@@ -79,6 +79,8 @@ Session telemetry stays local by default. `DSH_TELEMETRY_MODE=FULL` streams ever
 
 Install external plugin bundles through `dsh plugin --profile <name> add <package-or-git-spec>`. The installed package owns its dependencies and contributes its declared `cordis.patch.yml` layer. The CLI also ships `@deepseek-ai/dsh-mcp-client` as a dependency for patch layers, but no MCP server is enabled by default because each server command is trusted executable code outside the agent sandbox.
 
+Do not repeat a bundle's `insert` entries in the profile's own `cordis.patch.yml`: a package listed in `dsh.profile.bundles` already contributes its declared patch layer. Keep the profile patch as `[]` unless you are overriding an existing row or adding a separate row; inserting the same id twice makes Loader reject the profile with `duplicate loader entry id`.
+
 ## Source execution
 
 From the repository root, run `pnpm run build` separately after a fresh checkout and whenever artifacts need updating, then use `pnpm dsh <args...>`. The `package.json` script launches `apps/cli/src/bin.ts` with `node --import tsx/esm` without building and forwards every argument. Missing Typert host artifacts fail profile boot through module-resolution errors without a build instruction. Once those host artifacts exist, missing frontend or client-plugin bundles fail at startup with an instruction to run `pnpm run build`. The launcher does not check freshness, so existing stale bundles can run older browser code until rebuilt. The process inherits the launch environment; set `NODE_USE_ENV_PROXY=1` when a supporting Node version must honor `HTTP_PROXY` and `HTTPS_PROXY`. The installed form launches the built `apps/cli/lib/bin.js` without rebuilding the repository.
