@@ -15,9 +15,12 @@ const attended: DirectoryPickerHostFacts = {
 }
 
 describe('resolveDirectoryPickerBackend', () => {
-  it('resolves native for a loopback bind on a display platform', () => {
+  it('resolves native for a loopback bind on macOS', () => {
     expect(resolveDirectoryPickerBackend(attended)).toBe('native')
-    expect(resolveDirectoryPickerBackend({ ...attended, platform: 'win32' })).toBe('native')
+  })
+
+  it('resolves browse on Windows to avoid the native dialog worker', () => {
+    expect(resolveDirectoryPickerBackend({ ...attended, platform: 'win32' })).toBe('browse')
   })
 
   it('resolves browse for an all-interfaces bind regardless of other signals', () => {
