@@ -16,11 +16,10 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
+import { createWindowOptions } from './window-options.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
 
 const APP_NAME = 'DeepSeek Harness'
-const WINDOW_WIDTH = 1440
-const WINDOW_HEIGHT = 920
 const DESKTOP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const REPOSITORY_ROOT = resolve(DESKTOP_DIR, '../..')
 
@@ -97,44 +96,7 @@ function hardenSession(): void {
 async function createMainWindow(): Promise<BrowserWindow> {
   const origin = hostOrigin
   if (origin === undefined) throw new Error('desktop Host is not ready')
-  const window = new BrowserWindow({
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
-    minWidth: 960,
-    minHeight: 640,
-    show: false,
-    autoHideMenuBar: true,
-    frame: process.platform === 'win32',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    ...(process.platform === 'darwin' ? {} : {
-      titleBarOverlay: {
-        color: '#00000000',
-        symbolColor: '#7f858f',
-        height: 44,
-      },
-    }),
-    ...(process.platform === 'darwin' ? {
-      trafficLightPosition: { x: 16, y: 18 },
-      vibrancy: 'sidebar' as const,
-      visualEffectState: 'followWindow' as const,
-    } : {}),
-    ...(process.platform === 'win32' ? {
-      backgroundMaterial: 'acrylic' as const,
-      hasShadow: true,
-      roundedCorners: true,
-      thickFrame: true,
-    } : {
-      transparent: true,
-      backgroundColor: '#00000000',
-    }),
-    title: APP_NAME,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
-  })
+  const window = new BrowserWindow(createWindowOptions(process.platform, APP_NAME))
   mainWindow = window
   window.on('close', (event) => { lifecycle?.onWindowClose(event) })
   window.on('closed', () => {

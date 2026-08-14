@@ -1,4 +1,7 @@
-const DESKTOP_PLATFORMS = new Set(['darwin', 'win32', 'linux'])
+// macOS and Windows render their own title bar under the native frame, so the
+// page supplies drag regions and titlebar inset. Linux keeps the standard
+// system title bar and caption buttons, so it needs no desktop presentation.
+const DESKTOP_PLATFORMS = new Set(['darwin', 'win32'])
 
 /**
  * Apply the presentation-only Electron marker before the client tree mounts.
