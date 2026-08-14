@@ -17,6 +17,7 @@ import {
 } from 'electron'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
+import { handleDesktopZoomShortcut, resetDesktopZoom } from './zoom-shortcuts.ts'
 
 const APP_NAME = 'DeepSeek Harness'
 const WINDOW_WIDTH = 1440
@@ -149,9 +150,13 @@ async function createMainWindow(): Promise<BrowserWindow> {
     if (isExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  window.webContents.on('before-input-event', (event, input) => {
+    handleDesktopZoomShortcut(event, input, window.webContents)
+  })
   const rendererUrl = new URL(origin)
   rendererUrl.searchParams.set('dsh-desktop-platform', process.platform)
   await window.loadURL(rendererUrl.href)
+  resetDesktopZoom(window.webContents)
   if (!lifecycle?.isQuitting) window.show()
   return window
 }
