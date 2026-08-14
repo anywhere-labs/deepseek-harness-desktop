@@ -7,6 +7,7 @@ import type {
   UIEvent as ReactUIEvent,
 } from 'react'
 import { IconCheckOutline16, IconCopyOutline16 } from './icons/index.tsx'
+import { writeClipboard } from './clipboard.ts'
 import { Menu } from './Menu.tsx'
 import type { MenuEntry } from './Menu.tsx'
 import css from './JsonTree.module.css'
@@ -530,12 +531,8 @@ export function JsonTree({
   const copy = async (mode: 'json' | 'path' | 'prettyJson' | 'value') => {
     /* v8 ignore next -- copy controls only render while their target exists. */
     if (copyTarget === undefined) return
-    try {
-      await navigator.clipboard.writeText(copyText(copyTarget, mode))
-      setCopyState('copied')
-    } catch {
-      setCopyState('failed')
-    }
+    const ok = await writeClipboard(copyText(copyTarget, mode))
+    setCopyState(ok ? 'copied' : 'failed')
     if (resetTimer.current !== undefined) clearTimeout(resetTimer.current)
     resetTimer.current = setTimeout(() => { setCopyState('idle') }, 1_500)
   }

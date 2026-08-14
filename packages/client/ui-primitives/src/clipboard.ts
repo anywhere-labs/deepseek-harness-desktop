@@ -17,13 +17,15 @@ export async function writeClipboard(text: string): Promise<boolean> {
       await navigator.clipboard.writeText(text)
       return true
     } catch {
-      // Denied permissions / iframe policy — do not claim success.
-      return false
+      // Permission policies that deny `clipboard-sanitized-write` (Electron
+      // session handlers, cross-origin iframes) expose the async API but
+      // reject the write; fall through to the execCommand path below.
     }
   }
-  // jsdom and older hosts: best-effort execCommand path when present.
-  // execCommand('copy') is the only clipboard fallback where the async API
-  // is missing; deprecated but deliberately retained.
+  // jsdom, insecure contexts, and policy-denied hosts: best-effort execCommand
+  // path when present. execCommand('copy') is the legacy synchronous clipboard
+  // write and does not consult the permission system; deprecated but
+  // deliberately retained.
   /* oxlint-disable typescript/no-deprecated */
   const exec = typeof document.execCommand === 'function'
     ? document.execCommand.bind(document)

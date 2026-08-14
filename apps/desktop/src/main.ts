@@ -90,8 +90,14 @@ function hasOrigin(raw: string, expected: string): boolean {
 /** Install navigation and permission policy before the first renderer loads. */
 function hardenSession(): void {
   const desktopSession = session.defaultSession
-  desktopSession.setPermissionCheckHandler(() => false)
-  desktopSession.setPermissionRequestHandler((_webContents, _permission, callback) => { callback(false) })
+  // The Web UI copy controls call `navigator.clipboard.writeText()`, which
+  // performs a `clipboard-sanitized-write` permission check; denying every
+  // permission silently breaks copy. Everything else stays denied.
+  const isAllowed = (permission: string): boolean => permission === 'clipboard-sanitized-write'
+  desktopSession.setPermissionCheckHandler((_webContents, permission) => isAllowed(permission))
+  desktopSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(isAllowed(permission))
+  })
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
