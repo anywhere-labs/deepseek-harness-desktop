@@ -105,7 +105,7 @@ export interface HostSupervisorOptions {
   readonly readinessTimeoutMs?: number
   /** Grace after SIGTERM before SIGKILL. */
   readonly shutdownTimeoutMs?: number
-  /** Receives bounded Host output for desktop diagnostics. */
+  /** Receives Host output throughout the child process lifetime. */
   readonly log?: (line: string) => void
   /** Called when a ready Host exits outside an application-owned shutdown. */
   readonly onUnexpectedExit?: (detail: { code: number | null; signal: NodeJS.Signals | null }) => void
@@ -168,27 +168,26 @@ export function createHostSupervisor(options: HostSupervisorOptions): HostSuperv
       exitResult = deferred<void>()
       exited = exitResult.promise
       let settled = false
-      const startupCleanups: Array<() => void> = []
 
-      const cleanupStartup = (): void => {
+      const cleanupReadiness = (): void => {
         clearTimeout(timer)
-        for (const dispose of startupCleanups.splice(0)) dispose()
       }
       const fail = (error: unknown): void => {
         if (settled) return
         settled = true
-        cleanupStartup()
+        cleanupReadiness()
         const diagnostic = output === '' ? '' : `\nHost output:\n${output}`
         reject(new Error(`${error instanceof Error ? error.message : String(error)}${diagnostic}`))
       }
       const acceptChunk = (chunk: string): void => {
         appendOutput(chunk)
+        if (settled) return
         try {
           const url = parser.push(chunk)
-          if (url === undefined || settled) return
+          if (url === undefined) return
           settled = true
           ready = true
-          cleanupStartup()
+          cleanupReadiness()
           resolve(url)
         } catch (error) {
           fail(error)
@@ -200,8 +199,9 @@ export function createHostSupervisor(options: HostSupervisorOptions): HostSuperv
         fail(new Error(`desktop Host readiness timed out after ${String(readinessTimeoutMs)}ms`))
         spawned.kill('SIGTERM')
       }, readinessTimeoutMs)
-      startupCleanups.push(spawned.stdout.onData(acceptChunk))
-      startupCleanups.push(spawned.stderr.onData(appendOutput))
+      // Keep both streams subscribed until they close so runtime diagnostics are not discarded.
+      spawned.stdout.onData(acceptChunk)
+      spawned.stderr.onData(appendOutput)
       spawned.onError((error) => {
         fail(new Error(`desktop Host failed to spawn: ${error.message}`))
         exitResult?.resolve()

@@ -128,6 +128,28 @@ describe('desktop Host supervisor', () => {
     expect(child.signals).toEqual([])
   })
 
+  it('keeps forwarding Host output after readiness without parsing another readiness URL', async () => {
+    const child = new FakeHostChild()
+    const log = vi.fn<(chunk: string) => void>()
+    const supervisor = createHostSupervisor({ spawnHost: () => child, log })
+    const starting = supervisor.start()
+
+    child.stdout.emit('dsh web: http://127.0.0.1:4567\n')
+    await expect(starting).resolves.toBe('http://127.0.0.1:4567')
+
+    child.stdout.emit('runtime warning\n')
+    child.stderr.emit('runtime failure\n')
+    child.stdout.emit('dsh web: http://127.0.0.1:9999\n')
+
+    expect(log.mock.calls.map(([chunk]) => chunk)).toEqual([
+      'dsh web: http://127.0.0.1:4567\n',
+      'runtime warning\n',
+      'runtime failure\n',
+      'dsh web: http://127.0.0.1:9999\n',
+    ])
+    expect(child.signals).toEqual([])
+  })
+
   it('does not combine stderr and stdout fragments into a readiness line', async () => {
     const child = new FakeHostChild()
     const supervisor = createHostSupervisor({ spawnHost: () => child })
