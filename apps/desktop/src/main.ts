@@ -16,6 +16,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
+import { createDesktopContextMenuTemplate } from './context-menu.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
 
 const APP_NAME = 'DeepSeek Harness'
@@ -148,6 +149,15 @@ async function createMainWindow(): Promise<BrowserWindow> {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
+  })
+  window.webContents.on('context-menu', (_event, params) => {
+    const template = createDesktopContextMenuTemplate(params)
+    if (template.length === 0) return
+    Menu.buildFromTemplate(template).popup({
+      window,
+      ...(params.frame === null ? {} : { frame: params.frame }),
+      sourceType: params.menuSourceType,
+    })
   })
   const rendererUrl = new URL(origin)
   rendererUrl.searchParams.set('dsh-desktop-platform', process.platform)
