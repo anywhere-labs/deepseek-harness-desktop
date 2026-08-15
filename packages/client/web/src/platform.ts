@@ -12,6 +12,9 @@ export const PLATFORM_MODULES = [
   '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-attachment',
   '@deepseek-ai/dsh-client-schema-form',
+  // Shared by the generated Remote client faces (schema validation in the
+  // typert.remote-client bundles), so the shell owns the one instance.
+  'zod',
 ] as const
 
 /** One platform module specifier (a seed-table key). */
