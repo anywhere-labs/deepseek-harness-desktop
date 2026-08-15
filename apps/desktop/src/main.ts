@@ -91,7 +91,18 @@ function hasOrigin(raw: string, expected: string): boolean {
 function hardenSession(): void {
   const desktopSession = session.defaultSession
   desktopSession.setPermissionCheckHandler(() => false)
-  desktopSession.setPermissionRequestHandler((_webContents, _permission, callback) => { callback(false) })
+  // The Web GUI's copy controls use `navigator.clipboard.writeText`, which
+  // Electron gates through the permission REQUEST handler under the
+  // `clipboard-sanitized-write` permission. Auto-denying it (as this policy
+  // does for everything else) silently breaks every built-in copy button:
+  // the write is rejected with NotAllowedError and no fallback runs. Only the
+  // app's own loopback origin can ever load in this session (will-navigate
+  // blocks every other origin), so granting this one benign, user-gesture-bound
+  // clipboard write cannot be reached by third-party content; everything else
+  // stays denied.
+  desktopSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === 'clipboard-sanitized-write')
+  })
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
