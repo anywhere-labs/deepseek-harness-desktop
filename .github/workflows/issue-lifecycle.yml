@@ -45,6 +45,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
       - name: Create project token
+        if: ${{ github.repository == 'deepseek-harness/deepseek-harness' }}
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
@@ -53,6 +54,7 @@ jobs:
           owner: deepseek-harness
           repositories: deepseek-harness
       - name: Handle repository event
+        if: ${{ github.repository == 'deepseek-harness/deepseek-harness' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node .github/issue-management/policy.mjs lifecycle
