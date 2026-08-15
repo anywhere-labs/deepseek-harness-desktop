@@ -1,4 +1,5 @@
 import type { NativeImage } from 'electron'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { DesktopShellSpec } from '../src/runtime.ts'
 import {
@@ -7,6 +8,8 @@ import {
   desktopWindowOptions,
 } from '../src/window-options.ts'
 import { WINDOWS_TITLEBAR_HEIGHT } from '../src/window-chrome.ts'
+
+const preloadPath = join(import.meta.dirname, '../src/preload.cjs')
 
 const spec: DesktopShellSpec = {
   mode: 'compatibility',
@@ -41,6 +44,7 @@ describe('compatibility BrowserWindow options', () => {
       show: false,
       icon,
       webPreferences: {
+        preload: preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -90,6 +94,7 @@ describe('compatibility BrowserWindow options', () => {
       vibrancy: 'sidebar',
       visualEffectState: 'followWindow',
     }))
+    expect(options.webPreferences?.preload).toBe(preloadPath)
     expect(desktopWindowOptions(advanced, {} as NativeImage, 'darwin')).toEqual(options)
   })
 
