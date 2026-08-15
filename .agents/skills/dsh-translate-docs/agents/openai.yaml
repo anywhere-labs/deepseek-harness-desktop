@@ -1,7 +1,0 @@
-interface:
-  display_name: "DSH Extended Doc Translation"
-  short_description: "Run the full bilingual documentation workflow manually"
-  default_prompt: "Use $dsh-translate-docs to run the extended bilingual-document workflow for the specified pair."
-
-policy:
-  allow_implicit_invocation: false

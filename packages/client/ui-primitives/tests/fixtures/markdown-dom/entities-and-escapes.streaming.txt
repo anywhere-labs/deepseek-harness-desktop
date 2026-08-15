@@ -1,3 +1,0 @@
-<div class="_markdown_404681">
-  <p>
-    #text "AT&T, 3 < 4, *not em*, backslash \\ literal, © entity."

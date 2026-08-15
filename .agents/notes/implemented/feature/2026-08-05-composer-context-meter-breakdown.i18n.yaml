@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-05-composer-context-meter-breakdown.md
-2026-08-05-composer-context-meter-breakdown.md: a757bcbc8bc57f4c3a16f663a9c922155b8bb575
-2026-08-05-composer-context-meter-breakdown.zh.md: a6db86b437dedb848cb9bc9bf3bd1be23f2f355c

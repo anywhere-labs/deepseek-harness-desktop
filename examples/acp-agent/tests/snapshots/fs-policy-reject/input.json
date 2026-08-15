@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Do NOT use the read tool and do NOT use bash or shell commands. Immediately use the edit tool to replace the literal text blue with green in settings.txt in the current directory. Do not read the file first. After the tool result, reply with exactly the single word DONE." }
-  ]
-}

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "First use the read tool to read data.txt in the current directory. Then use the write tool (NOT bash) to replace its entire contents with exactly the single line: replaced. Then reply with exactly the single word DONE." }
-  ]
-}

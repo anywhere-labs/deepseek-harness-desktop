@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Inspect the exact tools service API and tools/pre-execute event with cordis_inspect_query, then reply with exactly CORDIS_INSPECT_JSDOC_OK." }
-  ]
-}

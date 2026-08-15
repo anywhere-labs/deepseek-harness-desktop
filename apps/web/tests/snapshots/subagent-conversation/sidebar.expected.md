@@ -1,5 +1,0 @@
-- tree "Sessions":
-  - treeitem "workspace" [expanded]:
-    - img
-    - text: workspace
-  - treeitem "Ask a research subagent to now"

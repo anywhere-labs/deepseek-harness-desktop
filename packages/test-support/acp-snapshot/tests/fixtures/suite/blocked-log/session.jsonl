@@ -1,2 +1,0 @@
-{"type":"session","id":"99999999-8888-4777-8666-555555555555","createdAt":13,"cwd":"/rec/blocked-cwd","delegationDepth":0}
-{"type":"hook/result","seq":1,"time":13,"data":{"decision":"block","durationMs":99}}

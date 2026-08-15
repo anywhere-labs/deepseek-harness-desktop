@@ -1,7 +1,0 @@
-{
-  "name": "headless-agent-example",
-  "private": true,
-  "version": "0.0.1",
-  "type": "module",
-  "description": "Runnable demo: one complete headless coding-agent turn"
-}

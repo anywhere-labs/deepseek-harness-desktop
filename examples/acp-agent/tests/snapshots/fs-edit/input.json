@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "First use the read tool to read config.txt in the current directory. Then use the edit tool (NOT bash) to replace the literal text DEBUG with RELEASE in that file. Then reply with exactly the single word DONE." }
-  ]
-}

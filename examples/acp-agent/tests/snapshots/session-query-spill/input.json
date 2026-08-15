@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Read request event 5 with session_event_read, verify the complete spill was retained, then reply DONE." }
-  ]
-}

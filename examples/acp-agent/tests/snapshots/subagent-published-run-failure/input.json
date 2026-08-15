@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Delegate one foreground subagent. Its published run will fail; report that failure as PARENT_OBSERVED_ERROR." }
-  ]
-}

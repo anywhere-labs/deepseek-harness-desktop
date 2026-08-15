@@ -1,8 +1,0 @@
-{
-  "steps": [
-    {
-      "op": "prompt",
-      "text": "Probe strict-schema fillers against missing-goal revision 1, then create a durable goal to finish the snapshot proof and inspect it."
-    }
-  ]
-}

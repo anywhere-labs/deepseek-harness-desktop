@@ -1,7 +1,0 @@
-# Two rows that cannot load: the Loader reports several failed entries as one
-# AggregateError whose own message names none of them, so this fixture is what
-# proves the mount diagnostic flattens the causes.
-- id: first-missing
-  name: ../../plugins/does-not-exist.js
-- id: second-missing
-  name: ../../plugins/also-missing.js

@@ -1,6 +1,0 @@
-<div class="_markdown_404681">
-  <p>
-    #text "Spans "
-    <code>
-      #text "a b"
-    #text " across a line."

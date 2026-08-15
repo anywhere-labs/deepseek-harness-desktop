@@ -1,7 +1,0 @@
-# Invalid `--patch` overlay used to prove boot failures settle and exit.
-
-- id: llm-pi-ai
-  config:
-    providers:
-      - provider: openai
-        apiKey: keyless-invalid-shape

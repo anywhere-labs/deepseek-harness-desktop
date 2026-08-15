@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the pwsh tool to run exactly: [Console]::Out.Write('PWSH_OK'). Then reply with the single word DONE and stop." }
-  ]
-}

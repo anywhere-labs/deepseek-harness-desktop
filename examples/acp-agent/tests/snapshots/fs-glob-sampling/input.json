@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Call glob exactly once with pattern * and path tree. Then reply with exactly GLOB_SAMPLED and nothing else." }
-  ]
-}

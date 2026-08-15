@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-19-human-goal-command.md
-2026-07-19-human-goal-command.md: 7ed104eef1a48879a6e93af707c6ea9d8f97190c
-2026-07-19-human-goal-command.zh.md: 86e40cc6789c3a70cd4560831176bdad95afecb5

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Perform these exact steps in order on deleted.txt in the current directory: (1) use the read tool to read it, (2) use the bash tool with command `rm deleted.txt`, (3) use the read tool on deleted.txt again and observe the not-found error, (4) use the write tool to recreate deleted.txt with exactly the content `fresh\\n`, and (5) reply with exactly the single word DONE. Do not use any other tools or skip any step." }
-  ]
-}

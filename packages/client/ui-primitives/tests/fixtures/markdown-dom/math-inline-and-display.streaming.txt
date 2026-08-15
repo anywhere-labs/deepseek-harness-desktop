@@ -1,9 +1,0 @@
-<div class="_markdown_404681">
-  <p>
-    #text "Einstein wrote $E = mc^2$ inline."
-  <p>
-    #text "$$\n\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u} \\cdot \\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p\n$$"
-  <p>
-    #text "Backslash inline (\\frac{1}{5}) and display:"
-  <p>
-    #text "[\\frac{\\pi}{4} < \\theta < \\frac{\\pi}{2}]"

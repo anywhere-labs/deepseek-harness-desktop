@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the subagent tool TWICE, once at a time, to delegate two subtasks to child agents. First subtask: 'Reply with exactly the word ALPHA and nothing else.' Second subtask (after the first returns): 'Reply with exactly the word BETA and nothing else.' After both subagents return, reply with the single word PARENT_DONE and stop. Do not use the bash tool." }
-  ]
-}

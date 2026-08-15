@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Delegate through two child generations. The depth-two child must attempt one more subagent call and report the rejection." }
-  ]
-}

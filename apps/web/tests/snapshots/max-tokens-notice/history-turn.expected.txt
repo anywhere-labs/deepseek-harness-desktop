@@ -1,3 +1,0 @@
-dot=warning
-title=Output token limit reached
-hint=The reply was cut off; earlier output is preserved in the conversation. Send "continue" to let the model resume.

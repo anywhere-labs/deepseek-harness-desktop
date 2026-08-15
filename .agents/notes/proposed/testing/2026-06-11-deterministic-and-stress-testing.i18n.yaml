@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/proposed/testing/2026-06-11-deterministic-and-stress-testing.md
-2026-06-11-deterministic-and-stress-testing.md: d9977be835af05f9ee303b63ec6015bc9e153170
-2026-06-11-deterministic-and-stress-testing.zh.md: 263e69f85a1cd8ee47da07210e513cab272d1a44

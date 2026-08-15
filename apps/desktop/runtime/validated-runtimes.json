@@ -1,0 +1,7 @@
+{
+  "comment": "Compatibility matrix shipped with the shell: which upstream runtimes this shell release was validated against, and which one it recommends. Updated by the contract CI when a new upstream version passes the full gate (stage + boot-check + packaged smoke).",
+  "validated": [
+    "0.1.0-rc.6"
+  ],
+  "recommended": "0.1.0-rc.6"
+}

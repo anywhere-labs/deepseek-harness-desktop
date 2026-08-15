@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/archived/simplification/2026-07-27-copyable-transcript-no-gutter-bar.md
-2026-07-27-copyable-transcript-no-gutter-bar.md: a4eca191d28a834b05a6839997aab602852912c0
-2026-07-27-copyable-transcript-no-gutter-bar.zh.md: b1f661cb76bb879e414a0dcfd08fc9349ae070c7

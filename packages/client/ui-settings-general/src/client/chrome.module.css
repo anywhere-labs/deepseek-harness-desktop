@@ -1,7 +1,0 @@
-/* Trigger row label (the shell's button provides layout/colors; the label
- * only guards against overflow during the sidebar collapse crossfade). */
-
-.triggerLabel {
-  overflow: hidden;
-  white-space: nowrap;
-}

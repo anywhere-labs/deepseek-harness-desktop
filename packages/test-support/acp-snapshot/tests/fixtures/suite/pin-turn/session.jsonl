@@ -1,4 +1,0 @@
-{"type":"session","id":"12121212-3434-4545-8686-787878787878","createdAt":7,"cwd":"/rec/pin-cwd","delegationDepth":0}
-{"type":"request/header","seq":0,"time":7,"data":{"header":{"config":{"model":"fake"},"system":"{{system}}","tools":"{{tools}}"},"reason":"initial"}}
-{"type":"request/header","seq":1,"time":7,"data":{"header":{"config":{"model":"fake"},"system":"{{system}}","tools":"{{tools}}"},"reason":"change"}}
-{"type":"turn/start","seq":2,"time":7,"data":{"turn":1}}
