@@ -38,24 +38,6 @@ pnpm dsh web
 
 - Share feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
 - Tag your plugin repository with the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to make it discoverable.
-- Join the DeepSeek Harness WeCom group: scan to add the WeCom assistant and fill in the intake survey; the assistant then invites you to the group.
-
-<table>
-  <thead>
-    <tr>
-      <th align="center">WeCom assistant</th>
-      <th align="center">Intake survey</th>
-      <th align="center">WeChat official account</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="assets/community-wecom-assistant.png" alt="DeepSeek Harness WeCom assistant QR code" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="assets/community-wecom-survey.png" alt="DeepSeek Harness intake survey QR code" width="180" height="180"></a></td>
-      <td align="center"><img src="assets/community-wechat-official-account.png" alt="DeepSeek Harness team WeChat official account QR code" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
 
 ## Contributing
 
