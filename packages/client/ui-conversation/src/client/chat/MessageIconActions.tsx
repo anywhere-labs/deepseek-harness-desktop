@@ -30,6 +30,11 @@ export interface MessageIconActionsProps {
   /** Parent layout class composed onto the actions row. */
   className?: string | undefined
   /**
+   * Slot-rendered actions owned by independent plugins, placed before the
+   * built-in copy control (destructive actions addressed at this message).
+   */
+  leadingActions?: ReactNode
+  /**
    * Slot-rendered actions owned by independent plugins, placed between the
    * built-in copy and branch controls.
    */
@@ -45,7 +50,7 @@ export interface MessageIconActionsProps {
  */
 export function MessageIconActions({
   text, time, runMs, ttftMs, tokensPerSecond, clock, onBranch, branchUnavailable = false, className,
-  extraActions, t,
+  leadingActions, extraActions, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()
@@ -110,6 +115,7 @@ export function MessageIconActions({
   return (
     <div className={className === undefined ? css.actions : `${css.actions} ${className}`}>
       {clock === 'start' ? clockEl : null}
+      {leadingActions}
       <Tooltip label={copied ? t('copied') : t('copy')} side="bottom">
         <button type="button" className={css.action} aria-label={copied ? t('copied') : t('copy')} onClick={onCopy}>
           {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}

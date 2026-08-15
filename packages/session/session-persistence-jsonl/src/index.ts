@@ -9,7 +9,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { readdirSync } from 'node:fs'
-import { open, mkdir, readFile, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readFile, readdir, realpath, link, rm, stat, truncate, rename } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -179,6 +179,10 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
     return this.coordinator.append(id, events)
+  }
+
+  truncate(id: SessionId, toSeq: number): Promise<void> {
+    return this.coordinator.truncate(id, toSeq)
   }
 
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
@@ -441,6 +445,41 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     if (tornMarker !== undefined) await this.repair(meta, tornMarker.truncateTo)
     const repairedEvents = [...(tornMarker?.recoveredEvents ?? []), ...closers]
     if (repairedEvents.length > 0) await this.appendLines(meta, repairedEvents)
+  }
+
+  /**
+   * Truncate the stored log to the events with `seq < toSeq` by rewriting the
+   * artifact atomically: decode the committed prefix, drop the suffix,
+   * re-encode, and publish over the existing file (POSIX rename replaces
+   * atomically; Windows removes then publishes the staged file).
+   * @param meta - the stored session header.
+   * @param toSeq - first event seq to drop; validated by the coordinator.
+   */
+  async truncateAt(meta: SessionHeader, toSeq: number): Promise<void> {
+    await this.ensureRootEncoding()
+    const path = logPath(this.root, meta.cwd, meta.id, this.compression)
+    const stored = await this.readPrefix(path, meta.id)
+    if (toSeq > stored.events.length) {
+      throw new Error(
+        `truncate toSeq ${toSeq} exceeds stored event count ${stored.events.length} for "${meta.id}"`,
+      )
+    }
+    const prefix = stored.events.filter(event => event.seq < toSeq)
+    const content = await this.encodeMaterialization(meta, prefix)
+    const tmp = await this.writeSyncedTempFile(path, content)
+    try {
+      /* v8 ignore next -- native Windows coverage exercises this platform dispatch; Linux covers the POSIX peer */
+      if (process.platform === 'win32') {
+        await rm(path, { force: true })
+        await publishNewFileWin32(tmp, path)
+      } else {
+        await rename(tmp, path)
+        await this.syncDirPosix(dirname(path))
+      }
+    } catch (error) {
+      await rm(tmp, { force: true })
+      throw error
+    }
   }
 
   /** List valid unique stored sessions' metadata (header line only — no full-log parse). */

@@ -315,6 +315,8 @@ export class AgentLoop extends Service implements AgentFactory {
   private readonly ownership: FactoryOwnership
   /** Plain holder prevents Cordis from re-tracing the factory's dependency context through a caller shadow. */
   private readonly runtime: { ctx: Context }
+  /** Live agent teardowns by session id, for lifecycle-replacing operations (rewind). */
+  private readonly lifecycles = new Map<SessionId, () => Promise<void>>()
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'agentLoop')
@@ -514,11 +516,13 @@ export class AgentLoop extends Service implements AgentFactory {
           detachSession?.()
         } finally {
           untrack()
+          this.lifecycles.delete(id)
           if (!ownerTriggered) await unfollowOwner()
         }
       }
     })())
     const untrack = this.ownership.track(dispose)
+    this.lifecycles.set(id, dispose)
     let unfollowOwner: () => Promise<void> | void
     try {
       unfollowOwner = ownerCtx.effect(() => () => {
@@ -663,6 +667,7 @@ export class AgentLoop extends Service implements AgentFactory {
     ownerCtx: Context,
     persistence: SessionPersistence,
     options: ResumeAgentOptions,
+    source: SessionStartSource = 'resume',
   ): Promise<AgentHandle> {
     const id = options.resumeSessionId
     const published = (async () => {
@@ -699,7 +704,7 @@ export class AgentLoop extends Service implements AgentFactory {
           options.agentOptions ?? {},
           options.setup,
           options.signal,
-          'resume',
+          source,
         )
       } finally {
         preparation?.[Symbol.dispose]()
@@ -707,6 +712,60 @@ export class AgentLoop extends Service implements AgentFactory {
     })()
     this.ownership.trackWrapper(published)
     return published
+  }
+
+  /**
+   * Rewind one live agent to a truncated prefix of its own log — the lifecycle
+   * half of a user-initiated rollback. The caller computes `toSeq` (a turn
+   * boundary; the prefix keeps events with `seq < toSeq`) and truncates
+   * persistence FIRST; this method then stops the agent, removes its session,
+   * and resumes a fresh agent under the same identity with the same options.
+   * The returned handle is owned like any {@link create}/{@link resume} handle;
+   * the Web host discards it, so the new lifecycle is retained by the loop
+   * fiber until teardown.
+   * @param agent - the exact live registry agent to rewind.
+   * @param toSeq - first event seq to drop; must not exceed the log length.
+   * @returns the published replacement handle.
+   * @throws when the agent is not the live registry instance, is running, or
+   *   has no tracked lifecycle; when persistence is unavailable; or when the
+   *   truncation or resume fails.
+   */
+  async rewind(agent: Agent, toSeq: number): Promise<AgentHandle> {
+    if (!Number.isSafeInteger(toSeq) || toSeq < 0) {
+      throw new TypeError('rewind toSeq must be a non-negative safe integer')
+    }
+    if (this.runtime.ctx.agents.get(agent.id) !== agent) {
+      throw new Error(`agent "${agent.id}" is not the live registry instance`)
+    }
+    if (agent.status === 'running') {
+      throw new Error(`agent "${agent.id}" is running; stop it before rewinding`)
+    }
+    if (toSeq > agent.session.events.length) {
+      throw new Error(
+        `rewind toSeq ${toSeq} exceeds log length ${agent.session.events.length} for "${agent.id}"`,
+      )
+    }
+    const dispose = this.lifecycles.get(agent.id)
+    if (dispose === undefined) {
+      throw new Error(`agent "${agent.id}" has no tracked lifecycle in this loop`)
+    }
+    const persistence = this.runtime.ctx.get('sessionPersistence')
+    if (persistence === undefined) {
+      throw new Error('cannot rewind: session persistence is not configured')
+    }
+    // Release the live lifecycle first (removing the in-memory session), then
+    // truncate the now-cold log, then resume it under the same identity. The
+    // flush is owed: pending write-behind batches — including the inbox-splice
+    // records the dispose teardown appends — must land before truncation or
+    // the cut would drop events the session log still holds; the coordinator's
+    // truncate drains the live controller's pending writes itself.
+    await this.runtime.ctx.sessions.flush(agent.session)
+    await dispose()
+    await persistence.truncate(agent.id, toSeq)
+    return this.resumeWith(this.ctx, persistence, {
+      resumeSessionId: agent.id,
+      agentOptions: agent.options,
+    }, 'clear')
   }
 }
 

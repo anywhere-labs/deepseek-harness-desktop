@@ -99,6 +99,52 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
       }
     })
 
+    it('truncate drops the suffix at a turn boundary, preserves the header, and continues appending from the cut', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('truncate-cut')
+        await persistence.create(m)
+        // Turn 1 occupies seqs 0..5; the second turn starts at seq 6.
+        const secondTurn = oneTurnLog().map(event => ({ ...event, seq: event.seq + 6 }))
+        await persistence.append(m.id, [...oneTurnLog(), ...secondTurn])
+        const before = await persistence.load(m.id)
+        expect(before.events.map(event => event.seq)).toHaveLength(12)
+        // Cut at the second turn's turn/start: the suffix is dropped whole.
+        await persistence.truncate(m.id, 6)
+        const loaded = await persistence.load(m.id)
+        expect(loaded.meta).toMatchObject({ version: SESSION_FORMAT_VERSION, id: m.id, createdAt: 1000 })
+        expect(loaded.events.map(event => event.seq)).toEqual([0, 1, 2, 3, 4, 5])
+        // The cut is the fresh next-seq: a continuation append lands at seq 6.
+        await persistence.append(m.id, [{
+          type: 'user/message', seq: 6, time: 7,
+          data: freezeMessage({
+            id: MessageId('truncate-followup'),
+            role: 'user',
+            content: [{ type: 'text', text: 'again' }],
+            source: { kind: 'user' },
+          }),
+          surfaceOp: 'append',
+        }])
+        const continued = await persistence.load(m.id)
+        expect(continued.events.map(event => event.seq)).toEqual([0, 1, 2, 3, 4, 5, 6])
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('truncate refuses an out-of-range or negative toSeq', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('truncate-refuse')
+        await persistence.create(m)
+        await persistence.append(m.id, oneTurnLog())
+        await expect(persistence.truncate(m.id, 99)).rejects.toThrow('exceeds stored event count')
+        await expect(persistence.truncate(m.id, -1)).rejects.toThrow('non-negative safe integer')
+      } finally {
+        await dispose()
+      }
+    })
+
     it('rejects a fractional creation timestamp without reserving its session id', async () => {
       const { persistence, dispose } = await make()
       try {

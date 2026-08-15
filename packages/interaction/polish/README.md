@@ -27,7 +27,7 @@ The service registers two Typert Remote methods under the `polish` namespace, mo
 
 #### What the model sees
 
-One user message with the polish instruction and the verbatim draft. The instruction fixes the meaning, asks for a clearer and more complete rewrite in the original language, and requires the answer to be the polished text only — no explanation, prefix, quotes, or tool calls. The returned text is never sent automatically; the caller places it in the composer for the user to review.
+One user message with the polish instruction and the verbatim draft, delivered as a plugin-sourced `user/message`; the model's reply lands as an ordinary `assistant/message`. The instruction fixes the meaning, asks for a clearer and more complete rewrite in the original language, and requires the answer to be the polished text only — no explanation, prefix, quotes, or tool calls. The returned text is never sent automatically; the caller places it in the composer for the user to review.
 
 #### Token effect
 

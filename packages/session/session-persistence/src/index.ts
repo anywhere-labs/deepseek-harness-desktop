@@ -143,6 +143,19 @@ export abstract class SessionPersistence extends Service {
   abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>
 
   /**
+   * Truncate a persisted session to the events with `seq < toSeq` — the
+   * durability half of a user-initiated rollback. The identity must be cold:
+   * no live Session may be bound to it (the caller stops the agent and removes
+   * the in-memory session first) and no preparation may be reserved. Refuses
+   * when `toSeq` exceeds the stored event count, and fails loud when the
+   * backend cannot truncate. Non-mutating reads observe the truncated prefix
+   * afterwards.
+   * @param id - the persisted session to truncate.
+   * @param toSeq - first event seq to drop; a non-negative safe integer.
+   */
+  abstract truncate(id: SessionId, toSeq: number): Promise<void>
+
+  /**
    * Prepare the exact unpublished Session used by resume. Implementations may
    * reuse object graphs retained by an earlier {@link inspect} after confirming
    * their durable revision is still current; disposal releases an unpublished

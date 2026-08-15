@@ -193,6 +193,16 @@ export interface PersistenceBackend<TornMarker = unknown> {
   commitRepair(meta: SessionHeader, tornMarker: TornMarker | undefined, closers: readonly SessionEvent[]): Promise<void>
 
   /**
+   * Optional truncation hook: durably rewrite the stored log for one session
+   * to the events with `seq < toSeq`. A backend without the capability omits
+   * the hook and coordinator truncation fails loud. Non-mutating reads must
+   * observe the truncated prefix afterwards.
+   * @param meta - the stored session header.
+   * @param toSeq - first event seq to drop; a non-negative safe integer.
+   */
+  truncateAt?(meta: SessionHeader, toSeq: number): Promise<void>
+
+  /**
    * List all stored (materialized) sessions' metadata.
    * @param signal - optional cancellation for backend listing work.
    */
@@ -706,6 +716,56 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     // cursor as soon as it commits (uniform across backends).
     state.materialized = true
     state.cursor += events.length
+    this.preparations.invalidate(id)
+  }
+
+  /**
+   * Truncate a stored log to the events with `seq < toSeq` — the durability
+   * half of a user-initiated rollback. Refuses a live or prepared identity,
+   * an out-of-range `toSeq`, and a backend without the truncation hook.
+   * @param id - persisted session to truncate.
+   * @param toSeq - first event seq to drop; a non-negative safe integer.
+   */
+  async truncate(id: SessionId, toSeq: number): Promise<void> {
+    if (!Number.isSafeInteger(toSeq) || toSeq < 0) {
+      throw new TypeError('truncate toSeq must be a non-negative safe integer')
+    }
+    // Drain any live controller's pending writes before serializing: a
+    // lifecycle teardown (agent dispose) may have appended tail records that
+    // are still in the write-behind batch. Truncation must cut the complete
+    // durable log, or the delayed append would land past the cut afterwards.
+    for (const session of this.live.keys()) {
+      if (session.id === id) await this.flush(session)
+    }
+    return this.serialize(id, () => this.truncateCore(id, toSeq))
+  }
+
+  private async truncateCore(id: SessionId, toSeq: number): Promise<void> {
+    if (this.ctx.sessions.get(id) !== undefined) {
+      throw new Error(`cannot truncate session "${id}" while it is live`)
+    }
+    if (this.preparations.has(id)) {
+      throw new Error(`cannot truncate session "${id}" while a preparation is reserved`)
+    }
+    if (this.backend.truncateAt === undefined) {
+      throw new Error(`backend "${this.backend.name}" does not support truncation`)
+    }
+    let state = this.states.get(id)
+    if (state === undefined) {
+      // Discovered-in-storage session: adopt resolves and repairs the stored
+      // prefix, then this call truncates the resolved log.
+      state = await this.adopt(id)
+    }
+    if (toSeq > state.cursor) {
+      throw new Error(
+        `truncate toSeq ${toSeq} exceeds stored event count ${state.cursor} for "${id}"`,
+      )
+    }
+    if (toSeq === state.cursor) return
+    await this.backend.truncateAt(state.meta, toSeq)
+    // The durable rewrite is the transaction: advance the cursor as soon as it
+    // commits, so the next append continues from the truncated prefix.
+    state.cursor = toSeq
     this.preparations.invalidate(id)
   }
 

@@ -6,7 +6,9 @@ import { assistantText } from './turn-assistant.ts'
 import css from './TurnTailNodeView.module.css'
 
 type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
-  & PropsRenderSlots<'conversation.chat.turnTail' | 'conversation.chat.assistant-actions'>
+  & PropsRenderSlots<
+    'conversation.chat.turnTail' | 'conversation.chat.assistant-actions' | 'conversation.chat.assistant-leading-actions'
+  >
 
 /** Turn-local actions and feature tail over the Location index, independent of Assistant placement. */
 export const TurnTailNodeView = memo(function TurnTailNodeView({
@@ -32,6 +34,9 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const assistantActions = messageId === undefined
     ? null
     : renderSlot('conversation.chat.assistant-actions', { messageId })
+  const leadingAssistantActions = messageId === undefined
+    ? null
+    : renderSlot('conversation.chat.assistant-leading-actions', { messageId, seq: closing.finalNode.seq })
   return (
     <div className={css.root} data-turn-tail={data.turn} data-time-hover-root>
       {tail}
@@ -45,6 +50,7 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         onBranch={() => { forkAt(closing.finalNode.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
         className={css.actions}
+        leadingActions={leadingAssistantActions}
         extraActions={assistantActions}
         t={t}
       />

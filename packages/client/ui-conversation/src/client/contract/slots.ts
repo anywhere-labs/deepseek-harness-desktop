@@ -112,6 +112,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       owner: AssistantActionOwnerProps
     }
     /**
+     * Action strip attached to one finalized assistant message, rendered
+     * before the IconActions row's built-in copy control. Same ownership as
+     * the trailing `assistant-actions` strip, plus the message's event seq:
+     * the leading seat addresses destructive actions (rollback) that need the
+     * durable anchor the message id alone does not carry. Entries render by
+     * ascending `order`.
+     */
+    'conversation.chat.assistant-leading-actions': {
+      kind: 'list'
+      scope: 'session'
+      owner: AssistantLeadingActionOwnerProps
+    }
+    /**
      * The body of the details panel for the tool call the user selected —
      * one occupant, so taking it means rendering every tool's output, not just
      * the ones you know. The owner passes a frozen `block` whose two lifecycle
@@ -338,6 +351,18 @@ export interface TurnTailOwnerProps {
 export interface AssistantActionOwnerProps {
   /** Stable identity carried from the `assistant/message` event. */
   messageId: MessageId
+}
+
+/**
+ * Owner currency of the leading assistant-message action strip: the durable
+ * message identity plus the message's event seq, the anchor destructive
+ * actions truncate the session log at.
+ */
+export interface AssistantLeadingActionOwnerProps {
+  /** Stable identity carried from the `assistant/message` event. */
+  messageId: MessageId
+  /** The closing assistant message's event seq — the rollback cut anchor. */
+  seq: number
 }
 
 /** Hook constrained to business data published on the current Chat Node's Turn. */

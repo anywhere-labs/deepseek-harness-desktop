@@ -124,6 +124,7 @@ class TestPersistence extends SessionPersistence {
   locate(_meta: SessionHeader): SessionLocation | undefined { return undefined }
   create(_meta: SessionHeader): Promise<void> { return Promise.resolve() }
   append(_id: SessionId, _events: readonly SessionEvent[]): Promise<void> { return Promise.resolve() }
+  truncate(_id: SessionId, _toSeq: number): Promise<void> { return Promise.reject(new Error('test persistence does not support truncation')) }
 
   load(id: SessionId): Promise<SessionInspection> {
     return this.readFrom(id, 0)

@@ -44,6 +44,7 @@ export function registerChatNodeRenderers(ctx: Context): void {
     children: {
       'conversation.chat.turnTail': { kind: 'chain', scope: 'session' },
       'conversation.chat.assistant-actions': { kind: 'list', scope: 'session' },
+      'conversation.chat.assistant-leading-actions': { kind: 'list', scope: 'session' },
     },
   }, TurnTailNodeView))
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register(
