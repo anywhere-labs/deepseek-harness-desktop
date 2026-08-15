@@ -58,7 +58,8 @@
     "win": {
       "icon": "build/icon.png",
       "target": [
-        "nsis"
+        "nsis",
+        "dir"
       ]
     },
     "nsis": {
