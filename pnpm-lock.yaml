@@ -519,9 +519,15 @@ importers:
       '@deepseek-ai/dsh-client-ui-plan':
         specifier: workspace:^
         version: link:../../../packages/client/ui-plan
+      '@deepseek-ai/dsh-client-ui-polish':
+        specifier: workspace:^
+        version: link:../../../packages/client/ui-polish
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: workspace:^
         version: link:../../../packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-rollback':
+        specifier: workspace:^
+        version: link:../../../packages/client/ui-rollback
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:^
         version: link:../../../packages/client/ui-settings
@@ -708,6 +714,9 @@ importers:
       '@deepseek-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../../packages/plan/plan-mode
+      '@deepseek-ai/dsh-polish':
+        specifier: workspace:^
+        version: link:../../../packages/interaction/polish
       '@deepseek-ai/dsh-pwsh-local':
         specifier: workspace:^
         version: link:../../../packages/shell/pwsh-local
@@ -717,6 +726,9 @@ importers:
       '@deepseek-ai/dsh-repeat-tool-reminder':
         specifier: workspace:^
         version: link:../../../packages/guard/repeat-tool-reminder
+      '@deepseek-ai/dsh-rollback':
+        specifier: workspace:^
+        version: link:../../../packages/interaction/rollback
       '@deepseek-ai/dsh-sandbox':
         specifier: workspace:^
         version: link:../../../packages/sandbox/sandbox

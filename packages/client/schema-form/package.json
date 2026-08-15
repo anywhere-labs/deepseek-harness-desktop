@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-schema-form",
   "description": "Schema/draft model layer for settings editors: rehydrates a serialized schemastery schema, validates drafts, and edits them immutably by path",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "publishConfig": {
     "access": "public"
   },

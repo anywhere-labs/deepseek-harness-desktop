@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-session-log-export",
   "description": "Web Session-log export command and shared download dialog",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "publishConfig": { "access": "public" },
   "repository": {
     "type": "git",

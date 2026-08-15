@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-web",
   "description": "Web shell kernel: bootWebShell (module system holding + seed table + two-stage boot + AppRoot gate + app-shell assembly entry), consumed by the apps/web vite entry",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-subagent-control",
   "description": "Globally named send_message, interrupt_agent, and list_agents tools over ctx.subagents continuations",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "publishConfig": {
     "access": "public"
   },
