@@ -2,18 +2,17 @@
 
 English | [中文](README.zh.md)
 
-Draft polishing over the session's own agent channel: rewrite and expand a user message while keeping its meaning, using the exact provider, model, and credentials the session is already on. The polish request is delivered as a plugin-sourced `user/message` and the model reply lands as an ordinary `assistant/message`, so the operation is fully reconstructable from the session log and consumes no new protocol — the caller (the Web composer's polish button) replaces the draft with the returned text for the user to review before sending.
+Draft polishing in an isolated throwaway session: rewrite and expand a user message while keeping its meaning, using the same provider/model/credential resolution the target session already has. The polish request goes to a fresh agent created for exactly one turn — the target session's log is never appended to, so the visible conversation stays clean and the draft never becomes a real message — and that agent is disposed when the reply lands. The caller (the Web composer's polish button) replaces the composer draft with the returned text for the user to review before sending.
 
 ## Remote API
 
-The service registers two Typert Remote methods under the `polish` namespace, mounted by the Client assembly (`@deepseek-ai/dsh-api-remotes`):
+The service registers one Typert Remote method under the `polish` namespace, mounted by the Client assembly (`@deepseek-ai/dsh-api-remotes`):
 
 | Method | Request | Result |
 |---|---|---|
 | `polish` | `{ sessionId, message }` | `{ ok: true, value: { text } }` or a closed failure |
-| `model` | `{ sessionId }` | `{ label }` — the session's current model label for the button caption |
 
-`polish` requires a **live** agent for `sessionId`; cold sessions are not resumed for a polish turn (`session-not-found` otherwise). The draft is trimmed, must be non-empty (`message-blank`), and must not exceed the configured `maxMessageChars` (`message-too-long`). After the followup the service waits for the agent to reach quiescence and returns the first non-empty assistant message appended after the request; a turn whose reply carries no text reports `no-result`.
+`polish` requires a **live** agent for `sessionId` (it mirrors that session's provider/model); cold sessions are not resumed for a polish turn (`session-not-found` otherwise). The draft is trimmed, must be non-empty (`message-blank`), and must not exceed the configured `maxMessageChars` (`message-too-long`). The throwaway agent runs one turn; a reply with no text reports `no-result`, and a failure to create or drive the throwaway session reports `polish-session-failed` with the underlying message.
 
 ## Config
 
@@ -27,17 +26,17 @@ The service registers two Typert Remote methods under the `polish` namespace, mo
 
 #### What the model sees
 
-One user message with the polish instruction and the verbatim draft, delivered as a plugin-sourced `user/message`; the model's reply lands as an ordinary `assistant/message`. The instruction fixes the meaning, asks for a clearer and more complete rewrite in the original language, and requires the answer to be the polished text only — no explanation, prefix, quotes, or tool calls. The returned text is never sent automatically; the caller places it in the composer for the user to review.
+One user message with the polish instruction and the verbatim draft, delivered to the throwaway session as a plugin-sourced `user/message`; the model's reply lands as an ordinary `assistant/message` in that session, which is then disposed. The instruction fixes the meaning, asks for a clearer and more complete rewrite in the original language, and requires the answer to be the polished text only — no explanation, prefix, quotes, or tool calls. The returned text is never sent automatically; the caller places it in the composer for the user to review.
 
 #### Token effect
 
-One model request plus the retained draft and reply in the session log. The reply stays in history until compaction, like any assistant message.
+One model request per click, paid by the throwaway session's token meter; nothing is retained in the target session's log.
 
 #### KV Cache effect
 
-Append-only: the new user message follows the reusable request prefix and does not invalidate prior cache entries.
+The throwaway session is a fresh context, so the polish turn does not reuse the target session's prefix cache; it also never invalidates it, because the target log is untouched.
 
 ## Known Limitations and Deferred Work
 
-- **Concurrent human turns race the result read** — the polish reply is the first non-empty assistant message after the request; a human turn admitted while the polish turn runs appends later, so its reply never shadows the polish result, but a human message admitted before the polish turn that completes after it can precede the polish reply in the log. The composer disables the button while a polish is in flight, which makes the race unreachable from the shipped UI.
-- **Cold sessions are not polished** — resuming a persisted session for a polish turn is deliberately out of scope; the Web GUI always operates on live sessions.
+- **No session-log record of the polish turn** — the throwaway session is disposed, so a polish is not reconstructable from the visible session. The target session's log stays byte-identical, which is the point; if auditability ever outweighs cleanliness, a durable record would need a new event kind.
+- **Cold sessions are not polished** — resuming a persisted session to mirror its selection is deliberately out of scope; the Web GUI always operates on live sessions.

@@ -47,10 +47,11 @@ const RETRY_ID = 'retry-fixture' as Extract<ConversationNode, { kind: 'model-ret
 interface MessageItemProps {
   readonly node: ConversationNode
   readonly t: ChatNodeViewProps['t']
+  readonly inputActions?: { setDraft: (text: string) => void }
 }
 
 /** Legacy-node fixture adapter for the independently registered renderers. */
-function MessageItem({ node, t: translate }: MessageItemProps) {
+function MessageItem({ node, t: translate, inputActions }: MessageItemProps) {
   const kind = node.kind === 'assistant' ? 'assistant-step' : node.kind
   const viewNode: ChatConversationViewNode = {
     key: `fixture:${node.kind}:${node.seq}`,
@@ -62,7 +63,10 @@ function MessageItem({ node, t: translate }: MessageItemProps) {
     visibility: 'visible',
     data: node.kind === 'model-retry' ? { attempts: [node], current: node } : node,
   }
-  const props = { node: viewNode, t: translate } as ChatNodeViewProps
+  const props = {
+    node: viewNode, t: translate,
+    ...inputActions === undefined ? {} : { inputActions },
+  } as ChatNodeViewProps
   switch (node.kind) {
     case 'user':
     case 'steering':
@@ -81,17 +85,18 @@ function MessageItem({ node, t: translate }: MessageItemProps) {
 }
 
 describe('MessageItem arms', () => {
-  it('user bubbles expose clock / copy and neither branch nor edit; copy writes the text', () => {
+  it('user bubbles expose clock / copy / edit; copy writes the text and edit refills the composer', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
     })
+    const setDraft = vi.fn<(text: string) => void>()
     // Same-day clock: construct "today at 14:24" so the label stays `HH:mm`.
     const now = new Date()
     const time = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 24).getTime()
     render(
-      <MessageItem t={t} node={{
+      <MessageItem t={t} inputActions={{ setDraft }} node={{
         kind: 'user', seq: 1, time,
         content: [{ type: 'text', text: 'hello bubble' }] as never,
         source: null,
@@ -101,9 +106,10 @@ describe('MessageItem arms', () => {
     expect(screen.getByText('14:24')).toBeTruthy()
     expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('hello bubble')
+    fireEvent.click(screen.getByRole('button', { name: '编辑此消息' }))
+    expect(setDraft).toHaveBeenCalledWith('hello bubble')
   })
 
   it('user copy falls back to execCommand when clipboard.writeText is unavailable', () => {

@@ -1,15 +1,15 @@
 /**
  * PolishButton: the composer's polish entry, seated at the right end of the
  * tool row immediately LEFT of the model select. It rewrites and expands the
- * current draft through the session's own agent channel (the polish Remote
- * over dsh-polish): the caption shows the live model label, the button
- * disables while a polish turn is in flight, and on success the draft is
- * replaced with the returned text for the user to review before sending.
- * Failures announce through the shared transient Toast anchored to the
- * button.
+ * current draft through an isolated throwaway session that mirrors the
+ * session's own provider/model selection (dsh-polish), so the visible
+ * conversation is never touched. The button disables while a polish turn is in
+ * flight, and on success the draft is replaced with the returned text for the
+ * user to review before sending. Failures announce through the shared
+ * transient Toast anchored to the button.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   IconEnhanceOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -32,13 +32,13 @@ const KNOWN_FAILURES: Record<string, PolishKey> = {
   'message-blank': 'error.message-blank',
   'message-too-long': 'error.message-too-long',
   'no-result': 'error.no-result',
+  'polish-session-failed': 'error.polish-session-failed',
 }
 
 export function PolishButton({
-  input, inputActions, modelOf, polish, t,
+  input, inputActions, polish, t,
 }: PolishButtonProps) {
   const [busy, setBusy] = useState(false)
-  const [model, setModel] = useState('')
   const [toast, setToast] = useState<{ seq: number; text: string } | null>(null)
   const toastSeq = useRef(0)
   const anchorRef = useRef<HTMLButtonElement | null>(null)
@@ -46,22 +46,9 @@ export function PolishButton({
   // the next render, so rapid clicks would otherwise fire two polish turns.
   const busyRef = useRef(false)
 
-  // The caption model label resolves once per session; a failure keeps the
-  // bare fallback caption rather than blocking the button.
-  useEffect(() => {
-    let alive = true
-    setModel('')
-    modelOf().then((label) => {
-      if (alive) setModel(label)
-    }).catch(() => {})
-    return () => { alive = false }
-  }, [modelOf])
-
   const draft = input.draft.trim()
   const disabled = busy || draft === ''
-  const caption = busy
-    ? t('polishing')
-    : t('polish', { model: model === '' ? t('polish.fallback') : model })
+  const caption = busy ? t('polishing') : t('polish')
 
   const announce = useCallback((text: string): void => {
     toastSeq.current += 1
@@ -81,7 +68,9 @@ export function PolishButton({
         announce(key === undefined ? t('error.raw', {
           code: outcome.code,
           message: outcome.message,
-        }) : t(key))
+        }) : key === 'error.polish-session-failed'
+          ? t(key, { message: outcome.message })
+          : t(key))
       }
     } finally {
       busyRef.current = false

@@ -6,7 +6,7 @@ import { harness } from './helpers.ts'
 
 describe('dsh-polish invariant companion', () => {
   it('removes its registry contribution when its fiber is disposed (HMR safety)', async () => {
-    const ctx = await harness(new MockAdapter([]), { maxMessageChars: 20000 })
+    const { ctx } = await harness(new MockAdapter([]), { maxMessageChars: 20000 })
     try {
       await ctx.plugin(InvariantRegistry)
       const fiber = await ctx.plugin(PolishInvariant)
