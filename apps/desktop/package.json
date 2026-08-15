@@ -61,6 +61,14 @@
         "nsis"
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "differentialPackage": true
+    },
     "linux": {
       "category": "Development",
       "target": [
