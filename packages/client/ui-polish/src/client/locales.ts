@@ -9,7 +9,7 @@ export const zh = {
   'error.message-blank': '输入内容为空',
   'error.message-too-long': '输入内容过长，请精简后重试',
   'error.no-result': '没有获得润色结果，请重试',
-  'error.polish-session-failed': '润色失败：{message}',
+  'error.polish-failed': '润色失败：{message}',
   'error.raw': '{code}: {message}',
 } satisfies Record<string, string>
 
@@ -25,6 +25,6 @@ export const en = {
   'error.message-blank': 'Input is empty',
   'error.message-too-long': 'Input is too long, shorten it and retry',
   'error.no-result': 'No polish result, retry',
-  'error.polish-session-failed': 'Polish failed: {message}',
+  'error.polish-failed': 'Polish failed: {message}',
   'error.raw': '{code}: {message}',
 } satisfies Record<PolishKey, string>

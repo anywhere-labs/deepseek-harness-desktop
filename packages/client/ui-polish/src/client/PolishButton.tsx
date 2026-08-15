@@ -32,7 +32,7 @@ const KNOWN_FAILURES: Record<string, PolishKey> = {
   'message-blank': 'error.message-blank',
   'message-too-long': 'error.message-too-long',
   'no-result': 'error.no-result',
-  'polish-session-failed': 'error.polish-session-failed',
+  'polish-failed': 'error.polish-failed',
 }
 
 export function PolishButton({
@@ -68,7 +68,7 @@ export function PolishButton({
         announce(key === undefined ? t('error.raw', {
           code: outcome.code,
           message: outcome.message,
-        }) : key === 'error.polish-session-failed'
+        }) : key === 'error.polish-failed'
           ? t(key, { message: outcome.message })
           : t(key))
       }

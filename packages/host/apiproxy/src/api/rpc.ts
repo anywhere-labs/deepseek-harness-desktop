@@ -33,6 +33,10 @@ export interface RpcErrorDetailsMap {
   'bad-request': { issues: ZodIssue[] }
   'cancelled': {}
   'session-not-found': { sessionId: SessionId }
+  /** A session is mid-turn and cannot be deleted until it settles. */
+  'session-running': { sessionId: SessionId }
+  /** The agent-stop or log-removal half of a session deletion failed; the message is the underlying error. */
+  'session-delete-failed': { sessionId: SessionId }
   'model-unavailable': { provider: string; model: string }
   'session-conflict': { sessionId: SessionId; requestedCwd: string; existingCwd?: string }
   'invalid-time-zone': { value: string }

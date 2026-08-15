@@ -123,7 +123,28 @@ export function apply(ctx: Context): void {
         if (!result.ok) {
           return { ok: false, code: result.error.code, message: result.error.message }
         }
-        if (result.value.ok) return { ok: true }
+        if (result.value.ok) {
+          // A live session receives the same event as a broadcast; a cold
+          // session never does. The replacement is rebuilt from the request
+          // (id + text) plus the returned seq and folded locally — the seq
+          // guard drops the duplicate when the broadcast also arrives. The
+          // replace bounds are only meaningful host-side; the client fold
+          // reads the presence of the marker, not its extent.
+          sessions.binding(sessionId)?.session.acceptHostEvent({
+            type: 'user/message',
+            seq: result.value.value.seq,
+            time: Date.now(),
+            data: {
+              id: messageId,
+              role: 'user',
+              content: [{ type: 'text', text }],
+              source: { kind: 'user' },
+            },
+            surfaceOp: { op: 'replace', start: 0, end: 0 },
+            sourceEventSeqs: [0],
+          })
+          return { ok: true }
+        }
         return { ok: false, code: result.value.error.code, message: result.value.error.code }
       },
     },

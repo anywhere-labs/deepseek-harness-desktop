@@ -42,8 +42,9 @@
 .editInput {
   width: 100%;
   resize: vertical;
-  background: var(--dsw-alias-bg-raised);
-  border: 1px solid var(--dsw-alias-border);
+  background: var(--dsw-alias-bg-layer-1);
+  /* Input stroke: the composer-card pair, one notch weaker than buttons. */
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
   border-radius: 12px;
   padding: 10px 12px;
   font-size: 16px;
@@ -53,7 +54,7 @@
 }
 
 .editInput:focus {
-  border-color: var(--dsw-alias-accent);
+  border-color: var(--dsw-alias-brand-primary);
   outline: none;
 }
 
@@ -67,11 +68,15 @@
   border: none;
   border-radius: 16px;
   padding: 4px 14px;
-  background: var(--dsw-alias-accent);
-  color: var(--dsw-alias-label-on-accent, var(--dsw-alias-label-primary));
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
   font-size: 14px;
   line-height: 24px;
   cursor: pointer;
+}
+
+.editSave:hover:not(:disabled) {
+  background: var(--dsw-alias-button-primary-hover);
 }
 
 .editSave:disabled {

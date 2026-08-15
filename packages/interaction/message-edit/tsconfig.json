@@ -21,6 +21,12 @@
       "path": "../../core/session"
     },
     {
+      "path": "../../session/session-persistence"
+    },
+    {
+      "path": "../../session/session-persistence-jsonl"
+    },
+    {
       "path": "../../typert/protocol"
     },
     {

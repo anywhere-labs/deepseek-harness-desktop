@@ -1,9 +1,9 @@
 /** Request/result vocabulary of the polish Remote. */
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
-/** One polish request: rewrite and expand a draft in an isolated session. */
+/** One polish request: rewrite and expand a draft through a direct model call. */
 export interface PolishRequest {
-  /** The live session whose provider/model selection the polish turn mirrors. */
+  /** The live session whose provider/model selection the polish call mirrors. */
   readonly sessionId: SessionId
   /** The user-message draft to polish, verbatim. */
   readonly message: string
@@ -26,8 +26,8 @@ export type PolishFailure =
   }
   | { readonly code: 'no-result' }
   | {
-    readonly code: 'polish-session-failed'
-    /** The throwaway-session failure, verbatim. */
+    readonly code: 'polish-failed'
+    /** The direct-call failure, verbatim. */
     readonly message: string
   }
 

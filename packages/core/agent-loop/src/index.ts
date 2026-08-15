@@ -767,6 +767,31 @@ export class AgentLoop extends Service implements AgentFactory {
       agentOptions: agent.options,
     }, 'clear')
   }
+
+  /**
+   * Stop one live agent and remove its session — the lifecycle half of a
+   * user-initiated session deletion. Flushes the session's pending
+   * write-behind batches first, then disposes the lifecycle (stops the
+   * machine, unregisters the agent, removes the session from the store, and
+   * unwinds the scope). The caller removes the persisted log afterwards.
+   * @param agent - the exact live registry agent to dispose.
+   * @throws when the agent is not the live registry instance, is running, or
+   *   has no tracked lifecycle.
+   */
+  async disposeAgent(agent: Agent): Promise<void> {
+    if (this.runtime.ctx.agents.get(agent.id) !== agent) {
+      throw new Error(`agent "${agent.id}" is not the live registry instance`)
+    }
+    if (agent.status === 'running') {
+      throw new Error(`agent "${agent.id}" is running; stop it before deleting the session`)
+    }
+    const dispose = this.lifecycles.get(agent.id)
+    if (dispose === undefined) {
+      throw new Error(`agent "${agent.id}" has no tracked lifecycle in this loop`)
+    }
+    await this.runtime.ctx.sessions.flush(agent.session)
+    await dispose()
+  }
 }
 
 export default AgentLoop

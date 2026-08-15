@@ -89,11 +89,11 @@ describe('PolishButton', () => {
     expect(props.inputActions.setDraft).not.toHaveBeenCalled()
   })
 
-  it('announces a throwaway-session failure with its message through the toast', async () => {
+  it('announces a direct-call failure with its message through the toast', async () => {
     const props = makeProps({
       polish: vi.fn<PolishActions['polish']>(async () => ({
         ok: false,
-        code: 'polish-session-failed',
+        code: 'polish-failed',
         message: 'boom',
       })),
     })

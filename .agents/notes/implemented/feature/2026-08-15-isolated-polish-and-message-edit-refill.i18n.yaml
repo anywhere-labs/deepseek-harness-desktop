@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-15-isolated-polish-and-message-edit-refill.md
-2026-08-15-isolated-polish-and-message-edit-refill.md: 6a1b7ac5a1028b04abcd135a8d340c311400f0e6
-2026-08-15-isolated-polish-and-message-edit-refill.zh.md: b9bea3d91530194348c0195984b3a3444590fde5
+2026-08-15-isolated-polish-and-message-edit-refill.md: cbe9975cf49055af3f65a37fe92e5215d5b20bac
+2026-08-15-isolated-polish-and-message-edit-refill.zh.md: facc75fc47e21bfdc5e00602dbc50830bde6fa04

@@ -41,5 +41,5 @@
 
 .codeChoice input {
   margin-top: 3px;
-  accent-color: var(--dsw-alias-accent);
+  accent-color: var(--dsw-alias-button-primary-fill);
 }

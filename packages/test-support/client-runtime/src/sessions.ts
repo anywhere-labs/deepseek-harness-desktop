@@ -137,6 +137,15 @@ export class FixtureSession implements SessionFace {
   rename(): never {
     throw new Error(`test session "${this.sessionId}": rename is not stubbed — supply it on the fixture's session face`)
   }
+
+  /**
+   * Fail-loud stub; supply `acceptHostEvent` on the fixture's session face to
+   * exercise it (the message-edit fold path).
+   * @returns never — always throws.
+   */
+  acceptHostEvent(): never {
+    throw new Error(`test session "${this.sessionId}": acceptHostEvent is not stubbed — supply it on the fixture's session face`)
+  }
 }
 
 /** One live test session: fixture-derived stores plus its minted scope state. */
@@ -487,6 +496,20 @@ export class TestSessions implements ISessions {
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
+  }
+
+  /**
+   * Recorded delete stub: the fixture row is removed from the list store (the
+   * production behavior is removal without a frame wait).
+   * @param sessionId - the session to delete.
+   */
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    const state = this.list.getSnapshot()
+    this.list.set({
+      ...state,
+      ids: state.ids.filter(id => id !== sessionId),
+      byId: Object.fromEntries(Object.entries(state.byId).filter(([id]) => id !== sessionId)),
+    })
   }
 
   /**

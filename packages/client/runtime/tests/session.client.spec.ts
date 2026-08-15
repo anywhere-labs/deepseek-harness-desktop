@@ -265,6 +265,23 @@ describe('live event path', () => {
     expect(session.getSnapshot().nodes).toEqual(before.nodes)
   })
 
+  it('acceptHostEvent folds one event and drops a same-seq duplicate', async () => {
+    const { session } = await opened()
+    // A user-initiated mutation (message edit) returns its event directly;
+    // a cold session never broadcasts it, so this is the only writer.
+    session.acceptHostEvent(ev.user(6, '已编辑'))
+    await Promise.resolve()
+    const applied = session.getSnapshot()
+    const chatNodes = [...applied.chat.nodes.values()]
+    expect(chatNodes.some(node => node.anchorSeq === 6)).toBe(true)
+    expect(applied.nodes.length).toBeGreaterThan(0)
+
+    // A concurrent broadcast of the SAME event must be dropped by the seq guard.
+    session.acceptHostEvent(ev.user(6, '已编辑'))
+    await Promise.resolve()
+    expect(session.getSnapshot().nodes).toEqual(applied.nodes)
+  })
+
   it('keeps the authoritative host blank bit across unrelated log events', async () => {
     const { session } = await opened([])
     session.handleBlank(true)

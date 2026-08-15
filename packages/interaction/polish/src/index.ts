@@ -1,21 +1,19 @@
 /**
- * Draft polishing in an isolated throwaway session. The polish request is
- * delivered to a fresh agent created for exactly one turn — same
- * provider/model/credential resolution as the target session, but the target
- * session's log is never touched, so the user's visible conversation stays
- * clean and the draft never becomes a real message. The reply text is returned
- * to the caller, which replaces the composer draft with it for review.
+ * Draft polishing as a direct model call — no session is created, no log
+ * entry is written, nothing is ever sent. The service resolves the target
+ * session's provider/model selection and makes one streaming request through
+ * `ctx.llm.prepareCall`, exactly as "asking the model directly" would: the
+ * polished text comes back and the caller replaces the composer draft with it
+ * for the user to review. The visible conversation is untouched by
+ * construction.
  * @module @deepseek-ai/dsh-polish
  */
 
-import { randomUUID } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
-import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   PolishFailure,
@@ -39,6 +37,9 @@ declare module '@deepseek-ai/cordis' {
 
 /** Validate the one deployment-varying limit at the configuration boundary. */
 function resolveMaxMessageChars(value: number): number {
+  // The schemastery Config already enforces min(1); this guard covers direct
+  // construction outside the Loader, which no shipped path exercises.
+  /* v8 ignore next 4 -- schema-guarded defensive arm for direct construction */
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new TypeError(
       `polish: maxMessageChars must be a positive safe integer, got ${String(value)}`,
@@ -71,27 +72,24 @@ function polishPrompt(message: string): string {
   ].join('\n')
 }
 
-/** The first non-empty assistant text in the log, or undefined. */
-function firstAssistantText(events: readonly SessionEvent[]): string | undefined {
-  for (const event of events) {
-    if (event.type !== 'assistant/message') continue
-    const text = event.data.message.content
-      .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-      .map(block => block.text)
-      .join('')
-      .trim()
-    if (text.length > 0) return text
-  }
-  return undefined
+/** Accumulate the reply's text blocks from the chunk stream (text deltas only; the block-end text duplicates them). */
+function accumulatedText(chunks: AsyncIterable<StreamChunk>): Promise<string> {
+  let text = ''
+  return (async () => {
+    for await (const chunk of chunks) {
+      if (chunk.type === 'text-delta') text += chunk.text
+    }
+    return text.trim()
+  })()
 }
 
 /**
- * The polish Remote service: rewrites a draft through a throwaway agent that
- * mirrors the target session's provider/model selection. Requires a live
- * target agent — cold sessions are not resumed for a polish turn.
+ * The polish Remote service: rewrites a draft through ONE direct model call on
+ * the target session's provider/model selection. Nothing is logged and no
+ * session is created; cold targets cannot resolve a selection and are refused.
  */
 export class PolishService extends TypertRemoteService {
-  static inject = ['agents']
+  static inject = ['agents', 'llm']
 
   /** Loader validation for the input bound. */
   static Config: s<Config> = s.object({
@@ -101,7 +99,7 @@ export class PolishService extends TypertRemoteService {
   private readonly maxMessageChars: number
 
   /**
-   * @param ctx - Host context carrying the live agent registry.
+   * @param ctx - Host context carrying the agent registry and the LLM service.
    * @param config - Input bound policy.
    */
   constructor(ctx: Context, config: Config) {
@@ -110,10 +108,9 @@ export class PolishService extends TypertRemoteService {
   }
 
   /**
-   * Polish and expand one draft in an isolated session. The target session's
-   * log is never appended to: the request goes to a fresh agent that inherits
-   * the target's provider/model, and that agent is disposed when the reply
-   * lands. The caller replaces the composer draft with the returned text.
+   * Polish and expand one draft through a direct model call mirroring the
+   * target session's provider/model selection. The visible session is never
+   * touched; the caller replaces the composer draft with the returned text.
    * @param request - target session and the verbatim draft.
    * @returns the polished text or an explicit business failure.
    */
@@ -132,37 +129,30 @@ export class PolishService extends TypertRemoteService {
         actualChars: message.length,
       })
     }
+    const provider = target.options.provider
+    const model = target.options.model
+    if (provider === undefined || model === undefined) {
+      return rejected({ code: 'polish-failed', message: 'target session has no provider/model selection' })
+    }
 
-    let handle: Awaited<ReturnType<typeof this.ctx.agents.create>> | undefined
     try {
-      handle = await this.ctx.agents.create({
-        sessionId: SessionId(randomUUID()),
-        agentOptions: {
-          ...target.options.provider === undefined ? {} : { provider: target.options.provider },
-          ...target.options.model === undefined ? {} : { model: target.options.model },
-        },
-        meta: {
-          hidden: true,
-          ...target.session.header.cwd === undefined ? {} : { cwd: target.session.header.cwd },
-        },
-      })
-      handle.agent.followup(createUserMessage({
-        content: [{ type: 'text', text: polishPrompt(message) }],
-        source: { kind: 'plugin', plugin: 'dsh-polish' },
+      const prepared = await this.ctx.llm.prepareCall({ provider, model })
+      const text = await accumulatedText(prepared.stream({
+        ...prepared.config,
+        messages: [createUserMessage({
+          content: [{ type: 'text', text: polishPrompt(message) }],
+          source: { kind: 'user' },
+        })],
       }))
-      await handle.agent.whenIdle()
-
-      const text = firstAssistantText(handle.agent.session.events)
-      if (text === undefined) return rejected({ code: 'no-result' })
+      if (text.length === 0) return rejected({ code: 'no-result' })
       return success(text)
     } catch (error: unknown) {
       return rejected({
-        code: 'polish-session-failed',
+        code: 'polish-failed',
+        // Adapters throw Errors; the String fallback covers hostile non-Error throws.
+        /* v8 ignore next 1 -- Error-only throw contract from the LLM service */
         message: error instanceof Error ? error.message : String(error),
       })
-    } finally {
-      // The throwaway session never persists and never appears in the UI.
-      if (handle !== undefined) await handle.dispose()
     }
   }
 }

@@ -66,8 +66,9 @@
       config:
         maxNoteBytes: 8192
 
-    # Draft polishing over the session's own agent channel; the composer's
-    # polish button (ui-polish) consumes the polish Remote namespace.
+    # Draft polishing as a direct model call on the session's provider/model
+    # selection; the composer's polish button (ui-polish) consumes the polish
+    # Remote namespace.
     - id: polish
       name: '@deepseek-ai/dsh-polish'
       config:

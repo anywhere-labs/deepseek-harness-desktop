@@ -73,6 +73,11 @@ class TracePersistence extends SessionPersistence {
     return Promise.resolve()
   }
 
+  remove(id: SessionIdType): Promise<void> {
+    if (!TracePersistence.entries.delete(id)) return Promise.reject(new Error('missing test session'))
+    return Promise.resolve()
+  }
+
   load(id: SessionIdType): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
     return this.inspect(id)
   }

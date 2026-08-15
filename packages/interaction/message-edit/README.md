@@ -14,7 +14,7 @@ The service registers one Typert Remote method under the `messageEdit` namespace
 |---|---|---|
 | `messageEdit` | `{ sessionId, messageId, text }` | `{ ok: true, value: { seq } }` or a closed failure |
 
-`messageEdit` requires a **live** agent for `sessionId` (`session-not-found` otherwise). The text is trimmed, must be non-empty (`message-blank`), and must not exceed the configured `maxMessageChars` (`message-too-long`). The target must be a plain user message still on the surface — a message compacted away, injected as context, or from a non-user source is refused (`message-not-found`).
+`messageEdit` edits a **live** session through its agent (the appended event broadcasts to viewers) or a **cold** persisted session through session persistence — a reopened conversation is editable without resuming its agent; a session with neither answers `session-not-found`. The text is trimmed, must be non-empty (`message-blank`), and must not exceed the configured `maxMessageChars` (`message-too-long`). The target must be a plain user message still on the surface — a message compacted away, injected as context, or from a non-user source is refused (`message-not-found`). The client folds the replacement locally from the returned seq (a cold session never broadcasts; the seq guard drops the duplicate when a live broadcast also arrives).
 
 ## Config
 

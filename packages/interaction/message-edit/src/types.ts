@@ -4,7 +4,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm'
 
 /** One edit request: rewrite a settled user message in place. */
 export interface MessageEditRequest {
-  /** The live session whose log carries the message. */
+  /** The session whose log carries the message; live or cold. */
   readonly sessionId: SessionId
   /** Stable identity of the `user/message` to rewrite (survives prior edits). */
   readonly messageId: MessageId
