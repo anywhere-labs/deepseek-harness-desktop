@@ -162,6 +162,14 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
       expect(response.status()).toBe(200)
       expect(openPath).toHaveBeenCalledTimes(1)
       expect(openPath.mock.calls[0]![0].payload).toEqual({ path: `${scaffold.workspaceCwd}/.` })
+      // A chip click must give visible feedback, not a dead link: the composer
+      // notice channel announces the outcome. "Handed to the OS" is the honest
+      // ceiling — the Host cannot tell a silently discarded request from a
+      // real open, so the success copy never claims the file actually opened.
+      await chips.nth(0).click()
+      await expect.poll(() => page.getByText(`Handed 关于我.md to the OS to open; if no window or app-chooser appeared, the file type has a default app that could not open this path — change the default app or open ${scaffold.workspaceCwd}/关于我.md manually`, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+      expect(openPath).toHaveBeenCalledTimes(2)
+      expect(openPath.mock.calls[1]![0].payload).toEqual({ path: `${scaffold.workspaceCwd}/关于我.md` })
     } finally {
       openPath.mockRestore()
     }

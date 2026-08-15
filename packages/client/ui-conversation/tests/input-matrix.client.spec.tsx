@@ -55,6 +55,7 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
     draftImages: () => [],
     resolveSubmitMode: () => 'queue',
     toggleCommandMenu: vi.fn(),
+    clearNotice: () => {},
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(createSnapshotStore<string | null>(null)),

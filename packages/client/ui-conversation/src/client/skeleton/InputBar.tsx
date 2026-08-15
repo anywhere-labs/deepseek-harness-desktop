@@ -36,6 +36,9 @@ import css from './InputBar.module.css'
 /** Decoration product of the no-session state (no machine, empty draft). */
 const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
 
+/** The composer notice strip's visible lifetime; a full open-result path needs a longer read. */
+const NOTICE_HOLD_MS = 6000
+
 /** Rail thumbnail carrying its source attachment for the open/remove callbacks. */
 interface ComposerRailItem extends AttachmentRailItem {
   attachment: ComposerAttachment
@@ -45,7 +48,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
-  resolveSubmitMode, toggleCommandMenu, stop, command, t,
+  resolveSubmitMode, toggleCommandMenu, stop, command, clearNotice, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -55,6 +58,15 @@ export function InputBar({
   const notice = useNotices(s => s)
   const lexicon = useLexicon(s => s)
   const commandMenuOpen = useMenuLauncher(source => source === 'command')
+  // The notice strip is a transient announcement like the prompt-error toast:
+  // a surfaced notice auto-dismisses after NOTICE_HOLD_MS. seq keys the timer
+  // so an identical repeat restarts the hold instead of vanishing early, and a
+  // replacement notice supersedes the pending dismissal.
+  useEffect(() => {
+    if (notice === null) return
+    const timer = setTimeout(clearNotice, NOTICE_HOLD_MS)
+    return () => { clearTimeout(timer) }
+  }, [notice?.seq, clearNotice])
   const promptError = useSession(s => s.promptError) ?? null
   const running = useSession(s => s.running) ?? false
   const subagent = useSession(s => s.subagent) ?? null

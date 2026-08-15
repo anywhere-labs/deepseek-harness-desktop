@@ -18,6 +18,7 @@ import type {
 } from './contract/slots.ts'
 import type { InputNotice } from './input/contract.ts'
 import { createChatStore } from './stores.ts'
+import { feedbackPatchEnabled } from './fork-flags.ts'
 import { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
@@ -107,6 +108,16 @@ function concreteConversation(ctx: Context): ConversationController {
 /** Chain routing: claim the composer while an approval wait is pending (pure — owner props only). */
 function selectApproval({ interactions }: ComposerChainProps): ApprovalWait | null {
   return interactions.find((i): i is ApprovalWait => i.kind === 'approval') ?? null
+}
+
+/**
+ * Trailing path segment for feedback copy; slash- or backslash-separated.
+ * @param path - absolute or relative file path.
+ * @returns The final segment, or the whole string when separator-free.
+ */
+function pathTail(path: string): string {
+  const at = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return at === -1 ? path : path.slice(at + 1)
 }
 
 /** Mounts the conversation plugin.
@@ -297,6 +308,7 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
+          clearNotice: () => {},
           hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
         }
       }
@@ -351,6 +363,7 @@ export function apply(ctx: Context): void {
           const result = await session.command(line)
           return result.ok && result.value.matched
         },
+        clearNotice: feedbackPatchEnabled() ? () => { shell.clearNotice() } : () => {},
         hooks: {
           notices: shell.notices,
           lexicon: shell.lexicon,
@@ -394,10 +407,28 @@ export function apply(ctx: Context): void {
         fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
         openFile: (path) => {
           const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
-          void workspaces.openPath(resolveWorkspacePath(cwd, path)).catch(() => {
-            // Host/OS open failures stay silent in the chat row; the native
-            // app surfaces its own error dialog when the path is unusable.
-          })
+          const resolved = resolveWorkspacePath(cwd, path)
+          // Fork-gated (feedbackPatchEnabled): the Host reports open success
+          // even when the default app silently discards the request (e.g. an
+          // app that cannot take a WSL UNC path), so the success copy says
+          // "handed to the OS", never "opened". Failures surface the Host
+          // reason through the composer notice channel instead of staying
+          // silent in the chat row. Official behavior (flag off) swallows both.
+          if (!feedbackPatchEnabled()) {
+            void workspaces.openPath(resolved).catch(() => {})
+            return
+          }
+          void workspaces.openPath(resolved).then(
+            () => {
+              inputHub.shell(sessionId).notify('info', t('produced.open.succeeded', { name: pathTail(resolved), path: resolved }))
+            },
+            (error: unknown) => {
+              inputHub.shell(sessionId).notify('error', t('produced.open.failed', {
+                name: pathTail(resolved),
+                reason: error instanceof Error ? error.message : String(error),
+              }))
+            },
+          )
         },
         loadOlder: () => { void scoped.loadOlder() },
         loadImage: attachment => conversation.resolveImage(sessionId, attachment),

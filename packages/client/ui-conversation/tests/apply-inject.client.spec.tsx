@@ -25,6 +25,7 @@ import type {
   ConversationSessionInjected, DetailsInjected,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { createChatStore } from '../src/client/stores.ts'
+import * as forkFlags from '../src/client/fork-flags.ts'
 
 // The service reads its initial locale from the browser; these specs assert
 // the shipped Chinese copy, so they state the browser they assume.
@@ -230,14 +231,57 @@ describe('conversation slot inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('openFile (chat view face) resolves against session cwd and calls workspaces.openPath', async () => {
+  it('openFile (chat view face) resolves against session cwd, calls workspaces.openPath, and reports success on the composer notice channel', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(ROOT)
     injected.openFile('src/a.ts')
     await vi.waitFor(() => {
       expect(b.runtime.workspaces.calls).toContainEqual({ method: 'openPath', args: ['/proj/src/a.ts'] })
     })
+    // Success copy is honest: the Host cannot tell a silently discarded
+    // request from a real open, so the notice says "handed to the OS".
+    const notices = b.composerApi(ROOT).hooks.notices
+    await vi.waitFor(() => {
+      const notice = notices.getSnapshot()
+      if (notice === null) throw new Error('no open notice yet')
+      expect(notice.level).toBe('info')
+      expect(notice.text).toBe('已将 a.ts 交给系统打开；若未弹出窗口或选择软件对话框，说明该文件类型已有默认程序但未能打开此路径，请更换默认程序或手动打开 /proj/src/a.ts')
+      expect(typeof notice.seq).toBe('number')
+    })
     await b.runtime.dispose()
+  })
+
+  it('openFile surfaces the Host reason on the composer notice channel when opening fails', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(ROOT)
+    b.runtime.workspaces.stub('openPath', () => Promise.reject(new Error('path open failed: spawn powershell.exe ENOENT')))
+    injected.openFile('src/a.ts')
+    const notices = b.composerApi(ROOT).hooks.notices
+    await vi.waitFor(() => {
+      const notice = notices.getSnapshot()
+      if (notice === null) throw new Error('no open notice yet')
+      expect(notice.level).toBe('error')
+      expect(notice.text).toBe('打开 a.ts 失败：path open failed: spawn powershell.exe ENOENT')
+      expect(typeof notice.seq).toBe('number')
+    })
+    await b.runtime.dispose()
+  })
+
+  it('openFile with the feedback patch disabled keeps the official silent behavior (no notice)', async () => {
+    const b = await bench()
+    const spy = vi.spyOn(forkFlags, 'feedbackPatchEnabled').mockReturnValue(false)
+    try {
+      const { injected } = b.chatViewApi(ROOT)
+      injected.openFile('src/a.ts')
+      await vi.waitFor(() => {
+        expect(b.runtime.workspaces.calls).toContainEqual({ method: 'openPath', args: ['/proj/src/a.ts'] })
+      })
+      // Official behavior: the open runs and its outcome stays silent.
+      expect(b.composerApi(ROOT).hooks.notices.getSnapshot()).toBeNull()
+    } finally {
+      spy.mockRestore()
+      await b.runtime.dispose()
+    }
   })
 
   it('routes workspace switching through the runtime owner, carrying the draft', async () => {

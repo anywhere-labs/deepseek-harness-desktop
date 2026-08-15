@@ -19,6 +19,7 @@ import type { DraftAttachmentId } from '../src/client/input/contract.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
+import * as forkFlags from '../src/client/fork-flags.ts'
 
 afterEach(cleanup)
 
@@ -177,6 +178,7 @@ function bench(over?: BenchOptions) {
     useMenuLauncher: bindSnapshotSelector(menuLauncher),
     stop,
     command: over?.command ?? (() => Promise.resolve(true)),
+    clearNotice: () => { if (forkFlags.feedbackPatchEnabled()) shell.clearNotice() },
     // Mirrors the real lookup chain (conversation namespace, then common).
     t: over?.t ?? makeTranslate(zh, commonZh),
     renderSlot,
@@ -1133,6 +1135,33 @@ describe('strips and variants', () => {
     const { view, shell } = bench()
     act(() => { shell.notify('error', '命令失败了') })
     expect(view.getByText('命令失败了')).toBeTruthy()
+  })
+
+  it('auto-dismisses the notice strip after the hold and clears the store', () => {
+    vi.useFakeTimers()
+    onTestFinished(() => { vi.useRealTimers() })
+    const { view, shell } = bench()
+    act(() => { shell.notify('error', '命令失败了') })
+    expect(shell.notices.getSnapshot()).not.toBeNull()
+    expect(view.getByText('命令失败了')).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(6000) })
+    expect(shell.notices.getSnapshot()).toBeNull()
+    expect(view.queryByText('命令失败了')).toBeNull()
+  })
+
+  it('keeps the notice strip when the feedback patch is disabled (official persistent strip)', () => {
+    vi.useFakeTimers()
+    onTestFinished(() => { vi.useRealTimers() })
+    const spy = vi.spyOn(forkFlags, 'feedbackPatchEnabled').mockReturnValue(false)
+    try {
+      const { view, shell } = bench()
+      act(() => { shell.notify('error', '命令失败了') })
+      act(() => { vi.advanceTimersByTime(6000) })
+      expect(shell.notices.getSnapshot()).not.toBeNull()
+      expect(view.getByText('命令失败了')).toBeTruthy()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('hero variant adds the hero class and accessory row renders', () => {

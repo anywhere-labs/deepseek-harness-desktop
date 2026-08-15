@@ -14,7 +14,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import { deriveEventMessage, SessionId } from '@deepseek-ai/dsh-session'
@@ -396,10 +396,28 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await fileLink.waitFor({ timeout: 10_000 })
     const frame = page.locator('[style*="grid-template-columns"]').first()
     expect(await frame.getAttribute('data-details-collapsed')).toBe('true')
-    await fileLink.click()
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
-    // Path label survives from the recorded args (a.txt).
-    await expect.poll(() => page.getByText('a.txt', { exact: false }).count(), { timeout: 5_000 }).toBeGreaterThan(0)
+    // Intercept the host open so the click's openFile outcome is deterministic
+    // and portable across platforms (the produced-files scenario does the
+    // same), and dismiss the resulting notice before later a11y goldens
+    // capture the center column.
+    const openPath = vi.spyOn(scaffold.ctx.apiProxy.host, 'openPath')
+      .mockImplementation(async (request, _signal) => ({
+        rpcId: request.rpcId,
+        result: { ok: true, value: { opened: true as const } },
+      }))
+    try {
+      await fileLink.click()
+      await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+      // Path label survives from the recorded args (a.txt).
+      await expect.poll(() => page.getByText('a.txt', { exact: false }).count(), { timeout: 5_000 }).toBeGreaterThan(0)
+      // Wait out the fork's auto-dismissed success notice (6s hold): first
+      // observe it appear, then wait for it to clear, so it cannot leak into
+      // the command-row / feedback-row goldens.
+      await expect.poll(() => page.getByText('Handed a.txt to the OS to open', { exact: false }).count(), { timeout: 5_000 }).toBe(1)
+      await expect.poll(() => page.getByText('Handed a.txt to the OS to open', { exact: false }).count(), { timeout: 10_000 }).toBe(0)
+    } finally {
+      openPath.mockRestore()
+    }
   })
 
   it.skipIf(MODE === 'record')('expands the cold-resumed compact summary', async () => {

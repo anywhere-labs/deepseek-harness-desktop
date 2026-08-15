@@ -347,6 +347,11 @@ export class SessionInputShell implements SessionInput {
     this.notices.set({ level, text, seq: this.noticeSeq })
   }
 
+  /** Dismiss the surfaced notice (the composer renders it as a transient strip). */
+  clearNotice(): void {
+    this.notices.set(null)
+  }
+
   // ---- wiring-layer extras (not on the frozen SessionInput face) ----
 
   /** Teardown: abort any in-flight attempt and stop accepting async settlements. */

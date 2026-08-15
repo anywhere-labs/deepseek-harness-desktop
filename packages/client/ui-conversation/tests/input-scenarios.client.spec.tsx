@@ -149,6 +149,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
         span: { ...selection, draftRev: snapshot.draftRev },
       })
     },
+    clearNotice: () => { shell.clearNotice() },
     useNotices: bindSnapshotSelector(shell.notices),
     useLexicon: bindSnapshotSelector(shell.lexicon),
     useMenuLauncher: bindSnapshotSelector(controller.launcher),
