@@ -14,6 +14,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-loop'
+// Type-only: pulls the sessionPersistence service's Context merge so the cold
+// path's ctx.get resolves the typed service.
+import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { FileDiff } from '@deepseek-ai/dsh-tools'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
@@ -132,8 +135,11 @@ export class RollbackService extends TypertRemoteService {
   }
 
   /**
-   * Rewind one live session to before the message at `messageSeq`: the cut is
-   * the picked message's turn start, so the surviving log is balanced. When
+   * Rewind a session to before the message at `messageSeq`: the cut is the
+   * picked message's turn start, so the surviving log is balanced. A live
+   * session rewinds through the agent loop (truncate + dispose + resume); a
+   * cold persisted session is truncated through persistence directly and
+   * stays cold — the next prompt resumes it with the full composition. When
    * `code` is set, the dropped span's fs write/edit hunks are reverse-applied
    * first (in reverse order); partial failures are reported, never fatal.
    * @param request - target session, picked message seq, and code-revert flag.
@@ -142,9 +148,45 @@ export class RollbackService extends TypertRemoteService {
   @Remote('rollback')
   async rollback(request: RollbackRequest): Promise<RollbackResult> {
     const agent = this.ctx.agents.get(request.sessionId)
+    const persistence = this.ctx.get('sessionPersistence')
+
+    // Cold path: a reopened session has no live agent; truncate the durable
+    // log directly (the session stays cold until the next prompt resumes it).
     if (agent === undefined) {
-      return rejected({ code: 'session-not-found', sessionId: request.sessionId })
+      if (persistence === undefined) {
+        return rejected({ code: 'session-not-found', sessionId: request.sessionId })
+      }
+      const stored = (await persistence.list()).find(header => header.id === request.sessionId)
+      if (stored === undefined) {
+        return rejected({ code: 'session-not-found', sessionId: request.sessionId })
+      }
+      const loaded = await persistence.load(request.sessionId)
+      if (!Number.isSafeInteger(request.messageSeq) || request.messageSeq < 0
+        || request.messageSeq >= loaded.events.length) {
+        return rejected({
+          code: 'message-seq-out-of-range',
+          messageSeq: request.messageSeq,
+          logLength: loaded.events.length,
+        })
+      }
+      const cutSeq = turnStartOf(loaded.events, request.messageSeq)
+      if (cutSeq === undefined) return rejected({ code: 'no-turn' })
+      const codeFailures = await this.revertCode(request, loaded.events.slice(cutSeq), stored.cwd)
+      try {
+        await persistence.truncate(request.sessionId, cutSeq)
+      } catch (error: unknown) {
+        return rejected({
+          code: 'rewind-failed',
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+      return success({
+        cutSeq,
+        codeReverted: codeFailures.reverted,
+        codeFailures: codeFailures.failures,
+      })
     }
+
     if (!Number.isSafeInteger(request.messageSeq) || request.messageSeq < 0
       || request.messageSeq >= agent.session.events.length) {
       return rejected({
@@ -157,22 +199,7 @@ export class RollbackService extends TypertRemoteService {
     if (cutSeq === undefined) return rejected({ code: 'no-turn' })
 
     // Collect before the rewind (the old log is disposed underneath).
-    const diffs = request.code === true
-      ? reverseDiffs(agent.session.events.slice(cutSeq))
-      : []
-    const cwd = agent.session.header.cwd
-
-    const codeFailures: CodeRevertFailure[] = []
-    if (diffs.length > 0 && cwd === undefined) {
-      for (const diff of diffs) {
-        codeFailures.push({ path: diff.path, reason: 'session has no workspace root' })
-      }
-    } else if (diffs.length > 0 && cwd !== undefined) {
-      for (const diff of diffs) {
-        const failure = await applyReverse(cwd, diff)
-        if (failure !== undefined) codeFailures.push(failure)
-      }
-    }
+    const reverted = await this.revertCode(request, agent.session.events.slice(cutSeq), agent.session.header.cwd)
 
     try {
       await this.ctx.agentLoop.rewind(agent, cutSeq)
@@ -186,9 +213,31 @@ export class RollbackService extends TypertRemoteService {
     }
     return success({
       cutSeq,
-      codeReverted: diffs.length - codeFailures.length,
-      codeFailures,
+      codeReverted: reverted.reverted,
+      codeFailures: reverted.failures,
     })
+  }
+
+  /** Reverse-apply the dropped span's file diffs; returns the failure list and the reverted count. */
+  private async revertCode(
+    request: RollbackRequest,
+    dropped: readonly SessionEvent[],
+    cwd: string | undefined,
+  ): Promise<{ failures: CodeRevertFailure[]; reverted: number }> {
+    if (request.code !== true) return { failures: [], reverted: 0 }
+    const diffs = reverseDiffs(dropped)
+    const failures: CodeRevertFailure[] = []
+    if (diffs.length > 0 && cwd === undefined) {
+      for (const diff of diffs) {
+        failures.push({ path: diff.path, reason: 'session has no workspace root' })
+      }
+    } else if (diffs.length > 0 && cwd !== undefined) {
+      for (const diff of diffs) {
+        const failure = await applyReverse(cwd, diff)
+        if (failure !== undefined) failures.push(failure)
+      }
+    }
+    return { failures, reverted: diffs.length - failures.length }
   }
 }
 

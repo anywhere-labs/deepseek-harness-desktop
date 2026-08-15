@@ -830,7 +830,13 @@ export class SessionManager {
           ...(frame.cwd !== undefined ? { cwd: frame.cwd } : {}),
           ...(frame.agentPreset !== undefined ? { agentPreset: frame.agentPreset } : {}),
         })
-        this.sessions.get(frame.sessionId)?.handleBlank(frame.blank)
+        const instance = this.sessions.get(frame.sessionId)
+        if (instance !== undefined) {
+          // A rewind re-adds the same id under a truncated log: reset the
+          // stale resident window and removed flag so the view refetches.
+          if (instance.getSnapshot().removed) instance.resetConversationWindow()
+          instance.handleBlank(frame.blank)
+        }
         if (frame.origin === 'subagent' && frame.parentSessionId !== undefined) {
           this.markCatalogParentExpandable(frame.parentSessionId)
         }

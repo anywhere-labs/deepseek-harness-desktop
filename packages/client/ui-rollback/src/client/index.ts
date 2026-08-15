@@ -33,7 +33,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'rollback'
 
 /** Required services for the rollback entry and copy. */
-export const inject = ['slots', 'remote', 'remote.rollback', 'locale']
+export const inject = ['slots', 'remote', 'remote.rollback', 'locale', 'sessions']
 
 /**
  * Client plugin body: the rollback button with its Remote verb.
@@ -50,7 +50,15 @@ export function apply(ctx: ClientContext): void {
     inject: (sessionId: SessionId): RollbackActions => ({
       rollback: async (messageSeq, code) => {
         const result = await ctx.remote.rollback.rollback({ sessionId, messageSeq, code })
-        return normalizeRollback(result)
+        const outcome = normalizeRollback(result)
+        if (outcome.ok) {
+          // The host truncated this session's log (live rewind or cold
+          // truncation). Clear the stale window and refetch so the dropped
+          // messages — the context and text the rollback removed — disappear
+          // from the view and input re-enables.
+          ctx.sessions.binding(sessionId)?.session.resetConversationWindow()
+        }
+        return outcome
       },
     }),
   }, RollbackButton))

@@ -146,6 +146,15 @@ export class FixtureSession implements SessionFace {
   acceptHostEvent(): never {
     throw new Error(`test session "${this.sessionId}": acceptHostEvent is not stubbed — supply it on the fixture's session face`)
   }
+
+  /**
+   * Fail-loud stub; supply `resetConversationWindow` on the fixture's session
+   * face to exercise it (the rollback refresh path).
+   * @returns never — always throws.
+   */
+  resetConversationWindow(): never {
+    throw new Error(`test session "${this.sessionId}": resetConversationWindow is not stubbed — supply it on the fixture's session face`)
+  }
 }
 
 /** One live test session: fixture-derived stores plus its minted scope state. */
@@ -503,13 +512,14 @@ export class TestSessions implements ISessions {
    * production behavior is removal without a frame wait).
    * @param sessionId - the session to delete.
    */
-  async deleteSession(sessionId: SessionId): Promise<void> {
+  deleteSession(sessionId: SessionId): Promise<void> {
     const state = this.list.getSnapshot()
     this.list.set({
       ...state,
       ids: state.ids.filter(id => id !== sessionId),
       byId: Object.fromEntries(Object.entries(state.byId).filter(([id]) => id !== sessionId)),
     })
+    return Promise.resolve()
   }
 
   /**

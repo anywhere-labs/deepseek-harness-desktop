@@ -89,6 +89,13 @@ export interface ISession {
    * @param event - the appended event to apply.
    */
   acceptHostEvent(event: SessionEvent): void
+  /**
+   * The Host replaced this session's log under the same id (a rollback
+   * rewind's remove + re-add, or a cold-session rollback truncation). Clear
+   * the stale window and removed flag, then refetch history so the view
+   * shows the post-rollback conversation.
+   */
+  resetConversationWindow(): void
 }
 
 /**

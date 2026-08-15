@@ -1,4 +1,4 @@
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -115,5 +115,56 @@ describe('dsh-rollback through the agent loop', () => {
       ok: false,
       error: { code: 'message-seq-out-of-range', messageSeq: 9999, logLength: agent.session.events.length },
     })
+  })
+
+  it('truncates a cold persisted session without an agent', async () => {
+    const adapter = new MockAdapter([])
+    const { ctx } = await harness(adapter)
+    const persistence = ctx.sessionPersistence
+    const id = SessionId('rb-cold')
+    await persistence.create({ id, version: 0, createdAt: Date.now() })
+    const assistant = createMessage({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'ok' }],
+      source: { kind: 'model', provider: 'mock', model: 'mock' },
+    })
+    const log = [
+      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+      {
+        type: 'user/message', seq: 1, time: 2,
+        data: createUserMessage({ content: [{ type: 'text', text: 'first' }], source: { kind: 'user' } }),
+        surfaceOp: 'append',
+      },
+      { type: 'step/start', seq: 2, time: 3, data: { turn: 1, step: 1 } },
+      {
+        type: 'assistant/message', seq: 3, time: 4,
+        data: { turn: 1, step: 1, message: assistant, provenance: { provider: 'mock', model: 'mock' } },
+        surfaceOp: 'append',
+      },
+      { type: 'step/end', seq: 4, time: 5, data: { turn: 1, step: 1 } },
+      { type: 'turn/end', seq: 5, time: 6, data: { turn: 1, reason: { kind: 'completed' } } },
+      { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
+      {
+        type: 'user/message', seq: 7, time: 8,
+        data: createUserMessage({ content: [{ type: 'text', text: 'second' }], source: { kind: 'user' } }),
+        surfaceOp: 'append',
+      },
+      { type: 'turn/end', seq: 8, time: 9, data: { turn: 2, reason: { kind: 'completed' } } },
+    ] as SessionEvent[]
+    await persistence.append(id, log)
+
+    // No live agent: the rollback must truncate the durable log directly.
+    expect(ctx.agents.get(id)).toBeUndefined()
+    const picked = log[7]
+    if (picked === undefined) throw new Error('expected the second user message')
+    const result = await ctx.rollback.rollback({ sessionId: id, messageSeq: picked.seq })
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.value.cutSeq).toBe(6)
+
+    const loaded = await persistence.load(id)
+    const messages = userMessages(loaded.events)
+    expect(messages).toHaveLength(1)
+    expect(loaded.events.map(event => event.seq)).toEqual([0, 1, 2, 3, 4, 5])
   })
 })

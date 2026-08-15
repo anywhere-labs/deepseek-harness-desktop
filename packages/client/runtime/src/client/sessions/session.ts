@@ -578,6 +578,20 @@ export class Session implements SessionFace {
   }
 
   /**
+   * The host replaced this session's log under the same id — a rollback rewind
+   * (remove + re-add) or a cold-session rollback truncation. The resident
+   * instance must not stay stuck removed with a stale window: input is
+   * disabled while removed, and the old messages are exactly what the
+   * rollback was supposed to clean. Reset the window and refetch history
+   * through the shared resync path.
+   */
+  resetConversationWindow(): void {
+    this.removed = false
+    this.notifier.markDirty()
+    void this.resync()
+  }
+
+  /**
    * host/agent-error relay: the only outlet for live failures with no turn position.
    * @param message - the stringified error.
    */

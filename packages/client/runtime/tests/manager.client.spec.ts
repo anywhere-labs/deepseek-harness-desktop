@@ -997,6 +997,33 @@ describe('pending-interaction list status', () => {
     expect(manager.getListSnapshot().items).toHaveLength(0)
   })
 
+  it('resets a removed resident instance when the host re-adds the same id (rewind)', async () => {
+    const api = new FakeApiClient()
+    api.onHistory = () => Promise.resolve(ok({ events: entries(plainTurn(0, 0, 'a', 'b')), hasMore: false }) as never)
+    const manager = new SessionManager(api, fakeRemote())
+    manager.handleHostEnvelope({ rpcId: 'h1' as never, payload: { type: 'host/session-added', sessionId: S1, blank: false } })
+    const session = manager.get(S1)
+    await session.open()
+    expect(session.getSnapshot().openState).toBe('open')
+
+    // A rollback rewind removes the live session (host/session-removed)…
+    manager.handleHostEnvelope({ rpcId: 'rm' as never, payload: { type: 'host/session-removed', sessionId: S1 } })
+    expect(session.getSnapshot().removed).toBe(true)
+
+    // …then re-adds the same id under the truncated log. The resident
+    // instance must not stay stuck removed with a stale window: input is
+    // disabled while removed and the old messages are exactly what the
+    // rollback was supposed to clean.
+    manager.handleHostEnvelope({ rpcId: 'ra' as never, payload: { type: 'host/session-added', sessionId: S1, blank: false } })
+    await vi.waitFor(() => {
+      expect(session.getSnapshot().removed).toBe(false)
+    })
+    // The window refetches the truncated log (openState returns to open).
+    await vi.waitFor(() => {
+      expect(session.getSnapshot().openState).toBe('open')
+    })
+  })
+
   it('drops stale status at generation death before replay re-adds live interactions', () => {
     const manager = new SessionManager(new FakeApiClient(), fakeRemote())
     manager.handleHostEnvelope({ rpcId: 'h1' as never, payload: { type: 'host/session-added', sessionId: S1, blank: false } })

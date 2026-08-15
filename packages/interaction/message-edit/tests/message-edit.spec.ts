@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
@@ -129,6 +129,61 @@ describe('dsh-message-edit through the agent loop', () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it('edits a cold persisted session, then resumes it and answers a follow-up', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'me-cold-resume-'))
+    try {
+      const ctx = await harness(new MockAdapter([textResponse('ok'), textResponse('ok')]))
+      await ctx.plugin(JsonlSessionPersistence, { root: dir, compression: 'none' })
+      const persistence = ctx.sessionPersistence
+      const id = SessionId('me-cold-resume')
+      const original = createUserMessage({
+        content: [{ type: 'text', text: '冷会话原文' }],
+        source: { kind: 'user' },
+      })
+      const log = [
+        { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+        { type: 'user/message', seq: 1, time: 2, data: original, surfaceOp: 'append' as const },
+        { type: 'step/start', seq: 2, time: 3, data: { turn: 1, step: 1 } },
+        {
+          type: 'assistant/message', seq: 3, time: 4,
+          data: {
+            turn: 1, step: 1,
+            message: createMessage({
+              role: 'assistant',
+              content: [{ type: 'text', text: 'ok' }],
+              source: { kind: 'model', provider: 'mock', model: 'mock' },
+            }),
+            provenance: { provider: 'mock', model: 'mock' },
+          },
+          surfaceOp: 'append' as const,
+        },
+        { type: 'step/end', seq: 4, time: 5, data: { turn: 1, step: 1 } },
+        { type: 'turn/end', seq: 5, time: 6, data: { turn: 1, reason: { kind: 'completed' as const } } },
+      ]
+      await persistence.create({ id, version: 0, createdAt: Date.now() })
+      await persistence.append(id, log as never[])
+
+      // Edit the cold session, then resume it as session.prompt would and send
+      // a follow-up: the edited text, not the original, is model-visible.
+      const edited = await ctx.messageEdit.edit({ sessionId: id, messageId: original.id, text: '冷会话已改' })
+      expect(edited.ok).toBe(true)
+      const resumed = await ctx.agents.resume({ resumeSessionId: id, agentOptions: { provider: 'mock', model: 'mock' } })
+      const agent = resumed.agent
+      agent.followup(createUserMessage({
+        content: [{ type: 'text', text: '恢复后的新消息' }],
+        source: { kind: 'user' },
+      }))
+      await agent.whenIdle()
+
+      const texts = agent.session.deriveMessages()
+        .filter(message => message.role === 'user')
+        .map(message => message.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+      expect(texts).toEqual(['冷会话已改', '恢复后的新消息'])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  }, 20_000)
 
   it('fails closed for an unknown session with no agent and no persisted log', async () => {
     const ctx = await harness(new MockAdapter([]))

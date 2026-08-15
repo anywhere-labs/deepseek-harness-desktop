@@ -38,6 +38,10 @@ async function bench(remoteRollback?: (request: unknown) => Promise<unknown>) {
   }
   new RemoteService(ctx)
   ctx.provide('remote.rollback', { rollback })
+  // The rollback verb refreshes the session window on success; this fixture
+  // has no resident session, so binding resolves nothing and the refresh
+  // short-circuits.
+  ctx.provide('sessions', { binding: () => undefined })
   await ctx.plugin(SlotRegistry).await()
   ctx.slots.register({
     name: 'root',
