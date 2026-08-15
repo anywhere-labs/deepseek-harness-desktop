@@ -12,6 +12,8 @@ Bundle names resolve from the dsh installation first, then from the profile dire
 
 The `web` and `headless` profiles auto-initialize from shipped templates on first use (`web`: base + web-app; `headless`: base + headless). Any other missing profile fails loud with a hint to run `dsh plugin --profile <name> add <package>`.
 
+`--safe-mode` is available on profile boots and the `web` alias. It prepares a missing shipped profile, loads its manifest's shipped bundle layers and the launcher's internal agent preset and telemetry overlays, and keeps the profile's dependencies plus persisted credentials, settings, sessions, and workspaces. It omits the profile and home `cordis.patch.yml` layers and does not start their watchers for that process. Safe Mode accepts application arguments and is mutually exclusive with `--patch`, `--dump-default-config`, and `--dump-config`.
+
 ### App arguments
 
 The launcher's flags come first and end at the first token it does not recognize; everything from there on is handed to the booted profile verbatim through `ctx.cmdlineArgs`, where any injected app plugin may parse it ([`dsh-cmdline`](../../../packages/boot/cmdline/README.md)). `dsh --profile web --port 8080` therefore reaches the web app's `--port`, `dsh --profile web --help` prints that app's help and boots nothing, and `dsh --help` (no profile to hand it to) prints the launcher's own. `-V`/`--version` prints the launcher's version when it appears before the app-argument boundary.
@@ -56,6 +58,7 @@ Git-hosted plugins that ship sources build during install through their `prepare
 
 ```sh
 dsh web
+dsh web --safe-mode
 dsh web --patch ./extra.cordis.yml
 dsh web --dump-config
 dsh web --help
@@ -65,7 +68,7 @@ The production Web runner needs built package and frontend artifacts (`pnpm run 
 
 Process shutdown gives the plugin tree up to five seconds to dispose. The first `SIGINT`/`SIGTERM` starts that graceful drain — `SIGTERM` is a supervisor's ordinary stop request and exits 0 on every surface, `SIGINT` reports 130; a second signal forces immediate exit. If one-shot normal completion is already stuck in disposal, the first `Ctrl+C` is the escalation and exits immediately instead of being swallowed.
 
-All modes treat the invoking directory as the default workspace root, load applicable `AGENTS.md` or `CLAUDE.md` instructions with a 65,536-byte render budget, and use an in-memory SQLite session content index. Every profile boot watches valid edits of both `cordis.patch.yml` layers (profile and home) and reapplies them transactionally; a one-shot surface exits through its bounded shutdown, which disposes the watchers.
+All modes treat the invoking directory as the default workspace root, load applicable `AGENTS.md` or `CLAUDE.md` instructions with a 65,536-byte render budget, and use an in-memory SQLite session content index. Normal profile boots watch valid edits of both `cordis.patch.yml` layers (profile and home) and reapply them transactionally; Safe Mode skips both watchers. A one-shot surface exits through its bounded shutdown, which disposes any active watchers.
 
 New sessions default to the `workspace-write` permission preset. Bash and filesystem mutations are restricted to the session workspace and platform temporary roots; reads, network access, and process visibility are not confined. `DSH_PERMISSION_MODE` changes the process fallback. Stored General-settings permissions affect later Web sessions, not an already-open one.
 

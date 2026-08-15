@@ -32,6 +32,7 @@ switch (invocation.mode) {
     await runProfile({
       environment: loadLayeredEnv('dsh'),
       profile: invocation.profile,
+      safeMode: invocation.safeMode === true,
       patchFiles: invocation.patches,
       args: invocation.args,
     })

@@ -11,6 +11,7 @@
 | `dsh --profile <name>` | 启动位于 `$DSH_HOME/profiles/<name>` 的指定 profile。 |
 | `dsh --profile headless "job"` | 运行一个全新的持久化会话，打印最终答案并退出。 |
 | `dsh web` | `--profile web` 的别名。 |
+| `dsh web --safe-mode` | 从随附 bundle 启动 Web，并在本次运行中跳过 profile 与 home 自定义 patch。 |
 | `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
@@ -39,6 +40,8 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 `dsh.profile.bundles` 中列出的组合包先从 dsh 安装目录解析（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@deepseek-ai/dsh-headless`），再从 profile 自身的 `node_modules` 解析；pnpm 会将树外插件安装到该目录。
 
 使用 `--dump-default-config` 和 `--dump-config` 可在不启动的情况下检查组合后的配置树。
+
+安全模式会在需要时准备所选 profile，保留其已安装依赖与持久化应用数据，并加载随附 bundle 层、内部 agent preset 与 telemetry overlay。本次进程会跳过 profile `cordis.patch.yml`、home 级 patch 及两者的 watcher。`--safe-mode` 不能与 `--patch` 或配置导出 flag 同时使用。
 
 层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI（命令行界面）行为参考](reference/README.md)为准。
 

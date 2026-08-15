@@ -28,6 +28,8 @@ describe('parseDshArgs', () => {
     expect(parse(['web'])).toEqual({ mode: 'profile', profile: 'web', patches: [], args: [] })
     expect(parse(['web', '--patch', 'web.yml']))
       .toEqual({ mode: 'profile', profile: 'web', patches: ['web.yml'], args: [] })
+    expect(parse(['web', '--safe-mode']))
+      .toEqual({ mode: 'profile', profile: 'web', safeMode: true, patches: [], args: [] })
   })
 
   it('ends the launcher flags at the first token it does not own', () => {
@@ -81,11 +83,15 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--dump-config'])).toBe(1)
     expect(exitCode(['--profile', 'x', '--dump-config', '--dump-default-config'])).toBe(1)
     expect(exitCode(['--profile', 'x', '--dump-default-config', '--patch', 'p.yml'])).toBe(1)
+    expect(exitCode(['--profile', 'x', '--safe-mode', '--patch', 'p.yml'])).toBe(1)
+    expect(exitCode(['--profile', 'x', '--safe-mode', '--dump-config'])).toBe(1)
     expect(exitCode(['--profile', 'x', '--dump-config', 'task'])).toBe(1)
     expect(exitCode(['--bogus'])).toBe(1)
     expect(exitCode(['--profile', 'x', 'web'])).toBe(1)
     expect(exitCode(['web', '--dump-config', '--dump-default-config'])).toBe(1)
     expect(exitCode(['web', '--dump-default-config', '--patch', 'w.yml'])).toBe(1)
+    expect(exitCode(['web', '--safe-mode', '--patch', 'w.yml'])).toBe(1)
+    expect(exitCode(['web', '--safe-mode', '--dump-default-config'])).toBe(1)
     expect(exitCode(['web', '--patch='])).toBe(1)
     // A dump never runs app command-line providers, so it cannot show what
     // those flags would decide; printing a tree that differs from the same

@@ -11,6 +11,7 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 | `dsh --profile <name>` | Boot the named profile under `$DSH_HOME/profiles/<name>`. |
 | `dsh --profile headless "job"` | Run one fresh persisted session, print the final answer, and exit. |
 | `dsh web` | Alias of `--profile web`. |
+| `dsh web --safe-mode` | Boot Web from shipped bundles while skipping profile and home custom patches for this run. |
 | `dsh plugin --profile <name> <pnpm args>` | Manage a profile's plugins by forwarding to pnpm in the profile directory. |
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
@@ -39,6 +40,8 @@ The tree composes over an empty root:
 Bundles named in `dsh.profile.bundles` resolve from the dsh installation first (`@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, `@deepseek-ai/dsh-headless`), then from the profile's own `node_modules`, where pnpm installs out-of-tree plugins.
 
 Use `--dump-default-config` and `--dump-config` to inspect the composed tree without booting it.
+
+Safe Mode prepares the selected profile when needed, keeps its installed dependencies and persisted application data, and boots the shipped bundle layers plus internal agent preset and telemetry overlays. It skips the profile `cordis.patch.yml`, the home-level patch, and both patch watchers for the current process. `--safe-mode` is mutually exclusive with `--patch` and the configuration-dump flags.
 
 The [CLI behavior reference](reference/README.md) owns exact layer precedence, flags, shutdown behavior, deployment defaults, and source execution.
 

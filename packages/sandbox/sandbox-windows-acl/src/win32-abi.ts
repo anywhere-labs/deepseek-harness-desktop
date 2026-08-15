@@ -17,9 +17,10 @@
  *    correct WinConsoleLogonSid does produce a valid S-1-2-1, but the child
  *    then still dies with STATUS_DLL_INIT_FAILED (0xC0000142) whenever
  *    CREATE_NO_WINDOW / CREATE_NEW_CONSOLE is used.
- *  - Console isolation: under this restriction scheme a hidden console is not
- *    attainable, so children share the host console (stdio redirection is
- *    pipe-based and unaffected).
+ *  - Console isolation: CREATE_NO_WINDOW remains unavailable under this
+ *    restriction scheme. STARTF_USESHOWWINDOW with SW_HIDE suppresses a new
+ *    visible window while the child shares the host console and redirected
+ *    stdio.
  * @module @deepseek-ai/dsh-sandbox-windows-acl/win32-abi
  */
 
@@ -139,6 +140,10 @@ export const SUB_CONTAINERS_AND_OBJECTS_INHERIT = 0x3 // == OBJECT_INHERIT_ACE |
  * handles, required because Node clears stdio inheritability at startup.
  */
 export const STARTF_USESTDHANDLES = 0x00000100
+/** STARTF_USESHOWWINDOW: honor STARTUPINFOW.wShowWindow for the child window. */
+export const STARTF_USESHOWWINDOW = 0x00000001
+/** SW_HIDE: create the child window hidden without changing its console creation flags. */
+export const SW_HIDE = 0
 /** HANDLE_FLAG_INHERIT: SetHandleInformation flag re-enabling handle inheritance for the spawned child's stdio handles. */
 export const HANDLE_FLAG_INHERIT = 0x1
 /** INFINITE: never-timeout wait value. */

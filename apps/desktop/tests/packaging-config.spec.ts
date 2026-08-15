@@ -30,6 +30,7 @@ const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repositoryRoot = resolve(desktopRoot, '../..')
 const workspaceConfiguration = readFileSync(resolve(repositoryRoot, 'pnpm-workspace.yaml'), 'utf8')
 const builderPatch = readFileSync(resolve(repositoryRoot, 'patches/app-builder-lib@26.15.3.patch'), 'utf8')
+const runtimeStager = readFileSync(resolve(desktopRoot, 'scripts/stage-runtime.ts'), 'utf8')
 const desktopPackage = JSON.parse(
   readFileSync(resolve(desktopRoot, 'package.json'), 'utf8'),
 ) as DesktopPackage
@@ -75,6 +76,7 @@ describe('desktop packaging configuration', () => {
     }
     expect(desktopPackage.scripts.package).toContain('electron-builder --dir')
     expect(desktopPackage.scripts.package).not.toContain('release-preflight.ts')
+    expect(runtimeStager).toContain("'--config.allow-unused-patches=true'")
   })
 
   it('makes the macOS DMG path signed, hardened, and notarized', () => {

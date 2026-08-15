@@ -1,11 +1,10 @@
 /**
  * Restricted-process spawning: anonymous pipes for stdio, STARTUPINFOW with
- * STARTF_USESTDHANDLES, CreateProcessAsUserW under the restricted token, then
- * asynchronous pipe draining and exit waiting. Console isolation
- * (CREATE_NO_WINDOW / CREATE_NEW_CONSOLE) is intentionally absent: under this
- * restriction scheme hidden-console children die with STATUS_DLL_INIT_FAILED
- * (0xC0000142) — verified empirically, see win32-abi.ts. Stdio redirection is
- * pipe-based and unaffected; the child shares the host console.
+ * STARTF_USESTDHANDLES and STARTF_USESHOWWINDOW, CreateProcessAsUserW under the
+ * restricted token, then asynchronous pipe draining and exit waiting. SW_HIDE
+ * suppresses a visible child window while creation flags continue to omit
+ * CREATE_NO_WINDOW / CREATE_NEW_CONSOLE, which break restricted children with
+ * STATUS_DLL_INIT_FAILED (0xC0000142). Stdio remains pipe-based.
  * @module @deepseek-ai/dsh-sandbox-windows-acl/spawn
  */
 
@@ -113,7 +112,8 @@ export function spawnSandboxed(
   const startupInfo = allocStartupInfo()
   encodeStartupInfo(startupInfo, {
     cb: abi.STARTUPINFOW_SIZE,
-    dwFlags: abi.STARTF_USESTDHANDLES,
+    dwFlags: abi.STARTF_USESTDHANDLES | abi.STARTF_USESHOWWINDOW,
+    wShowWindow: abi.SW_HIDE,
     hStdInput: stdIn.read,
     hStdOutput: stdOut.write,
     hStdError: stdErr.write,
@@ -297,7 +297,8 @@ export function spawnSandboxedInherited(
   const startupInfo = allocStartupInfo()
   encodeStartupInfo(startupInfo, {
     cb: abi.STARTUPINFOW_SIZE,
-    dwFlags: abi.STARTF_USESTDHANDLES,
+    dwFlags: abi.STARTF_USESTDHANDLES | abi.STARTF_USESHOWWINDOW,
+    wShowWindow: abi.SW_HIDE,
     hStdInput: stdIn,
     hStdOutput: stdOut,
     hStdError: stdErr,

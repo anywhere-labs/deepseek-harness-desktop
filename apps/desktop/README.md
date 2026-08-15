@@ -14,6 +14,10 @@ pnpm run dev:desktop
 
 Closing the window hides it. Use the tray menu to restore the window or quit the application. Explicit quit waits for the Host process to stop and escalates termination after the bounded Host grace period.
 
+Packaged macOS and Linux launches capture the user's default login-shell environment from the home directory with a two-second bound, then merge it with the application environment. A missing shell, capture failure, or timeout falls back to the inherited environment; Windows uses the inherited environment directly. The captured values stay in memory for the current launch and are never written to disk.
+
+The desktop boot path initializes the shipped Web profile automatically. A fast launch stays silent. At 15 seconds the application offers continued waiting, Safe Mode, or quit; the Host still owns a 90-second hard readiness deadline. Safe Mode retains shipped bundles, credentials, settings, sessions, and workspaces while skipping profile and home patch files plus their watchers for that run. Failed starts offer retry, Safe Mode, a sanitized diagnostic copy, and the profile configuration folder. Structured startup logs contain bounded event metadata under Electron's application log directory and exclude environment values, credentials, and Host output.
+
 The desktop app accepts only the readiness URL emitted by `dsh web` for `127.0.0.1` or `localhost`. Navigation stays on that origin; HTTP and HTTPS links open in the system browser.
 
 Native chrome follows the host platform. macOS uses a frameless inset title bar, traffic lights, and sidebar vibrancy; its collapsed sidebar is 90px wide, with centered controls whose top edge aligns with the expanded logo row below the traffic lights. Windows retains its system frame, shadow, resize and Snap behavior, and Windows 11 rounded corners while a hidden title bar places the native caption buttons in the Session header's first row; the Windows sidebar has no traffic-light inset. The empty part of that row remains draggable, its controls remain clickable, and a resident drag band covers the same row when no Session header is visible. Windows acrylic and macOS vibrancy reach only the sidebar, while conversation and details stay opaque. Linux keeps a frameless window and an opaque sidebar fallback.
@@ -26,7 +30,7 @@ The local packaging command performs the complete repository build, stages the H
 pnpm run package:desktop
 ```
 
-Packaged applications run the staged `@deepseek-ai/dsh` CLI in a separate process through Electron's Node mode. The application therefore retains the supervised-Host lifecycle without shipping a second Node executable. An `afterPack` check rejects the package before signing when the staged CLI entry or Web frontend entry is absent. Both macOS and Windows use the exact tracked `apps/desktop/build/icon.png` source; the repository does not preprocess or commit platform-specific icon variants.
+Packaged applications run the staged `@deepseek-ai/dsh` CLI in a separate process through Electron's Node mode. The application therefore retains the supervised-Host lifecycle without shipping a second Node executable. An `afterPack` check rejects the package before signing when the staged CLI entry, Web frontend entry, Windows ACL runner, or any relative import in that runner is absent. Both macOS and Windows use the exact tracked `apps/desktop/build/icon.png` source; the repository does not preprocess or commit platform-specific icon variants.
 
 ### Signed macOS DMG
 

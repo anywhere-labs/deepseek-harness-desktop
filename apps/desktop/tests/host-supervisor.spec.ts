@@ -128,6 +128,49 @@ describe('desktop Host supervisor', () => {
     expect(child.signals).toEqual([])
   })
 
+  it('keeps forwarding Host output after readiness without parsing another readiness URL', async () => {
+    const child = new FakeHostChild()
+    const log = vi.fn<(chunk: string) => void>()
+    const supervisor = createHostSupervisor({ spawnHost: () => child, log })
+    const starting = supervisor.start()
+
+    child.stdout.emit('dsh web: http://127.0.0.1:4567\n')
+    await expect(starting).resolves.toBe('http://127.0.0.1:4567')
+    child.stdout.emit('runtime warning\n')
+    child.stderr.emit('runtime failure\n')
+    child.stdout.emit('dsh web: http://127.0.0.1:9999\n')
+
+    expect(log.mock.calls.map(([chunk]) => chunk)).toEqual([
+      'dsh web: http://127.0.0.1:4567\n',
+      'runtime warning\n',
+      'runtime failure\n',
+      'dsh web: http://127.0.0.1:9999\n',
+    ])
+    expect(child.signals).toEqual([])
+  })
+
+  it('contains observer callback failures without disrupting readiness or exit handling', async () => {
+    const child = new FakeHostChild()
+    const onCallbackError = vi.fn()
+    const supervisor = createHostSupervisor({
+      spawnHost: () => child,
+      log: () => { throw new Error('log callback failed') },
+      onUnexpectedExit: () => { throw new Error('exit callback failed') },
+      onCallbackError,
+    })
+    const starting = supervisor.start()
+
+    child.stdout.emit('dsh web: http://127.0.0.1:4567\n')
+    await expect(starting).resolves.toBe('http://127.0.0.1:4567')
+    child.emitExit(9)
+
+    expect(onCallbackError).toHaveBeenCalledTimes(2)
+    expect(onCallbackError.mock.calls.map(([error]) => (error as Error).message)).toEqual([
+      'log callback failed',
+      'exit callback failed',
+    ])
+  })
+
   it('does not combine stderr and stdout fragments into a readiness line', async () => {
     const child = new FakeHostChild()
     const supervisor = createHostSupervisor({ spawnHost: () => child })
@@ -303,6 +346,32 @@ describe('desktop Host process', () => {
       '/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness',
       ['--expose-internals', expect.stringContaining('/Resources/host/node_modules/@deepseek-ai/dsh/lib/bin.js'), 'web', '--host', '127.0.0.1', '--port', '0'],
       expect.objectContaining({ env: { DSH_DESKTOP: '1', ELECTRON_RUN_AS_NODE: '1' } }),
+    )
+  })
+
+  it('places the safe-mode launcher flag before web app arguments', async () => {
+    const spawned = {
+      stdout: { on: vi.fn(), off: vi.fn() },
+      stderr: { on: vi.fn(), off: vi.fn() },
+      on: vi.fn(),
+      off: vi.fn(),
+      kill: vi.fn(),
+    }
+    vi.mocked(spawn).mockReturnValue(spawned as never)
+
+    const { spawnDshWeb } = await import('../src/host-supervisor.ts')
+    spawnDshWeb({
+      nodeExecutable: 'node',
+      cliEntry: '/runtime/dsh.js',
+      cwd: '/Users/tester',
+      env: {},
+      safeMode: true,
+    })
+
+    expect(spawn).toHaveBeenCalledWith(
+      'node',
+      ['--expose-internals', '/runtime/dsh.js', 'web', '--safe-mode', '--host', '127.0.0.1', '--port', '0'],
+      expect.objectContaining({ windowsHide: true }),
     )
   })
 })

@@ -86,7 +86,8 @@ async function deploy(): Promise<void> {
   const savedWorkspaceState = existsSync(workspaceState) ? await readFile(workspaceState) : undefined
   try {
     await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
-      '--config.verify-deps-before-run=false', '--filter', deployPackage, 'deploy', '--legacy', '--prod',
+      '--config.verify-deps-before-run=false', '--config.allow-unused-patches=true',
+      '--filter', deployPackage, 'deploy', '--legacy', '--prod',
       '--config.node-linker=hoisted', '--config.auto-install-peers=false', '--config.link-workspace-packages=true', staging,
     ])
   } finally {

@@ -21,6 +21,8 @@ import { Command, CommanderError } from 'commander'
 interface ProfileInvocation {
   mode: 'profile'
   profile: string
+  /** Boot only shipped bundle layers, skipping both user patch files for this run. */
+  safeMode?: true
   /** Extra patch-list overlays applied after the profile's own layer, in argv order. */
   patches: string[]
   /** Everything after the launcher's own flags, verbatim, for injected app plugins. */
@@ -52,6 +54,7 @@ interface BootOptions {
   patch?: string[]
   dumpConfig?: boolean
   dumpDefaultConfig?: boolean
+  safeMode?: boolean
 }
 
 /**
@@ -66,6 +69,7 @@ Examples:
   dsh --profile web                          boot the web profile (same as: dsh web)
   dsh --profile headless "run the tests"     answer one task, print the result, and exit
   dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
+  dsh web --safe-mode                        boot shipped web layers without user patches
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
   dsh --profile web --help                   the web app's own flags and help
   dsh plugin --profile tui add <package>     install a plugin into the tui profile
@@ -83,8 +87,15 @@ Examples:
 function resolveBoot(program: Command, profile: string, options: BootOptions, args: string[]): DshInvocation {
   const patches = options.patch ?? []
   if (patches.includes('')) program.error('error: --patch needs a path')
+  const safeMode = options.safeMode === true
+  if (safeMode && patches.length > 0) program.error('error: --safe-mode takes no --patch overlays')
+  if (safeMode && (options.dumpConfig === true || options.dumpDefaultConfig === true)) {
+    program.error('error: --safe-mode cannot be combined with config dumps')
+  }
   if (options.dumpConfig !== true && options.dumpDefaultConfig !== true) {
-    return { mode: 'profile', profile, patches, args }
+    return safeMode
+      ? { mode: 'profile', profile, safeMode: true, patches, args }
+      : { mode: 'profile', profile, patches, args }
   }
   if (options.dumpConfig === true && options.dumpDefaultConfig === true) {
     program.error('error: --dump-config and --dump-default-config are mutually exclusive')
@@ -130,6 +141,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .argument('[args...]', 'arguments for the booted profile\'s app (see: dsh --profile <name> --help)')
     .option('--profile <name>', 'the profile under $DSH_HOME/profiles to boot')
     .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
+    .option('--safe-mode', 'boot shipped bundle layers without profile or home user patches')
     .option('--dump-config', 'print the composed profile tree and exit')
     .option('--dump-default-config', 'print the profile tree without its user layer or --patch overlays and exit')
     .action((args: string[], options: BootOptions & { profile?: string }) => {
@@ -147,9 +159,9 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
   /** Reject parent options supplied before a subcommand. */
   const rejectParentOptions = (command: string): void => {
     const parent = program.opts<BootOptions & { profile?: string }>()
-    if (parent.profile !== undefined || parent.patch !== undefined
+    if (parent.profile !== undefined || parent.patch !== undefined || parent.safeMode !== undefined
       || parent.dumpConfig !== undefined || parent.dumpDefaultConfig !== undefined) {
-      program.error(`error: ${command} takes none of parent --profile, --patch, --dump-config, or --dump-default-config`)
+      program.error(`error: ${command} takes none of parent --profile, --patch, --safe-mode, --dump-config, or --dump-default-config`)
     }
   }
 
@@ -161,6 +173,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .enablePositionalOptions()
     .argument('[args...]', 'arguments for the web app (see: dsh web --help)')
     .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
+    .option('--safe-mode', 'boot shipped web bundle layers without profile or home user patches')
     .option('--dump-config', 'print the composed web-profile tree (with the user layer and any --patch) and exit')
     .option('--dump-default-config', 'print the web profile\'s bundle layers (no user layer) and exit')
     .action((args: string[], options: BootOptions) => {

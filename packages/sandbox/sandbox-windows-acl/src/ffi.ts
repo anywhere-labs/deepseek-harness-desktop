@@ -43,6 +43,7 @@ type Ptr = ReturnType<typeof koffi.pointer>
 export interface StartupInfoInput {
   cb: number
   dwFlags: number
+  wShowWindow: number
   hStdInput: NativePtr
   hStdOutput: NativePtr
   hStdError: NativePtr
@@ -341,7 +342,7 @@ export function allocStartupInfo(): NativePtr {
 }
 
 /**
- * Write the stdio-relevant fields into a zeroed STARTUPINFOW (others stay default-initialized).
+ * Write the stdio and window-display fields into a zeroed STARTUPINFOW.
  * @param startupInfo - the allocated STARTUPINFOW to encode into.
  * @param fields - the field subset to write.
  */

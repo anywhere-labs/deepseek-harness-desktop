@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import koffi from 'koffi'
 
-import { PROCESS_INFORMATION, getTempPath } from '../src/ffi.ts'
+import { PROCESS_INFORMATION, STARTUPINFOW, getTempPath } from '../src/ffi.ts'
 import type { NativePtr, Win32Bindings } from '../src/ffi.ts'
 import { Win32Error } from '../src/errors.ts'
 import { drainPipe, spawnSandboxed, spawnSandboxedInherited, waitForExit } from '../src/spawn.ts'
@@ -224,6 +224,25 @@ describe('spawn pipe failures close their handles', () => {
     expect(() => spawnSandboxed(api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' }))
       .toThrow(/null process\/thread handles/u)
   })
+
+  it('spawnSandboxed hides the child window without console-isolation creation flags', () => {
+    let startup: Record<string, unknown> | undefined
+    const { api } = pipeOkApi({
+      createProcessAsUserW: vi.fn((
+        _token: unknown, _app: unknown, _cmd: unknown, _pa: unknown, _ta: unknown,
+        _inherit: unknown, flags: number, _env: unknown, _cwd: unknown, startupInfo: NativePtr, processInfo: NativePtr,
+      ) => {
+        expect(flags).toBe(0)
+        startup = koffi.decode(startupInfo, STARTUPINFOW) as Record<string, unknown>
+        koffi.encode(processInfo, PROCESS_INFORMATION, { hProcess: 200n, hThread: 201n, dwProcessId: 1234, dwThreadId: 5678 })
+        return 1
+      }),
+    })
+
+    spawnSandboxed(api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' })
+    expect(startup?.dwFlags).toBe(abi.STARTF_USESTDHANDLES | abi.STARTF_USESHOWWINDOW)
+    expect(startup?.wShowWindow).toBe(abi.SW_HIDE)
+  })
 })
 
 describe('spawnSandboxedInherited failure paths', () => {
@@ -299,6 +318,25 @@ describe('spawnSandboxedInherited failure paths', () => {
     expect(caught).toBeInstanceOf(Win32Error)
     expect((caught as Win32Error).api).toBe('CreateProcessAsUserW')
     expect(closeHandle).toHaveBeenCalledWith(100n)
+  })
+
+  it('hides the inherited-stdio child while retaining only CREATE_SUSPENDED', () => {
+    let startup: Record<string, unknown> | undefined
+    const { api } = inheritedApi({
+      createProcessAsUserW: vi.fn((
+        _token: unknown, _app: unknown, _cmd: unknown, _pa: unknown, _ta: unknown,
+        _inherit: unknown, flags: number, _env: unknown, _cwd: unknown, startupInfo: NativePtr, processInfo: NativePtr,
+      ) => {
+        expect(flags).toBe(abi.CREATE_SUSPENDED)
+        startup = koffi.decode(startupInfo, STARTUPINFOW) as Record<string, unknown>
+        koffi.encode(processInfo, PROCESS_INFORMATION, { hProcess: 200n, hThread: 201n, dwProcessId: 1234, dwThreadId: 5678 })
+        return 1
+      }),
+    })
+
+    spawnSandboxedInherited(api, token, { command: 'probe.exe', args: [], cwd: 'C:\\' })
+    expect(startup?.dwFlags).toBe(abi.STARTF_USESTDHANDLES | abi.STARTF_USESHOWWINDOW)
+    expect(startup?.wShowWindow).toBe(abi.SW_HIDE)
   })
 
   it('closes the job and rejects NULL process/thread handles after a successful spawn', () => {

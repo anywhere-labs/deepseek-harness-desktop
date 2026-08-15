@@ -133,6 +133,8 @@ int wmain()
 	P(DETACHED_PROCESS);
 	P(CREATE_NEW_CONSOLE);
 	P(STARTF_USESTDHANDLES);
+	P(STARTF_USESHOWWINDOW);
+	P(SW_HIDE);
 	P(HANDLE_FLAG_INHERIT);
 	P(INFINITE);
 
@@ -186,6 +188,7 @@ int wmain()
 	static_assert(SUB_CONTAINERS_AND_OBJECTS_INHERIT == 0x3, "inheritance");
 	static_assert(CREATE_NO_WINDOW == 0x08000000, "create no window");
 	static_assert(STARTF_USESTDHANDLES == 0x100, "std handles flag");
+	static_assert(STARTF_USESHOWWINDOW == 0x1 && SW_HIDE == 0, "hidden startup window");
 	static_assert(sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION) == 144, "job extended limit size");
 	static_assert(offsetof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION, BasicLimitInformation) + offsetof(JOBOBJECT_BASIC_LIMIT_INFORMATION, LimitFlags) == 16, "job LimitFlags offset");
 	static_assert(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE == 0x2000, "kill on job close flag");

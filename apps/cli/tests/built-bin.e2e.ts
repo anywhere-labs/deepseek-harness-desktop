@@ -493,6 +493,28 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     }
   }, 30_000)
 
+  it('boots shipped bundle layers in safe mode without reading or changing invalid user patches', async () => {
+    const fixture = createProfileLifecycleFixture()
+    const profilePatch = join(fixture.home, 'profiles', 'lifecycle', 'cordis.patch.yml')
+    const homePatch = join(fixture.home, 'cordis.patch.yml')
+    const invalidProfile = 'invalid: [profile\n'
+    const invalidHome = 'invalid: [home\n'
+    writeFileSync(profilePatch, invalidProfile)
+    writeFileSync(homePatch, invalidHome)
+    const child = startProfileLifecycle(fixture, ['--safe-mode'])
+    try {
+      await waitForFile(fixture.ready)
+      requestProfileShutdown(child, fixture)
+      const result = await child
+      expect(result.exitCode, `${result.stderr}\nstdout:\n${result.stdout}\nsignal: ${String(result.signal)}`).toBe(0)
+      expect(readFileSync(profilePatch, 'utf8')).toBe(invalidProfile)
+      expect(readFileSync(homePatch, 'utf8')).toBe(invalidHome)
+    } finally {
+      child.kill('SIGKILL')
+      rmSync(fixture.home, { recursive: true, force: true })
+    }
+  }, 30_000)
+
   it('fully settles a custom profile, hot-reloads its patch layer with removal reverting, and disposes on a signal', async () => {
     const fixture = createProfileLifecycleFixture()
     const child = startProfileLifecycle(fixture)
