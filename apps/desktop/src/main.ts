@@ -17,7 +17,7 @@ import {
 } from 'electron'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
-import { loadSettings, pinRuntime, resolvePinnedRuntime, saveSettings } from './runtime-manager/settings.ts'
+import { loadSettings, pinRuntime, pinRuntimeForWorkspace, resolvePinnedRuntime, saveSettings, type DesktopSettings } from './runtime-manager/settings.ts'
 import { listInstalledRuntimes, resolveRuntime, runtimeInstallationDir, type RuntimePaths } from './runtime-manager/versions.ts'
 import { installRuntimeVersion, resolvePnpmCommand } from './runtime-manager/install.ts'
 import { loadValidatedRuntimes, type ValidatedRuntimes } from './runtime-manager/validated.ts'
@@ -37,6 +37,21 @@ let hostOrigin: string | undefined
 let bootQuitPromise: Promise<void> | undefined
 let quitReleased = false
 let currentRuntimeVersion: string | undefined
+let activeWorkspace: string | undefined
+
+/** `--workspace=<dir>` CLI arg, or the last workspace persisted in settings. */
+function resolveWorkspace(settings: DesktopSettings): string | undefined {
+  const flag = process.argv.find(argument => argument.startsWith('--workspace='))
+  if (flag !== undefined) return flag.slice('--workspace='.length)
+  return settings.lastWorkspace
+}
+
+/** Restart the shell so the new workspace/runtime pin takes effect. */
+function relaunchWithSettings(settings: DesktopSettings): void {
+  saveSettings(app.getPath('userData'), settings)
+  app.relaunch()
+  releaseAppQuit()
+}
 
 /** Resolve artifacts from the checkout in development and resourcesPath when packaged. */
 function hostPaths(): { nodeExecutable: string; cliEntry: string; cwd: string; electronRunAsNode: boolean } {
@@ -196,10 +211,26 @@ function createTray(): void {
 
 /** Runtime switcher: pin a version (bundled or managed) and relaunch with it. */
 function switchRuntime(version: string | undefined): void {
-  const userDataDir = app.getPath('userData')
-  saveSettings(userDataDir, pinRuntime(loadSettings(userDataDir), version))
-  app.relaunch()
-  releaseAppQuit()
+  const settings = pinRuntime(loadSettings(app.getPath('userData')), version)
+  relaunchWithSettings(settings)
+}
+
+/** Pin/unpin the active workspace's runtime, then relaunch. */
+function switchWorkspaceRuntime(workspace: string, version: string | undefined): void {
+  const settings = pinRuntimeForWorkspace(loadSettings(app.getPath('userData')), workspace, version)
+  relaunchWithSettings(settings)
+}
+
+/** Pick a workspace directory and relaunch the shell for it. */
+async function openWorkspace(): Promise<void> {
+  const result = await dialog.showOpenDialog({
+    title: '选择工作区',
+    properties: ['openDirectory'],
+  })
+  const directory = result.filePaths[0]
+  if (directory === undefined || result.canceled) return
+  const settings = loadSettings(app.getPath('userData'))
+  relaunchWithSettings({ ...settings, lastWorkspace: directory })
 }
 
 /** Install the recommended runtime via the bundled pnpm, then switch to it. */
@@ -241,6 +272,24 @@ function runtimeMenu(): MenuItemConstructorOptions[] {
   const items: MenuItemConstructorOptions[] = [
     { label: '运行时', enabled: false },
   ]
+  const workspace = activeWorkspace
+  if (workspace !== undefined) {
+    items.push({
+      label: `工作区: ${workspace}`,
+      submenu: [
+        {
+          label: '固定此工作区用内置版本',
+          click: () => { switchWorkspaceRuntime(workspace, undefined) },
+        },
+        ...installed.map(runtime => ({
+          label: `固定此工作区用 ${runtime.version}${runtime.version === bundled ? ' (内置)' : ''}`,
+          click: () => { switchWorkspaceRuntime(workspace, runtime.version) },
+        })),
+      ],
+    })
+  }
+  items.push({ label: '打开工作区…', click: () => { void openWorkspace() } })
+  items.push({ type: 'separator' })
   for (const runtime of installed) {
     const marks = [
       runtime.version === current ? '✓' : '',
@@ -288,9 +337,11 @@ async function boot(): Promise<void> {
   const userDataDir = app.getPath('userData')
   const homeDir = app.getPath('home')
   const settings = loadSettings(userDataDir)
+  activeWorkspace = resolveWorkspace(settings)
+  const hostCwd = activeWorkspace ?? homeDir
   const bundled = { version: bundledRuntimeVersion(), paths: hostPaths() }
-  const pinned = resolvePinnedRuntime(settings, homeDir)
-  const runtime = resolveRuntime(userDataDir, pinned, bundled, homeDir)
+  const pinned = resolvePinnedRuntime(settings, hostCwd)
+  const runtime = resolveRuntime(userDataDir, pinned, bundled, hostCwd)
   currentRuntimeVersion = runtime.version
   if (pinned !== undefined && runtime.version !== pinned) {
     console.warn(`desktop runtime pin ${pinned} is not installed — falling back to bundled ${runtime.version}`)

@@ -11,6 +11,8 @@ export interface DesktopSettings {
   pinnedRuntime?: string
   /** Per-workspace pins, keyed by the host cwd passed at spawn time. */
   pinnedByWorkspace?: Record<string, string>
+  /** Last workspace directory the shell was launched for. */
+  lastWorkspace?: string
 }
 
 export function defaultSettings(): DesktopSettings {
