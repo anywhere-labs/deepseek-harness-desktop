@@ -75,6 +75,8 @@ export function toAssistantBlock(block: ContentBlock): AssistantBlock {
 /** A finalized user message. */
 export interface UserMessageNode {
   kind: 'user'
+  /** Stable identity carried from the `user/message` event; survives in-place edits. */
+  messageId: MessageId
   seq: number
   /** Unix epoch ms from the source session event. */
   time: number

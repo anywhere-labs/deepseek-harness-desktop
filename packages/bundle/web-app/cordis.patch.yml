@@ -78,6 +78,11 @@
     - id: rollback
       name: '@deepseek-ai/dsh-rollback'
 
+    # In-place user-message editing over the session surface; the message edit
+    # control (ui-conversation) consumes the messageEdit Remote namespace.
+    - id: message-edit
+      name: '@deepseek-ai/dsh-message-edit'
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'

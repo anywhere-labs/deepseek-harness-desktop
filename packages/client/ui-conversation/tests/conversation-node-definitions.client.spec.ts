@@ -542,6 +542,38 @@ describe('built-in conversation node Definitions', () => {
     expect((node(current, 'tool-call')?.data as ToolChatData).root).not.toHaveProperty('kind')
   })
 
+  it('folds an in-place edit into the SAME user node with the new text', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'user/message', {
+        ...textMessage('edit-me', '第一版'),
+        source: { kind: 'user' },
+      }, { surfaceOp: 'append' }),
+      at(4, 'assistant/message', {
+        turn: 1,
+        step: 1,
+        message: assistantMessage('edit-answer', 'ok'),
+      }, { surfaceOp: 'append' }),
+      at(5, 'user/message', {
+        ...textMessage('edit-me', '第二版'),
+        source: { kind: 'user' },
+      }, { surfaceOp: { op: 'replace', start: 3, end: 3 }, sourceEventSeqs: [3] }),
+    ])
+
+    const current = snapshot(value)
+    // One node, same id, updated text — no second bubble.
+    const users = [...current.nodes.values()]
+      .filter((entry): entry is ChatConversationViewNode => (entry.data as { kind?: string } | undefined)?.kind === 'user')
+      .map(entry => entry.data)
+    expect(users).toHaveLength(1)
+    expect(users[0]).toMatchObject({
+      kind: 'user',
+      messageId: 'edit-me',
+      content: [{ type: 'text', text: '第二版' }],
+    })
+  })
+
   it('assembles retry chains and keeps manual and automatic compaction ownership separate', () => {
     const retry = assembler([
       at(1, 'turn/start', { turn: 1 }),

@@ -370,10 +370,20 @@ export type UseChatNodeTurnData = <Key extends Extract<keyof ConversationTurnDat
   key: Key,
 ) => Readonly<ConversationTurnDataMap[Key]> | undefined
 
+/** Settled outcome of one in-place message edit, normalized for the UI. */
+export type MessageEditOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: string; readonly message: string }
+
+/** The in-place edit verb bound to one session (message id + replacement text). */
+export type MessageEditActions = (messageId: MessageId, text: string) => Promise<MessageEditOutcome>
+
 /** Slot-level Hook factory used by renderers reading their Node's Turn data. */
 export interface ChatNodeTurnDataInjected {
   hooks: {
     turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData>
+    /** In-place user-message edit verb (session-bound); messages not yet sent are not editable. */
+    messageEdit: SlotHookFactory<'conversation.chat.node', () => MessageEditActions>
   }
 }
 

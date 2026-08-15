@@ -98,6 +98,8 @@ export interface CreateAgentOptions {
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
+    /** Exclude the session from product surfaces; throwaway worker sessions set it. */
+    readonly hidden?: boolean
   }
   /**
    * Initial replay/fork history. A fork supplies a balanced completed-turn

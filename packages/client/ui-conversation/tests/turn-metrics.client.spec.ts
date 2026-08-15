@@ -1,6 +1,7 @@
 // Per-turn latency/throughput fold and the footer figure formatters.
 
 import { describe, expect, it } from 'vitest'
+import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
 import type { AssistantMessageNode, ConversationNode, UserMessageNode } from '@deepseek-ai/dsh-client-runtime/client'
 import { assistantStepReading, deriveTurnMetrics } from '../src/client/chat/turn-metrics.ts'
 import { formatLatencySeconds, formatTokensPerSecond } from '../src/client/chat/message-chrome.ts'
@@ -20,7 +21,7 @@ const assistant = ({ seq, turn, step, timing, usage }: StepSpec): AssistantMessa
 })
 
 const user = (seq: number): UserMessageNode => ({
-  kind: 'user', seq, time: seq * 1_000, content: [{ type: 'text', text: 'hi' }] as never, source: null,
+  kind: 'user', messageId: ('m-' + seq) as MessageId, seq, time: seq * 1_000, content: [{ type: 'text', text: 'hi' }] as never, source: null,
 })
 
 describe('assistantStepReading', () => {

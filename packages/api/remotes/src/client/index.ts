@@ -6,6 +6,7 @@ import goalsRemote from '@deepseek-ai/dsh-goal/remote'
 import dynamicRemote from '@deepseek-ai/dsh-cordis-host-runner/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import messageFeedbackRemote from '@deepseek-ai/dsh-message-feedback/remote'
+import messageEditRemote from '@deepseek-ai/dsh-message-edit/remote'
 import polishRemote from '@deepseek-ai/dsh-polish/remote'
 import rollbackRemote from '@deepseek-ai/dsh-rollback/remote'
 import type { TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
@@ -16,6 +17,7 @@ export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-goal/remote'
 export type {} from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 export type {} from '@deepseek-ai/dsh-message-feedback/remote'
+export type {} from '@deepseek-ai/dsh-message-edit/remote'
 export type {} from '@deepseek-ai/dsh-polish/remote'
 export type {} from '@deepseek-ai/dsh-rollback/remote'
 // The forwarded-event allowlist's selection seat: without it in the consumer's
@@ -110,7 +112,8 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      commandsRemote, goalsRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote, polishRemote, rollbackRemote,
+      commandsRemote, goalsRemote, dynamicRemote, pluginInventoryRemote, messageFeedbackRemote,
+      messageEditRemote, polishRemote, rollbackRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

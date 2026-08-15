@@ -31,11 +31,17 @@ function isCompactionCheckpoint(event: Parameters<ConversationNodeDefinition['ma
 export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   kind: 'input-message',
   target: 'chat',
-  match: event => event.type === 'user/message'
-    && isAppendSurfaceEvent(event)
-    && !isCompactionCheckpoint(event)
-    ? { id: String(event.data.id), role: 'start' }
-    : null,
+  match: (event) => {
+    if (event.type === 'user/message' && isAppendSurfaceEvent(event) && !isCompactionCheckpoint(event)) {
+      return { id: String(event.data.id), role: 'start' }
+    }
+    // An edit shadows its target on the model surface; the UI folds it into
+    // the SAME node (same message id) instead of appending a second bubble.
+    if (event.type === 'user/message' && isReplacementSurfaceEvent(event) && !isCompactionCheckpoint(event)) {
+      return { id: String(event.data.id), role: 'update' }
+    }
+    return null
+  },
   start: (_context, match, reader) => {
     if (match.event.type !== 'user/message') throw new Error('input-message start requires user/message')
     const event = match.event
@@ -62,13 +68,23 @@ export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
       }
       : {
         kind: 'user',
+        messageId: event.data.id,
         seq: event.seq,
         time: event.time,
         content: event.data.content,
         source: event.data.source,
       }
   },
-  update: context => context.state,
+  update: (context, match) => {
+    if (match.event.type !== 'user/message' || context.state.kind !== 'user') return context.state
+    // In-place edit: replace the visible text blocks, keep the node identity
+    // and position. Non-text blocks of the original (images, attachments) are
+    // preserved as they were; only the text the user rewrote changes.
+    return {
+      ...context.state,
+      content: match.event.data.content,
+    }
+  },
   buildViewNode: (context) => {
     if (context.state === undefined) return null
     return chatNode(context, context.state.kind, context.state.seq, context.state)

@@ -14,7 +14,7 @@ user 气泡的 IconActions 行在复制和分支旁边还有一个编辑按钮�
 
 公共 locale 保留通用的 `edit` 词条：它是共享词汇，而非本组件的文案。
 
-重新引入该控件时要与能力一起落地：既需要编辑已定稿 user 消息的 client 变更，也需要 host 侧决定这条编辑后的消息对已经消费过它的轮次意味着什么。回填式编辑（把消息文本加载回输入区）已于 [2026-08-15-isolated-polish-and-message-edit-refill](../feature/2026-08-15-isolated-polish-and-message-edit-refill.md) 回归；真正的就地变更仍然延后。
+重新引入该控件时要与能力一起落地：既需要编辑已定稿 user 消息的 client 变更，也需要 host 侧决定这条编辑后的消息对已经消费过它的轮次意味着什么。就地编辑（复用原 id 的 surface 替换 `user/message`）已于 [2026-08-15-isolated-polish-and-message-edit-refill](../feature/2026-08-15-isolated-polish-and-message-edit-refill.md) 回归；重放消费旧措辞的回合仍然延后。
 
 ## 曾考虑的替代方案
 
