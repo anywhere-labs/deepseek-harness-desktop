@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
-  IconBranchOutline16, IconCheckOutline16, IconCopyOutline16, Tooltip, writeClipboard,
+  IconBranchOutline16, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, Tooltip, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { formatLatencySeconds, formatMessageClock, formatRunDuration, formatTokensPerSecond } from './message-chrome.ts'
@@ -35,6 +35,11 @@ export interface MessageIconActionsProps {
    */
   leadingActions?: ReactNode
   /**
+   * Load the message's plain text back into the composer for editing; user
+   * messages only. Omission hides the edit control.
+   */
+  onEdit?: (() => void) | undefined
+  /**
    * Slot-rendered actions owned by independent plugins, placed between the
    * built-in copy and branch controls.
    */
@@ -50,7 +55,7 @@ export interface MessageIconActionsProps {
  */
 export function MessageIconActions({
   text, time, runMs, ttftMs, tokensPerSecond, clock, onBranch, branchUnavailable = false, className,
-  leadingActions, extraActions, t,
+  leadingActions, onEdit, extraActions, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()
@@ -116,6 +121,13 @@ export function MessageIconActions({
     <div className={className === undefined ? css.actions : `${css.actions} ${className}`}>
       {clock === 'start' ? clockEl : null}
       {leadingActions}
+      {onEdit !== undefined && (
+        <Tooltip label={t('message.edit')} side="bottom">
+          <button type="button" className={css.action} aria-label={t('message.edit')} onClick={onEdit}>
+            <IconEditOutline16 />
+          </button>
+        </Tooltip>
+      )}
       <Tooltip label={copied ? t('copied') : t('copy')} side="bottom">
         <button type="button" className={css.action} aria-label={copied ? t('copied') : t('copy')} onClick={onCopy}>
           {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}

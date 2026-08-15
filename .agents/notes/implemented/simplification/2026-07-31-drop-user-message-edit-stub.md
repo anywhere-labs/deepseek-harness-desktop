@@ -14,7 +14,7 @@ The user bubble's IconActions row carried an edit button beside copy and branch.
 
 The common locale keeps its generic `edit` term, which is shared vocabulary rather than this component's copy.
 
-Reintroduce the control together with the capability: a client mutation that edits a settled user message and the host behavior that decides what the edited message does to the turn that already consumed it.
+Reintroduce the control together with the capability: a client mutation that edits a settled user message and the host behavior that decides what the edited message does to the turn that already consumed it. Composer-refill editing (loading the message's text back into the input) returned in [2026-08-15-isolated-polish-and-message-edit-refill](../feature/2026-08-15-isolated-polish-and-message-edit-refill.md); true in-place mutation stays deferred.
 
 ## Alternatives considered
 

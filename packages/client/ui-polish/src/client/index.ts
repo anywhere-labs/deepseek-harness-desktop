@@ -2,7 +2,7 @@
  * Polish surface plugin, browser half: one entry in the composer's
  * `conversation.input.right` list (the seat immediately left of the model
  * select). The button consumes the generated polish Remote through the Client
- * assembly; inject carries only the two verbs bound to the entry's session,
+ * assembly; inject carries the single verb bound to the entry's session,
  * live draft state arrives through the framework session kit.
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -31,10 +31,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'polish'
 
 /** Required services for the polish entry and copy. */
-export const inject = ['slots', 'sessions', 'remote', 'remote.polish', 'locale']
+export const inject = ['slots', 'remote', 'remote.polish', 'locale']
 
 /**
- * Client plugin body: the polish button with its Remote verbs.
+ * Client plugin body: the polish button with its Remote verb.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -46,10 +46,6 @@ export function apply(ctx: ClientContext): void {
     order: 10,
     locale: NS,
     inject: (sessionId: SessionId): PolishActions => ({
-      modelOf: async () => {
-        const result = await ctx.remote.polish.model({ sessionId })
-        return result.ok ? result.value.label : ''
-      },
       polish: async (message) => {
         const result = await ctx.remote.polish.polish({ sessionId, message })
         if (!result.ok) {

@@ -1,25 +1,24 @@
 /**
- * Draft polishing over the session's own agent channel. The polish request is
- * delivered as a plugin-sourced `user/message` and the model reply lands as an
- * ordinary `assistant/message`, so the operation is fully reconstructable from
- * the session log (model-visible means logged) and uses the session's current
- * provider/model/credential resolution exactly like a normal turn. The result
- * is the first non-empty assistant message appended after the request; the
- * caller replaces the composer draft with it for the user to review.
+ * Draft polishing in an isolated throwaway session. The polish request is
+ * delivered to a fresh agent created for exactly one turn — same
+ * provider/model/credential resolution as the target session, but the target
+ * session's log is never touched, so the user's visible conversation stays
+ * clean and the draft never becomes a real message. The reply text is returned
+ * to the caller, which replaces the composer draft with it for review.
  * @module @deepseek-ai/dsh-polish
  */
 
+import { randomUUID } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   PolishFailure,
-  PolishModelRequest,
-  PolishModelResult,
   PolishRequest,
   PolishResult,
 } from './types.ts'
@@ -72,18 +71,24 @@ function polishPrompt(message: string): string {
   ].join('\n')
 }
 
-/** The latest logged request-header model, or undefined before any request. */
-function latestModel(events: readonly SessionEvent[]): string | undefined {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (event?.type === 'request/header') return event.data.header.config.model
+/** The first non-empty assistant text in the log, or undefined. */
+function firstAssistantText(events: readonly SessionEvent[]): string | undefined {
+  for (const event of events) {
+    if (event.type !== 'assistant/message') continue
+    const text = event.data.message.content
+      .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+      .map(block => block.text)
+      .join('')
+      .trim()
+    if (text.length > 0) return text
   }
   return undefined
 }
 
 /**
- * The polish Remote service: rewrites a draft through the session's own agent.
- * Requires a live agent — cold sessions are not resumed for a polish turn.
+ * The polish Remote service: rewrites a draft through a throwaway agent that
+ * mirrors the target session's provider/model selection. Requires a live
+ * target agent — cold sessions are not resumed for a polish turn.
  */
 export class PolishService extends TypertRemoteService {
   static inject = ['agents']
@@ -105,17 +110,17 @@ export class PolishService extends TypertRemoteService {
   }
 
   /**
-   * Polish and expand one draft through the session's own agent channel. The
-   * request is logged as a plugin-sourced user message and the first non-empty
-   * assistant reply after it is the result; the caller replaces the composer
-   * draft with the returned text.
+   * Polish and expand one draft in an isolated session. The target session's
+   * log is never appended to: the request goes to a fresh agent that inherits
+   * the target's provider/model, and that agent is disposed when the reply
+   * lands. The caller replaces the composer draft with the returned text.
    * @param request - target session and the verbatim draft.
    * @returns the polished text or an explicit business failure.
    */
   @Remote('polish')
   async polish(request: PolishRequest): Promise<PolishResult> {
-    const agent = this.ctx.agents.get(request.sessionId)
-    if (agent === undefined) {
+    const target = this.ctx.agents.get(request.sessionId)
+    if (target === undefined) {
       return rejected({ code: 'session-not-found', sessionId: request.sessionId })
     }
     const message = request.message.trim()
@@ -128,41 +133,34 @@ export class PolishService extends TypertRemoteService {
       })
     }
 
-    // The baseline is the log length BEFORE the followup: the polish turn is
-    // the first work appended after it. A concurrent human turn admitted while
-    // the polish turn runs appends after the polish reply, so the first
-    // non-empty assistant message past the baseline stays the polish result.
-    const baseline = agent.session.events.length
-    agent.followup(createUserMessage({
-      content: [{ type: 'text', text: polishPrompt(message) }],
-      source: { kind: 'plugin', plugin: 'dsh-polish' },
-    }))
-    await agent.whenIdle()
+    let handle: Awaited<ReturnType<typeof this.ctx.agents.create>> | undefined
+    try {
+      handle = await this.ctx.agents.create({
+        sessionId: SessionId(randomUUID()),
+        agentOptions: {
+          ...target.options.provider === undefined ? {} : { provider: target.options.provider },
+          ...target.options.model === undefined ? {} : { model: target.options.model },
+        },
+        ...target.session.header.cwd === undefined ? {} : { meta: { cwd: target.session.header.cwd } },
+      })
+      handle.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: polishPrompt(message) }],
+        source: { kind: 'plugin', plugin: 'dsh-polish' },
+      }))
+      await handle.agent.whenIdle()
 
-    for (const event of agent.session.events.slice(baseline)) {
-      if (event.type !== 'assistant/message') continue
-      const text = event.data.message.content
-        .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
-        .map(block => block.text)
-        .join('')
-        .trim()
-      if (text.length > 0) return success(text)
+      const text = firstAssistantText(handle.agent.session.events)
+      if (text === undefined) return rejected({ code: 'no-result' })
+      return success(text)
+    } catch (error: unknown) {
+      return rejected({
+        code: 'polish-session-failed',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      // The throwaway session never persists and never appears in the UI.
+      if (handle !== undefined) await handle.dispose()
     }
-    return rejected({ code: 'no-result' })
-  }
-
-  /**
-   * Read the display label of one session's current model, for the caller's
-   * button caption. Resolves from the latest logged request header, falling
-   * back to the agent options.
-   * @param request - target session.
-   * @returns the model label; empty when nothing is resolvable.
-   */
-  @Remote('model')
-  model(request: PolishModelRequest): PolishModelResult {
-    const agent = this.ctx.agents.get(request.sessionId)
-    if (agent === undefined) return { label: '' }
-    return { label: latestModel(agent.session.events) ?? agent.options.model ?? '' }
   }
 }
 

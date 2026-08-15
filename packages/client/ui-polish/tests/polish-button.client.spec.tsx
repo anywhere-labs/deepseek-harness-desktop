@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// PolishButton behavior: caption with the live model label, disable rules,
-// the polish call replacing the draft, and failure toasts — driven purely
-// through props, no wire.
+// PolishButton behavior: the bare 润色/Polish caption, disable rules, the
+// polish call replacing the draft, and failure toasts — driven purely through
+// props, no wire.
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,12 +18,10 @@ const t: PolishButtonProps['t'] = makeTranslate(zh, commonZh)
 
 function makeProps(over: Partial<PolishButtonProps> = {}) {
   const setDraft = vi.fn<(text: string) => void>()
-  const modelOf = vi.fn<PolishActions['modelOf']>(async () => 'deepseek v4 flash')
   const polish = vi.fn<PolishActions['polish']>(async () => ({ ok: true, text: '润色后的文本' }))
   return {
     input: { draft: '你好' },
     inputActions: { setDraft },
-    modelOf,
     polish,
     t,
     ...over,
@@ -38,18 +36,9 @@ function button(): HTMLButtonElement {
 afterEach(cleanup)
 
 describe('PolishButton', () => {
-  it('shows the live model label in the caption', async () => {
+  it('shows the bare 润色 caption', async () => {
     render(<PolishButton {...makeProps()} />)
-    await waitFor(() => {
-      expect(button().textContent).toContain('润色 deepseek v4 flash')
-    })
-  })
-
-  it('falls back to the bare caption when the model label fails to resolve', async () => {
-    render(<PolishButton {...makeProps({ modelOf: vi.fn(async () => '') })} />)
-    await waitFor(() => {
-      expect(button().textContent).toContain('润色')
-    })
+    expect(button().textContent).toBe('润色')
   })
 
   it('disables on an empty draft', async () => {
@@ -98,5 +87,53 @@ describe('PolishButton', () => {
     fireEvent.click(button())
     expect(await screen.findByText('没有获得润色结果，请重试')).toBeTruthy()
     expect(props.inputActions.setDraft).not.toHaveBeenCalled()
+  })
+
+  it('announces a throwaway-session failure with its message through the toast', async () => {
+    const props = makeProps({
+      polish: vi.fn<PolishActions['polish']>(async () => ({
+        ok: false,
+        code: 'polish-session-failed',
+        message: 'boom',
+      })),
+    })
+    render(<PolishButton {...props} />)
+    fireEvent.click(button())
+    expect(await screen.findByText('润色失败：boom')).toBeTruthy()
+  })
+
+  it('announces an unknown failure code through the raw toast', async () => {
+    const props = makeProps({
+      polish: vi.fn<PolishActions['polish']>(async () => ({
+        ok: false,
+        code: 'weird-code',
+        message: 'boom',
+      })),
+    })
+    render(<PolishButton {...props} />)
+    fireEvent.click(button())
+    expect(await screen.findByText('weird-code: boom')).toBeTruthy()
+  })
+
+  it('dismisses the failure toast after the hold', async () => {
+    // Success replaces the draft without a toast; only failures announce.
+    const props = makeProps({
+      polish: vi.fn<PolishActions['polish']>(async () => ({
+        ok: false,
+        code: 'no-result',
+        message: 'no-result',
+      })),
+    })
+    vi.useFakeTimers()
+    try {
+      render(<PolishButton {...props} />)
+      fireEvent.click(button())
+      await act(async () => {})
+      expect(screen.getByRole('alert')).toBeTruthy()
+      act(() => { vi.advanceTimersByTime(4000) })
+      expect(screen.queryByRole('alert')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
