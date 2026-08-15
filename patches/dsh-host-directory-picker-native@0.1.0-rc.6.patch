@@ -1,0 +1,24 @@
+diff --git a/lib/worker.cjs b/lib/worker.cjs
+index 14f45848b683dbd50fda6fe924c590209bd456d4..9e13a55255ee33b3953226c0025a65cf841e49e7 100644
+--- a/lib/worker.cjs
++++ b/lib/worker.cjs
+@@ -14,15 +14,12 @@
+ */
+ /**
+ * Read a NUL-terminated UTF-16 string at a native address. koffi's
+-* `_Out_ void **` out-params surface a raw address, and
+-* `koffi.decode(addr, 'str16')` would dereference it as a pointer — crash
+-* on real Windows — so view the memory directly instead.
++* `_Out_ void **` out-params surface a raw address. Use the direct string
++* decoder because `koffi.view()` relies on external buffers, which Electron
++* runtimes do not support.
+ */
+ function readUtf16(koffi, address) {
+-	const bytes = Buffer.from(koffi.view(address, 32768));
+-	let end = 0;
+-	while (end + 1 < bytes.length && bytes[end] !== 0) end += 2;
+-	return bytes.toString("utf16le", 0, end);
++	return koffi.decode.string16(address);
+ }
+ const COINIT_APARTMENTTHREADED = 2;
+ const CLSCTX_INPROC_SERVER = 1;

@@ -51,7 +51,7 @@ desktop Client module 会校验模式与平台 marker，随后在兼容模式下
 
 Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在 `app-boot` 完成并审计整个 profile 后创建窗口，因此首个 renderer manifest 会包含所有已激活的官方、desktop 与第三方 client plugin，同时插件自身不会在 Loader entry 内等待整棵 Loader tree。
 
-在 Windows 上，Launcher 会固定使用现有 browse 目录选择 backend 与 client surface，而不使用自适应 native chooser。因此 workspace 选择始终在 Web UI 内完成，也不会在 Electron main 进程中加载原生 N-API 对话框 worker。macOS 与 Linux 仍使用上游自适应 chooser。
+Launcher 会在所有平台保留上游自适应目录选择器。在 Windows 上，安装阶段会修补 native picker package，使其通过 Koffi 直接解码所选 UTF-16 路径；这会避开 Electron 不支持的 external-buffer 操作，同时保留操作系统文件夹对话框。macOS 与 Linux 使用未经修改的上游选择结果。
 
 在两种呈现模式下，Windows PowerShell 都会保留上游 `pwsh-sandbox` 行为与 Windows ACL confinement。Launcher generation 只会把该 Host provider 替换为同一 package 中的 `dsh-plugin-desktop/windows-pwsh-sandbox` 子路径。对于与上游 ACL runner 完全匹配的 argv，adapter 会让打包后的 Electron executable 通过私有 trampoline 以 Node 模式启动，在创建受限 PowerShell 进程前移除 Node-mode 环境变量，然后把全部 policy 与失败处理重新委托给上游 runner。Desktop deploy root 还会固定一个 Yarn patch，在两条原生受限进程路径上把 `STARTF_USESHOWWINDOW`、现有的 `STARTF_USESTDHANDLES` 与 `SW_HIDE` 组合起来。这会保留已捕获的 stdio 而不抑制 console 分配，并在 Windows 为 GUI Host 启动的 PowerShell 进程创建首个 console 窗口时，请求使用隐藏的初始显示状态。它不会使用与上游实现不兼容的 `CREATE_NO_WINDOW` 或 `CREATE_NEW_CONSOLE` flag。直接使用 `danger-full-access` 的 PowerShell、macOS 与 Linux 执行路径保持不变；Windows confinement 失败时不会自动回退到不受限执行。
 
