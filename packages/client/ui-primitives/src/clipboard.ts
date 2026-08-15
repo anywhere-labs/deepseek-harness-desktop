@@ -3,7 +3,7 @@
 
 /**
  * Write text to the host clipboard, preferring the async Clipboard API and
- * falling back to `execCommand('copy')` on hosts (jsdom, insecure contexts)
+ * falling back to \execCommand('copy')\ on hosts (jsdom, insecure contexts)
  * that omit it.
  * @param text - the exact text to place on the clipboard.
  * @returns true only when the host accepted the write.
@@ -35,6 +35,7 @@ export async function writeClipboard(text: string): Promise<boolean> {
   el.style.position = 'fixed'
   el.style.left = '-9999px'
   document.body.appendChild(el)
+  el.focus() // oxlint-disable-line oxc/no-useless-call — focus required for execCommand('copy') in Electron/insecure contexts
   el.select()
   try {
     return exec('copy')
