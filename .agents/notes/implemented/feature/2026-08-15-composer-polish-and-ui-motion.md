@@ -1,8 +1,8 @@
 # Agent Note: Composer polish over the session's own agent channel
 
-English | [中文](2026-08-15-composer-polish-and-ui-motion.zh.md)
-
 Status: implemented
+
+English | [中文](2026-08-15-composer-polish-and-ui-motion.zh.md)
 
 ## Problem
 

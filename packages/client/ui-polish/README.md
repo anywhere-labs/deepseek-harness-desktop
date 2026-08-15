@@ -14,7 +14,9 @@ The caption shows the session's current model label (`润色 deepseek v4 flash` 
 
 ## Model Experience
 
-### What the model sees
+### The polish turn
+
+#### What the model sees
 
 The polish instruction and the verbatim draft as one user message (see `dsh-polish`); the model's reply is never sent automatically — it replaces the composer draft for the user to review.
 

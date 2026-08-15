@@ -182,6 +182,10 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     return this.coordinator.append(id, events)
   }
 
+  truncate(id: SessionId, toSeq: number): Promise<void> {
+    return this.coordinator.truncate(id, toSeq)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }
@@ -331,6 +335,28 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
       // deleted as torn first); this rolls back a DB-level failure (disk full,
       // etc.), unreachable in test.
       /* v8 ignore start */
+      this.db.exec('ROLLBACK')
+      throw error
+      /* v8 ignore stop */
+    }
+  }
+
+  /**
+   * Truncate the stored log to the rows with `seq < toSeq` in one transaction:
+   * DELETE the suffix and bump the session revision so read-model caches
+   * invalidate.
+   * @param meta - the stored session header.
+   * @param toSeq - first event seq to drop; validated by the coordinator.
+   */
+  async truncateAt(meta: SessionHeader, toSeq: number): Promise<void> {
+    await this.ready
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare('DELETE FROM events WHERE session_id = ? AND seq >= ?').run(meta.id, toSeq)
+      this.db.prepare('UPDATE sessions SET revision = revision + 1 WHERE id = ?').run(meta.id)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      /* v8 ignore start -- rolls back a DB-level failure (disk full, etc.), unreachable in test */
       this.db.exec('ROLLBACK')
       throw error
       /* v8 ignore stop */

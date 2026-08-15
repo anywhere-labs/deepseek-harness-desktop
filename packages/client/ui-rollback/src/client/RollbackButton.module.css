@@ -1,0 +1,45 @@
+/* The rollback entry inside the assistant message IconActions row: the same
+   28px action chrome as copy, plus the confirmation dialog and code-choice
+   checkbox. */
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: none;
+  border-radius: 28px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.dialog {
+  width: 420px;
+}
+
+.modalAction {
+  min-width: 88px;
+}
+
+.codeChoice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.codeChoice input {
+  margin-top: 3px;
+  accent-color: var(--dsw-alias-accent);
+}

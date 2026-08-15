@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-15-composer-polish-and-ui-motion.md
-2026-08-15-composer-polish-and-ui-motion.md: 75007eef0f218631fb7f3fe94df87685957ca28f
-2026-08-15-composer-polish-and-ui-motion.zh.md: 7fae79593f73d8efc74817d0d629688622d9cdce
+2026-08-15-composer-polish-and-ui-motion.md: 68cbb4e54bd82652d3c240cb257152932acafa27
+2026-08-15-composer-polish-and-ui-motion.zh.md: 31c66c8f0e94fcaccad5ca33a1ab3f3f310a5554

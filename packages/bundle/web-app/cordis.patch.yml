@@ -73,6 +73,11 @@
       config:
         maxMessageChars: 20000
 
+    # Session rollback over the agent-loop rewind; the message rollback button
+    # (ui-rollback) consumes the rollback Remote namespace.
+    - id: rollback
+      name: '@deepseek-ai/dsh-rollback'
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
@@ -252,6 +257,11 @@
     # assistant-message action strip, over the messageFeedback Remote.
     - id: ui-message-feedback
       name: '@deepseek-ai/dsh-client-ui-message-feedback'
+
+    # Session rollback: the leading assistant-message action (left of copy)
+    # with the code-revert choice, over the rollback Remote (dsh-rollback).
+    - id: ui-rollback
+      name: '@deepseek-ai/dsh-client-ui-rollback'
 
     # Draft polishing: the polish button left of the model select, over the
     # polish Remote (dsh-polish).

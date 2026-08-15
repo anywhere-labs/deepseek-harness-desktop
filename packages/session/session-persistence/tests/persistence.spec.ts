@@ -101,6 +101,10 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return this.coordinator.append(id, events)
   }
 
+  truncate(id: SessionId, toSeq: number): Promise<void> {
+    return this.coordinator.truncate(id, toSeq)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): ReturnType<PersistenceCoordinator['prepare']> {
     return this.coordinator.prepare(id, signal)
   }
@@ -159,6 +163,13 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     /* v8 ignore next -- commitRepair only runs for a materialized (stored) session */
     if (!entry) return
     if (closers.length > 0) entry.events.push(...structuredClone(closers) as SessionEvent[])
+  }
+
+  async truncateAt(m: SessionHeader, toSeq: number): Promise<void> {
+    const entry = this.store.get(m.id)
+    /* v8 ignore next -- truncate only runs for a materialized (stored) session */
+    if (!entry) return
+    entry.events = entry.events.filter(event => event.seq < toSeq)
   }
 
   async list(signal?: AbortSignal): Promise<SessionHeader[]> {

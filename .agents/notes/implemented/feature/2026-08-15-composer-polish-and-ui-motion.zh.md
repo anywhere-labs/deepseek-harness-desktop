@@ -1,8 +1,8 @@
 # Agent Note: 基于会话自身 agent 通道的输入润色
 
-[English](2026-08-15-composer-polish-and-ui-motion.md) | 中文
-
 Status: implemented
+
+[English](2026-08-15-composer-polish-and-ui-motion.md) | 中文
 
 ## Problem
 

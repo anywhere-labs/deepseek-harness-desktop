@@ -241,6 +241,16 @@ export const IconCopyOutline16 = ({ size = 16, className }: IconProps) => (
   </svg>
 )
 
+/** ic_ds_rollback_outline_16 — undo-style counterclockwise arrow (harness-only figma extract). */
+export const IconRollbackOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M8.333 5.333c-1.767 0-3.367.66-4.6 1.733L1.333 4.667v6h6L4.92 8.253c.927-.773 2.107-1.253 3.413-1.253 2.36 0 4.367 1.54 5.067 3.667l1.58-.52C14.053 7.353 11.433 5.333 8.333 5.333z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
 /** ic_ds_refresh_outline_16 */
 export const IconRefreshOutline16 = ({ size = 16, className }: IconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

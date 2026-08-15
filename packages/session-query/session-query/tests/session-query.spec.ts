@@ -76,6 +76,13 @@ class TestPersistence extends SessionPersistence {
     return Promise.resolve()
   }
 
+  truncate(id: SessionIdType, toSeq: number): Promise<void> {
+    const entry = TestPersistence.entries.get(id)
+    if (entry === undefined) return Promise.reject(new Error('missing test session'))
+    entry.events = entry.events.filter(event => event.seq < toSeq)
+    return Promise.resolve()
+  }
+
   load(id: SessionIdType): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
     return this.inspect(id)
   }
