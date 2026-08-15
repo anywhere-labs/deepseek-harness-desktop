@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-agent-spine-demo",
   "description": "The default executor-less/UI-less agent spine with fallback session titles, provider-routed retry, and optional persisted goals",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.6",
   "publishConfig": {
     "access": "public"
   },
