@@ -55,6 +55,28 @@ describe('packaged desktop runtime verification', () => {
     }
   })
 
+  it('rejects a missing transitive Windows runner chunk', async () => {
+    const appOutDir = await mkdtemp(join(tmpdir(), 'dsh-packaged-runtime-'))
+    try {
+      const resources = join(appOutDir, 'DeepSeek Harness.app', 'Contents', 'Resources', 'host', 'node_modules')
+      const cli = join(resources, '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+      const web = join(resources, '@deepseek-ai', 'dsh-web-frontend', 'dist', 'index.html')
+      const runner = join(resources, '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib', 'runner.js')
+      const runnerChunk = join(resources, '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib', 'types-current.js')
+      await mkdir(join(cli, '..'), { recursive: true })
+      await mkdir(join(web, '..'), { recursive: true })
+      await mkdir(join(runner, '..'), { recursive: true })
+      await writeFile(cli, '')
+      await writeFile(web, '')
+      await writeFile(runner, "import './types-current.js'\n")
+      await writeFile(runnerChunk, "export {} from './nested-stale.js'\n")
+
+      await expect(afterPack(context(appOutDir))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(appOutDir, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a shell whose Host dependency tree was filtered out', async () => {
     const appOutDir = await mkdtemp(join(tmpdir(), 'dsh-packaged-runtime-'))
     try {

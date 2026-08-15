@@ -188,6 +188,27 @@ describe('loadProfile', () => {
     ])
   })
 
+  it('loads an exact recovery bundle list without parsing or changing the profile manifest', () => {
+    const anchor = stageInstallation({
+      'shipped-bundle': { patch: '[]\n' },
+      'custom-bundle': { patch: '[]\n' },
+    })
+    const home = tmp()
+    const dir = resolveProfileDir('web', home)
+    initProfile(dir, ['shipped-bundle', 'custom-bundle'])
+    const invalidManifest = '{ invalid profile manifest\n'
+    writeFileSync(join(dir, 'package.json'), invalidManifest)
+
+    const profile = loadProfile('t', 'web', anchor, home, {
+      userLayer: false,
+      bundles: ['shipped-bundle'],
+    })
+
+    expect(profile.layers.map(layer => layer.packageName)).toEqual(['shipped-bundle'])
+    expect(profile.patches).toEqual([])
+    expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(invalidManifest)
+  })
+
   it('fails loud when a listed bundle declares no dsh.bundle', () => {
     const anchor = stageInstallation({ 'not-a-bundle': {} })
     const home = tmp()

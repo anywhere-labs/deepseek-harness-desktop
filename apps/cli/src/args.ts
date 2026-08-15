@@ -21,7 +21,7 @@ import { Command, CommanderError } from 'commander'
 interface ProfileInvocation {
   mode: 'profile'
   profile: string
-  /** Boot only shipped bundle layers, skipping both user patch files for this run. */
+  /** Boot recovery bundle layers, skipping both user patch files for this run. */
   safeMode?: true
   /** Extra patch-list overlays applied after the profile's own layer, in argv order. */
   patches: string[]
@@ -141,7 +141,7 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
     .argument('[args...]', 'arguments for the booted profile\'s app (see: dsh --profile <name> --help)')
     .option('--profile <name>', 'the profile under $DSH_HOME/profiles to boot')
     .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
-    .option('--safe-mode', 'boot shipped bundle layers without profile or home user patches')
+    .option('--safe-mode', 'boot recovery bundle layers without profile or home user patches')
     .option('--dump-config', 'print the composed profile tree and exit')
     .option('--dump-default-config', 'print the profile tree without its user layer or --patch overlays and exit')
     .action((args: string[], options: BootOptions & { profile?: string }) => {

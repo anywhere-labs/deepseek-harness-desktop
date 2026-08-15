@@ -20,9 +20,9 @@ Status: implemented
 
 打包后的 supervisor 使用已打包的 Electron 可执行文件和 `ELECTRON_RUN_AS_NODE=1` 启动 `resources/host/node_modules/@deepseek-ai/dsh/lib/bin.js`；源码启动仍使用宿主 `node` 命令与工作区 CLI 入口。Electron 的 Node 模式可以提供独立 Host 进程，无需在应用中增加第二个 Node 可执行文件。因此，已交付 Electron 的 Node ABI 拥有暂存依赖闭包中原生依赖的兼容性。
 
-打包后的 macOS 与 Linux 应用会在 spawn Host 前，从用户主目录捕获默认登录 shell 环境。捕获过程使用私有输出描述符、随机边界标记、NUL 分隔值、一 MiB 输出上限与两秒终止期限；shell 缺失、解析失败、输出超限、超时和 spawn 失败都会回退到应用继承的环境。登录 shell PATH 优先，Electron 持有的 HOME 保持权威，瞬态 shell 变量会被移除，捕获值只保留在内存中。源码启动与 Windows 使用继承环境。
+打包后的 macOS 与 Linux 应用会在 spawn Host 前，从用户主目录捕获默认登录 shell 环境。捕获过程使用隔离的进程组、私有输出描述符、随机边界标记、NUL 分隔值、一 MiB 输出上限与两秒终止期限；超时与输出超限会终止 shell 进程树并关闭捕获流，shell 缺失、解析失败、输出超限、超时和 spawn 失败都会回退到应用继承的环境。登录 shell PATH 优先，Electron 持有的 HOME 保持权威，瞬态 shell 变量会被移除，捕获值只保留在内存中。源码启动与 Windows 使用继承环境。
 
-CLI 为 profile 与 Web 入口提供 `--safe-mode` 启动选项。该模式仍会准备缺失的随附 profile，并加载随附 bundle 层、内部 agent preset overlay、存储、凭据、会话、工作区与 telemetry；本次进程跳过 profile 和 home `cordis.patch.yml` 层及两者的 watcher。该 flag 与临时 `--patch` overlay、配置导出互斥。
+CLI 为 profile 与 Web 入口提供 `--safe-mode` 启动选项。该模式仍会准备缺失的随附 profile，并加载恢复 bundle 层、内部 agent preset overlay、存储、凭据、会话、工作区与 telemetry；本次进程跳过 profile 和 home `cordis.patch.yml` 层及两者的 watcher。随附 profile 名称会使用当前随附模板，无需解析磁盘上的 manifest，因此损坏的 manifest 或自定义 bundle 无法阻止桌面恢复；自定义 profile 名称继续使用自身配置的 bundle 清单。该 flag 与临时 `--patch` overlay、配置导出互斥。
 
 桌面启动由可恢复状态机管理。普通模式静默启动；达到 15 秒软阈值时，应用提供继续等待、安全模式和退出选项，Host supervisor 同时保留 90 秒硬性就绪期限。重试与模式切换会先关闭当前子进程，等待 shutdown 与 start 都完成结算，再创建下一个 Host。即时失败界面提供重试、安全模式、复制已清理诊断、打开配置目录和退出。应用主动 abort 会关闭当前提示框并排空活动尝试。安全模式就绪后会显示明确标记。启动 telemetry 以有界 JSONL 事件元数据写入 Electron 应用日志目录，不包含 Host 输出、环境变量值、路径或凭据。
 

@@ -12,7 +12,7 @@
 
 `web` 和 `headless` profile 首次使用时会从随附模板自动初始化（`web`：base + web-app；`headless`：base + headless）。其他缺失的 profile 会显式报错，并提示运行 `dsh plugin --profile <name> add <package>`。
 
-profile 启动与 `web` 别名都支持 `--safe-mode`。该模式会准备缺失的随附 profile，加载其 manifest 中的随附 bundle 层以及启动器内部的 agent preset 和 telemetry overlay，并保留 profile 依赖及持久化凭据、设置、会话和工作区。本次进程省略 profile 与 home `cordis.patch.yml` 层，也不会启动两者的 watcher。安全模式可以携带应用参数，并与 `--patch`、`--dump-default-config` 和 `--dump-config` 互斥。
+profile 启动与 `web` 别名都支持 `--safe-mode`。该模式会准备缺失的随附 profile，并保留 profile 依赖及持久化凭据、设置、会话和工作区。随附 profile 名称会直接使用当前随附模板的 bundle 清单，无需解析磁盘上的 manifest；自定义 profile 名称会使用自身配置的 bundle 清单。两条路径都会保留启动器内部的 agent preset 与 telemetry overlay，在本次进程中省略 profile 和 home `cordis.patch.yml` 层，并跳过两者的 watcher。安全模式可以携带应用参数，并与 `--patch`、`--dump-default-config` 和 `--dump-config` 互斥。
 
 ### 应用参数
 

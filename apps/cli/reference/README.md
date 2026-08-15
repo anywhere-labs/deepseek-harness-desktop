@@ -12,7 +12,7 @@ Bundle names resolve from the dsh installation first, then from the profile dire
 
 The `web` and `headless` profiles auto-initialize from shipped templates on first use (`web`: base + web-app; `headless`: base + headless). Any other missing profile fails loud with a hint to run `dsh plugin --profile <name> add <package>`.
 
-`--safe-mode` is available on profile boots and the `web` alias. It prepares a missing shipped profile, loads its manifest's shipped bundle layers and the launcher's internal agent preset and telemetry overlays, and keeps the profile's dependencies plus persisted credentials, settings, sessions, and workspaces. It omits the profile and home `cordis.patch.yml` layers and does not start their watchers for that process. Safe Mode accepts application arguments and is mutually exclusive with `--patch`, `--dump-default-config`, and `--dump-config`.
+`--safe-mode` is available on profile boots and the `web` alias. It prepares a missing shipped profile and keeps the profile's dependencies plus persisted credentials, settings, sessions, and workspaces. A shipped profile name uses the current shipped template bundle list without parsing its on-disk manifest; a custom profile name uses its configured bundle list. Both paths retain the launcher's internal agent preset and telemetry overlays, omit the profile and home `cordis.patch.yml` layers, and skip their watchers for that process. Safe Mode accepts application arguments and is mutually exclusive with `--patch`, `--dump-default-config`, and `--dump-config`.
 
 ### App arguments
 

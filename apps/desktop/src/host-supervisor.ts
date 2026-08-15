@@ -70,6 +70,9 @@ export function createReadinessParser(): ReadinessParser {
   return {
     push(chunk) {
       pending += chunk
+      if (pending.length > MAX_STARTUP_OUTPUT_CHARS) {
+        throw new Error(`desktop Host readiness line exceeded ${String(MAX_STARTUP_OUTPUT_CHARS)} characters`)
+      }
       for (;;) {
         const newline = pending.indexOf('\n')
         if (newline === -1) return readyUrl

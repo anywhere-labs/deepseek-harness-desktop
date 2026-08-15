@@ -79,16 +79,25 @@ export async function captureLoginShellEnvironment(
     : ['-ilc', command]
   const child = spawn(shell, args, {
     cwd: home,
+    detached: true,
     env: environment,
     stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
   })
+  const killShellTree = (): void => {
+    try {
+      if (child.pid === undefined) child.kill('SIGKILL')
+      else process.kill(-child.pid, 'SIGKILL')
+    } catch {
+      // A spawn failure or an already-exited process needs no further cleanup.
+    }
+  }
   const output = child.stdio[3]
   if (output === null || output === undefined) {
     const closed = new Promise<void>((resolve) => {
       child.once('error', () => {})
       child.once('close', () => { resolve() })
     })
-    child.kill('SIGKILL')
+    killShellTree()
     await closed
     throw new Error('desktop shell environment has no capture stream')
   }
@@ -108,7 +117,8 @@ export async function captureLoginShellEnvironment(
       if (failure !== undefined) return
       failure = error
       stopReading()
-      child.kill('SIGKILL')
+      output.destroy()
+      killShellTree()
     }
     const accept = (chunk: Buffer | string): void => {
       try {
@@ -125,10 +135,7 @@ export async function captureLoginShellEnvironment(
     }
 
     output.on('data', accept)
-    child.once('error', (error) => {
-      failure ??= error
-      stopReading()
-    })
+    child.once('error', failAndKill)
     const timer = setTimeout(() => {
       failAndKill(new Error(`desktop shell environment timed out after ${String(timeoutMs)}ms`))
     }, timeoutMs)

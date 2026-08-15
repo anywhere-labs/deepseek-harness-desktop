@@ -3,7 +3,7 @@
  * patch layers (bundle layers in `dsh.profile.bundles` order, the profile's
  * own `cordis.patch.yml`, `--patch` overlays, the telemetry switch), mount the
  * tree over the profile's empty root config, keep the profile patch layer
- * live, and wire fail-loud plus bounded shutdown. Safe mode mounts shipped
+ * live, and wire fail-loud plus bounded shutdown. Safe mode mounts recovery
  * bundle layers without reading or watching either user patch file.
  *
  * App flags are not the launcher's business: the invocation's inner arguments
@@ -27,6 +27,7 @@ import {
   loadOverlayPatches,
   loadProfile,
   PROFILE_PATCH_FILENAME,
+  PROFILE_TEMPLATES,
   watchUserPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
@@ -94,11 +95,15 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
  * on the same file, so both compose over the identical base).
  * @param name - the profile name.
  * @param userLayer - `false` skips parsing `cordis.patch.yml` (the default dump).
+ * @param bundles - Exact bundle list for a recovery composition.
  * @returns the loaded profile.
  */
-export function prepareProfile(name: string, userLayer = true): Profile {
+export function prepareProfile(name: string, userLayer = true, bundles?: readonly string[]): Profile {
   healProfilesModuleFallback(INSTALL_ANCHOR)
-  const profile = loadProfile(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })
+  const profile = loadProfile(NAME, name, INSTALL_ANCHOR, undefined, {
+    userLayer,
+    ...bundles === undefined ? {} : { bundles },
+  })
   writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   return profile
 }
@@ -146,7 +151,7 @@ function composeProfile(
   patchFiles: readonly string[],
   safeMode: boolean,
 ): ComposedProfile {
-  const profile = prepareProfile(name, !safeMode)
+  const profile = prepareProfile(name, !safeMode, safeMode ? PROFILE_TEMPLATES[name] : undefined)
   const homePatches = safeMode ? [] : loadOptionalPatches(NAME, homePatchPath()) ?? []
   const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))
   const bundlePatches = profile.layers.flatMap(layer => layer.patches)

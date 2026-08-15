@@ -41,7 +41,7 @@ Bundles named in `dsh.profile.bundles` resolve from the dsh installation first (
 
 Use `--dump-default-config` and `--dump-config` to inspect the composed tree without booting it.
 
-Safe Mode prepares the selected profile when needed, keeps its installed dependencies and persisted application data, and boots the shipped bundle layers plus internal agent preset and telemetry overlays. It skips the profile `cordis.patch.yml`, the home-level patch, and both patch watchers for the current process. `--safe-mode` is mutually exclusive with `--patch` and the configuration-dump flags.
+Safe Mode prepares the selected profile when needed, keeps its installed dependencies and persisted application data, and boots recovery bundle layers plus internal agent preset and telemetry overlays. Shipped profiles use the current shipped template without parsing their on-disk manifest, so a malformed manifest or custom bundle cannot block recovery; custom profile names keep their configured bundle list. The process skips the profile `cordis.patch.yml`, the home-level patch, and both patch watchers. `--safe-mode` is mutually exclusive with `--patch` and the configuration-dump flags.
 
 The [CLI behavior reference](reference/README.md) owns exact layer precedence, flags, shutdown behavior, deployment defaults, and source execution.
 

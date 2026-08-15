@@ -1,5 +1,23 @@
-import { describe, expect, it, vi } from 'vitest'
-import { parseShellEnvironment, resolveDesktopEnvironment } from '../src/shell-environment.ts'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { captureLoginShellEnvironment, parseShellEnvironment, resolveDesktopEnvironment } from '../src/shell-environment.ts'
+
+const temporaryDirectories: string[] = []
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true })
+})
+
+function fakeShell(body: string): { home: string; shell: string } {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-shell-environment-'))
+  temporaryDirectories.push(home)
+  const shell = join(home, 'test-shell')
+  writeFileSync(shell, `#!/bin/sh\n${body}\n`)
+  chmodSync(shell, 0o700)
+  return { home, shell }
+}
 
 describe('desktop shell environment parser', () => {
   it('reads NUL-delimited values between private markers', () => {
@@ -17,6 +35,29 @@ describe('desktop shell environment parser', () => {
     expect(() => parseShellEnvironment(Buffer.from('start\0PATH=/usr/bin\0'), 'start', 'end')).toThrow('end marker')
     expect(() => parseShellEnvironment(Buffer.from('start\0invalid\0end\0'), 'start', 'end')).toThrow('invalid record')
   })
+})
+
+describe.skipIf(process.platform === 'win32')('desktop login shell capture', () => {
+  it('reads only the private descriptor framed by the generated command', async () => {
+    const { home, shell } = fakeShell('printf ordinary-output; exec /bin/sh -c "$2"')
+
+    await expect(captureLoginShellEnvironment(shell, home, { CAPTURED_VALUE: 'available' }, 10_000))
+      .resolves.toMatchObject({ CAPTURED_VALUE: 'available' })
+  }, 15_000)
+
+  it('enforces its deadline when a shell and background child retain the capture descriptor', async () => {
+    const { home, shell } = fakeShell('sleep 30 >&3 &\nsleep 30')
+    const startedAt = Date.now()
+
+    await expect(captureLoginShellEnvironment(shell, home, {}, 25)).rejects.toThrow('timed out after 25ms')
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+  })
+
+  it('rejects an oversized capture and terminates the shell tree', async () => {
+    const { home, shell } = fakeShell('head -c 1048577 /dev/zero >&3\nsleep 30')
+
+    await expect(captureLoginShellEnvironment(shell, home, {}, 10_000)).rejects.toThrow('exceeded 1048576 bytes')
+  }, 15_000)
 })
 
 describe('desktop shell environment resolution', () => {

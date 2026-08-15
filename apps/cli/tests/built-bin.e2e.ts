@@ -493,7 +493,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     }
   }, 30_000)
 
-  it('boots shipped bundle layers in safe mode without reading or changing invalid user patches', async () => {
+  it('boots profile bundle layers in safe mode without reading or changing invalid user patches', async () => {
     const fixture = createProfileLifecycleFixture()
     const profilePatch = join(fixture.home, 'profiles', 'lifecycle', 'cordis.patch.yml')
     const homePatch = join(fixture.home, 'cordis.patch.yml')

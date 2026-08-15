@@ -104,6 +104,12 @@ describe('desktop Host readiness', () => {
     expect(() => parser.finalize()).toThrow(/readiness/iu)
   })
 
+  it('rejects an oversized unterminated readiness line', () => {
+    const parser = createReadinessParser()
+
+    expect(() => parser.push('x'.repeat(32_769))).toThrow('readiness line exceeded 32768 characters')
+  })
+
   it('rejects conflicting readiness URLs', () => {
     const parser = createReadinessParser()
 

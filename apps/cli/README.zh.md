@@ -41,7 +41,7 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 使用 `--dump-default-config` 和 `--dump-config` 可在不启动的情况下检查组合后的配置树。
 
-安全模式会在需要时准备所选 profile，保留其已安装依赖与持久化应用数据，并加载随附 bundle 层、内部 agent preset 与 telemetry overlay。本次进程会跳过 profile `cordis.patch.yml`、home 级 patch 及两者的 watcher。`--safe-mode` 不能与 `--patch` 或配置导出 flag 同时使用。
+安全模式会在需要时准备所选 profile，保留其已安装依赖与持久化应用数据，并加载恢复 bundle 层、内部 agent preset 与 telemetry overlay。随附 profile 会直接使用当前随附模板，无需解析磁盘上的 manifest，因此损坏的 manifest 或自定义 bundle 无法阻止恢复；自定义 profile 名称继续使用自身配置的 bundle 清单。本次进程会跳过 profile `cordis.patch.yml`、home 级 patch 及两者的 watcher。`--safe-mode` 不能与 `--patch` 或配置导出 flag 同时使用。
 
 层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI（命令行界面）行为参考](reference/README.md)为准。
 

@@ -12,21 +12,37 @@ afterEach(() => {
 })
 
 describe('desktop startup diagnostics', () => {
-  it('redacts credential assignments, bearer tokens and DeepSeek-style keys', () => {
+  it('redacts credential assignments, authentication headers, URL userinfo and DeepSeek-style keys', () => {
     const diagnostic = redactDesktopDiagnostic([
       'DEEPSEEK_API_KEY=sk-secretvalue123',
       'TOKEN:plain-secret',
-      'Authorization: Bearer bearer-secret',
+      '{"apiKey": "json-secret", "status": "failed"}',
+      'Authorization: Basic basic-secret',
+      'Set-Cookie: session=cookie-secret; HttpOnly',
+      'endpoint=https://user:url-secret@example.com/path',
       'ordinary failure',
     ].join('\n'))
 
     expect(diagnostic).toContain('DEEPSEEK_API_KEY=[REDACTED]')
     expect(diagnostic).toContain('TOKEN:[REDACTED]')
-    expect(diagnostic).toContain('Bearer [REDACTED]')
+    expect(diagnostic).toContain('"apiKey":[REDACTED]')
+    expect(diagnostic).toContain('Authorization: [REDACTED]')
+    expect(diagnostic).toContain('Set-Cookie: [REDACTED]')
+    expect(diagnostic).toContain('https://[REDACTED]@example.com/path')
     expect(diagnostic).toContain('ordinary failure')
     expect(diagnostic).not.toContain('secretvalue')
     expect(diagnostic).not.toContain('plain-secret')
-    expect(diagnostic).not.toContain('bearer-secret')
+    expect(diagnostic).not.toContain('json-secret')
+    expect(diagnostic).not.toContain('basic-secret')
+    expect(diagnostic).not.toContain('cookie-secret')
+    expect(diagnostic).not.toContain('url-secret')
+  })
+
+  it('bounds diagnostics after redaction', () => {
+    const diagnostic = redactDesktopDiagnostic(`PASSWORD=hidden\n${'x'.repeat(40_000)}`)
+
+    expect(diagnostic).toHaveLength(32_768)
+    expect(diagnostic).not.toContain('hidden')
   })
 
   it('writes only structured fields to the daily application log', () => {
