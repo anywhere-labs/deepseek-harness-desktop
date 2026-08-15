@@ -32,6 +32,9 @@
   padding: 2px 0;
   border-radius: 12px 12px 0 0;
   background: var(--dsw-specific-tip);
+  /* Dock entrance: rows appear under the composer while a turn runs; one
+     short rise marks the arrival without stealing attention. */
+  animation: var(--dsw-motion-duration) var(--dsw-motion-ease-out) var(--dsw-motion-rise-in);
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }

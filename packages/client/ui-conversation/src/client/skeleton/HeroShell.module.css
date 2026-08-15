@@ -21,6 +21,8 @@
   width: 100%;
   max-width: var(--dsh-composer-card-max-width);
   overflow: visible;
+  /* One gentle entrance for the whole empty-state hero. */
+  animation: var(--dsw-motion-duration) var(--dsw-motion-ease-out) var(--dsw-motion-rise-in);
 }
 
 /* figma 34:10411: fish + title, gap 10, centered; 26/32 wt500. The preview

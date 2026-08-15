@@ -335,6 +335,10 @@
   background: var(--dsw-specific-selector);
   color: var(--dsw-alias-label-primary);
   cursor: pointer;
+  /* Hover/disabled state transitions ride the shared motion vocabulary. */
+  transition:
+    background-color var(--dsw-motion-duration) var(--dsw-motion-ease-in-out),
+    opacity var(--dsw-motion-duration-fast) var(--dsw-motion-ease-in-out);
 }
 
 .add:hover:not(:disabled) {
@@ -367,6 +371,8 @@
   white-space: nowrap;
   cursor: pointer;
   appearance: none;
+  /* Hover state transition rides the shared motion vocabulary. */
+  transition: background-color var(--dsw-motion-duration) var(--dsw-motion-ease-in-out);
 }
 
 .select:hover:not(:disabled) {
@@ -394,13 +400,12 @@
      fill in both themes (design 34:10465). */
   color: #fff;
   cursor: pointer;
-  transition: background-color 100ms ease;
+  transition: background-color var(--dsw-motion-duration) var(--dsw-motion-ease-in-out);
   /* Opts out of the row's 2px downward shift (.row top pad): the send circle
      keeps its original seat while the smaller chips sit lower. Transform, not
      margin, so flex centering math is untouched. */
   transform: translateY(-2px);
 }
-
 .primary:hover:not(:disabled) {
   background: var(--dsw-alias-button-info-hover);
 }

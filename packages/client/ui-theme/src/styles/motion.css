@@ -1,0 +1,68 @@
+/* Unified motion vocabulary for restrained micro-interactions: duration and
+   easing tokens, three standard entrance keyframes, and the global
+   reduced-motion degradation. Feature components consume the tokens (never
+   hardcoded durations) and the keyframe-name variables below, so a timing or
+   curve change stays in this one sheet. The `--dsw-motion-*` keyframe-name
+   variables exist because CSS Modules localize bare animation-name
+   identifiers in component sheets; a var() reference resolves at runtime and
+   survives compilation untouched. */
+body {
+  --dsw-motion-duration-fast: 120ms;
+  --dsw-motion-duration: 200ms;
+  --dsw-motion-duration-slow: 300ms;
+  --dsw-motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dsw-motion-ease-in-out: var(--ds-ease-in-out);
+  --dsw-motion-rise-in: dsw-rise-in;
+  --dsw-motion-fade-in: dsw-fade-in;
+  --dsw-motion-scale-in: dsw-scale-in;
+}
+
+@keyframes dsw-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dsw-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dsw-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Global reduced-motion degradation: users who opt out get instantaneous
+   state changes with the same end state. Duration (not delay) is zeroed so a
+   staggered entrance collapses to a single frame; iteration is capped so an
+   infinite indicator never runs. Component-level overrides (static gradient
+   fills) keep their local rules. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

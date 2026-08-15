@@ -9,6 +9,9 @@
   min-width: 0;
   border-left: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
+  /* Panel slide-in: the details column mounts on selection and unmounts on
+     close, so one short fade covers the transition in both directions. */
+  animation: var(--dsw-motion-duration) var(--dsw-motion-ease-out) var(--dsw-motion-rise-in);
 }
 
 /* figma RightSidebar header frame (I54:42735;43:36451): pad 14/12/12/12, gap 8. */

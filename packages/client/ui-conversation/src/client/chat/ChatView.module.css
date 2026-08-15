@@ -48,6 +48,10 @@
    measurement/mount unit for a virtualizer without changing the column gap. */
 .flowItem {
   min-width: 0;
+  /* Entrance micro-interaction for every node (message, tool card, command
+     row, turn tail): one short rise+fade on mount. A session switch remounts
+     the whole column, so the same animation covers arriving conversations. */
+  animation: var(--dsw-motion-duration) var(--dsw-motion-ease-out) var(--dsw-motion-rise-in);
 }
 
 /* A keyed renderer may intentionally decline its row after dispatch (the

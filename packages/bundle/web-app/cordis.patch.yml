@@ -66,6 +66,13 @@
       config:
         maxNoteBytes: 8192
 
+    # Draft polishing over the session's own agent channel; the composer's
+    # polish button (ui-polish) consumes the polish Remote namespace.
+    - id: polish
+      name: '@deepseek-ai/dsh-polish'
+      config:
+        maxMessageChars: 20000
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
@@ -245,6 +252,11 @@
     # assistant-message action strip, over the messageFeedback Remote.
     - id: ui-message-feedback
       name: '@deepseek-ai/dsh-client-ui-message-feedback'
+
+    # Draft polishing: the polish button left of the model select, over the
+    # polish Remote (dsh-polish).
+    - id: ui-polish
+      name: '@deepseek-ai/dsh-client-ui-polish'
 
     # Model selection: the /model popupSelect + composer seat over session.models.
     - id: ui-model-selection
