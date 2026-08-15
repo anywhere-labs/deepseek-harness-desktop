@@ -19,8 +19,13 @@ interface Manifest {
 }
 
 async function run(command: string, args: readonly string[]): Promise<void> {
+  // Windows: a .cmd shim is not directly spawnable on every Node build
+  // (EINVAL), so route it through cmd.exe, which resolves the shim normally.
+  const wrapped: readonly [string, readonly string[]] = process.platform === 'win32' && command.endsWith('.cmd')
+    ? ['cmd.exe', ['/d', '/s', '/c', command, ...args]]
+    : [command, args]
   await new Promise<void>((accept, reject) => {
-    const child = spawn(command, args, { cwd: repositoryRoot, env: { ...process.env, CI: 'true' }, stdio: 'inherit' })
+    const child = spawn(wrapped[0], wrapped[1], { cwd: repositoryRoot, env: { ...process.env, CI: 'true' }, stdio: 'inherit' })
     child.once('error', reject)
     child.once('exit', (code, signal) => {
       if (code === 0) accept()
@@ -86,6 +91,9 @@ async function deploy(): Promise<void> {
   const savedWorkspaceState = existsSync(workspaceState) ? await readFile(workspaceState) : undefined
   try {
     await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
+      // The runtime closure never contains electron-builder, so the workspace's
+      // app-builder-lib patch is unused here; allow that, warn only.
+      '--config.allowUnusedPatches=true',
       '--config.verify-deps-before-run=false', '--filter', deployPackage, 'deploy', '--legacy', '--prod',
       '--config.node-linker=hoisted', '--config.auto-install-peers=false', '--config.link-workspace-packages=true', staging,
     ])
