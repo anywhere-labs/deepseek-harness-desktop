@@ -33,6 +33,9 @@ jobs:
       - name: Build shell
         run: pnpm run build
 
+      - name: Upstream contract gate
+        run: node --import tsx scripts/verify-upstream-contract.ts
+
       - name: Stage official runtime from npm
         run: node --import tsx apps/desktop/scripts/stage-runtime.ts
 
