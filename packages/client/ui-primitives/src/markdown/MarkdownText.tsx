@@ -20,6 +20,7 @@ import {
   wrapBlockChildren,
 } from './render.tsx'
 import type { MarkdownCodeLabels, MarkdownFileMentions, MarkdownRenderContext, ReferenceTargets } from './render.tsx'
+import { textDirection } from './text-direction.ts'
 import 'katex/dist/katex.min.css'
 import css from './MarkdownText.module.css'
 
@@ -172,5 +173,5 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
     }
     return streamRef.current.render(text)
   }, [text, streaming, codeLabels, fileMentions])
-  return <div className={css.markdown}>{children}</div>
+  return <div className={css.markdown} dir={textDirection(text)}>{children}</div>
 })

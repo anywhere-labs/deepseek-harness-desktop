@@ -37,6 +37,39 @@ function renderNodes(nodes: Md.RootContent[], context = makeContext()): HTMLElem
 const text = (value: string): Md.Text => ({ type: 'text', value })
 
 describe('renderBlocks over hand-built trees', () => {
+  it('sets paragraph and heading base direction from their text', () => {
+    const container = renderNodes([
+      { type: 'paragraph', children: [text('مرحبا بالعالم')] },
+      { type: 'heading', depth: 2, children: [text('عنوان')] },
+      { type: 'paragraph', children: [text('hello world')] },
+    ])
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs[0]?.getAttribute('dir')).toBe('rtl')
+    expect(paragraphs[1]?.getAttribute('dir')).toBe('ltr')
+    expect(container.querySelector('h2')?.getAttribute('dir')).toBe('rtl')
+  })
+
+  it('extracts direction text through emphasis, links, code, and image alt', () => {
+    const container = renderNodes([
+      { type: 'paragraph', children: [{ type: 'strong', children: [text('مرحبا')] }, text(' '), { type: 'inlineCode', value: 'بالعالم' }] },
+      { type: 'paragraph', children: [{ type: 'html', value: 'مرحبا' }] },
+      { type: 'paragraph', children: [{ type: 'image', url: 'https://x/a.png', alt: 'وصف', title: null }] },
+      { type: 'paragraph', children: [{ type: 'imageReference', identifier: 'r', referenceType: 'full', alt: 'وصف' }] },
+      { type: 'paragraph', children: [{ type: 'link', url: 'https://x', children: [text('رابط')] }] },
+    ])
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs.every(p => p.getAttribute('dir') === 'rtl')).toBe(true)
+  })
+
+  it('treats a missing image alt as neutral direction', () => {
+    const container = renderNodes([
+      { type: 'paragraph', children: [{ type: 'image', url: 'https://x/a.png', alt: null, title: null }] },
+      { type: 'paragraph', children: [{ type: 'imageReference', identifier: 'r', referenceType: 'full', alt: null }] },
+    ])
+    const paragraphs = [...container.querySelectorAll('p')]
+    expect(paragraphs.every(p => p.getAttribute('dir') === 'ltr')).toBe(true)
+  })
+
   it('reverts unresolved references to their bracketed source', () => {
     const container = renderNodes([
       {

@@ -204,6 +204,21 @@ function bench(over?: BenchOptions) {
   }
 }
 
+describe('input direction', () => {
+  it('sets the draft direction to rtl for Arabic-dominant text', () => {
+    const { view } = bench({ draft: 'Hello كيف حالك اليوم' })
+    const grow = view.container.querySelector('[data-input-scroll]')?.firstElementChild
+    expect(grow?.getAttribute('dir')).toBe('rtl')
+  })
+
+  it('keeps ltr for Latin text and empty drafts', () => {
+    const { view } = bench({ draft: 'hello world' })
+    expect(view.container.querySelector('[data-input-scroll]')?.firstElementChild?.getAttribute('dir')).toBe('ltr')
+    const empty = bench()
+    expect(empty.view.container.querySelector('[data-input-scroll]')?.firstElementChild?.getAttribute('dir')).toBe('ltr')
+  })
+})
+
 describe('image draft rail', () => {
   it('collects clipboard files while preserving text from a mixed paste', () => {
     const addImages = vi.fn(() => null)

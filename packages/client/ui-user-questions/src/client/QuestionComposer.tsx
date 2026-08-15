@@ -2,7 +2,7 @@ import { useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCheckOutline14, IconChevronLeftOutline14, IconChevronRightOutline14,
-  IconCloseOutline16, IconEditOutline16, MarkdownText,
+  IconCloseOutline16, IconEditOutline16, MarkdownText, textDirection,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   PendingQuestion, planReviewOf,
@@ -195,7 +195,7 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
         <header className={css.header}>
           <div className={css.headingBlock}>
             {question.header !== undefined && <div className={css.eyebrow}>{question.header}</div>}
-            <h2 className={css.title} id={`question-${pending.key}-${String(index)}`}>
+            <h2 className={css.title} dir={textDirection(question.question)} id={`question-${pending.key}-${String(index)}`}>
               {question.question}
             </h2>
           </div>
@@ -273,6 +273,7 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
                   <input
                     type="text"
                     className={css.customInput}
+                    dir={textDirection(draft.custom)}
                     value={draft.custom}
                     disabled={busy !== null}
                     placeholder={t('custom.placeholder')}
@@ -285,6 +286,7 @@ function QuestionFlow({ pending, t }: { pending: PendingQuestion } & Pick<Questi
                 <textarea
                   autoFocus
                   className={css.customTextarea}
+                  dir={textDirection(draft.custom)}
                   value={draft.custom}
                   disabled={busy !== null}
                   rows={2}

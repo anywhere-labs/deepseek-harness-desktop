@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip, textDirection,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { AttachmentRail, DropOverlay, ImageLightbox } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { AttachmentRailItem } from '@deepseek-ai/dsh-client-ui-attachment'
@@ -694,7 +694,7 @@ export function InputBar({
             offset the browser applies to both layers at once, never a JS mirror between two boxes,
             which a compositor-driven gesture outruns and leaves the words trailing the caret. */}
         <div ref={scrollRef} className={css.scroll} data-input-scroll>
-          <div className={css.grow}>
+          <div className={css.grow} dir={textDirection(draft)}>
             <div aria-hidden className={css.backdrop} data-input-backdrop>{backdrop}</div>
             <textarea
               ref={inputRef}

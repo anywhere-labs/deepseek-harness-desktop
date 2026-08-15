@@ -72,6 +72,17 @@ function answeredEnvelope(rpcId: string, answers: object[]) {
 }
 
 describe('QuestionComposer', () => {
+  it('sets the base direction on the question title and the custom answer field', () => {
+    const carrier = new PendingWait('question', RpcId('q-rtl'), SID, {
+      questions: [{ id: 'q', question: 'ما اسمك؟' }],
+    }, vi.fn(() => Promise.resolve<RpcReceipt>({ accepted: true })))
+    render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)
+    expect(screen.getByRole('heading', { name: 'ما اسمك؟' }).getAttribute('dir')).toBe('rtl')
+    const custom = screen.getByPlaceholderText('输入你的答案')
+    fireEvent.change(custom, { target: { value: 'مرحبا' } })
+    expect(custom.getAttribute('dir')).toBe('rtl')
+  })
+
   it('collects single, custom, and multi-select answers before one batch submit', () => {
     const { carrier, respond } = wait()
     render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)

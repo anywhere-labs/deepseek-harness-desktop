@@ -23,6 +23,7 @@ import type {} from 'mdast-util-math'
 import { normalizeUri } from 'micromark-util-sanitize-uri'
 import { CodeBlock } from './CodeBlock.tsx'
 import { renderTexToReact } from './katex.tsx'
+import { textDirection } from './text-direction.ts'
 import type { PositionedBlock } from './incremental.ts'
 import css from './MarkdownText.module.css'
 
@@ -202,14 +203,37 @@ function renderChildren(
   return nodes.map((node, index) => renderNode(node, index, context))
 }
 
+/**
+ * Concatenate the literal text of inline children, for base-direction
+ * detection on paragraph and heading blocks. Strong text comes from `text`,
+ * `html`, and `inlineCode` values plus image alt text; emphasis, links, and
+ * their references contribute through recursion, while math, breaks, and
+ * footnote references carry no strong text.
+ * @param nodes - The inline children of a paragraph or heading.
+ * @returns The concatenated literal text.
+ */
+function inlineText(nodes: readonly Md.RootContent[]): string {
+  let out = ''
+  for (const node of nodes) {
+    if (node.type === 'text' || node.type === 'html' || node.type === 'inlineCode') {
+      out += node.value
+    } else if (node.type === 'image' || node.type === 'imageReference') {
+      out += node.alt ?? ''
+    } else if ('children' in node) {
+      out += inlineText(node.children)
+    }
+  }
+  return out
+}
+
 function renderNode(node: Md.RootContent, key: Key, context: MarkdownRenderContext): ReactNode {
   switch (node.type) {
     case 'text':
       return node.value
     case 'paragraph':
-      return <p key={key}>{renderChildren(node.children, context)}</p>
+      return <p key={key} dir={textDirection(inlineText(node.children))}>{renderChildren(node.children, context)}</p>
     case 'heading':
-      return createElement(`h${node.depth}`, { key }, ...renderChildren(node.children, context))
+      return createElement(`h${node.depth}`, { key, dir: textDirection(inlineText(node.children)) }, ...renderChildren(node.children, context))
     case 'blockquote':
       return (
         <blockquote key={key}>

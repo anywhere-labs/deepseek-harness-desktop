@@ -4,8 +4,32 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { JsonBlock, MarkdownText, MessageText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { cjkFriendlyStrong } from '../src/markdown/cjkFriendlyStrong.ts'
 import { mathCompatibility } from '../src/markdown/mathCompatibility.ts'
+import { textDirection } from '../src/markdown/text-direction.ts'
 
 afterEach(cleanup)
+
+describe('textDirection', () => {
+  it('classifies Arabic-dominant text as rtl even when it opens with a Latin word', () => {
+    expect(textDirection('Hello كيف حالك اليوم')).toBe('rtl')
+  })
+
+  it('classifies Latin-dominant text as ltr', () => {
+    expect(textDirection('Hello world')).toBe('ltr')
+  })
+
+  it('keeps a Latin sentence with an occasional Arabic token ltr', () => {
+    expect(textDirection('Please open the PDF file مستند')).toBe('ltr')
+  })
+
+  it('resolves neutral-only and empty text to ltr', () => {
+    expect(textDirection('')).toBe('ltr')
+    expect(textDirection('123 456 !?')).toBe('ltr')
+  })
+
+  it('resolves a tie to ltr', () => {
+    expect(textDirection('abاب')).toBe('ltr')
+  })
+})
 
 describe('MessageText', () => {
   it('renders the text verbatim', () => {
@@ -13,9 +37,22 @@ describe('MessageText', () => {
     expect(container.textContent).toBe('# line1\n`line2`')
     expect(container.querySelector('h1')).toBeNull()
   })
+
+  it('sets the base direction from the text', () => {
+    const rtl = render(<MessageText text="مرحبا" />)
+    expect(rtl.container.firstElementChild?.getAttribute('dir')).toBe('rtl')
+    const ltr = render(<MessageText text="hello" />)
+    expect(ltr.container.firstElementChild?.getAttribute('dir')).toBe('ltr')
+  })
 })
 
 describe('MarkdownText', () => {
+  it('sets the base direction on the container and each paragraph', () => {
+    const { container } = render(<MarkdownText text="Hello كيف حالك اليوم" />)
+    expect(container.firstElementChild?.getAttribute('dir')).toBe('rtl')
+    expect(container.querySelector('p')?.getAttribute('dir')).toBe('rtl')
+  })
+
   it('renders CommonMark and GFM elements as semantic DOM', () => {
     const markdown = [
       '# Heading',
