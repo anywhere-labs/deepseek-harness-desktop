@@ -1,8 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Reply with exactly the word: ONE. No tools." },
-    { "op": "prompt", "text": "Reply with exactly the word: TWO. No tools." }
-  ]
-}

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the bash tool to run exactly: echo HELLO. Report the tool result you got back verbatim, then stop." }
-  ]
-}

@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/archived/bug-fix/2026-07-23-tui-generic-card-markdown.md
-2026-07-23-tui-generic-card-markdown.md: 5c092c4d5ffbc566074f9b280d3fbc207d645ec7
-2026-07-23-tui-generic-card-markdown.zh.md: 93e6388c64e69d9028822ce65f9eda368ed26e7d

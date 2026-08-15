@@ -1,4 +1,0 @@
-interface:
-  display_name: "Archive Agent Notes"
-  short_description: "Audit and freeze low-value Agent Notes"
-  default_prompt: "Use $dsh-archive-agent-notes to audit Agent Notes, archive low-future-value implemented records, and delete low-value rejected records."

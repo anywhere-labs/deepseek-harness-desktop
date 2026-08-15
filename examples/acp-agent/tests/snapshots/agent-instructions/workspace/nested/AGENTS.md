@@ -1,1 +1,0 @@
-AGENTS.canonical.md

@@ -1,3 +1,0 @@
-{"type":"session","id":"56565656-7878-4989-8a9a-9b9b9b9b9b9b","createdAt":11,"cwd":"/rec/plain-cwd","delegationDepth":0}
-{"type":"request/header","seq":0,"time":11,"data":{"header":{"config":{"model":"fake"},"system":"{{system}}","tools":"{{tools}}"},"reason":"initial"}}
-{"type":"assistant/chunk","seq":1,"time":11,"data":{"turn":1,"step":1,"chunk":{"type":"text-delta","index":0,"text":"hi"}}}

@@ -1,8 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Remember this fact for later: the project codeword is MARMALADE. Reply with the single word OK and stop. Do not use any tools." },
-    { "op": "prompt", "text": "Use the subagent_fork tool exactly once to delegate this subtask to a forked child agent: 'What is the project codeword mentioned earlier in this conversation? Reply with exactly that one word and nothing else.' The forked child inherits this conversation, so it can answer. After the subagent returns, reply with the single word PARENT_DONE and stop. Do not use the bash tool." }
-  ]
-}

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the bash tool to run exactly: false. Then reply with exactly CHILD_EXIT_PRESERVED and stop." }
-  ]
-}

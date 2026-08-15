@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Write the todo list 'watch the kettle boil' five times in a row without changing it, then reply DONE." }
-  ]
-}

@@ -1,7 +1,0 @@
-{"type":"session","version":0,"id":"{{sessionId}}","createdAt":1785974400000,"cwd":"{{cwd}}","agentPreset":"minimal"}
-{"type":"user/message","seq":0,"time":1785974400001,"data":{"content":[{"type":"text","text":"Reply exactly MINIMAL_PRESET_REQUEST_OK and stop."}],"source":{"kind":"user","rpcId":"{{rpcId}}"}},"surfaceOp":"append"}
-{"type":"assistant/chunk","seq":1,"time":1785974400002,"data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"text"}}}
-{"type":"assistant/chunk","seq":2,"time":1785974400003,"data":{"turn":1,"step":1,"chunk":{"type":"text-delta","index":0,"text":"MINIMAL_PRESET_REQUEST_OK"}}}
-{"type":"assistant/chunk","seq":3,"time":1785974400004,"data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"MINIMAL_PRESET_REQUEST_OK"}}}}
-{"type":"assistant/chunk","seq":4,"time":1785974400005,"data":{"turn":1,"step":1,"chunk":{"type":"usage","usage":{"inputTokens":10,"outputTokens":4}}}}
-{"type":"assistant/chunk","seq":5,"time":1785974400006,"data":{"turn":1,"step":1,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}

@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/archived/bug-fix/2026-07-31-tui-diff-context-line-accounting.md
-2026-07-31-tui-diff-context-line-accounting.md: 5172069c7def39808b018030b630ea4313bd7038
-2026-07-31-tui-diff-context-line-accounting.zh.md: b9a9863f05d1c5b829facdc850eccc7a321a76ab

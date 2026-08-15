@@ -1,0 +1,44 @@
+name: desktop
+
+on:
+  push:
+    branches: [master, main, v2]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install shell workspace (tooling only)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm --filter @deepseek-ai/dsh-desktop exec vitest run
+
+      - name: Build shell
+        run: pnpm run build
+
+      - name: Stage official runtime from npm
+        run: node --import tsx apps/desktop/scripts/stage-runtime.ts
+
+      - name: Boot-check staged Host
+        run: |
+          timeout 60 node --expose-internals \
+            apps/desktop/runtime-host/node_modules/@deepseek-ai/dsh/lib/bin.js \
+            web --host 127.0.0.1 --port 0 \
+            | grep -m1 "dsh web: http://127.0.0.1:" && echo "HOST BOOT OK"

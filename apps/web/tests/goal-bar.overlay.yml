@@ -1,5 +1,0 @@
-# The client-side FixtureApiClient intentionally rejects settings traffic, so
-# this goal-only scenario omits the settings shell and the onboarding steps it
-# would mount. Onboarding owns separate assembled-browser coverage.
-- id: ui-settings-general
-  disabled: true

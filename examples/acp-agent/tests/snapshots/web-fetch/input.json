@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the web_fetch tool exactly once to fetch http://127.0.0.1:43117/menu.html, then reply with exactly DONE. Do not describe the content." }
-  ]
-}

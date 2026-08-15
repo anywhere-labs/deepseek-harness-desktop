@@ -1,4 +1,0 @@
-- row "Load earlier history":
-  - cell "Load earlier history":
-    - button "Load earlier history":
-      - status

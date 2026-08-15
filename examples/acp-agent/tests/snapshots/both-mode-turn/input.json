@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Call the run_code tool (NOT the native bash tool directly) with a program that runs exactly `echo BOTH_OK` via tools.bash and returns its output. Then reply with that output only and stop." }
-  ]
-}

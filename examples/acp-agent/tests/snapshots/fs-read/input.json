@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the read tool (NOT bash) to read the file greeting.txt in the current directory, then reply with exactly the single word DONE." }
-  ]
-}

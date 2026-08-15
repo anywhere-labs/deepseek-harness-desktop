@@ -37,7 +37,7 @@ function hostPaths(): { nodeExecutable: string; cliEntry: string; cwd: string; e
   if (!app.isPackaged) {
     return {
       nodeExecutable: process.env.DSH_DESKTOP_NODE_EXECUTABLE ?? 'node',
-      cliEntry: join(REPOSITORY_ROOT, 'apps/cli/lib/bin.js'),
+      cliEntry: join(REPOSITORY_ROOT, 'node_modules/@deepseek-ai/dsh/lib/bin.js'),
       cwd: process.cwd(),
       electronRunAsNode: false,
     }

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "What is my favorite color? Reply with just the color and stop. Do not use any tools." }
-  ]
-}

@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-07-06-recallable-compaction.md
-2026-07-06-recallable-compaction.md: 377ced0b0ec001287c0c7a3f1900249b30872b95
-2026-07-06-recallable-compaction.zh.md: a78760d6dcaf40f9a8439d61b5ebcdf8a7a97a77

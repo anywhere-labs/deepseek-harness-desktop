@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write
-2026-07-02-result-time-applied-hunk-diffs.md: 19b41cc441f5cab299dbeded0a9eae25ab7e9f97
-2026-07-02-result-time-applied-hunk-diffs.zh.md: b77ec75f0f8af615bde3b95d8fb4620fddedbc9c

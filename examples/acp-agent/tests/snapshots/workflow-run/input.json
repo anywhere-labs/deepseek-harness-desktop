@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the workflow tool exactly once, with args omitted, meta set to { \"name\": \"snapshot-flow\", \"description\": \"one child for the snapshot\" }, and this EXACT script body (copy it verbatim):\nphase('Run')\nconst reply = await agent('Reply with exactly the word WF_CHILD_OK and nothing else.')\nreturn { reply }\nAfter the workflow returns, reply with the single word WORKFLOW_DONE and stop. Do not use any other tool." }
-  ]
-}

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "A file named greeting.txt in the current directory contains one word. Use the bash tool to append a second line containing the word WORLD to it (so it has two lines), then read the file back with `cat greeting.txt` to confirm, and reply with the single word DONE. Use a single bash call per action." }
-  ]
-}

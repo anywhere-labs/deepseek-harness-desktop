@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the lsp tool exactly once to find the definition at subject.ts line 1 character 7, then reply with exactly DONE." }
-  ]
-}

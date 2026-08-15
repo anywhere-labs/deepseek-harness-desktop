@@ -1,7 +1,0 @@
-<div class="_markdown_404681">
-  #text "<script>globalThis.compromised = true</script>\n"
-  <p>
-    #text "Paragraph with inline <img src=\"x\" onerror=\"boom\"> html and <b>bold tag</b> kept literal?"
-  #text "\n<div class=\"x\">\nhtml block content\n</div>\n"
-  <p>
-    #text "after"

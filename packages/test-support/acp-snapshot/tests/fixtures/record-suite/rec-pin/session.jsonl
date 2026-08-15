@@ -1,2 +1,0 @@
-{"type":"session","id":"ccdc749f-56f3-4267-9750-598b5c60b7b2","createdAt":600,"cwd":"/var/folders/2g/b32ct0qn1d728l_v6tdkjytr0000gn/T/acp-snap-cwd-nOQ4Gy","delegationDepth":0}
-{"type":"request/header","seq":0,"time":4,"data":{"header":{"config":{"model":"fake"},"system":"{{system}}","tools":"{{tools}}"},"reason":"initial"}}

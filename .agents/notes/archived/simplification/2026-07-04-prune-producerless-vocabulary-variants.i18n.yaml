@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write
-2026-07-04-prune-producerless-vocabulary-variants.md: c1544fa9d72c994518f690d482a62d506ff3f83e
-2026-07-04-prune-producerless-vocabulary-variants.zh.md: e48f55c49d35d4a675f0d9540dab034bcb864cd3

@@ -71,6 +71,18 @@ DeepSeek Harness 的核心能力、插件系统和 Web UI 来自官方项目。�
 
 如果你希望通过命令行运行 Harness，或者参与核心功能开发，请优先查看官方仓库。
 
+### 官方 runtime 只来自 npm,不做源码 vendor
+
+本仓库**不包含任何官方源码副本**。官方 runtime(`@deepseek-ai/dsh`)与 Web UI(`@deepseek-ai/dsh-web-frontend`)以 npm 包形式固定版本,声明在 `apps/desktop/runtime/package.json`。打包时 `stage-runtime.ts` 在独立目录执行一次生产安装,把依赖闭包原样带入安装包。
+
+| 组件 | 来源 | 固定版本 |
+| --- | --- | --- |
+| Host CLI(`dsh web`) | `@deepseek-ai/dsh` | 0.1.0-rc.6 |
+| Web 前端静态资源 | `@deepseek-ai/dsh-web-frontend` | 0.0.1-rc.5 |
+| Electron 壳 | 本仓库 `apps/desktop` | — |
+
+官方发新版本时,升级只改上面两个版本号并重新验证,不需要合并任何上游源码。
+
 <a id="run-from-source"></a>
 
 ## 开发
@@ -85,7 +97,21 @@ apps/desktop
 
 ```sh
 pnpm install
-pnpm run dev:desktop
+pnpm run dev
+```
+
+构建与本地打包验证：
+
+```sh
+pnpm run typecheck
+pnpm run build
+pnpm run package      # stage npm runtime + electron-builder --dir
+```
+
+打包后的 Host 启动自检(应输出 `dsh web: http://127.0.0.1:<port>`):
+
+```sh
+node --expose-internals apps/desktop/runtime-host/node_modules/@deepseek-ai/dsh/lib/bin.js web --host 127.0.0.1 --port 0
 ```
 
 ## 社区交流

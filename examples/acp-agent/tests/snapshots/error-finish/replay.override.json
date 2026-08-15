@@ -1,3 +1,0 @@
-[
-  { "kind": "throw", "chunks": [], "message": "simulated provider error (HTTP 401)", "code": "AUTH" }
-]

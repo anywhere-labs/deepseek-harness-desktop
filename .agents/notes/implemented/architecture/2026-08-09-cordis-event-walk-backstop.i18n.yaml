@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-09-cordis-event-walk-backstop.md
-2026-08-09-cordis-event-walk-backstop.md: 1d833858f9471c98f54b3793edd12e4710b8c0fc
-2026-08-09-cordis-event-walk-backstop.zh.md: 4981016a22f94d710855331bc636c8f3dd9a4801

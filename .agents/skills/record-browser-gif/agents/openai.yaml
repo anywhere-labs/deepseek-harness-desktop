@@ -1,4 +1,0 @@
-interface:
-  display_name: "Record Browser GIF"
-  short_description: "Record and optimize local browser demo GIFs"
-  default_prompt: "Use $record-browser-gif to record this browser flow as a verified local GIF."
