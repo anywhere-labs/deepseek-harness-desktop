@@ -1,0 +1,135 @@
+name: Build All Platforms
+
+on:
+  push:
+    branches: [master, main]
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build Linux AppImage
+        run: yarn dist:linux
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-Linux
+          path: dsh-plugin-desktop/dist/*.AppImage
+          retention-days: 90
+
+      - name: Upload to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dsh-plugin-desktop/dist/*.AppImage
+          draft: false
+          prerelease: false
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build Windows
+        run: yarn dist:win
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-Windows
+          path: dsh-plugin-desktop/dist/*.exe
+          retention-days: 90
+
+      - name: Upload to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dsh-plugin-desktop/dist/*.exe
+          draft: false
+          prerelease: false
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build macOS
+        run: |
+          yarn workspace dsh-plugin-desktop build
+          cd dsh-plugin-desktop
+          npx electron-builder --mac dmg --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-macOS
+          path: dsh-plugin-desktop/dist/*.dmg
+          retention-days: 90
+
+      - name: Upload to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dsh-plugin-desktop/dist/*.dmg
+          draft: false
+          prerelease: false

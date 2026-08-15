@@ -53,6 +53,7 @@
     "package:dir": "yarn workspace dsh-plugin-desktop package:dir",
     "dist:mac": "yarn workspace dsh-plugin-desktop dist:mac",
     "dist:win": "yarn workspace dsh-plugin-desktop dist:win",
+    "dist:linux": "yarn workspace dsh-plugin-desktop dist:linux",
     "upstream:version": "cd deepseek-harness && corepack pnpm --version",
     "upstream:install": "cd deepseek-harness && corepack pnpm install --frozen-lockfile",
     "upstream:build": "cd deepseek-harness && corepack pnpm run build"

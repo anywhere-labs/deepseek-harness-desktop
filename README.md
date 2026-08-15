@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/Desktop-App-47848F?style=flat" alt="Desktop application">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat" alt="MIT License"></a>
   <a href="https://discord.gg/TJeGqKRNM"><img src="https://img.shields.io/badge/Discord-5865F2?style=flat&amp;logo=discord&amp;logoColor=white" alt="Join Discord"></a>
-  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows-4493F8?style=flat-square" alt="Supported platforms: macOS and Windows">
+  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Supported platforms: macOS, Windows and Linux">
 </p>
 
 <p align="center"><sub>中文 · <a href="README.en.md">English</a></sub></p>
@@ -16,7 +16,7 @@
 
 <a id="run"></a>
 
-<h3 align="center"><a href="https://www.deepseekdesktop.com"><ins>立刻下载 MacOS/Windows</ins></a></h3>
+<h3 align="center"><a href="https://www.deepseekdesktop.com"><ins>立刻下载 MacOS/Windows</ins></a> · <a href="https://github.com/ziyuliu258/deepseek-harness-desktop-extended-for-linux/releases"><ins>Linux AppImage</ins></a></h3>
 
 <p align="center">
   <img src="assets/desktop-preview.png" alt="DeepSeek Harness Desktop 界面预览" width="100%">
@@ -80,7 +80,7 @@ Desktop 的插件能力已经可以使用。开发者可以通过两个公开接
 - 桌面应用封装
 - 本地服务的启动、停止与恢复
 - 桌面窗口和系统托盘集成
-- macOS、Windows 安装包构建与发布
+- macOS、Windows、Linux 安装包构建与发布
 - 更适合桌面使用的界面体验
 
 如果你希望通过命令行运行 Harness，或者参与核心功能开发，请优先查看官方仓库。
