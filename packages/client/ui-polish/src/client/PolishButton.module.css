@@ -1,0 +1,45 @@
+/* Polish control in the composer tool row (right end, left of the model
+   select): a compact chip matching the model-select family (28px tall, 8px
+   radius, secondary label tone), with hover/busy states riding the shared
+   motion vocabulary. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dsw-motion-duration) var(--dsw-motion-ease-in-out),
+    opacity var(--dsw-motion-duration-fast) var(--dsw-motion-ease-in-out);
+}
+
+.button:hover:not(:disabled) {
+  background-color: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.icon {
+  flex: none;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
