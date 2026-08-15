@@ -16,6 +16,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
+import { isAllowedPermission } from './permissions.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
 
 const APP_NAME = 'DeepSeek Harness'
@@ -90,8 +91,16 @@ function hasOrigin(raw: string, expected: string): boolean {
 /** Install navigation and permission policy before the first renderer loads. */
 function hardenSession(): void {
   const desktopSession = session.defaultSession
-  desktopSession.setPermissionCheckHandler(() => false)
-  desktopSession.setPermissionRequestHandler((_webContents, _permission, callback) => { callback(false) })
+  desktopSession.setPermissionCheckHandler((_webContents, permission) => {
+    // Copy controls across the Web UI write text through the async Clipboard
+    // API; Electron gates that write on the `clipboard-sanitized-write`
+    // permission check. Deny-all blocked it, silently breaking every copy
+    // button, so allow exactly that permission and keep the rest denied.
+    return isAllowedPermission(permission)
+  })
+  desktopSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(isAllowedPermission(permission))
+  })
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
