@@ -17,6 +17,10 @@ import {
 } from 'electron'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
+import { loadSettings, pinRuntime, resolvePinnedRuntime, saveSettings } from './runtime-manager/settings.ts'
+import { listInstalledRuntimes, resolveRuntime, type RuntimePaths } from './runtime-manager/versions.ts'
+import { loadValidatedRuntimes, type ValidatedRuntimes } from './runtime-manager/validated.ts'
+import { readFileSync } from 'node:fs'
 
 const APP_NAME = 'DeepSeek Harness'
 const WINDOW_WIDTH = 1440
@@ -31,6 +35,7 @@ let lifecycle: DesktopLifecycle | undefined
 let hostOrigin: string | undefined
 let bootQuitPromise: Promise<void> | undefined
 let quitReleased = false
+let currentRuntimeVersion: string | undefined
 
 /** Resolve artifacts from the checkout in development and resourcesPath when packaged. */
 function hostPaths(): { nodeExecutable: string; cliEntry: string; cwd: string; electronRunAsNode: boolean } {
@@ -48,6 +53,25 @@ function hostPaths(): { nodeExecutable: string; cliEntry: string; cwd: string; e
     cwd: app.getPath('home'),
     electronRunAsNode: true,
   }
+}
+
+/** The bundled runtime version = the pin in the shipped runtime manifest. */
+function bundledRuntimeVersion(): string {
+  const manifestPath = app.isPackaged
+    ? join(process.resourcesPath, 'host/package.json')
+    : join(REPOSITORY_ROOT, 'apps/desktop/runtime/package.json')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { dependencies?: Record<string, string> }
+  const version = manifest.dependencies?.['@deepseek-ai/dsh']
+  if (typeof version !== 'string' || version === '') throw new Error('bundled runtime manifest has no @deepseek-ai/dsh pin')
+  return version
+}
+
+/** The validated-runtimes matrix shipped with this shell release. */
+function validatedRuntimes(): ValidatedRuntimes {
+  const path = app.isPackaged
+    ? join(process.resourcesPath, 'desktop-resources/validated-runtimes.json')
+    : join(DESKTOP_DIR, 'runtime/validated-runtimes.json')
+  return loadValidatedRuntimes(path)
 }
 
 function assertHostArtifacts(paths: ReturnType<typeof hostPaths>): void {
@@ -161,11 +185,57 @@ function createTray(): void {
   tray.setToolTip(APP_NAME)
   const template: MenuItemConstructorOptions[] = [
     { label: '打开主窗口', click: () => { void lifecycle?.showWindow() } },
+    ...runtimeMenu(),
     { type: 'separator' },
     { label: '退出', click: () => { void requestAppQuit() } },
   ]
   tray.setContextMenu(Menu.buildFromTemplate(template))
   tray.on('click', () => { void lifecycle?.showWindow() })
+}
+
+/** Runtime switcher: pin a version (bundled or managed) and relaunch with it. */
+function switchRuntime(version: string | undefined): void {
+  const userDataDir = app.getPath('userData')
+  saveSettings(userDataDir, pinRuntime(loadSettings(userDataDir), version))
+  app.relaunch()
+  releaseAppQuit()
+}
+
+function runtimeMenu(): MenuItemConstructorOptions[] {
+  const userDataDir = app.getPath('userData')
+  
+  let matrix: ValidatedRuntimes
+  try {
+    matrix = validatedRuntimes()
+  } catch {
+    matrix = { validated: [], recommended: '' }
+  }
+  const bundled = bundledRuntimeVersion()
+  const installed = listInstalledRuntimes(userDataDir, { version: bundled, paths: hostPaths() })
+  const current = currentRuntimeVersion ?? bundled
+
+  const items: MenuItemConstructorOptions[] = [
+    { label: '运行时', enabled: false },
+  ]
+  for (const runtime of installed) {
+    const marks = [
+      runtime.version === current ? '✓' : '',
+      runtime.bundled ? '(内置)' : '',
+      matrix.validated.includes(runtime.version) ? '' : '(未验证)',
+    ].filter(Boolean).join(' ')
+    items.push({
+      label: `${runtime.version} ${marks}`.trim(),
+      enabled: runtime.version !== current,
+      click: () => { switchRuntime(runtime.version === bundled ? undefined : runtime.version) },
+    })
+  }
+  if (matrix.recommended !== '' && !installed.some(runtime => runtime.version === matrix.recommended)) {
+    items.push({ label: `安装推荐版本 ${matrix.recommended}`, enabled: false })
+  }
+  if (current !== bundled && !installed.some(runtime => runtime.version === current)) {
+    items.push({ label: `当前 ${current} 缺失,已回退内置`, enabled: false })
+  }
+  return items
 }
 
 function releaseAppQuit(): void {
@@ -188,7 +258,17 @@ function requestAppQuit(): Promise<void> {
 
 async function boot(): Promise<void> {
   if (bootQuitPromise !== undefined) return
-  const paths = hostPaths()
+  const userDataDir = app.getPath('userData')
+  const homeDir = app.getPath('home')
+  const settings = loadSettings(userDataDir)
+  const bundled = { version: bundledRuntimeVersion(), paths: hostPaths() }
+  const pinned = resolvePinnedRuntime(settings, homeDir)
+  const runtime = resolveRuntime(userDataDir, pinned, bundled, homeDir)
+  currentRuntimeVersion = runtime.version
+  if (pinned !== undefined && runtime.version !== pinned) {
+    console.warn(`desktop runtime pin ${pinned} is not installed — falling back to bundled ${runtime.version}`)
+  }
+  const paths: RuntimePaths = runtime.paths
   assertHostArtifacts(paths)
   host = createHostSupervisor({
     spawnHost: () => spawnDshWeb({

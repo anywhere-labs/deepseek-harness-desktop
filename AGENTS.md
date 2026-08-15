@@ -49,3 +49,20 @@ node --expose-internals apps/desktop/runtime-host/node_modules/@deepseek-ai/dsh/
 
 If an upgrade requires changes outside `apps/desktop/`, the change belongs
 upstream — open an issue/PR there instead.
+
+## Runtime version manager
+
+- `apps/desktop/src/runtime-manager/` owns runtime selection: the bundled
+  runtime (pinned in `apps/desktop/runtime/package.json`) plus managed
+  installations under `<userData>/runtime-versions/<version>/`.
+- Desktop-owned data lives in `app.getPath('userData')` (settings,
+  runtime-versions, window state). **DSH data stays in `~/.dsh`** — the
+  Host is spawned with the user home as cwd, so sessions/credentials/
+  profiles are shared with the official CLI, web, and dsh-TUI.
+- `apps/desktop/runtime/validated-runtimes.json` is the shipped
+  compatibility matrix ("latest tested", not "latest"). The contract CI
+  updates it when a new upstream version passes all gates.
+- `installRuntimeVersion` (runtime-manager/install.ts) performs a
+  standalone production install of the runtime manifest at the requested
+  version. It needs a `pnpm` executable; a fully self-contained downloader
+  is a follow-up.

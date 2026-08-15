@@ -44,6 +44,10 @@
       {
         "from": "runtime-host/node_modules",
         "to": "host/node_modules"
+      },
+      {
+        "from": "runtime/validated-runtimes.json",
+        "to": "desktop-resources/validated-runtimes.json"
       }
     ],
     "mac": {
