@@ -96,6 +96,7 @@
     "@deepseek-ai/dsh-host-plugin-inventory": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-message-feedback": "workspace:^",
+    "@deepseek-ai/dsh-message-edit": "workspace:^",
     "@deepseek-ai/dsh-polish": "workspace:^",
     "@deepseek-ai/dsh-rollback": "workspace:^",
     "@deepseek-ai/dsh-session-projection-cache": "workspace:^",

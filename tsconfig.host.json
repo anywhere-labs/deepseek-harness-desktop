@@ -179,6 +179,7 @@
     { "path": "./packages/interaction/permission-presets" },
     { "path": "./packages/interaction/polish" },
     { "path": "./packages/interaction/rollback" },
+    { "path": "./packages/interaction/message-edit" },
     { "path": "./packages/core/tools" },
     { "path": "./packages/core/agent-tool-presentation" },
     { "path": "./packages/skill/skill" },

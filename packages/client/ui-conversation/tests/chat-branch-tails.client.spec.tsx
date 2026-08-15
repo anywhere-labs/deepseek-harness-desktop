@@ -6,7 +6,7 @@
 // renderSlot.)
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -25,6 +25,7 @@ import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
 import { StatsLine, type StatsLineProps } from '../src/client/chat/StatsLine.tsx'
 import { zh } from '../src/client/locales.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
+import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
 
 /** jsdom has no ResizeObserver; StatsLine watches its row for ellipsis truncation through one. */
 class ResizeObserverStub {
@@ -48,10 +49,11 @@ interface MessageItemProps {
   readonly node: ConversationNode
   readonly t: ChatNodeViewProps['t']
   readonly inputActions?: { setDraft: (text: string) => void }
+  readonly useMessageEdit?: ChatNodeViewProps['useMessageEdit']
 }
 
 /** Legacy-node fixture adapter for the independently registered renderers. */
-function MessageItem({ node, t: translate, inputActions }: MessageItemProps) {
+function MessageItem({ node, t: translate, inputActions, useMessageEdit }: MessageItemProps) {
   const kind = node.kind === 'assistant' ? 'assistant-step' : node.kind
   const viewNode: ChatConversationViewNode = {
     key: `fixture:${node.kind}:${node.seq}`,
@@ -65,6 +67,7 @@ function MessageItem({ node, t: translate, inputActions }: MessageItemProps) {
   }
   const props = {
     node: viewNode, t: translate,
+    useMessageEdit: useMessageEdit ?? (() => () => Promise.resolve({ ok: true })),
     ...inputActions === undefined ? {} : { inputActions },
   } as ChatNodeViewProps
   switch (node.kind) {
@@ -85,22 +88,25 @@ function MessageItem({ node, t: translate, inputActions }: MessageItemProps) {
 }
 
 describe('MessageItem arms', () => {
-  it('user bubbles expose clock / copy / edit; copy writes the text and edit refills the composer', () => {
+  it('user bubbles expose clock / copy / edit; copy writes the text and edit opens the in-place editor', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText },
     })
-    const setDraft = vi.fn<(text: string) => void>()
+    const messageEdit = vi.fn<(messageId: MessageId, text: string) => Promise<{ ok: true }>>(async () => ({ ok: true }))
     // Same-day clock: construct "today at 14:24" so the label stays `HH:mm`.
     const now = new Date()
     const time = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 14, 24).getTime()
     render(
-      <MessageItem t={t} inputActions={{ setDraft }} node={{
-        kind: 'user', seq: 1, time,
-        content: [{ type: 'text', text: 'hello bubble' }] as never,
-        source: null,
-      }}
+      <MessageItem
+        t={t}
+        useMessageEdit={(() => messageEdit) as unknown as ChatNodeViewProps['useMessageEdit']}
+        node={{
+          kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time,
+          content: [{ type: 'text', text: 'hello bubble' }] as never,
+          source: null,
+        }}
       />,
     )
     expect(screen.getByText('14:24')).toBeTruthy()
@@ -108,8 +114,37 @@ describe('MessageItem arms', () => {
     expect(screen.queryByRole('button', { name: '在新对话中分支' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('hello bubble')
+
+    // The edit control swaps the bubble for a textarea preloaded with the
+    // message's full text; saving rewrites the message in place.
     fireEvent.click(screen.getByRole('button', { name: '编辑此消息' }))
-    expect(setDraft).toHaveBeenCalledWith('hello bubble')
+    const editor = screen.getByRole('textbox', { name: '编辑消息内容' }) as HTMLTextAreaElement
+    expect(editor.value).toBe('hello bubble')
+    fireEvent.change(editor, { target: { value: 'hello bubble v2' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(messageEdit).toHaveBeenCalledWith('m-1', 'hello bubble v2')
+    // The in-place editor closes on success; the event stream then updates
+    // the node's content through the message definition.
+    await waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '编辑消息内容' })).toBeNull()
+    })
+  })
+
+  it('edit cancel discards the draft and restores the bubble', () => {
+    render(
+      <MessageItem t={t} node={{
+        kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time: 1_000,
+        content: [{ type: 'text', text: 'original' }] as never,
+        source: null,
+      }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '编辑此消息' }))
+    const editor = screen.getByRole('textbox', { name: '编辑消息内容' }) as HTMLTextAreaElement
+    fireEvent.change(editor, { target: { value: 'changed' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('textbox', { name: '编辑消息内容' })).toBeNull()
+    expect(screen.getByText('original')).toBeTruthy()
   })
 
   it('user copy falls back to execCommand when clipboard.writeText is unavailable', () => {
@@ -124,7 +159,7 @@ describe('MessageItem arms', () => {
     })
     render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 1, time: 1_000,
+        kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time: 1_000,
         content: [{ type: 'text', text: 'fallback body' }] as never,
         source: null,
       }}
@@ -141,7 +176,7 @@ describe('MessageItem arms', () => {
     })
     render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 1, time: 1_000,
+        kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time: 1_000,
         content: [{ type: 'text', text: 'quiet' }] as never,
         source: null,
       }}
@@ -165,7 +200,7 @@ describe('MessageItem arms', () => {
     })
     render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 1, time: 1_000,
+        kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time: 1_000,
         content: [{ type: 'text', text: 'copied body' }] as never,
         source: null,
       }}
@@ -198,7 +233,7 @@ describe('MessageItem arms', () => {
     })
     const view = render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 1, time: 1_000,
+        kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time: 1_000,
         content: [{ type: 'text', text: 'copied body' }] as never,
         source: null,
       }}
@@ -215,7 +250,7 @@ describe('MessageItem arms', () => {
 
     const mounted = render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 2, time: 1_000,
+        kind: 'user', messageId: 'm-2' as MessageId, seq: 2, time: 1_000,
         content: [{ type: 'text', text: 'copied body' }] as never,
         source: null,
       }}
@@ -938,7 +973,7 @@ describe('useCalendarDay boundary refresh', () => {
     const time = new Date(2026, 6, 29, 14, 24).getTime()
     render(
       <MessageItem t={t} node={{
-        kind: 'user', seq: 1, time,
+        kind: 'user', messageId: 'm-1' as MessageId, seq: 1, time,
         content: [{ type: 'text', text: 'night bubble' }] as never,
         source: null,
       }}

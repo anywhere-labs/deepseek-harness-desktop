@@ -33,6 +33,7 @@ import {
 import { TurnTailNodeView } from '../src/client/chat/TurnTailNodeView.tsx'
 import { formatRunDuration } from '../src/client/chat/message-chrome.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
+import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
 
 afterEach(() => {
   cleanup()
@@ -87,6 +88,7 @@ function makeSource(init?: Partial<ConversationSnapshot>) {
 
 const user = (seq: number, text: string): UserMessageNode => ({
   kind: 'user',
+  messageId: ('m-' + seq) as MessageId,
   seq,
   time: seq * 1000,
   content: [{ type: 'text', text }] as never,
@@ -194,7 +196,10 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
         : undefined
     })
     const nodeProps = <Kind extends ChatNode['kind']>(): ChatNodeViewProps<Kind> => (
-      { ...props, ...nodeOwner, useTurnData } as unknown as ChatNodeViewProps<Kind>
+      {
+        ...props, ...nodeOwner, useTurnData,
+        useMessageEdit: () => () => Promise.resolve({ ok: true }),
+      } as unknown as ChatNodeViewProps<Kind>
     )
     switch (nodeOwner.node.kind) {
       case 'user':
@@ -526,7 +531,7 @@ describe('ChatView', () => {
     const h = makeHarness({
       queue: [pending],
       nodes: [{
-        kind: 'user', seq: 2, time: 2_000,
+        kind: 'user', messageId: 'm-2' as MessageId, seq: 2, time: 2_000,
         content: pending.content, source: null,
       }],
       running: true,

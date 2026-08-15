@@ -96,6 +96,12 @@ export interface SessionHeader {
    * would replay history the model can no longer act on.
    */
   readonly agentPreset?: string
+  /**
+   * Whether the session is excluded from product surfaces (session.list and
+   * derived lists): a throwaway worker session (draft polishing) that exists
+   * only while its owner drives it. Durable so a restart keeps the exclusion.
+   */
+  readonly hidden?: boolean
 }
 
 /**
@@ -118,6 +124,7 @@ export interface CreateSessionOptions {
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
+    readonly hidden?: boolean
   }
 }
 

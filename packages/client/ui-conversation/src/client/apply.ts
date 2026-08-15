@@ -39,6 +39,8 @@ import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
+// Type-only: pulls the generated Remote API and ctx.remote merge through the Client assembly boundary.
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -75,19 +77,6 @@ const ABSENT_MENU_LAUNCHER = {
   subscribe: () => () => {},
 }
 
-const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
-  hooks: {
-    turnData: ({ useSession }, nodeKey) => function useTurnData(key) {
-      return useSession((snapshot) => {
-        const location = snapshot.chat.nodes.get(nodeKey)?.location
-        return location?.kind === 'turn' || location?.kind === 'step'
-          ? location.turn.data.get(key)
-          : undefined
-      })
-    },
-  },
-}
-
 /** Resolve the session-scoped conversation face (scope-addressed send/cancel), failing loud. */
 function scopedConversation(sessions: ISessions, id: SessionId): IConversation {
   const scoped = sessions.scope(id)
@@ -117,6 +106,28 @@ export function apply(ctx: Context): void {
   const workspaces = ctx.workspaces
   const layout = ctx.layout
   const slots = ctx.slots
+
+  // Apply-time construction keeps the Remote verb bound to this fiber.
+  const chatNodeInject: ChatNodeTurnDataInjected = {
+    hooks: {
+      turnData: ({ useSession }, nodeKey) => function useTurnData(key) {
+        return useSession((snapshot) => {
+          const location = snapshot.chat.nodes.get(nodeKey)?.location
+          return location?.kind === 'turn' || location?.kind === 'step'
+            ? location.turn.data.get(key)
+            : undefined
+        })
+      },
+      messageEdit: ({ sessionId }) => () => async (messageId, text) => {
+        const result = await ctx.remote.messageEdit.messageEdit({ sessionId, messageId, text })
+        if (!result.ok) {
+          return { ok: false, code: result.error.code, message: result.error.message }
+        }
+        if (result.value.ok) return { ok: true }
+        return { ok: false, code: result.value.error.code, message: result.value.error.code }
+      },
+    },
+  }
 
   registerConversationNodes(ctx)
   registerChatNodeRenderers(ctx)
@@ -380,7 +391,7 @@ export function apply(ctx: Context): void {
     label: () => t('view.chat'),
     locale: NS,
     children: {
-      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
+      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: chatNodeInject },
     },
     store: chatStore,
     inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {

@@ -141,7 +141,10 @@ export class PolishService extends TypertRemoteService {
           ...target.options.provider === undefined ? {} : { provider: target.options.provider },
           ...target.options.model === undefined ? {} : { model: target.options.model },
         },
-        ...target.session.header.cwd === undefined ? {} : { meta: { cwd: target.session.header.cwd } },
+        meta: {
+          hidden: true,
+          ...target.session.header.cwd === undefined ? {} : { cwd: target.session.header.cwd },
+        },
       })
       handle.agent.followup(createUserMessage({
         content: [{ type: 'text', text: polishPrompt(message) }],

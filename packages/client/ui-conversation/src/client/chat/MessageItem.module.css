@@ -28,6 +28,72 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* In-place edit box replacing the bubble while editing: same 525px cap and
+   right-aligned column, with its own save/cancel row below the textarea. */
+.editBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(525px, 82%);
+  min-width: 320px;
+}
+
+.editInput {
+  width: 100%;
+  resize: vertical;
+  background: var(--dsw-alias-bg-raised);
+  border: 1px solid var(--dsw-alias-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+}
+
+.editInput:focus {
+  border-color: var(--dsw-alias-accent);
+  outline: none;
+}
+
+.editActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editSave {
+  border: none;
+  border-radius: 16px;
+  padding: 4px 14px;
+  background: var(--dsw-alias-accent);
+  color: var(--dsw-alias-label-on-accent, var(--dsw-alias-label-primary));
+  font-size: 14px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.editSave:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.editCancel {
+  border: none;
+  border-radius: 16px;
+  padding: 4px 14px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.editCancel:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .contextRow {
   padding: 2px 0;
 }

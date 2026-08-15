@@ -132,6 +132,9 @@ function validateSessionHeader(id: SessionId, input: unknown): SessionHeader {
   if (record.agentPreset !== undefined && typeof record.agentPreset !== 'string') {
     throw new Error('session header agentPreset must be a string')
   }
+  if (record.hidden !== undefined && typeof record.hidden !== 'boolean') {
+    throw new Error('session header hidden must be a boolean')
+  }
   return deepFreeze(record as unknown as SessionHeader)
 }
 
@@ -884,6 +887,7 @@ export class SessionStore extends Service {
       ...meta?.origin === undefined ? {} : { origin: meta.origin },
       ...meta?.delegationDepth === undefined ? {} : { delegationDepth: meta.delegationDepth },
       ...meta?.agentPreset === undefined ? {} : { agentPreset: meta.agentPreset },
+      ...meta?.hidden === undefined ? {} : { hidden: meta.hidden },
     }
     return Session.create(sessionId, seed, header)
   }
@@ -1029,7 +1033,6 @@ export class SessionStore extends Service {
       } catch (error: unknown) {
         // Preserve the listener's exact rejection value; flush is a caller-owned
         // failure boundary, and Cordis listeners may throw arbitrary values.
-        // oxlint-disable-next-line typescript/prefer-promise-reject-errors
         return Promise.reject(error)
       }
     }))
