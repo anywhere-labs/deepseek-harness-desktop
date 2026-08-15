@@ -21,5 +21,6 @@ export const inject = [
 /** Register desktop-owned client surfaces for the current BrowserWindow mode. @param ctx - browser Cordis context. */
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
+  if (environment === null) return
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
 }
