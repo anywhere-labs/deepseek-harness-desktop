@@ -34,6 +34,7 @@ apps/web/dist/
 apps/desktop/runtime-host/
 apps/desktop/dist/
 apps/desktop/dist-new/
+apps/desktop/dist-latest/
 .artifacts/
 .playwright-mcp/
 .orig

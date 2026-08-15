@@ -96,6 +96,16 @@ export interface ISessions {
    */
   fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>
   /**
+   * Delete a session: the Host stops its agent (when attached), removes the
+   * in-memory session, and durably deletes the persisted log. On success the
+   * session disappears from the list store immediately (no frame wait); a
+   * running session fails with `session-running`, an unknown one with
+   * `session-not-found`.
+   * @param sessionId - the session to delete.
+   * @throws with the host's business error when deletion fails.
+   */
+  deleteSession(sessionId: SessionId): Promise<void>
+  /**
    * Register a per-session standard-props provider (hooks become `use<Name>`
    * selector hooks on the render side; props spread verbatim).
    * @param descriptor - static member roster plus per-session resolver.

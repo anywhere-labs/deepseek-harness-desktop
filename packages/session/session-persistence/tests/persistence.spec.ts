@@ -105,6 +105,10 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return this.coordinator.truncate(id, toSeq)
   }
 
+  remove(id: SessionId): Promise<void> {
+    return this.coordinator.remove(id)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): ReturnType<PersistenceCoordinator['prepare']> {
     return this.coordinator.prepare(id, signal)
   }
@@ -170,6 +174,10 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     /* v8 ignore next -- truncate only runs for a materialized (stored) session */
     if (!entry) return
     entry.events = entry.events.filter(event => event.seq < toSeq)
+  }
+
+  async removeStored(id: SessionId): Promise<void> {
+    if (!this.store.delete(id)) throw new Error(`session "${id}" not found`)
   }
 
   async list(signal?: AbortSignal): Promise<SessionHeader[]> {

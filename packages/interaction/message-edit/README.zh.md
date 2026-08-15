@@ -14,7 +14,7 @@
 |---|---|---|
 | `messageEdit` | `{ sessionId, messageId, text }` | `{ ok: true, value: { seq } }` 或一个闭集失败 |
 
-`messageEdit` 要求 `sessionId` 对应的 **live** agent（否则 `session-not-found`）。文本会去除首尾空白，必须非空（`message-blank`），且不得超过配置的 `maxMessageChars`（`message-too-long`）。目标必须是仍在 surface 上的普通用户消息——被压缩掉、作为上下文注入或来自非用户来源的消息会被拒绝（`message-not-found`）。
+`messageEdit` 通过 agent 编辑 **live** 会话（追加的事件会广播给查看者），或通过会话持久化编辑 **cold** 持久化会话——重新打开的会话无需恢复 agent 即可编辑；两者皆无的会话返回 `session-not-found`。文本会去除首尾空白，必须非空（`message-blank`），且不得超过配置的 `maxMessageChars`（`message-too-long`）。目标必须是仍在 surface 上的普通用户消息——被压缩掉、作为上下文注入或来自非用户来源的消息会被拒绝（`message-not-found`）。客户端根据返回的 seq 在本地折叠替换事件（cold 会话永无广播；live 广播同时到达时由 seq 守卫丢弃重复）。
 
 ## Config
 

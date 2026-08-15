@@ -603,6 +603,33 @@ export class SessionManager {
   }
 
   /**
+   * Delete a session through the Host, then remove its row and instance state
+   * locally without waiting for the host/session-removed frame (a cold
+   * deletion never emits one). Mirrors the frame handler's non-durable
+   * removal: the row disappears, the resident instance marks removed, and
+   * per-session buffers drop.
+   * @param sessionId - the session to delete.
+   * @returns the wire result.
+   */
+  async deleteSession(sessionId: SessionId): Promise<RpcResult<{ deleted: true }>> {
+    let result: RpcResult<{ deleted: true }>
+    try {
+      ({ result } = await this.api.sessions.delete({ sessionId }))
+    } catch (error) {
+      return transportError(error)
+    }
+    if (!result.ok) return result
+    this.recordMutation({ kind: 'remove', sessionId })
+    this.sessions.get(sessionId)?.handleRemoved()
+    this.updateCatalogActivity(sessionId, false)
+    this.pendingBuffers.delete(sessionId)
+    this.pendingInteractions.delete(sessionId)
+    this.jobsBySession.delete(sessionId)
+    this.projectionStores.delete(sessionId)
+    return result
+  }
+
+  /**
    * Insert-or-enrich a locally synthesized summary: a new id prepends; an
    * existing entry only gains fields it lacks (the session-added frame and the
    * create() echo race — whichever lands second must fill the placeholder's

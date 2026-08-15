@@ -1273,6 +1273,46 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       }
     })
 
+    it('remove deletes a stored session so later reads observe absence', async () => {
+      const fix = await makeFixture()
+      const { ctx, fiber } = await freshCtx(fix)
+      try {
+        const m = meta('remove-me', WORK)
+        await ctx.sessionPersistence.create(m)
+        await ctx.sessionPersistence.append(m.id, oneTurnLog())
+        expect((await ctx.sessionPersistence.list()).map(h => h.id)).toContain(m.id)
+
+        await ctx.sessionPersistence.remove(m.id)
+        expect((await ctx.sessionPersistence.list()).map(h => h.id)).not.toContain(m.id)
+        await expect(ctx.sessionPersistence.load(m.id)).rejects.toThrow(/not found/)
+      } finally {
+        await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
+    it('remove refuses a live session and a missing session', async () => {
+      const fix = await makeFixture()
+      const { ctx, fiber } = await freshCtx(fix)
+      let session!: Session
+      const sessionFiber = await ctx.plugin(Object.assign((inner: Context) => {
+        session = inner.sessions.create(SessionId('remove-live'), { meta: { cwd: WORK } })
+      }, { inject: ['sessions'] }))
+      try {
+        send(session, oneTurnLog())
+        await ctx.sessions.flush(session)
+        await expect(ctx.sessionPersistence.remove(session.id))
+          .rejects.toThrow(`cannot remove session "${session.id}" while it is live`)
+        await sessionFiber.dispose()
+        await ctx.sessionPersistence.remove(session.id)
+        await expect(ctx.sessionPersistence.remove(SessionId('remove-ghost'))).rejects.toThrow(/not found/)
+      } finally {
+        await sessionFiber.dispose()
+        await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
     // --- small public-API edges that the coordinator owns uniformly ---
 
     it('append of an empty batch is a no-op (stays lazy)', async () => {

@@ -19,6 +19,7 @@ class TestPersistence extends SessionPersistence {
   create(_meta: SessionHeader): Promise<void> { return Promise.resolve() }
   append(_id: SessionId, _events: readonly SessionEvent[]): Promise<void> { return Promise.resolve() }
   truncate(_id: SessionId, _toSeq: number): Promise<void> { return Promise.reject(new Error('test persistence does not support truncation')) }
+  remove(_id: SessionId): Promise<void> { return Promise.reject(new Error('test persistence does not support removal')) }
   load(_id: SessionId): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
     return Promise.reject(new Error('not used'))
   }

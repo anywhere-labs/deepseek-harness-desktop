@@ -186,6 +186,10 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     return this.coordinator.truncate(id, toSeq)
   }
 
+  remove(id: SessionId): Promise<void> {
+    return this.coordinator.remove(id)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }
@@ -354,6 +358,26 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     try {
       this.db.prepare('DELETE FROM events WHERE session_id = ? AND seq >= ?').run(meta.id, toSeq)
       this.db.prepare('UPDATE sessions SET revision = revision + 1 WHERE id = ?').run(meta.id)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      /* v8 ignore start -- rolls back a DB-level failure (disk full, etc.), unreachable in test */
+      this.db.exec('ROLLBACK')
+      throw error
+      /* v8 ignore stop */
+    }
+  }
+
+  /**
+   * Delete one stored session's rows (events plus the metadata row) in one
+   * transaction. The coordinator validates existence before calling this.
+   * @param id - persisted session to remove.
+   */
+  async removeStored(id: SessionId): Promise<void> {
+    await this.ready
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(id)
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
       this.db.exec('COMMIT')
     } catch (error) {
       /* v8 ignore start -- rolls back a DB-level failure (disk full, etc.), unreachable in test */

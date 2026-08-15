@@ -222,6 +222,14 @@ export interface PersistenceBackend<TornMarker = unknown> {
    * backend omits it.
    */
   close?(): Promise<void>
+
+  /**
+   * Durably delete one stored session's artifact. A backend without the
+   * capability omits the hook and coordinator removal fails loud. Non-mutating
+   * reads must observe the absence afterwards.
+   * @param id - persisted session to remove.
+   */
+  removeStored?(id: SessionId): Promise<void>
 }
 
 /** Per-session write state held by the coordinator's in-memory bookkeeping. */
@@ -766,6 +774,40 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     // The durable rewrite is the transaction: advance the cursor as soon as it
     // commits, so the next append continues from the truncated prefix.
     state.cursor = toSeq
+    this.preparations.invalidate(id)
+  }
+
+  /**
+   * Durably delete one stored session — the durability half of a user-initiated
+   * session deletion. Refuses a live or prepared identity, and a backend
+   * without the removal hook.
+   * @param id - persisted session to remove.
+   */
+  async remove(id: SessionId): Promise<void> {
+    // Drain any live controller's pending writes before serializing: a
+    // lifecycle teardown (agent dispose) may have appended tail records that
+    // are still in the write-behind batch.
+    for (const session of this.live.keys()) {
+      if (session.id === id) await this.flush(session)
+    }
+    return this.serialize(id, () => this.removeCore(id))
+  }
+
+  private async removeCore(id: SessionId): Promise<void> {
+    if (this.ctx.sessions.get(id) !== undefined) {
+      throw new Error(`cannot remove session "${id}" while it is live`)
+    }
+    if (this.preparations.has(id)) {
+      throw new Error(`cannot remove session "${id}" while a preparation is reserved`)
+    }
+    if (this.backend.removeStored === undefined) {
+      throw new Error(`backend "${this.backend.name}" does not support removal`)
+    }
+    // Discovered-in-storage session: adopt resolves and validates the stored
+    // prefix before the physical delete commits.
+    if (!this.states.has(id)) await this.adopt(id)
+    await this.backend.removeStored(id)
+    this.states.delete(id)
     this.preparations.invalidate(id)
   }
 

@@ -34,6 +34,7 @@ export interface RpcMethodMap {
   'session.attachment': SessionsApi['attachment']
   'session.updateQueue': SessionsApi['updateQueue']
   'session.cancel': SessionsApi['cancel']
+  'session.delete': SessionsApi['delete']
   'subagent.list': SubagentsApi['list']
   'subagent.history': SubagentsApi['history']
   'subagent.prompt': SubagentsApi['prompt']

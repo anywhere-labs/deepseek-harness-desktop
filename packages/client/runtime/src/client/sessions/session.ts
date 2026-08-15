@@ -728,6 +728,22 @@ export class Session implements SessionFace {
     return tail === undefined ? null : tail.seq
   }
 
+  /**
+   * Fold one Host-authoritative event returned by a user-initiated mutation
+   * (the message-edit replacement) into this window. The same seq guard as
+   * the live path drops the duplicate when the Host also broadcast the event;
+   * for a cold session there is no broadcast and this is the only writer.
+   * @param event - the appended event to apply.
+   */
+  acceptHostEvent(event: SessionEvent): void {
+    const tailSeq = this.windowTailSeq()
+    if (tailSeq !== null && event.seq <= tailSeq) return
+    this.events.push(event)
+    this.views.push(undefined)
+    if (event.type === 'turn/start') this.firstPromptPendingTurn = false
+    this.scheduleConversation(this.conversation.append({ event, view: undefined }))
+  }
+
   private buildSnapshot(): ConversationSnapshot {
     if (this.pendingCache === null || this.pendingCache.rev !== this.pendingRev) {
       this.pendingCache = { rev: this.pendingRev, value: [...this.pending.values()] }

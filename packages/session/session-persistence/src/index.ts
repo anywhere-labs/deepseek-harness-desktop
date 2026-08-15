@@ -156,6 +156,17 @@ export abstract class SessionPersistence extends Service {
   abstract truncate(id: SessionId, toSeq: number): Promise<void>
 
   /**
+   * Durably delete one stored session — the durability half of a
+   * user-initiated session deletion. The identity must be cold: no live
+   * Session may be bound to it (the caller stops the agent and removes the
+   * in-memory session first) and no preparation may be reserved. Refuses when
+   * the session is absent, and fails loud when the backend cannot remove.
+   * Non-mutating reads observe the absence afterwards.
+   * @param id - the persisted session to remove.
+   */
+  abstract remove(id: SessionId): Promise<void>
+
+  /**
    * Prepare the exact unpublished Session used by resume. Implementations may
    * reuse object graphs retained by an earlier {@link inspect} after confirming
    * their durable revision is still current; disposal releases an unpublished

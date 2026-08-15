@@ -2,9 +2,9 @@
 
 English | [中文](README.zh.md)
 
-Composer polish button: the `conversation.input.right` entry that sits immediately **left of the model select** in the composer's tool row. It rewrites and expands the current draft through an isolated throwaway session mirroring the session's own provider/model selection ([`dsh-polish`](../../interaction/polish/README.md)) — the visible conversation is never touched — and replaces the draft with the returned text for the user to review before sending.
+Composer polish button: the `conversation.input.right` entry that sits immediately **left of the model select** in the composer's tool row. It rewrites and expands the current draft through ONE direct model call on the session's own provider/model selection ([`dsh-polish`](../../interaction/polish/README.md)) — no session is created and the visible conversation is never touched — and replaces the draft with the returned text for the user to review before sending.
 
-The caption is the bare `润色` / `Polish`, switching to `润色中…` / `Polishing…` while the polish turn runs. The button disables on an empty draft and while a polish is in flight; failures announce through the shared transient Toast.
+The caption is the bare `润色` / `Polish`, switching to `润色中…` / `Polishing…` while the polish call runs. The button disables on an empty draft and while a polish is in flight; failures announce through the shared transient Toast.
 
 ## Registration
 
@@ -14,19 +14,19 @@ The caption is the bare `润色` / `Polish`, switching to `润色中…` / `Poli
 
 ## Model Experience
 
-### The polish turn
+### The polish call
 
 #### What the model sees
 
-The polish instruction and the verbatim draft as one user message in the throwaway session (see `dsh-polish`); the model's reply is never sent automatically — it replaces the composer draft for the user to review.
+The polish instruction and the verbatim draft as one user message in a single direct request (see `dsh-polish`); the model's reply is never sent automatically — it replaces the composer draft for the user to review.
 
 #### Token effect
 
-One model request per click in the throwaway session; nothing is retained in the visible session's log.
+One model request per click on the configured credential; nothing is retained in the visible session's log.
 
 #### KV Cache effect
 
-The throwaway context neither reuses nor invalidates the visible session's prefix cache.
+The direct call's fresh context neither reuses nor invalidates the visible session's prefix cache.
 
 ## Known Limitations and Deferred Work
 

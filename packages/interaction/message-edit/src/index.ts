@@ -5,13 +5,18 @@
  * (and therefore every later model request) sees the new text, the UI folds
  * the replacement into the same message node, and the append-only log keeps
  * both texts. The replacement is a plain `{ kind: 'user' }` message with the
- * text the caller supplied.
+ * text the caller supplied. Live sessions are edited through their agent;
+ * cold sessions are edited through session persistence, so a reopened
+ * conversation is editable without resuming its agent.
  * @module @deepseek-ai/dsh-message-edit
  */
 
 import { Context } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
+// Type-only: pulls the sessionPersistence service's Context merge so the cold
+// path's ctx.get resolves the typed service.
+import type {} from '@deepseek-ai/dsh-session-persistence'
 import { foldSurface } from '@deepseek-ai/dsh-session/surface'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { MessageId, UserMessage } from '@deepseek-ai/dsh-llm'
@@ -59,6 +64,16 @@ function rejected(error: MessageEditFailure): MessageEditResult {
   return Object.freeze({ ok: false, error: Object.freeze(error) })
 }
 
+/** Build the replacement `user/message` event for a target message. */
+function replacementEvent(target: SessionEvent<'user/message'>, text: string): UserMessage {
+  return {
+    id: target.data.id,
+    role: 'user',
+    content: [{ type: 'text', text }],
+    source: { kind: 'user' },
+  }
+}
+
 /** The current surface `user/message` carrying `messageId`, or undefined. */
 function editableMessage(
   events: readonly SessionEvent[],
@@ -81,7 +96,9 @@ function editableMessage(
 
 /**
  * The message-edit Remote service: rewrites one settled user message in place.
- * Requires a live agent; cold sessions are not resumed for an edit.
+ * Live sessions are edited through their agent (the appended event broadcasts
+ * to viewers); cold sessions are edited through session persistence, so an
+ * edit never has to resume an agent just to rewrite text.
  */
 export class MessageEditService extends TypertRemoteService {
   static inject = ['agents']
@@ -108,16 +125,13 @@ export class MessageEditService extends TypertRemoteService {
    * target on the model surface. The message is located by its stable id on
    * the CURRENT surface, so consecutive edits of the same message keep
    * working (each edit targets the previous replacement). A message
-   * compacted away or injected as context is refused.
+   * compacted away or injected as context is refused. The target session may
+   * be live (edited through its agent) or cold (edited through persistence).
    * @param request - target session, target message id, and replacement text.
-   * @returns the replacement event seq or an explicit business failure.
+   * @returns the replacement event seq plus the event, or an explicit failure.
    */
   @Remote('messageEdit')
-  edit(request: MessageEditRequest): MessageEditResult {
-    const agent = this.ctx.agents.get(request.sessionId)
-    if (agent === undefined) {
-      return rejected({ code: 'session-not-found', sessionId: request.sessionId })
-    }
+  async edit(request: MessageEditRequest): Promise<MessageEditResult> {
     const text = request.text.trim()
     if (text.length === 0) return rejected({ code: 'message-blank' })
     if (text.length > this.maxMessageChars) {
@@ -128,23 +142,44 @@ export class MessageEditService extends TypertRemoteService {
       })
     }
 
-    const events = agent.session.events
-    const surface = foldSurface(events)
-    const target = editableMessage(events, surface.nodes, request.messageId)
+    const agent = this.ctx.agents.get(request.sessionId)
+    if (agent !== undefined) {
+      const events = agent.session.events
+      const surface = foldSurface(events)
+      const target = editableMessage(events, surface.nodes, request.messageId)
+      if (target === undefined) {
+        return rejected({ code: 'message-not-found', messageId: request.messageId })
+      }
+      const event = agent.session.append('user/message', replacementEvent(target, text), {
+        surfaceOp: { op: 'replace', start: target.seq, end: target.seq },
+        sourceEventSeqs: [target.seq],
+      })
+      return success(event.seq)
+    }
+
+    const persistence = this.ctx.get('sessionPersistence')
+    if (persistence === undefined) {
+      return rejected({ code: 'session-not-found', sessionId: request.sessionId })
+    }
+    const stored = (await persistence.list()).find(header => header.id === request.sessionId)
+    if (stored === undefined) {
+      return rejected({ code: 'session-not-found', sessionId: request.sessionId })
+    }
+    const loaded = await persistence.load(request.sessionId)
+    const surface = foldSurface(loaded.events)
+    const target = editableMessage(loaded.events, surface.nodes, request.messageId)
     if (target === undefined) {
       return rejected({ code: 'message-not-found', messageId: request.messageId })
     }
-
-    const replacement: UserMessage = {
-      id: target.data.id,
-      role: 'user',
-      content: [{ type: 'text', text }],
-      source: { kind: 'user' },
-    }
-    const event = agent.session.append('user/message', replacement, {
+    const event: SessionEvent<'user/message'> = {
+      type: 'user/message',
+      seq: loaded.events.length,
+      time: Date.now(),
+      data: replacementEvent(target, text),
       surfaceOp: { op: 'replace', start: target.seq, end: target.seq },
       sourceEventSeqs: [target.seq],
-    })
+    }
+    await persistence.append(request.sessionId, [event])
     return success(event.seq)
   }
 }

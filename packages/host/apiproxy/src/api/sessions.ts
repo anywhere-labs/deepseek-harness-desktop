@@ -370,4 +370,13 @@ export interface SessionsApi {
    */
   cancel(request: RpcRequest<{ sessionId: SessionId }>): Promise<RpcResponse<{ accepted: true }>>
 
+  /**
+   * Deletes a session: stops its live agent (when one is attached), removes
+   * the in-memory session, and durably deletes the persisted log. A running
+   * agent fails with `session-running` (cancel first); a session neither
+   * attached nor persisted fails with `session-not-found`. Workspace
+   * accounting keeps the stale id; grouping surfaces filter it out.
+   */
+  delete(request: RpcRequest<{ sessionId: SessionId }>): Promise<RpcResponse<{ deleted: true }>>
+
 }

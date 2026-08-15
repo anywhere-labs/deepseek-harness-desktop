@@ -574,6 +574,44 @@ describe('built-in conversation node Definitions', () => {
     })
   })
 
+  it('folds a LIVE in-place edit through the incremental append path', () => {
+    const value = new ConversationNodeAssembler(new TestEventDefinitions(), new TestViewDefinitions())
+    value.replaceWindow([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'user/message', {
+        ...textMessage('live-edit', '第一版'),
+        source: { kind: 'user' },
+      }, { surfaceOp: 'append' }),
+      at(4, 'assistant/message', {
+        turn: 1,
+        step: 1,
+        message: assistantMessage('live-answer', 'ok'),
+      }, { surfaceOp: 'append' }),
+    ], false)
+    value.flush()
+    expect(node(snapshot(value), 'user')?.data).toMatchObject({ kind: 'user', messageId: 'live-edit' })
+
+    // The edit arrives as a live tail event: the node must fold to the new
+    // text WITHOUT a window rebuild (this is the assembled-app path).
+    value.append(at(5, 'user/message', {
+      ...textMessage('live-edit', '第二版'),
+      source: { kind: 'user' },
+    }, { surfaceOp: { op: 'replace', start: 3, end: 3 }, sourceEventSeqs: [3] }))
+    value.flush()
+
+    const current = snapshot(value)
+    const users = [...current.nodes.values()]
+      .filter((entry): entry is ChatConversationViewNode => (entry.data as { kind?: string } | undefined)?.kind === 'user')
+      .map(entry => entry.data)
+    expect(users).toHaveLength(1)
+    expect(users[0]).toMatchObject({
+      kind: 'user',
+      messageId: 'live-edit',
+      content: [{ type: 'text', text: '第二版' }],
+    })
+  })
+
   it('assembles retry chains and keeps manual and automatic compaction ownership separate', () => {
     const retry = assembler([
       at(1, 'turn/start', { turn: 1 }),

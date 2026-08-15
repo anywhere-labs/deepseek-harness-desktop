@@ -3,8 +3,8 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import { harness } from './helpers.ts'
 
-describe('dsh-polish through the agent loop', () => {
-  it('polishes in a throwaway session without touching the target session log', async () => {
+describe('dsh-polish through a direct model call', () => {
+  it('polishes without touching the target session log and without creating a session', async () => {
     const { ctx } = await harness(new MockAdapter([textResponse('润色后的、更完整的消息文本。')]))
     const agent = ctx.agentLoop.create(SessionId('it-polish-ok'), { provider: 'mock', model: 'mock' })
     const baseline = agent.session.events.length
@@ -12,14 +12,13 @@ describe('dsh-polish through the agent loop', () => {
     const result = await ctx.polish.polish({ sessionId: agent.id, message: '  帮我写一个bug  ' })
     expect(result).toEqual({ ok: true, value: { text: '润色后的、更完整的消息文本。' } })
 
-    // The visible conversation is untouched: nothing appended at all, and the
-    // throwaway session is gone again (the target still resolves).
+    // No session created, no log entry written: the visible conversation is
+    // byte-identical and the agent registry holds only the target.
     expect(agent.session.events.length).toBe(baseline)
-    expect(agent.session.events.some(event => event.type === 'user/message')).toBe(false)
     expect(ctx.agents.get(agent.id)).toBe(agent)
   })
 
-  it('mirrors the target session provider/model selection', async () => {
+  it('mirrors the target session provider/model selection on the direct call', async () => {
     const { ctx, adapter } = await harness(new MockAdapter([textResponse('润色结果。')]))
     const agent = ctx.agentLoop.create(SessionId('it-polish-model'), { provider: 'mock', model: 'mock' })
 
@@ -53,6 +52,16 @@ describe('dsh-polish through the agent loop', () => {
     expect(result).toEqual({ ok: false, error: { code: 'session-not-found', sessionId } })
   })
 
+  it('refuses a target without a provider/model selection', async () => {
+    const { ctx } = await harness(new MockAdapter([]))
+    const agent = ctx.agentLoop.create(SessionId('it-polish-no-route'), {})
+    const result = await ctx.polish.polish({ sessionId: agent.id, message: 'draft' })
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'polish-failed', message: 'target session has no provider/model selection' },
+    })
+  })
+
   it('reports no-result when the model reply is empty', async () => {
     const { ctx } = await harness(new MockAdapter([textResponse('')]))
     const agent = ctx.agentLoop.create(SessionId('it-polish-empty'), { provider: 'mock', model: 'mock' })
@@ -60,21 +69,14 @@ describe('dsh-polish through the agent loop', () => {
     expect(result).toEqual({ ok: false, error: { code: 'no-result' } })
   })
 
-  it('reports polish-session-failed when the throwaway session cannot be created', async () => {
+  it('reports polish-failed when the direct call cannot dispatch', async () => {
     const { ctx } = await harness(new MockAdapter([]))
-    const agent = ctx.agentLoop.create(SessionId('it-polish-fail'), { provider: 'mock', model: 'mock' })
-    const originalCreate = ctx.agents.create.bind(ctx.agents)
-    ctx.agents.create = () => Promise.reject(new Error('factory down'))
-    try {
-      const result = await ctx.polish.polish({ sessionId: agent.id, message: 'draft' })
-      expect(result).toEqual({
-        ok: false,
-        error: { code: 'polish-session-failed', message: 'factory down' },
-      })
-    } finally {
-      ctx.agents.create = originalCreate
-    }
-    // The target session stays live and untouched.
+    // The target agent exists but its route has no registered adapter, so the
+    // direct call fails at dispatch — no session is created either way.
+    const agent = ctx.agentLoop.create(SessionId('it-polish-fail'), { provider: 'ghost', model: 'ghost' })
+    const result = await ctx.polish.polish({ sessionId: agent.id, message: 'draft' })
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ ok: false, error: { code: 'polish-failed' } })
     expect(ctx.agents.get(agent.id)).toBe(agent)
   })
 })

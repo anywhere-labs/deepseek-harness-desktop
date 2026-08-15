@@ -532,6 +532,17 @@ export class SessionRuntime implements ISessions {
   }
 
   /**
+   * Delete a session (see ISessions.deleteSession): the row disappears from
+   * the list store on success, without waiting for a host frame.
+   * @param sessionId - the session to delete.
+   * @throws with the host's business error when deletion fails.
+   */
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.deleteSession(sessionId)
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
    * Resolve an Agent-scoped context view (use-and-discard).
    * @param id - session id (the agent identity — 1:1 same axis).
    * @returns scoped ctx, or undefined for a session neither listed nor already scoped.

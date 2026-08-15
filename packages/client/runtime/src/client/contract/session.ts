@@ -11,6 +11,7 @@ import type { AttachmentIdType, ImageAttachmentRef } from '@deepseek-ai/dsh-atta
 import type {
   MessageId, PromptContentPart, QueueAction, RpcResult, SessionId,
 } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { ConversationSnapshot } from '../sessions/conversation.ts'
 import type { ObservableSnapshot } from './store.ts'
@@ -79,6 +80,15 @@ export interface ISession {
    * @returns the admission result, or the Remote face's error branch.
    */
   command(line: string): Promise<RemoteResult<{ matched: boolean }>>
+  /**
+   * Fold one Host-authoritative event returned by a user-initiated mutation
+   * (the message-edit replacement) into this session's window. The same seq
+   * guard as the live stream drops the duplicate when the Host also
+   * broadcast the event; for a cold session there is no broadcast and this
+   * is the only writer.
+   * @param event - the appended event to apply.
+   */
+  acceptHostEvent(event: SessionEvent): void
 }
 
 /**

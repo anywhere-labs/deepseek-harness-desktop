@@ -2633,6 +2633,66 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         agent.cancel({ kind: 'user' }, { keepInbox: true })
         return Promise.resolve(ok(request, { accepted: true as const }))
       },
+
+      async delete(request) {
+        const { sessionId } = request.payload
+        const agent = ctx.agents.get(sessionId)
+        const persistence = ctx.get('sessionPersistence')
+        const persisted = persistence === undefined
+          ? false
+          : (await persistence.list()).some(header => header.id === sessionId)
+        if (agent === undefined && !persisted) {
+          return err(request, {
+            code: 'session-not-found',
+            message: `session "${sessionId}" not found`,
+            details: { sessionId },
+          })
+        }
+        if (agent !== undefined) {
+          if (hasSubagentOwner(agent.session, agent)) {
+            return err(request, subagentOwnershipError(sessionId))
+          }
+          if (agent.status === 'running') {
+            return err(request, {
+              code: 'session-running',
+              message: `session "${sessionId}" is running; stop it before deleting`,
+              details: { sessionId },
+            })
+          }
+          // Structural cast: the loop's Context augmentation lives in
+          // dsh-agent-loop, which this package does not reference; only the
+          // one teardown verb is needed here.
+          const loop = ctx.get('agentLoop') as { disposeAgent(agent: Agent): Promise<void> } | undefined
+          if (loop === undefined) {
+            return err(request, {
+              code: 'internal',
+              message: 'agent loop is unavailable; cannot stop the session agent',
+              details: {},
+            })
+          }
+          try {
+            await loop.disposeAgent(agent)
+          } catch (error: unknown) {
+            return err(request, {
+              code: 'session-delete-failed',
+              message: error instanceof Error ? error.message : String(error),
+              details: { sessionId },
+            })
+          }
+        }
+        if (persistence !== undefined && persisted) {
+          try {
+            await persistence.remove(sessionId)
+          } catch (error: unknown) {
+            return err(request, {
+              code: 'session-delete-failed',
+              message: error instanceof Error ? error.message : String(error),
+              details: { sessionId },
+            })
+          }
+        }
+        return ok(request, { deleted: true as const })
+      },
     },
 
     subagents: {

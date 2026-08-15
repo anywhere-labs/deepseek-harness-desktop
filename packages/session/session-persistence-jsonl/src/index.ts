@@ -185,6 +185,10 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     return this.coordinator.truncate(id, toSeq)
   }
 
+  remove(id: SessionId): Promise<void> {
+    return this.coordinator.remove(id)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }
@@ -485,6 +489,28 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
   /** List valid unique stored sessions' metadata (header line only — no full-log parse). */
   async list(signal?: AbortSignal): Promise<SessionHeader[]> {
     return (await this.listArtifacts(signal)).map(artifact => artifact.header)
+  }
+
+  /**
+   * Delete one stored session's artifact: remove its session directory under
+   * every project scope that could hold it (the coordinator resolves identity
+   * by id alone, so the physical log may live under any cwd).
+   * @param id - persisted session to remove.
+   */
+  async removeStored(id: SessionId): Promise<void> {
+    await this.ensureRootEncoding()
+    let removed = false
+    for (const project of await this.listProjectDirs()) {
+      await this.rejectLegacyFlatArtifact(project, id)
+      const dir = join(project, encodeSegment(id))
+      if (await this.exists(dir)) {
+        await rm(dir, { recursive: true, force: true })
+        /* v8 ignore next -- native Windows coverage exercises this platform dispatch; Linux covers the POSIX peer */
+        if (process.platform !== 'win32') await this.syncDirPosix(project)
+        removed = true
+      }
+    }
+    if (!removed) throw new Error(`session "${id}" not found`)
   }
 
   /** List metadata plus a stat-derived identity for each append-only log. */
