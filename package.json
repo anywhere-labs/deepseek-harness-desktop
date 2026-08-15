@@ -18,7 +18,8 @@
     "dist:desktop": "pnpm --filter @deepseek-ai/dsh-desktop run dist",
     "dist:mac": "pnpm --filter @deepseek-ai/dsh-desktop run dist:mac",
     "dist:mac:desktop": "pnpm --filter @deepseek-ai/dsh-desktop run dist:mac",
-    "verify:contract": "node --import tsx scripts/verify-upstream-contract.ts"
+    "verify:contract": "node --import tsx scripts/verify-upstream-contract.ts",
+    "postinstall": "node scripts/fix-pnpm-exe-perms.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.6",

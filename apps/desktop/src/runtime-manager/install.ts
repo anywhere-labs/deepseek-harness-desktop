@@ -10,7 +10,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 export const RUNTIME_FRONTEND_VERSION = '0.0.1-rc.5'
 
@@ -30,7 +30,7 @@ export interface InstallRuntimeOptions {
  */
 export function resolvePnpmCommand(resourcesPath?: string): string | undefined {
   if (resourcesPath !== undefined) {
-    const bundled = join(resourcesPath, 'pnpm-exe', process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
+    const bundled = resolve(join(resourcesPath, 'pnpm-exe', process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'))
     if (existsSync(bundled)) return bundled
   }
   return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
