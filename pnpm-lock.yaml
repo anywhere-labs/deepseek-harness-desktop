@@ -29,6 +29,9 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@pnpm/exe':
+        specifier: ^11.21.0
+        version: 11.21.0
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1
@@ -2824,6 +2827,47 @@ packages:
     resolution: {integrity: sha512-ODOov0sGMJMf3jPonOkgGqPknTsu+DdQ7kD++gz8aI+aFMOMHFbWAA2taqXXVTdP+OTOQR/znGvSpmkeI0WTYQ==}
     engines: {node: '>=14.18.0'}
 
+  '@pnpm/exe@11.21.0':
+    resolution: {integrity: sha512-zawQxIewH1od72HhlmXWq3No6XyuWn+nMvQ9BjWWGNBVskmS+RDlTu7ey2ruL650PbbyuCATYSal1DaXFKBdcw==}
+    hasBin: true
+
+  '@pnpm/linux-arm64@11.21.0':
+    resolution: {integrity: sha512-gOSfQKr6kZjEwHyoRwMt9qrqQ9sqbZmUm2hbgJJG8bp0ZR9YkQ4BZV2k4qlQA2jtsmHV1u1MwiaLcuK7DauvBg==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@pnpm/linux-x64@11.21.0':
+    resolution: {integrity: sha512-X+kBR8yscKyhhElO+WLrb6sFbl/3Ow70B+6fqZUYI8T8wtmlCw5GtcPXVBJPDJcLN5joe227h7lyCCZo4tdKdw==}
+    cpu: [x64]
+    os: [linux]
+
+  '@pnpm/linuxstatic-arm64@11.21.0':
+    resolution: {integrity: sha512-IUJfAclH0b3QxaHuQuVxXQIzEkDtTm0C+G3tgG0ET5tDRGc7wH7eU0GEM75ojHOwzqv7s0y00xPVVCIsxUM4Nw==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@pnpm/linuxstatic-x64@11.21.0':
+    resolution: {integrity: sha512-6Y2u+AfOUuTqWgTCpFhySL8HAcONDucCFixKle9tWoW7bm8RF0+fwQBRWNWGdx+Toau07wZ1LNZPqN8gpgeBDQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@pnpm/macos-arm64@11.21.0':
+    resolution: {integrity: sha512-sLMGvVJXWdhFAouY2icjeZ2VCFmyPPZvvtHkfj1oeCWGppsbWcP5cExSw9yU1Uw7ALwrV0I2lRZv33yWYfDtcQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@pnpm/win-arm64@11.21.0':
+    resolution: {integrity: sha512-79Nc+YI5B2ddH5MQD2YITL/PKnmXdcQKwmwx0HaD4QnsCco8DFaTho242e5sd9QfXKxYRvB9AOnuqIV4VjhAAw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@pnpm/win-x64@11.21.0':
+    resolution: {integrity: sha512-zT3TufmVOroWPrzXTPPPgYvIsTZIsK13kjpmgXlICyEFrhd16RFLoTWFhP+8UqHXpTNmVbtTHzg+fEVYy9rlEQ==}
+    cpu: [x64]
+    os: [win32]
+
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
 
@@ -2853,6 +2897,62 @@ packages:
 
   '@quansync/fs@1.0.0':
     resolution: {integrity: sha512-4TJ3DFtlf1L5LDMaM6CanJ/0lckGNtJcMjQ1NAV6zDmA0tEHKZtxNKin8EgPaVX1YzljbxckyT2tJrpQKAtngQ==}
+
+  '@reflink/reflink-darwin-arm64@0.1.19':
+    resolution: {integrity: sha512-ruy44Lpepdk1FqDz38vExBY/PVUsjxZA+chd9wozjUH9JjuDT/HEaQYA6wYN9mf041l0yLVar6BCZuWABJvHSA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@reflink/reflink-darwin-x64@0.1.19':
+    resolution: {integrity: sha512-By85MSWrMZa+c26TcnAy8SDk0sTUkYlNnwknSchkhHpGXOtjNDUOxJE9oByBnGbeuIE1PiQsxDG3Ud+IVV9yuA==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@reflink/reflink-linux-arm64-gnu@0.1.19':
+    resolution: {integrity: sha512-7P+er8+rP9iNeN+bfmccM4hTAaLP6PQJPKWSA4iSk2bNvo6KU6RyPgYeHxXmzNKzPVRcypZQTpFgstHam6maVg==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@reflink/reflink-linux-arm64-musl@0.1.19':
+    resolution: {integrity: sha512-37iO/Dp6m5DDaC2sf3zPtx/hl9FV3Xze4xoYidrxxS9bgP3S8ALroxRK6xBG/1TtfXKTvolvp+IjrUU6ujIGmA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@reflink/reflink-linux-x64-gnu@0.1.19':
+    resolution: {integrity: sha512-jbI8jvuYCaA3MVUdu8vLoLAFqC+iNMpiSuLbxlAgg7x3K5bsS8nOpTRnkLF7vISJ+rVR8W+7ThXlXlUQ93ulkw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@reflink/reflink-linux-x64-musl@0.1.19':
+    resolution: {integrity: sha512-e9FBWDe+lv7QKAwtKOt6A2W/fyy/aEEfr0g6j/hWzvQcrzHCsz07BNQYlNOjTfeytrtLU7k449H1PI95jA4OjQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@reflink/reflink-win32-arm64-msvc@0.1.19':
+    resolution: {integrity: sha512-09PxnVIQcd+UOn4WAW73WU6PXL7DwGS6wPlkMhMg2zlHHG65F3vHepOw06HFCq+N42qkaNAc8AKIabWvtk6cIQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@reflink/reflink-win32-x64-msvc@0.1.19':
+    resolution: {integrity: sha512-E//yT4ni2SyhwP8JRjVGWr3cbnhWDiPLgnQ66qqaanjjnMiu3O/2tjCPQXlcGc/DEYofpDc9fvhv6tALQsMV9w==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
+  '@reflink/reflink@0.1.19':
+    resolution: {integrity: sha512-DmCG8GzysnCZ15bres3N5AHCmwBwYgp0As6xjhQ47rAUTUXxJiK+lLUxaGsX3hd/30qUpVElh05PbGuxRPgJwA==}
+    engines: {node: '>= 10'}
 
   '@rolldown/binding-android-arm64@1.2.4':
     resolution: {integrity: sha512-jHC2cnyKz5xU2fhECtFl8OZ83cYNt13GZQD+0uMJ/X3o+ijmd56okHhTUwxVSHPx1IRVIJEZ1/1pPzeLCU6XKA==}
@@ -8772,6 +8872,40 @@ snapshots:
       tslib: 2.8.1
       webcrypto-core: 1.9.2
 
+  '@pnpm/exe@11.21.0':
+    dependencies:
+      '@reflink/reflink': 0.1.19
+      detect-libc: 2.1.2
+    optionalDependencies:
+      '@pnpm/linux-arm64': 11.21.0
+      '@pnpm/linux-x64': 11.21.0
+      '@pnpm/linuxstatic-arm64': 11.21.0
+      '@pnpm/linuxstatic-x64': 11.21.0
+      '@pnpm/macos-arm64': 11.21.0
+      '@pnpm/win-arm64': 11.21.0
+      '@pnpm/win-x64': 11.21.0
+
+  '@pnpm/linux-arm64@11.21.0':
+    optional: true
+
+  '@pnpm/linux-x64@11.21.0':
+    optional: true
+
+  '@pnpm/linuxstatic-arm64@11.21.0':
+    optional: true
+
+  '@pnpm/linuxstatic-x64@11.21.0':
+    optional: true
+
+  '@pnpm/macos-arm64@11.21.0':
+    optional: true
+
+  '@pnpm/win-arm64@11.21.0':
+    optional: true
+
+  '@pnpm/win-x64@11.21.0':
+    optional: true
+
   '@protobufjs/aspromise@1.1.2': {}
 
   '@protobufjs/base64@1.1.2': {}
@@ -8795,6 +8929,41 @@ snapshots:
   '@quansync/fs@1.0.0':
     dependencies:
       quansync: 1.0.0
+
+  '@reflink/reflink-darwin-arm64@0.1.19':
+    optional: true
+
+  '@reflink/reflink-darwin-x64@0.1.19':
+    optional: true
+
+  '@reflink/reflink-linux-arm64-gnu@0.1.19':
+    optional: true
+
+  '@reflink/reflink-linux-arm64-musl@0.1.19':
+    optional: true
+
+  '@reflink/reflink-linux-x64-gnu@0.1.19':
+    optional: true
+
+  '@reflink/reflink-linux-x64-musl@0.1.19':
+    optional: true
+
+  '@reflink/reflink-win32-arm64-msvc@0.1.19':
+    optional: true
+
+  '@reflink/reflink-win32-x64-msvc@0.1.19':
+    optional: true
+
+  '@reflink/reflink@0.1.19':
+    optionalDependencies:
+      '@reflink/reflink-darwin-arm64': 0.1.19
+      '@reflink/reflink-darwin-x64': 0.1.19
+      '@reflink/reflink-linux-arm64-gnu': 0.1.19
+      '@reflink/reflink-linux-arm64-musl': 0.1.19
+      '@reflink/reflink-linux-x64-gnu': 0.1.19
+      '@reflink/reflink-linux-x64-musl': 0.1.19
+      '@reflink/reflink-win32-arm64-msvc': 0.1.19
+      '@reflink/reflink-win32-x64-msvc': 0.1.19
 
   '@rolldown/binding-android-arm64@1.2.4':
     optional: true
@@ -9904,7 +10073,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.5
       serialize-error: 7.0.1
     optional: true
 
@@ -10602,7 +10771,7 @@ snapshots:
 
   node-abi@4.33.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-addon-api@7.1.1: {}
 
@@ -10657,7 +10826,7 @@ snapshots:
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-domexception@1.0.0: {}
 
@@ -10674,7 +10843,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
       undici: 6.28.0

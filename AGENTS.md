@@ -64,5 +64,6 @@ upstream — open an issue/PR there instead.
   updates it when a new upstream version passes all gates.
 - `installRuntimeVersion` (runtime-manager/install.ts) performs a
   standalone production install of the runtime manifest at the requested
-  version. It needs a `pnpm` executable; a fully self-contained downloader
-  is a follow-up.
+  version. Packaged builds bundle a standalone pnpm binary
+  (`@pnpm/exe` in extraResources → `resources/pnpm-exe/`), so end users
+  never need a system pnpm; development falls back to the system pnpm.

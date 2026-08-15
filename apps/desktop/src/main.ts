@@ -18,7 +18,8 @@ import {
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
 import { loadSettings, pinRuntime, resolvePinnedRuntime, saveSettings } from './runtime-manager/settings.ts'
-import { listInstalledRuntimes, resolveRuntime, type RuntimePaths } from './runtime-manager/versions.ts'
+import { listInstalledRuntimes, resolveRuntime, runtimeInstallationDir, type RuntimePaths } from './runtime-manager/versions.ts'
+import { installRuntimeVersion, resolvePnpmCommand } from './runtime-manager/install.ts'
 import { loadValidatedRuntimes, type ValidatedRuntimes } from './runtime-manager/validated.ts'
 import { readFileSync } from 'node:fs'
 
@@ -201,6 +202,29 @@ function switchRuntime(version: string | undefined): void {
   releaseAppQuit()
 }
 
+/** Install the recommended runtime via the bundled pnpm, then switch to it. */
+async function installRecommendedRuntime(version: string): Promise<void> {
+  const pnpmCommand = resolvePnpmCommand(app.isPackaged ? process.resourcesPath : undefined)
+  if (pnpmCommand === undefined) {
+    await dialog.showMessageBox({ type: 'error', title: APP_NAME, message: '没有可用的 pnpm 安装器(系统与内置均缺失)' })
+    return
+  }
+  try {
+    await installRuntimeVersion({
+      version,
+      targetDir: runtimeInstallationDir(app.getPath('userData'), version),
+      pnpmCommand,
+    })
+    switchRuntime(version)
+  } catch (error) {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: APP_NAME,
+      message: `运行时 ${version} 安装失败: ${error instanceof Error ? error.message : String(error)}`,
+    })
+  }
+}
+
 function runtimeMenu(): MenuItemConstructorOptions[] {
   const userDataDir = app.getPath('userData')
   
@@ -230,7 +254,10 @@ function runtimeMenu(): MenuItemConstructorOptions[] {
     })
   }
   if (matrix.recommended !== '' && !installed.some(runtime => runtime.version === matrix.recommended)) {
-    items.push({ label: `安装推荐版本 ${matrix.recommended}`, enabled: false })
+    items.push({
+      label: `安装推荐版本 ${matrix.recommended}`,
+      click: () => { void installRecommendedRuntime(matrix.recommended) },
+    })
   }
   if (current !== bundled && !installed.some(runtime => runtime.version === current)) {
     items.push({ label: `当前 ${current} 缺失,已回退内置`, enabled: false })

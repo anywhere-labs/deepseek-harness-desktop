@@ -15,6 +15,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@pnpm/exe": "^11.21.0",
     "@types/node": "^22.20.0",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
@@ -48,6 +49,10 @@
       {
         "from": "runtime/validated-runtimes.json",
         "to": "desktop-resources/validated-runtimes.json"
+      },
+      {
+        "from": "node_modules/@pnpm/exe",
+        "to": "pnpm-exe"
       }
     ],
     "mac": {

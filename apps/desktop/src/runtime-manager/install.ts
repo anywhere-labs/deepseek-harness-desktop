@@ -17,8 +17,23 @@ export const RUNTIME_FRONTEND_VERSION = '0.0.1-rc.5'
 export interface InstallRuntimeOptions {
   version: string
   targetDir: string
-  /** pnpm executable (pnpm / pnpm.cmd). */
-  pnpmCommand: string
+  /** pnpm executable (pnpm / pnpm.cmd). Absent = resolve bundled/system pnpm. */
+  pnpmCommand?: string
+  /** resourcesPath of the packaged app (where the bundled pnpm lives). */
+  resourcesPath?: string
+}
+
+/**
+ * Resolve a runnable pnpm command: the standalone binary bundled into the
+ * app resources (packaged mode), else the system pnpm (development/build
+ * machines). Returns undefined when neither exists.
+ */
+export function resolvePnpmCommand(resourcesPath?: string): string | undefined {
+  if (resourcesPath !== undefined) {
+    const bundled = join(resourcesPath, 'pnpm-exe', process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
+    if (existsSync(bundled)) return bundled
+  }
+  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 }
 
 export function runtimeManifest(version: string): Record<string, unknown> {
@@ -64,7 +79,9 @@ function run(command: string, args: readonly string[], cwd: string): Promise<voi
 }
 
 export async function installRuntimeVersion(options: InstallRuntimeOptions): Promise<void> {
-  const { version, targetDir, pnpmCommand } = options
+  const { version, targetDir } = options
+  const pnpmCommand = options.pnpmCommand ?? resolvePnpmCommand(options.resourcesPath)
+  if (pnpmCommand === undefined) throw new Error('no pnpm executable available (system or bundled)')
   await rm(targetDir, { recursive: true, force: true })
   await mkdir(targetDir, { recursive: true })
   await writeFile(join(targetDir, 'package.json'), `${JSON.stringify(runtimeManifest(version), null, 2)}\n`)
