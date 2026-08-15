@@ -16,6 +16,8 @@ pnpm run dev:desktop
 
 桌面应用只接受 `dsh web` 为 `127.0.0.1` 或 `localhost` 输出的就绪 URL。页面导航限制在该来源；HTTP 和 HTTPS 链接交给系统浏览器打开。
 
+如果桌面壳需要启动本地 Host 包装器或替代实现，将 `DSH_DESKTOP_HOST_ENTRY` 设为一个兼容 Node 的 CLI 入口路径。桌面壳仍会追加 `web --host 127.0.0.1 --port 0`、校验输出的回环 URL，并持有子进程生命周期；未设置该变量时，应用启动内置 DSH CLI。
+
 原生窗口外观按宿主平台区分。macOS 使用无边框内嵌标题栏、交通灯和侧栏 vibrancy；收起侧栏宽 90px，其中的控件水平居中，最上方控件在交通灯下方与展开态 logo 行对齐。Windows 保留系统边框、阴影、缩放与 Snap 行为以及 Windows 11 圆角，同时用隐藏标题栏把原生窗口按钮放入 Session header 首行；Windows 侧栏不预留交通灯区域。该行的空白部分可拖动，控件仍可点击；没有 Session header 时，常驻拖拽带覆盖同一行。Windows acrylic 和 macOS vibrancy 只透过侧栏，会话区与详情区保持不透明。Linux 使用无边框窗口和不透明侧栏降级样式。
 
 ## 打包

@@ -15,6 +15,7 @@ import {
   type Event,
   type MenuItemConstructorOptions,
 } from 'electron'
+import { resolveHostEntry } from './host-entry.ts'
 import { createHostSupervisor, spawnDshWeb, type HostSupervisor } from './host-supervisor.ts'
 import { createDesktopLifecycle, type DesktopLifecycle } from './window-lifecycle.ts'
 
@@ -32,19 +33,23 @@ let hostOrigin: string | undefined
 let bootQuitPromise: Promise<void> | undefined
 let quitReleased = false
 
-/** Resolve artifacts from the checkout in development and resourcesPath when packaged. */
+/** Resolve artifacts from the checkout or package, with an optional Host entry override. */
 function hostPaths(): { nodeExecutable: string; cliEntry: string; cwd: string; electronRunAsNode: boolean } {
+  const configuredCliEntry = process.env.DSH_DESKTOP_HOST_ENTRY
   if (!app.isPackaged) {
     return {
       nodeExecutable: process.env.DSH_DESKTOP_NODE_EXECUTABLE ?? 'node',
-      cliEntry: join(REPOSITORY_ROOT, 'apps/cli/lib/bin.js'),
+      cliEntry: resolveHostEntry(join(REPOSITORY_ROOT, 'apps/cli/lib/bin.js'), configuredCliEntry),
       cwd: process.cwd(),
       electronRunAsNode: false,
     }
   }
   return {
     nodeExecutable: process.execPath,
-    cliEntry: join(process.resourcesPath, 'host/node_modules/@deepseek-ai/dsh/lib/bin.js'),
+    cliEntry: resolveHostEntry(
+      join(process.resourcesPath, 'host/node_modules/@deepseek-ai/dsh/lib/bin.js'),
+      configuredCliEntry,
+    ),
     cwd: app.getPath('home'),
     electronRunAsNode: true,
   }
@@ -55,7 +60,7 @@ function assertHostArtifacts(paths: ReturnType<typeof hostPaths>): void {
     throw new Error(`desktop Node runtime is missing: ${paths.nodeExecutable}`)
   }
   if (!existsSync(paths.cliEntry)) {
-    throw new Error(`desktop Host entry is missing: ${paths.cliEntry}; run pnpm run build first`)
+    throw new Error(`desktop Host entry is missing: ${paths.cliEntry}`)
   }
 }
 
