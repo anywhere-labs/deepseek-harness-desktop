@@ -1,1 +1,0 @@
-Workspace snapshot root instruction.

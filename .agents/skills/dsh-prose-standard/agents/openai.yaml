@@ -1,4 +1,0 @@
-interface:
-  display_name: "DSH Prose Standard"
-  short_description: "Write concise prose without losing contracts"
-  default_prompt: "Use $dsh-prose-standard to audit a specified repository scope for required, complete, and concise prose."

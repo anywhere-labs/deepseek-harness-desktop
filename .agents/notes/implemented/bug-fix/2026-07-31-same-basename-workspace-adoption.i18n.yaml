@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-07-31-same-basename-workspace-adoption.md
-2026-07-31-same-basename-workspace-adoption.md: a634972448d8a3fea3d08c5713602cec0584a44e
-2026-07-31-same-basename-workspace-adoption.zh.md: f66946842e82ec38601192dd536eabfb9a0ffd69

@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the subagent tool TWICE in the SAME assistant message (two parallel tool calls in one response), each delegating the identical subtask: 'Reply with exactly the word ALPHA and nothing else.' Give both calls the description 'Say the word ALPHA'. After both subagents return, reply with the single word PARENT_DONE and stop. Do not use the bash tool." }
-  ]
-}

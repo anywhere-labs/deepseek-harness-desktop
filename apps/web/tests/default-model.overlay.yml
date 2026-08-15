@@ -1,8 +1,0 @@
-# The fixture-less web scaffold registers no adapter, so the shipped
-# deepseek-official default would be a route nothing serves — which the
-# composer refuses to type into. This scenario declares its own
-# pi-ai routes and starts the default on one of them.
-- id: agent-default-model
-  config:
-    provider: origin-gateway
-    model: origin-large

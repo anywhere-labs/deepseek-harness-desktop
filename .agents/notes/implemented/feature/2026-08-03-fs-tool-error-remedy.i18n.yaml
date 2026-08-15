@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-03-fs-tool-error-remedy.md
-2026-08-03-fs-tool-error-remedy.md: 66d47b750afdd43c4e2b830e73e21a3341f26c4b
-2026-08-03-fs-tool-error-remedy.zh.md: 09d8220a972c32c0fc2a951627f1cdcd172dbdba

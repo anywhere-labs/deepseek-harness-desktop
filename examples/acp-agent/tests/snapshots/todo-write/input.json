@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the todo_write tool to record a plan with exactly three todos for work running in parallel: \"read the code\" (in_progress), \"watch the background build\" (in_progress), \"write the fix\" (pending). Send all three in one todo_write call. Then reply with the single word DONE and stop." }
-  ]
-}

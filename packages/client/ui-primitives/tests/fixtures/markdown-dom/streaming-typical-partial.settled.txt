@@ -1,8 +1,0 @@
-<div class="_markdown_404681">
-  <h2>
-    #text "Streaming"
-  <ul>
-    <li>
-      #text "first"
-    <li>
-      #text "**unfinished"

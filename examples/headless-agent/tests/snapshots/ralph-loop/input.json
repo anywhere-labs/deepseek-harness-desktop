@@ -1,8 +1,0 @@
-{
-  "steps": [
-    {
-      "op": "prompt",
-      "text": "Run a two-round fresh-agent Ralph loop to prove the shipped headless integration."
-    }
-  ]
-}

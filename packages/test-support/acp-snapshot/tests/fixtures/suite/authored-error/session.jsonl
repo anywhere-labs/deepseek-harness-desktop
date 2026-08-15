@@ -1,2 +1,0 @@
-{"type":"session","id":"44444444-3333-4222-8111-000000000000","createdAt":17,"cwd":"/rec/authored-cwd","delegationDepth":0}
-{"type":"turn/end","seq":1,"time":17,"data":{"error":"model exploded"}}

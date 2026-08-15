@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-24-adapter-owned-reasoning-effort-capabilities.md
-2026-07-24-adapter-owned-reasoning-effort-capabilities.md: f71a15626b97090a89f071e552a12b1f89173620
-2026-07-24-adapter-owned-reasoning-effort-capabilities.zh.md: 6e8c99f98107e2855aa7cb7ea759544013d0ea8a

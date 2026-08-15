@@ -1,9 +1,0 @@
-{
-  "name": "@fixture/domain",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./types": "./src/types.ts"
-  }
-}

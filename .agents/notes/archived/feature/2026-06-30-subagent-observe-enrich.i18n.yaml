@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write
-2026-06-30-subagent-observe-enrich.md: 7140616ac4a9725652ed779cba3d4232b6b5127b
-2026-06-30-subagent-observe-enrich.zh.md: 5cf81e9ace48650b834f2cf5e8ec7cc81b8b0e4d

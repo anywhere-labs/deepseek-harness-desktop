@@ -1,8 +1,0 @@
-{
-  "steps": [
-    {
-      "op": "prompt",
-      "text": "Establish a durable compaction premise before continuing. Record every part of this historical evidence: the snapshot uses keyless replay; persistence uses JSONL; the assembled headless application loads its real Cordis composition; model-visible inputs remain logged; tool calls and results remain paired and ordered; context overflow retains the original failure while recovery is attempted; compaction opens with compaction/start and closes with compaction/end; a successful auxiliary summary records compaction/summary provenance; the replacement surface shadows only an older balanced range; the checkpoint remains smaller than the history it replaces; the newest tool result remains verbatim; the retried request sees that checkpoint; the final response proves the same turn continued; deterministic snapshot evidence stays separate from the live-provider smoke; and no external API key is needed. Emit one alpha marker through bash, then finish the task after any required recovery with the exact words COMPACTION RECOVERED."
-    }
-  ]
-}

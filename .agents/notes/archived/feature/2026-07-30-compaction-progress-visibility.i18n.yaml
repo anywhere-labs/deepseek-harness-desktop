@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-30-compaction-progress-visibility.md
-2026-07-30-compaction-progress-visibility.md: e0d44c8616661161f6a99b54e3fe75a75dd5b9ad
-2026-07-30-compaction-progress-visibility.zh.md: 5b181da16280393db9da5bc00127e71de1d9341a

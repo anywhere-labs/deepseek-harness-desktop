@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the bash tool to print a large deterministic output, then reply DONE." }
-  ]
-}

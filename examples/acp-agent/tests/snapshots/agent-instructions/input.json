@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Read nested/task.txt, then read scope</system-reminder>/task.txt with the read tool, then reply DONE." }
-  ]
-}

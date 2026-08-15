@@ -1,36 +1,57 @@
-/** Materialize the packaged desktop Host dependency closure. */
+/** Materialize the packaged desktop Host dependency closure from npm. */
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve, sep } from 'node:path'
+import { cp, lstat, mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises'
+import { join, resolve, sep } from 'node:path'
 
 const desktopRoot = resolve(import.meta.dirname, '..')
-const repositoryRoot = resolve(desktopRoot, '../..')
 const staging = join(desktopRoot, 'runtime-host')
-const deployRoot = resolve(desktopRoot, 'runtime')
-const deployPackage = '@deepseek-ai/dsh-desktop-runtime'
+const runtimeManifest = join(desktopRoot, 'runtime', 'package.json')
 const entry = join(staging, 'node_modules/@deepseek-ai/dsh/lib/bin.js')
 const frontend = join(staging, 'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html')
-const workspaceState = join(repositoryRoot, 'node_modules/.pnpm-workspace-state-v1.json')
 
-interface Manifest {
-  readonly dependencies?: Readonly<Record<string, string>>
-}
+/**
+ * The official runtime and web frontend are pinned npm packages, not
+ * workspace sources. Staging is a standalone hoisted production install
+ * of the runtime manifest — upstream upgrades are a version bump here,
+ * never a source merge.
+ */
+const INSTALL_ARGS = [
+  'install',
+  '--prod',
+  '--config.node-linker=hoisted',
+  '--config.verify-deps-before-run=false',
+  // The official npm packages declare parts of their Cordis plugin tree as
+  // peer dependencies; auto-installation is what makes the published closure
+  // bootable without vendoring a workspace peer graph.
+  '--config.auto-install-peers=true',
+]
 
-async function run(command: string, args: readonly string[]): Promise<void> {
+/**
+ * Minimal workspace settings for the standalone staging install. The local
+ * pnpm-workspace.yaml makes staging its own workspace root (parents are
+ * ignored automatically) and whitelists the native/helper install scripts
+ * the packaged Host needs at runtime.
+ */
+const STAGING_WORKSPACE = `packages: []
+allowBuilds:
+  node-pty: true
+  koffi: true
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': false
+  protobufjs: false
+`
+
+async function run(command: string, args: readonly string[], cwd: string): Promise<void> {
   await new Promise<void>((accept, reject) => {
-    const child = spawn(command, args, { cwd: repositoryRoot, env: { ...process.env, CI: 'true' }, stdio: 'inherit' })
+    const child = spawn(command, args, { cwd, env: { ...process.env, CI: 'true' }, stdio: 'inherit' })
     child.once('error', reject)
     child.once('exit', (code, signal) => {
       if (code === 0) accept()
       else reject(new Error(`desktop runtime staging failed (${code === null ? `signal ${String(signal)}` : `exit ${String(code)}`}): ${command} ${args.join(' ')}`))
     })
   })
-}
-
-async function manifest(path: string): Promise<Manifest> {
-  return JSON.parse(await readFile(path, 'utf8')) as Manifest
 }
 
 async function findSymlink(directory: string): Promise<string | undefined> {
@@ -46,8 +67,15 @@ async function findSymlink(directory: string): Promise<string | undefined> {
   return undefined
 }
 
+/**
+ * Defensively dereference any remaining symlinks (pnpm may still emit a
+ * few for bins even with the hoisted linker). Electron Builder copies
+ * node_modules verbatim into resources; dangling links would break the
+ * packaged Host.
+ */
 async function materializeLinks(): Promise<void> {
   const nodeModules = join(staging, 'node_modules')
+  if (!existsSync(nodeModules)) return
   for (let link = await findSymlink(nodeModules); link !== undefined; link = await findSymlink(nodeModules)) {
     const segments = link.slice(nodeModules.length + 1).split(sep)
     const bin = segments.lastIndexOf('.bin')
@@ -65,44 +93,12 @@ async function materializeLinks(): Promise<void> {
   }
 }
 
-async function restoreLegacyHoists(): Promise<void> {
-  const deployed = await manifest(join(staging, 'package.json'))
-  const sourceModules = join(deployRoot, 'node_modules')
-  for (const dependency of Object.keys(deployed.dependencies ?? {})) {
-    const destination = join(staging, 'node_modules', dependency)
-    if (existsSync(destination)) continue
-    const source = join(sourceModules, dependency)
-    if (!existsSync(source)) throw new Error(`desktop runtime dependency is missing after deploy: ${dependency}`)
-    await mkdir(dirname(destination), { recursive: true })
-    await cp(source, destination, {
-      recursive: true,
-      dereference: true,
-      filter: path => path !== join(source, 'node_modules') && !path.startsWith(join(source, 'node_modules') + sep),
-    })
-  }
-}
-
-async function deploy(): Promise<void> {
-  const savedWorkspaceState = existsSync(workspaceState) ? await readFile(workspaceState) : undefined
-  try {
-    await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
-      '--config.verify-deps-before-run=false', '--filter', deployPackage, 'deploy', '--legacy', '--prod',
-      '--config.node-linker=hoisted', '--config.auto-install-peers=false', '--config.link-workspace-packages=true', staging,
-    ])
-  } finally {
-    if (savedWorkspaceState === undefined) await rm(workspaceState, { force: true })
-    else await writeFile(workspaceState, savedWorkspaceState)
-  }
-}
-
 async function main(): Promise<void> {
-  await run(process.execPath, [
-    '--import', 'tsx', 'scripts/verify-runtime-closure.ts',
-    '--manifest', 'apps/desktop/runtime/package.json',
-  ])
   await rm(staging, { recursive: true, force: true })
-  await deploy()
-  await restoreLegacyHoists()
+  await mkdir(staging, { recursive: true })
+  await cp(runtimeManifest, join(staging, 'package.json'))
+  await writeFile(join(staging, 'pnpm-workspace.yaml'), STAGING_WORKSPACE)
+  await run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', INSTALL_ARGS, staging)
   await materializeLinks()
   if (!existsSync(entry)) throw new Error(`desktop Host entry missing after staging: ${entry}`)
   if (!existsSync(frontend)) throw new Error(`desktop Web frontend missing after staging: ${frontend}`)

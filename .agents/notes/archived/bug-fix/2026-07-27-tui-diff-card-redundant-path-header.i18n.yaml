@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-07-27-tui-diff-card-redundant-path-header.md
-2026-07-27-tui-diff-card-redundant-path-header.md: 608a11892a20d020087180175eff847021dc0554
-2026-07-27-tui-diff-card-redundant-path-header.zh.md: bf7f1c1eeb994f9940b5f7dfb7db72d422293bd4

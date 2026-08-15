@@ -1,8 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Reply with exactly TITLE_DONE. Do not use tools." },
-    { "op": "waitForTitleAfterTurnEnd" }
-  ]
-}

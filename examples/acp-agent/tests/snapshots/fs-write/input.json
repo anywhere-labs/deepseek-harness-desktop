@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the write tool (NOT bash) to create a file named notes.txt in the current directory containing exactly the single line: hello world. Then reply with exactly the single word DONE." }
-  ]
-}

@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-11-bounded-background-job-admission.md
-2026-08-11-bounded-background-job-admission.md: 8fa5bec07647947b730c436284da71b83deedb48
-2026-08-11-bounded-background-job-admission.zh.md: 79e759041cbf9d6e12b444f47e9d9ef0aa218532

@@ -1,8 +1,0 @@
-# Minimal keyless composition for loading example MCP overlays against the
-# package-owned fixture server in memory-mcp-configs.spec.ts. Source builtins
-# keep this unit test independent of prebuilt workspace artifacts.
-- id: system-prompt
-  name: cordis:memory-test-system-prompt
-
-- id: tools
-  name: cordis:memory-test-tools

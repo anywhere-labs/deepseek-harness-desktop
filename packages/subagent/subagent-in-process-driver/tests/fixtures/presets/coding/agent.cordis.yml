@@ -1,5 +1,0 @@
-# Agent-plane composition: the model-facing row lives here, not in the host.
-- id: only
-  name: ../../plugins/preset-tool.js
-  config:
-    tool: preset_only

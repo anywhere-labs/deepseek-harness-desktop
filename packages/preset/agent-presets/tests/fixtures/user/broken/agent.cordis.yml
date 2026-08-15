@@ -1,6 +1,0 @@
-- id: ok
-  name: ../../plugins/contribute.js
-  config:
-    tool: ok
-- id: missing
-  name: ../../plugins/does-not-exist.js

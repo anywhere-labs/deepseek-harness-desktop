@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-30-config-plane-boundaries.md
-2026-07-30-config-plane-boundaries.md: 2dfb527749e8dea54e037abc602af1611c3f9794
-2026-07-30-config-plane-boundaries.zh.md: 8b1ec3206237b7c2deafb743b62e697b3c452ffc

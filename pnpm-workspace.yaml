@@ -1,82 +1,36 @@
 packages:
-  - vendor/*
-  - packages/*/*
-  # The Landlock launcher is developed with its harness consumers but keeps
-  # its native build and publication scripts under native/landlock-run.
-  - native/landlock-run
-  - native/landlock-run/packages/*
-  # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
-  # Dependency-only deploy root for the packaged Electron Host. Its nested
-  # location keeps it outside application build and release-family scans.
-  - apps/desktop/runtime
-  - website
-  # The runnable demo leaves join as ONE workspace member: examples/package.json
-  # declares the union of every leaf's cordis.yml plugins as workspace:*, so a
-  # plain-node (`:lib`) boot of any leaf (examples/<leaf>/cordis.yml) resolves its
-  # plugins through real package `exports`→lib by walking up to examples/node_modules.
-  # Members for DEPENDENCY RESOLUTION only — NOT build targets: tsdown's explicit
-  # globs (vendor/*, packages/*/*) exclude them. See examples/AGENTS.md and the archived
-  # run-ci-examples-from-built-lib Agent Note.
-  - examples
-  # Deploy root of the single-exe build: a pure dependency manifest whose
-  # closure is what the exe bundles and what the Python runtime distributes.
-  - python/sdk-runtime
+  # NOTE: apps/desktop/runtime is intentionally NOT a workspace member. Its
+  # package.json is a pure npm pin manifest — stage-runtime.ts copies it into
+  # the staging directory and installs it standalone (--ignore-workspace),
+  # so the workspace itself never hosts the official runtime closure.
 
-# Vendored framework packages keep their upstream semver ranges, while local
-# builds must resolve those matching names to this workspace's pinned sources.
-linkWorkspacePackages: true
+  # The official runtime is consumed as published npm packages, not as
+  # vendored sources. `apps/desktop/runtime/package.json` pins the exact
+  # upstream versions the shell was validated against.
+linkWorkspacePackages: false
 
 overrides:
-  '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
-  '@deepseek-ai/schemastery': 'link:vendor/schemastery'
   # app-builder-lib 26.15.3 reads a cache-mode export introduced in 3.1.0,
   # while its declared range still permits the incompatible 3.0.0 release.
   'app-builder-lib@26.15.3>@electron/get': '3.1.0'
 
-peerDependencyRules:
-  allowedVersions:
-    typescript: '>=5 <7'
-
 # pnpm 10+ blocks any dependency shipping an install/build script until it is
-# explicitly reviewed here (strictDepBuilds defaults to true: an unlisted script
-# is a hard install error). Every such package MUST be listed; we deny by
-# default and only allow scripts we need. esbuild (native binary) and lefthook
-# (git hooks) genuinely need theirs.
+# explicitly reviewed here (strictDepBuilds defaults to true). electron-builder
+# resolves the optional Squirrel target even though this app does not select
+# it — its install script only copies a bundled 7-Zip binary, so we deny it.
 allowBuilds:
   esbuild: true
-  lefthook: true
-  # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
+  electron: true
+  electron-winstaller: false
   node-pty: true
-  # Pulled in by @earendil-works/pi-ai (optional LLM API backend). pnpm lists
-  # them only because they ship lifecycle scripts, but those are no-ops we don't
-  # need, so we deny them — install still succeeds.
+  koffi: true
+  # macOS spawn helper postinstall (restores the executable bit).
+  '@deepseek-ai/dsh-subprocess-local': true
+  # Pulled in by pi-ai (optional LLM API backend); their lifecycle scripts
+  # are no-ops we don't need.
   '@google/genai': false
   protobufjs: false
-  node-addon-require-builtin: false
-  # JSONL durability calls MoveFileExW with write-through publication on Windows.
-  koffi: true
-  # The Python runtime deploy includes the reviewed workspace postinstall that
-  # restores the executable bit on node-pty's macOS spawn helper.
-  '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
-  # electron-builder resolves the optional Squirrel target even though this app
-  # does not select it. Its install script only copies a bundled 7-Zip binary.
-  electron-winstaller: false
-
-minimumReleaseAgeExclude:
-  # Fresh pi-ai releases carry the model catalog updates that are the whole
-  # point of bumping it; waiting out the release age would defeat that.
-  - '@earendil-works/pi-ai@0.82.1'
-  - node-addon-native-custom-loader@0.1.4
-  - node-addon-require-builtin-darwin-arm64@0.1.4
-  - node-addon-require-builtin-darwin-x64@0.1.4
-  - node-addon-require-builtin-linux-arm64-gnu@0.1.4
-  - node-addon-require-builtin-linux-x64-gnu@0.1.4
-  - node-addon-require-builtin-win32-arm64-msvc@0.1.4
-  - node-addon-require-builtin-win32-ia32-msvc@0.1.4
-  - node-addon-require-builtin-win32-x64-msvc@0.1.4
-  - node-addon-require-builtin@0.1.4
 
 patchedDependencies:
   app-builder-lib@26.15.3: patches/app-builder-lib@26.15.3.patch
-  node-pty@1.1.0: patches/node-pty@1.1.0.patch

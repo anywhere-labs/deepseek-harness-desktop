@@ -1,4 +1,0 @@
-- listbox "Trigger suggestions":
-  - text: Skills
-  - option "policy-shared Available to both model and user invocation" [selected]
-  - option "policy-user-only user-only · Available only to user invocation"

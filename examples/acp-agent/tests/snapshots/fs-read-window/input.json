@@ -1,7 +1,0 @@
-{
-  "steps": [
-    { "op": "initialize" },
-    { "op": "newSession" },
-    { "op": "prompt", "text": "Use the read tool (NOT bash) with offset 5 and limit 4 to read lines 5 through 8 of big.txt in the current directory. Then reply with exactly the single word DONE." }
-  ]
-}
