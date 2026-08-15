@@ -27,6 +27,9 @@
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background: var(--dsw-specific-tip);
+  /* Dock strip entrance: the todo panel mounts with its session, one short
+     rise instead of a pop-in. */
+  animation: var(--dsw-motion-duration) var(--dsw-motion-ease-out) var(--dsw-motion-rise-in);
   /* Elevated surface: `--dsw-specific-tip` is the same dark rung as the menu
      surface, and `.list` scrolls inside this card, so the thumb takes the l2
      elevation tokens. Declared here because the elevation belongs to the

@@ -6,7 +6,7 @@
 
 当主机组合包含 HTTP 服务器时，主机侧紧接 `<body>` 起始标签注入同步引导代码。每份 index 响应会嵌入已注册的 Host 设置 `ui-theme.preference`，没有 settings provider 时则嵌入 `system`；浏览器按操作系统配色解析 `system`，随后在外壳加载页面渲染前设置 `color-scheme` 和 `body[data-ds-dark-theme]`。不含 HTTP 服务器的组合不受影响，插件树激活后，ThemeRuntime 与 ui-layout 仍分别是客户端状态和后续 DOM 更新的权威来源。
 
-`src/styles/` 下有五张样式表，全部由 web 壳的 `base.css` 导入：`base.css`、`design-platform.css`、`scrollbar.css`、`gradient-shadow-text.css` 与 `shiki.css`。`scrollbar.css` 是 `--dsw-alias-scrollbar-*` token 的唯一消费方，必须排在声明这些 token 的 `design-platform.css` 之后。
+`src/styles/` 下有六张样式表，全部由 web 壳的 `base.css` 导入：`base.css`、`design-platform.css`、`scrollbar.css`、`motion.css`、`gradient-shadow-text.css` 与 `shiki.css`。`scrollbar.css` 是 `--dsw-alias-scrollbar-*` token 的唯一消费方，必须排在声明这些 token 的 `design-platform.css` 之后。`motion.css` 拥有统一的微交互词汇——时长与缓动 token、三个标准进入 keyframes（`dsw-rise-in`、`dsw-fade-in`、`dsw-scale-in`）、组件样式表引用的 keyframes 名变量（CSS Modules 会把裸的 animation-name 标识符局部化，因此组件通过 `var()` 消费 `--dsw-motion-rise-in` 等），以及全局 `prefers-reduced-motion` 降级。它排在 token 表之后，因为其降级规则可能引用这些 token。
 
 `base.css` 还定义桌面的标题栏预留高度：macOS、Windows 与 Linux 使用 44px，其他桌面标记使用 40px 兜底。对于带有 `data-dsh-desktop-platform="darwin"` 或 `"win32"` 标记的 document，它会使 `html`／`body`／`#root` 层级透明，让 Electron 窗口材质透过布局持有的半透明区域；Web document 与 Linux 桌面 document 仍保留基础背景。桌面 document 中只要存在 `aria-modal="true"` 对话框，所有由渲染器持有的窗口拖拽区都会变为 `no-drag`，从而让遮罩与控件保留指针输入；最后一个模态框卸载后，各平台的拖拽区会恢复。
 
