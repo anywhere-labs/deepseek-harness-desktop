@@ -60,6 +60,7 @@ DSH Desktop 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
 | --- | --- |
 | 阅读插件生态倡议书 | [插件生态倡议书](docs/plugin-ecosystem.md) |
 | 编写普通或 Desktop 插件 | [插件开发](docs/plugin-development.md) |
+| 查看插件市场的产品与安全设计 | [DSH Community Market](dsh-community-market/README.zh.md) |
 | 了解桌面插件可以使用的能力 | [桌面插件接口说明](dsh-plugin-desktop/docs/plugin-services.zh.md) |
 | 了解桌面应用如何工作 | [架构说明](docs/architecture.md) |
 | 查阅包级构建与发布细节 | [`dsh-plugin-desktop/README.md`](dsh-plugin-desktop/README.md) |
@@ -79,8 +80,8 @@ DSH Desktop 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h3><a href="docs/plugin-ecosystem.md">插件市场</a> <img src="https://img.shields.io/badge/%E5%8D%B3%E5%B0%86%E6%8E%A8%E5%87%BA-F59E0B?style=flat-square" alt="即将推出"></h3>
-      <p>Harness 遵循“一切皆插件”的架构。桌面端插件市场将提供插件的发现、安装、更新和管理，让模型、工具、界面与工作流能力按需组合。</p>
+      <h3><a href="dsh-community-market/README.zh.md">插件市场</a> <img src="https://img.shields.io/badge/%E8%AE%BE%E8%AE%A1%E4%B8%AD-F59E0B?style=flat-square" alt="设计中"></h3>
+      <p>我们正在通过 DSH Community Market 设计插件发现、详情和确认安装体验。当前只有产品与安全文档，尚未提供可用市场页面。</p>
     </td>
     <td width="50%" valign="top">
       <h3>共建插件生态</h3>

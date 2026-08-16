@@ -14,6 +14,7 @@ const fail = message => { throw new Error(`verify-layout: ${message}`) }
 const workspace = readJson('package.json')
 const upstream = readJson('upstream.json')
 const plugin = readJson('dsh-plugin-desktop/package.json')
+const market = readJson('dsh-community-market/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
 const noteDirectory = '.agents/notes/implemented/process'
 const noteName = '2026-08-15-pinned-upstream-and-isolated-yarn-workspace'
@@ -23,12 +24,13 @@ const noteRecordPath = `${noteDirectory}/${noteName}.i18n.yaml`
 if (workspace.packageManager !== 'yarn@4.18.0') {
   fail('the product workspace must pin yarn@4.18.0')
 }
-if (JSON.stringify(workspace.workspaces) !== JSON.stringify(['dsh-plugin-desktop'])) {
-  fail('the root Yarn workspace must contain only dsh-plugin-desktop')
+if (JSON.stringify(workspace.workspaces) !== JSON.stringify(['dsh-plugin-desktop', 'dsh-community-market'])) {
+  fail('the root Yarn workspace must contain the desktop and community-market packages')
 }
-if (plugin.packageManager !== undefined) {
-  fail('dsh-plugin-desktop must inherit the root Yarn release')
+for (const [name, manifest] of [['dsh-plugin-desktop', plugin], ['dsh-community-market', market]]) {
+  if (manifest.packageManager !== undefined) fail(`${name} must inherit the root Yarn release`)
 }
+if (market.name !== 'dsh-community-market') fail('the market workspace must own dsh-community-market')
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
 // Windows checkouts materialize the symlink as a regular file holding the
@@ -44,6 +46,8 @@ for (const legacyFile of [
   'pnpm-workspace.yaml',
   'dsh-plugin-desktop/pnpm-lock.yaml',
   'dsh-plugin-desktop/pnpm-workspace.yaml',
+  'dsh-community-market/pnpm-lock.yaml',
+  'dsh-community-market/pnpm-workspace.yaml',
 ]) {
   if (existsSync(resolve(root, legacyFile))) fail(`${legacyFile} must not exist`)
 }
@@ -57,7 +61,7 @@ if (typeof upstreamPackage.packageManager !== 'string' || !upstreamPackage.packa
   fail('the upstream checkout must retain its pnpm package manager')
 }
 
-for (const [owner, manifest] of [['root', workspace], ['plugin', plugin]]) {
+for (const [owner, manifest] of [['root', workspace], ['desktop', plugin], ['market', market]]) {
   for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'resolutions']) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {
       if (typeof range !== 'string') continue

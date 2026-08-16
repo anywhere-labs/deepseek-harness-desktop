@@ -1,0 +1,45 @@
+{
+  "name": "dsh-community-market",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Documentation-first shell for a community plugin market in DSH Desktop",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anywhere-labs/deepseek-harness-desktop.git",
+    "directory": "dsh-community-market"
+  },
+  "homepage": "https://github.com/anywhere-labs/deepseek-harness-desktop/tree/master/dsh-community-market#readme",
+  "bugs": {
+    "url": "https://github.com/anywhere-labs/deepseek-harness-desktop/issues"
+  },
+  "type": "module",
+  "files": [
+    "docs/**",
+    "LICENSE",
+    "README.md",
+    "README.zh.md",
+    "README.i18n.yaml",
+    "SECURITY.md",
+    "SECURITY.zh.md",
+    "SECURITY.i18n.yaml"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "check": "node scripts/verify-docs.mjs",
+    "prepack": "yarn run check"
+  },
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "plugin",
+    "marketplace",
+    "community"
+  ]
+}

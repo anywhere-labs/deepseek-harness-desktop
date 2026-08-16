@@ -30,6 +30,8 @@ This manifesto is not a unilateral rulebook. It is a **living document**: it fol
 
 Once the plugin marketplace ships, plugins that follow this manifesto will be easier to discover, install, and trust. We want convention-driven development to be the beneficial choice for every author, not an extra burden.
 
+The market is still in its [product and safety design phase](../dsh-community-market/README.md), with no usable page or installer yet. Catalog inclusion means that a project matched catalog rules; it is not a security review or endorsement.
+
 ## How to participate
 
 - Learn how plugins are written in [plugin development](plugin-development.en.md).

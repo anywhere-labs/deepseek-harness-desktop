@@ -60,6 +60,7 @@ Ordinary users can start with the [user guide](docs/user-guide.en.md); the devel
 | --- | --- |
 | Read the plugin ecosystem manifesto | [Plugin ecosystem manifesto](docs/plugin-ecosystem.en.md) |
 | Build ordinary or Desktop plugins | [Plugin development](docs/plugin-development.en.md) |
+| Read the plugin market product and safety design | [DSH Community Market](dsh-community-market/README.md) |
 | See what Desktop plugins can use | [Desktop plugin API](dsh-plugin-desktop/docs/plugin-services.md) |
 | Understand how the desktop works | [Architecture](docs/architecture.en.md) |
 | Read package-level build and release details | [`dsh-plugin-desktop/README.md`](dsh-plugin-desktop/README.md) |
@@ -79,8 +80,8 @@ Ordinary users can start with the [user guide](docs/user-guide.en.md); the devel
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <h3><a href="docs/plugin-ecosystem.en.md">Plugin Marketplace</a> <img src="https://img.shields.io/badge/COMING_SOON-F59E0B?style=flat-square" alt="Coming Soon"></h3>
-      <p>Harness follows an “everything is a plugin” architecture. The desktop marketplace will make it easy to discover, install, update, and manage plugins for models, tools, interfaces, and workflows.</p>
+      <h3><a href="dsh-community-market/README.md">Plugin Marketplace</a> <img src="https://img.shields.io/badge/IN_DESIGN-F59E0B?style=flat-square" alt="In design"></h3>
+      <p>We are using DSH Community Market to design plugin discovery, details, and confirmed installation. It currently contains product and safety documentation, not a usable market page.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Co-build the Plugin Ecosystem</h3>
