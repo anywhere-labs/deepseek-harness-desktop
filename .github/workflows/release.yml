@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v2.0.0+dsh0.1.0-rc.6)'
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+  # 避免某些 post-install 脚本触发遥测
+  ELECTRON_SKIP_DOWNLOAD: 'false'
+  NODE_VERSION: '22.23.2'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      version: ${{ steps.meta.outputs.version }}
+      dsh_version: ${{ steps.meta.outputs.dsh_version }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG_NAME="${{ github.event.inputs.tag }}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          # 从 dsh-plugin-desktop/package.json 读桌面端版本
+          DESKTOP_VER=$(node -p "require('./dsh-plugin-desktop/package.json').version")
+          echo "version=$DESKTOP_VER" >> "$GITHUB_OUTPUT"
+          # 从 upstream.json 读 dsh runtime 版本
+          DSH_VER=$(node -p "require('./upstream.json').runtimePackageVersion")
+          echo "dsh_version=$DSH_VER" >> "$GITHUB_OUTPUT"
+          # dsh 版本含 -rc / -beta 视为 prerelease
+          if [[ "$DSH_VER" =~ -(rc|beta|alpha|pre) ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "=== Release Meta ==="
+          echo "tag       = $TAG_NAME"
+          echo "desktop   = $DESKTOP_VER"
+          echo "dsh       = $DSH_VER"
+          echo "prerelease= $([[ "$DSH_VER" =~ -(rc|beta|alpha|pre) ]] && echo true || echo false)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: version-lock
+          path: |
+            upstream.json
+            dsh-plugin-desktop/package.json
+
+  build-mac-arm64:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - name: Install dependencies
+        run: corepack yarn install --immutable
+      - name: Build desktop plugin
+        run: corepack yarn workspace dsh-plugin-desktop build
+      - name: Package macOS arm64 DMG (ad-hoc, no notarize)
+        env:
+          # fork 仓库无 Apple Developer 证书：关闭公证，允许 ad-hoc 签名
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          USE_HARD_LINKS: 'false'
+        run: |
+          cd dsh-plugin-desktop
+          npx electron-builder --mac dmg --arm64 --publish never \
+            --config.mac.notarize=false \
+            --config.mac.hardenedRuntime=false \
+            --config.mac.target=dmg
+      - name: List artifacts
+        run: |
+          echo "--- dsh-plugin-desktop/dist ---"
+          ls -lah dsh-plugin-desktop/dist/ 2>/dev/null || echo "(空)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-assets-arm64
+          path: |
+            dsh-plugin-desktop/dist/*.dmg
+            dsh-plugin-desktop/dist/*-arm64*
+
+  build-mac-x64:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - name: Install dependencies
+        run: corepack yarn install --immutable
+      - name: Build desktop plugin
+        run: corepack yarn workspace dsh-plugin-desktop build
+      - name: Package macOS x64 DMG (ad-hoc, no notarize)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          USE_HARD_LINKS: 'false'
+        run: |
+          cd dsh-plugin-desktop
+          npx electron-builder --mac dmg --x64 --publish never \
+            --config.mac.notarize=false \
+            --config.mac.hardenedRuntime=false \
+            --config.mac.target=dmg
+      - name: List artifacts
+        run: |
+          echo "--- dsh-plugin-desktop/dist ---"
+          ls -lah dsh-plugin-desktop/dist/ 2>/dev/null || echo "(空)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-assets-x64
+          path: |
+            dsh-plugin-desktop/dist/*.dmg
+            dsh-plugin-desktop/dist/*-x64*
+
+  build-win:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - name: Build + Package Windows x64 NSIS (unsigned)
+        run: corepack yarn dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: List artifacts
+        run: |
+          echo "--- dsh-plugin-desktop/dist ---"
+          Get-ChildItem -Path dsh-plugin-desktop/dist -Recurse -File | Select-Object Name,Length | Format-Table -AutoSize
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-assets
+          path: |
+            dsh-plugin-desktop/dist/*-Setup.exe
+            dsh-plugin-desktop/dist/*.exe
+
+  release:
+    needs: [prepare, build-mac-arm64, build-mac-x64, build-win]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+      - name: Flatten + generate SHASUMS
+        id: shasum
+        run: |
+          mkdir -p release
+          find assets -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.snap' \) -exec cp -v {} release/ \;
+          cd release
+          sha256sum * > SHASUMS-${{ needs.prepare.outputs.version }}.txt
+          echo "=== Release Assets ==="
+          ls -lah
+          echo "--- SHASUMS ---"
+          cat SHASUMS-*.txt
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: DSH Desktop ${{ needs.prepare.outputs.version }} (dsh ${{ needs.prepare.outputs.dsh_version }})
+          prerelease: ${{ needs.prepare.outputs.is_prerelease }}
+          generate_release_notes: true
+          body: |
+            ## 版本对应 / Version Mapping
+
+            | 组件 Component | 版本 Version |
+            | --- | --- |
+            | dsh-desktop | ${{ needs.prepare.outputs.version }} |
+            | @deepseek-ai/dsh (runtime) | ${{ needs.prepare.outputs.dsh_version }} |
+
+            ## 下载 / Downloads
+
+            | 平台 Platform | 文件 File | 说明 Notes |
+            | --- | --- | --- |
+            | macOS (Apple Silicon) | `*-arm64.dmg` | ad-hoc 签名，首次打开需右键 → 打开 |
+            | macOS (Intel) | `*-x64.dmg` | ad-hoc 签名，首次打开需右键 → 打开 |
+            | Windows x64 | `*-Setup.exe` | NSIS 安装包，未签名 |
+
+            > ⚠️ 本 Release 由 fork 仓库构建，未经 Apple 公证。macOS 首次打开方式：
+            > 双击 DMG 挂载后，将 app 拖到 Applications，右键 app → 「打开」→ 确认。
+
+            ## 校验 / Verify
+
+            ```sh
+            sha256sum -c SHASUMS-${{ needs.prepare.outputs.version }}.txt
+            ```
+          files: |
+            release/*.dmg
+            release/*.exe
+            release/SHASUMS-*.txt
