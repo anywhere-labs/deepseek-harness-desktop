@@ -203,6 +203,7 @@ describe('published package surface', () => {
       hardenedRuntime: true,
       notarize: true,
       target: ['dir'],
+      artifactName: 'DSH-Desktop-${version}-mac-${arch}.${ext}',
     }))
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
   })

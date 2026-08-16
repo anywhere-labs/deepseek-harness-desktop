@@ -10,6 +10,7 @@ function options(overrides: Partial<MacReleaseVerificationOptions> = {}) {
   const value: MacReleaseVerificationOptions = {
     distDir: '/release/dist',
     productName: 'DSH Desktop',
+    arch: 'arm64',
     listDmgs: () => ['/release/dist/DSH Desktop-2.0.0-arm64.dmg'],
     makeMountPoint: () => '/private/tmp/dsh-desktop-dmg-test',
     run: (command, args) => { calls.push({ command, args: [...args] }) },

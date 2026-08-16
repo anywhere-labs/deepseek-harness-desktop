@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { releaseMac, type MacReleaseOptions } from '../scripts/release-mac.ts'
+import {
+  MAC_ARCH_ENV,
+  readMacReleaseArch,
+  releaseMac,
+  type MacReleaseOptions,
+} from '../scripts/release-mac.ts'
 
 const DEVELOPER_ID_OUTPUT = `
   1) 0123456789ABCDEF "Developer ID Application: Mengxin Yang (TEAM123456)"
@@ -27,6 +32,7 @@ function baseOptions(
       identityEnvironments.push({ ...identityEnv })
       return DEVELOPER_ID_OUTPUT
     },
+    arch: readMacReleaseArch,
     run: (command, args, cwd, commandEnv) => {
       calls.push({ command, args: [...args], cwd, env: { ...commandEnv } })
     },
@@ -60,7 +66,7 @@ describe('macOS release command boundary', () => {
     expect(calls[1]).toEqual({
       command: 'yarn',
       args: [
-        'exec', 'electron-builder', '--mac', 'dmg',
+        'exec', 'electron-builder', '--mac', 'dmg', '--arm64',
         '--config.forceCodeSigning=true', '--config.mac.notarize=true',
       ],
       cwd: '/repo/dsh-plugin-desktop',
@@ -70,13 +76,14 @@ describe('macOS release command boundary', () => {
         APPLE_ID: 'developer@example.test',
         APPLE_APP_SPECIFIC_PASSWORD: appPassword,
         APPLE_TEAM_ID: 'TEAM123456',
+        [MAC_ARCH_ENV]: 'arm64',
       },
     })
     expect(calls[2]).toEqual({
       command: process.execPath,
       args: ['scripts/verify-mac-release.ts'],
       cwd: '/repo/dsh-plugin-desktop',
-      env: { PATH: '/usr/bin', SAFE_BUILD_VALUE: 'kept' },
+      env: { PATH: '/usr/bin', SAFE_BUILD_VALUE: 'kept', [MAC_ARCH_ENV]: 'arm64' },
     })
     expect(logs).toHaveLength(1)
     expect(logs[0]).toContain('signing via keychain; notarization via apple-id')
@@ -111,7 +118,8 @@ describe('macOS release command boundary', () => {
     expect(calls[1]?.env.CSC_KEY_PASSWORD).toBe(p12Password)
     expect(calls[1]?.env.MAC_CERT_P12_BASE64).toBeUndefined()
     expect(calls[1]?.env.MACOS_SIGN_IDENTITY).toBeUndefined()
-    expect(calls[2]?.env).toEqual({ PATH: '/usr/bin' })
+    expect(calls[1]?.env[MAC_ARCH_ENV]).toBe('arm64')
+    expect(calls[2]?.env).toEqual({ PATH: '/usr/bin', [MAC_ARCH_ENV]: 'arm64' })
   })
 
   it('rejects development signing before running any command', () => {
@@ -141,5 +149,35 @@ describe('macOS release command boundary', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.args).toEqual(['run', 'check'])
     expect(calls[0]?.cwd).toBe('/repo')
+  })
+
+  it('builds an Intel DMG when the caller selects the x64 architecture', () => {
+    const calls: CommandCall[] = []
+    const options = baseOptions({
+      APPLE_KEYCHAIN_PROFILE: 'dsh-notary',
+      [MAC_ARCH_ENV]: 'x64',
+    }, calls)
+
+    releaseMac(options)
+
+    expect(calls).toHaveLength(3)
+    expect(calls[1]?.args).toEqual([
+      'exec', 'electron-builder', '--mac', 'dmg', '--x64',
+      '--config.forceCodeSigning=true', '--config.mac.notarize=true',
+    ])
+    expect(calls[1]?.env[MAC_ARCH_ENV]).toBe('x64')
+    expect(calls[2]?.env[MAC_ARCH_ENV]).toBe('x64')
+  })
+
+  it('reads the default arm64 architecture from a release environment', () => {
+    expect(readMacReleaseArch({ PATH: '/usr/bin', [MAC_ARCH_ENV]: 'arm64' })).toBe('arm64')
+    expect(readMacReleaseArch({})).toBe('arm64')
+  })
+
+  it('rejects an unsupported architecture before the DMG builder runs', () => {
+    const calls: CommandCall[] = []
+    const options = baseOptions({ [MAC_ARCH_ENV]: 'ia32' }, calls)
+    expect(() => releaseMac(options)).toThrow('must be')
+    expect(calls).toEqual([])
   })
 })

@@ -12,6 +12,8 @@ export interface MacReleaseVerificationOptions {
   readonly distDir: string
   /** Installed application name inside the mounted image. */
   readonly productName: string
+  /** Architecture the release expected to seal into the DMG. */
+  readonly arch: 'x64' | 'arm64'
   /** Return regular DMG files in the distribution directory. */
   readonly listDmgs: (distDir: string) => readonly string[]
   /** Create a private empty mount point. */
@@ -42,6 +44,7 @@ function defaultOptions(): MacReleaseVerificationOptions {
   return {
     distDir: join(packageRoot, 'dist'),
     productName: 'DSH Desktop',
+    arch: process.env.DSH_MAC_ARCH === 'x64' ? 'x64' : 'arm64',
     listDmgs,
     makeMountPoint: () => mkdtempSync(join(tmpdir(), 'dsh-desktop-dmg-')),
     run,
@@ -60,7 +63,7 @@ export function verifyMacRelease(
   const dmgs = options.listDmgs(options.distDir)
   if (dmgs.length !== 1) {
     throw new Error(
-      `macOS release verification requires exactly one DMG in ${options.distDir}; found ${String(dmgs.length)}`,
+      `macOS release verification requires exactly one ${options.arch} DMG in ${options.distDir}; found ${String(dmgs.length)}`,
     )
   }
 
@@ -105,7 +108,7 @@ const invokedPath = process.argv[1]
 if (invokedPath !== undefined && resolve(invokedPath) === fileURLToPath(import.meta.url)) {
   try {
     const verified = verifyMacRelease()
-    console.log(`macOS release verification passed: ${verified.dmgPath}`)
+    console.log(`macOS release verification passed (${verified.dmgPath})`)
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1

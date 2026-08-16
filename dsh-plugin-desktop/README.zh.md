@@ -161,6 +161,20 @@ corepack.cmd yarn dist:win
 
 该本地命令会主动移除 Windows 证书变量，并设置 `signExecutable=false`。产物可以安装测试，但没有 Authenticode publisher，因此 Windows 可能显示 Unknown publisher 或 SmartScreen 警告。签名后的 Windows release、证书校验、安装器升级与卸载测试，以及原生 UI 和 sandbox smoke 仍是独立的发布 gate。
 
+### 本地 macOS 发布
+
+`dist:mac` 会根据已通过校验的发布凭据构建一个已签名并公证的 macOS DMG，然后挂载、校验其签名并卸载该 DMG。一次调用恰好产出一个架构。发布架构来自 `DSH_MAC_ARCH` 环境变量，未设置时默认为 `arm64`：
+
+```bash
+DSH_MAC_ARCH=x64 yarn dist:mac      # Intel DMG
+DSH_MAC_ARCH=arm64 yarn dist:mac    # Apple silicon DMG（默认）
+```
+
+Electron Builder 会收到对应的 `--x64` 或 `--arm64` flag，且产物名会内嵌架构（`DSH-Desktop-${version}-mac-x64.dmg` 或 `DSH-Desktop-${version}-mac-arm64.dmg`），因此同一个发布目录可以同时容纳两种架构而不发生命名冲突。`DSH_MAC_ARCH` 不是发布密钥，所以会转发给受校验的 `electron-builder` 子进程，以及 `verify-mac-release.ts`（其成功与失败信息都会标明期望的架构）。请分别在各自的原生宿主上构建 Intel 与 arm64 产物（`x64` 用 Intel 主机、`arm64` 用 Apple silicon 主机），让每个 DMG 带对应架构的正确 Electron 二进制。
+
+支持 Intel macOS 属于构建能力。分发是发布方职责：两种 DMG 都发布后，版本服务与 macOS 下载入口应按当前安装应用的架构把更新路由到匹配的 DMG。更新客户端打开的是入口下发的那个 DMG，因此把 Intel DMG 路由给 Intel 安装，才是让 Intel 构建在应用内可被更新的关键。
+
+
 ## 模型体验
 
 无。desktop package 只改变应用组合与原生呈现，不增加任何模型可见的指令、工具、事件或请求字段。

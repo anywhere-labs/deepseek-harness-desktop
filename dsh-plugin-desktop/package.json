@@ -257,6 +257,7 @@
         "dir"
       ],
       "category": "public.app-category.developer-tools",
+      "artifactName": "DSH-Desktop-${version}-mac-${arch}.${ext}",
       "hardenedRuntime": true,
       "icon": "build/app-icon-mac.png",
       "notarize": true

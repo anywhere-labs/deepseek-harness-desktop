@@ -9,6 +9,27 @@ import {
   withoutMacReleaseSecrets,
 } from './release-preflight.ts'
 
+/** Supported Electron architectures for one macOS release artifact. */
+export type MacReleaseArch = 'x64' | 'arm64'
+
+/** Environment variable that selects the macOS release architecture. */
+export const MAC_ARCH_ENV = 'DSH_MAC_ARCH'
+
+/**
+ * Resolve the architecture the release should build.
+ * @param env - Environment containing the optional architecture selector.
+ * @returns the requested architecture, defaulting to `arm64` when the selector is absent.
+ * @throws when the selector is present but not a supported architecture.
+ */
+export function readMacReleaseArch(env: NodeJS.ProcessEnv): MacReleaseArch {
+  const arch = env[MAC_ARCH_ENV]
+  if (arch === undefined || arch.length === 0) return 'arm64'
+  if (arch === 'x64' || arch === 'arm64') return arch
+  throw new Error(
+    `${MAC_ARCH_ENV} must be "x64", "arm64", or unset (defaults to arm64); received ${JSON.stringify(arch)}`,
+  )
+}
+
 /** Injectable release boundary used by focused tests. */
 export interface MacReleaseOptions {
   /** Environment containing the selected signing and notarization credentials. */
@@ -19,6 +40,8 @@ export interface MacReleaseOptions {
   readonly desktopRoot: string
   /** Read code-signing identities with a credential-free environment. */
   readonly listCodeSigningIdentities: (env: NodeJS.ProcessEnv) => string
+  /** Resolve the architecture the DMG builder must produce. */
+  readonly arch: (env: NodeJS.ProcessEnv) => MacReleaseArch
   /** Execute one release command. */
   readonly run: (
     command: string,
@@ -56,6 +79,7 @@ function defaultReleaseOptions(): MacReleaseOptions {
     platform: process.platform,
     desktopRoot: resolve(dirname(fileURLToPath(import.meta.url)), '..'),
     listCodeSigningIdentities,
+    arch: readMacReleaseArch,
     run,
     log: message => console.log(message),
   }
@@ -68,6 +92,7 @@ function defaultReleaseOptions(): MacReleaseOptions {
 export function releaseMac(options: MacReleaseOptions = defaultReleaseOptions()): void {
   const releaseEnvironment = adaptMacReleaseEnvironment(options.env)
   const buildEnvironment = withoutMacReleaseSecrets(releaseEnvironment)
+  const arch = options.arch(releaseEnvironment)
   const result = assertMacReleaseReady({
     env: releaseEnvironment,
     platform: options.platform,
@@ -81,10 +106,16 @@ export function releaseMac(options: MacReleaseOptions = defaultReleaseOptions())
   // material is withheld from every build, test, Loader smoke, and layout subprocess.
   options.run('yarn', ['run', 'check'], resolve(options.desktopRoot, '..'), buildEnvironment)
   options.run('yarn', [
-    'exec', 'electron-builder', '--mac', 'dmg',
+    'exec', 'electron-builder', '--mac', 'dmg', `--${arch}`,
     '--config.forceCodeSigning=true', '--config.mac.notarize=true',
-  ], options.desktopRoot, releaseEnvironment)
-  options.run(process.execPath, ['scripts/verify-mac-release.ts'], options.desktopRoot, buildEnvironment)
+  ], options.desktopRoot, {
+    ...releaseEnvironment,
+    [MAC_ARCH_ENV]: arch,
+  })
+  options.run(process.execPath, ['scripts/verify-mac-release.ts'], options.desktopRoot, {
+    ...buildEnvironment,
+    [MAC_ARCH_ENV]: arch,
+  })
 }
 
 const invokedPath = process.argv[1]

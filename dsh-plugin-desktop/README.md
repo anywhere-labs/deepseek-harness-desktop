@@ -161,6 +161,19 @@ Python and Visual Studio C++ Build Tools are not required. The Windows command u
 
 This local command deliberately strips Windows certificate variables and sets `signExecutable=false`. Its output is installable for testing but has no Authenticode publisher, so Windows can display an Unknown publisher or SmartScreen warning. A signed Windows release, certificate verification, installer upgrade/uninstall testing, and native UI/sandbox smoke remain separate release gates.
 
+### Local macOS release
+
+`dist:mac` builds one signed and notarized macOS DMG from validated release credentials, then mounts, verifies, and detaches that DMG. One invocation produces exactly one architecture. The release architecture comes from the `DSH_MAC_ARCH` environment variable and defaults to `arm64`:
+
+```bash
+DSH_MAC_ARCH=x64 yarn dist:mac      # Intel DMG
+DSH_MAC_ARCH=arm64 yarn dist:mac    # Apple silicon DMG (default)
+```
+
+Electron Builder receives the matching `--x64` or `--arm64` flag, and the artifact name embeds the architecture (`DSH-Desktop-${version}-mac-x64.dmg` or `DSH-Desktop-${version}-mac-arm64.dmg`) so one distribution directory can hold both without a naming collision. `DSH_MAC_ARCH` is not a release secret, so it is forwarded to the verified `electron-builder` subprocess and to `verify-mac-release.ts`, whose error and success messages name the expected architecture. Build the Intel and arm64 artifacts on their native hosts (an Intel host for `x64`, an Apple silicon host for `arm64`) so Electron ships the correct binary per DMG.
+
+Supporting Intel macOS is a build capability. Distribution is a release-operator step: after both DMGs are published, the version service and the macOS download endpoint should route each running application to the DMG that matches its installed architecture. The update client opens whichever DMG the endpoint serves, so routing the Intel DMG to Intel installs is what makes the Intel build reachable in-app.
+
 ## Model Experience
 
 None. The desktop package changes application composition and native presentation; it does not add model-visible instructions, tools, events, or request fields.
