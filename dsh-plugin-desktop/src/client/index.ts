@@ -30,6 +30,10 @@ export const inject = [
 /** Register desktop-owned client surfaces for the current BrowserWindow mode. @param ctx - browser Cordis context. */
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
+  // Plain-browser loads (no desktop shell query markers) get no desktop client
+  // effects at all — including the boot health reporter, whose endpoint only
+  // exists inside the desktop host's loopback server.
+  if (environment === null) return
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),
     'dsh-plugin-desktop: renderer boot health report',

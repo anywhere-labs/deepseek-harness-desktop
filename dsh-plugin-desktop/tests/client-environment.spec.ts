@@ -23,12 +23,18 @@ describe('desktop client environment', () => {
   })
 
   it.each([
-    ['', 'dsh-desktop-mode'],
     ['?dsh-desktop-mode=glass&dsh-desktop-platform=darwin', 'dsh-desktop-mode'],
-    ['?dsh-desktop-mode=advanced', 'dsh-desktop-platform'],
     ['?dsh-desktop-mode=advanced&dsh-desktop-platform=android', 'dsh-desktop-platform'],
-  ])('fails loud for malformed marker %s', (search, field) => {
+  ])('fails loud for an unknown marker value %s', (search, field) => {
     expect(() => parseDesktopClientEnvironment(search)).toThrow(field)
+  })
+
+  it.each([
+    ['', 'no markers'],
+    ['?dsh-desktop-mode=advanced', 'missing platform'],
+    ['?dsh-desktop-platform=darwin', 'missing mode'],
+  ])('resolves to null when the page is not served by the desktop shell (%s: %s)', (search) => {
+    expect(parseDesktopClientEnvironment(search)).toBeNull()
   })
 })
 

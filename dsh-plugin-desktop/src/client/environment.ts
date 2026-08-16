@@ -16,19 +16,25 @@ const MODES = new Set<DesktopClientMode>(['compatibility', 'advanced'])
 const PLATFORMS = new Set<DesktopClientPlatform>(['darwin', 'win32', 'linux'])
 
 /**
- * Validate the Electron-owned query marker before any desktop client effects run.
+ * Resolve the desktop renderer environment from the Electron-owned query markers.
+ *
+ * Returns `null` when either marker is absent: the page is not a desktop shell
+ * window (e.g. the same Web UI opened directly in a plain browser), so no
+ * desktop client effects should run. A marker that is present but holds an
+ * unknown value still fails loud — that indicates a malformed desktop page.
  * @param search - URL search string, including or omitting the leading question mark.
- * @returns the validated desktop renderer environment.
+ * @returns the validated desktop renderer environment, or `null` outside the desktop shell.
  */
-export function parseDesktopClientEnvironment(search: string): DesktopClientEnvironment {
+export function parseDesktopClientEnvironment(search: string): DesktopClientEnvironment | null {
   const params = new URLSearchParams(search)
   const mode = params.get('dsh-desktop-mode')
   const platform = params.get('dsh-desktop-platform')
+  if (mode === null || platform === null) return null
   if (!MODES.has(mode as DesktopClientMode)) {
-    throw new Error(`dsh-plugin-desktop: invalid or missing dsh-desktop-mode ${JSON.stringify(mode)}`)
+    throw new Error(`dsh-plugin-desktop: invalid dsh-desktop-mode ${JSON.stringify(mode)}`)
   }
   if (!PLATFORMS.has(platform as DesktopClientPlatform)) {
-    throw new Error(`dsh-plugin-desktop: invalid or missing dsh-desktop-platform ${JSON.stringify(platform)}`)
+    throw new Error(`dsh-plugin-desktop: invalid dsh-desktop-platform ${JSON.stringify(platform)}`)
   }
   return { mode: mode as DesktopClientMode, platform: platform as DesktopClientPlatform }
 }
