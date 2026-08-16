@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/Desktop-App-47848F?style=flat" alt="Desktop application">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2EA44F?style=flat" alt="MIT License"></a>
   <a href="https://discord.gg/TJeGqKRNM"><img src="https://img.shields.io/badge/Discord-5865F2?style=flat&amp;logo=discord&amp;logoColor=white" alt="Join Discord"></a>
-  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows-4493F8?style=flat-square" alt="Supported platforms: macOS and Windows">
+  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Supported platforms: macOS, Windows and Linux">
 </p>
 
 <p align="center"><sub><a href="README.md">中文</a> · English</sub></p>
@@ -16,7 +16,7 @@
 
 <a id="run"></a>
 
-<h3 align="center"><a href="https://www.deepseekdesktop.com"><ins>Download Desktop</ins></a></h3>
+<h3 align="center"><a href="https://www.deepseekdesktop.com"><ins>Download Desktop</ins></a> · <a href="https://github.com/ziyuliu258/deepseek-harness-desktop-extended-for-linux/releases"><ins>Linux AppImage</ins></a></h3>
 
 <p align="center">
   <img src="assets/desktop-preview.png" alt="DeepSeek Harness Desktop preview" width="100%">
@@ -80,7 +80,7 @@ The official project provides the core agent capabilities, plugin system, and We
 - Desktop application packaging
 - Starting, stopping, and recovering the local service
 - Desktop window and system tray integration
-- macOS and Windows installer builds and releases
+- macOS, Windows, and Linux installer builds and releases
 - An interface designed for desktop use
 
 If you prefer to run Harness from the command line or contribute to its core functionality, refer to the official repository first.
