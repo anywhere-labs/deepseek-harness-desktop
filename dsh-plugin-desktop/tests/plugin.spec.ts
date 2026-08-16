@@ -20,6 +20,12 @@ const config: DesktopConfig = {
   height: 840,
   minWidth: 900,
   minHeight: 640,
+  filePreview: {
+    maxTextBytes: 2 * 1024 * 1024,
+    maxImageBytes: 20 * 1024 * 1024,
+    resourceTtlMs: 60_000,
+    maxResources: 64,
+  },
 }
 
 afterEach(() => { vi.useRealTimers() })
@@ -33,6 +39,14 @@ interface PluginHarness {
   setThemeSource: ReturnType<typeof vi.fn<(source: ThemePreference) => void>>
   notify(next: DesktopSettings, prev: DesktopSettings): Promise<void>
   notifyTheme(preference: ThemePreference): void
+  /** Routes registered through the fake webServer. */
+  routes: Array<{ kind: 'exact' | 'prefix'; path: string }>
+  /** RPC channels registered through the fake connection. */
+  channels: string[]
+  /** Disposers returned by every registered effect, in registration order. */
+  disposers: Array<() => unknown>
+  /** Live RPC handlers keyed by channel (undefined after the channel is disposed). */
+  rpcHandlers: Map<string, ((...args: unknown[]) => unknown) | undefined>
 }
 
 function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginHarness {
@@ -41,6 +55,10 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   const update = vi.fn(async (_patch: object) => {})
   const restart = vi.fn(async () => {})
   const setThemeSource = vi.fn<(source: ThemePreference) => void>()
+  const routes: PluginHarness['routes'] = []
+  const channels: string[] = []
+  const disposers: Array<() => unknown> = []
+  const rpcHandlers = new Map<string, ((...args: unknown[]) => unknown) | undefined>()
   let settingsUpdated: ((namespace: unknown, next: unknown) => void) | undefined
   let themePreference: ThemePreference = 'system'
   const runtime: DesktopRuntime = {
@@ -87,11 +105,43 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     webServer: {
       host: '127.0.0.1',
       port: 43120,
+      register: vi.fn((route: { kind: 'exact' | 'prefix'; path: string }) => {
+        routes.push({ kind: route.kind, path: route.path })
+        return () => {
+          const at = routes.findIndex(r => r.kind === route.kind && r.path === route.path)
+          if (at !== -1) routes.splice(at, 1)
+        }
+      }),
     },
     settings,
+    connection: {
+      rpc: {
+        handle: vi.fn((channel: string, handler?: (...args: unknown[]) => unknown) => {
+          channels.push(channel)
+          let active = true
+          rpcHandlers.set(channel, async (...args: unknown[]) => {
+            if (!active) return { ok: false, error: { code: 'cancelled', message: 'channel removed', details: {} } }
+            return handler?.(...args)
+          })
+          return async () => {
+            active = false
+            rpcHandlers.delete(channel)
+            const at = channels.indexOf(channel)
+            if (at !== -1) channels.splice(at, 1)
+          }
+        }),
+      },
+    },
+    workspaceRegistry: { list: vi.fn(() => []) },
+    sessionQuery: { traceSession: vi.fn(async () => ({ target: { header: {} }, ancestors: [] })) },
+    fs: {},
     logger: { warn: vi.fn(), error: vi.fn() },
     get: vi.fn(() => () => {}),
-    effect: vi.fn((register: () => unknown) => register()),
+    effect: vi.fn((register: () => unknown) => {
+      const disposer = register()
+      if (typeof disposer === 'function') disposers.push(disposer as () => unknown)
+      return disposer
+    }),
     on: vi.fn((event: string, listener: (namespace: unknown, next: unknown) => void) => {
       if (event === 'settings/updated') settingsUpdated = listener
       return () => { if (settingsUpdated === listener) settingsUpdated = undefined }
@@ -109,6 +159,10 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
       themePreference = preference
       settingsUpdated?.(settingsNamespace('ui-theme'), { preference })
     },
+    routes,
+    channels,
+    disposers,
+    rpcHandlers,
   }
 }
 
@@ -216,5 +270,55 @@ describe('desktop Host plugin', () => {
       'supported on macOS and Windows',
     )
     expect(() => options?.validate?.({ mode: 'compatibility' })).not.toThrow()
+  })
+
+  it('registers exactly one file-preview RPC channel and one binary route in advanced mode', () => {
+    const harness = createHarness()
+    apply(harness.ctx, { ...config, mode: 'advanced' })
+
+    expect(harness.channels).toEqual(['/desktop-file-preview'])
+    expect(harness.routes).toEqual([{ kind: 'prefix', path: '/desktop-file-preview-content' }])
+  })
+
+  it('does not register any file-preview RPC channel or binary route in compatibility mode', () => {
+    const harness = createHarness()
+    apply(harness.ctx, config)
+
+    expect(harness.channels).toEqual([])
+    expect(harness.routes).toEqual([])
+  })
+
+  it('invalidates the RPC handler and removes the route when the fiber disposers run', async () => {
+    const harness = createHarness()
+    apply(harness.ctx, { ...config, mode: 'advanced' })
+
+    const handler = harness.rpcHandlers.get('/desktop-file-preview')
+    expect(handler).toBeDefined()
+    expect(harness.routes).toHaveLength(1)
+    expect(harness.channels).toHaveLength(1)
+
+    // Fiber teardown runs disposers in reverse registration order.
+    for (const disposer of [...harness.disposers].reverse()) await disposer()
+
+    // The route and channel registrations are removed.
+    expect(harness.routes).toEqual([])
+    expect(harness.channels).toEqual([])
+    expect(harness.rpcHandlers.has('/desktop-file-preview')).toBe(false)
+  })
+
+  it('does not leak filePreview config into the native shell spec', () => {
+    const harness = createHarness()
+    apply(harness.ctx, { ...config, mode: 'advanced' })
+
+    const spec = harness.shell()
+    expect(spec).toBeDefined()
+    expect(spec).not.toHaveProperty('filePreview')
+    expect(spec).toMatchObject({
+      mode: 'advanced',
+      width: 1280,
+      height: 840,
+      minWidth: 900,
+      minHeight: 640,
+    })
   })
 })
