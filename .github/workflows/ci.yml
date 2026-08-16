@@ -38,8 +38,8 @@ jobs:
       - run: yarn install --immutable
       - run: yarn check
 
-  # Windows-only logic on a real Windows runner: packaging tests, updates,
-  # window options, pwsh sandbox, and volume diagnostics.
+  # Windows-only logic and an unsigned NSIS build on a real Windows runner:
+  # updates, window options, pwsh sandbox, volume diagnostics, and packaging.
   desktop-windows:
     runs-on: windows-latest
     steps:
@@ -59,7 +59,7 @@ jobs:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
       - run: yarn install --immutable
-      - run: yarn workspace dsh-plugin-desktop check:win-package
+      - run: yarn workspace dsh-plugin-desktop dist:win
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the
   # pinned submodule's own Yarn/pnpm release on Windows.

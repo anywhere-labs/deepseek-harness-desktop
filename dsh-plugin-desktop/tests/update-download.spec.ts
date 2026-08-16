@@ -252,11 +252,11 @@ describe('desktop update installer download', () => {
     expect(requested).toBe(false)
   })
 
-  it.skipIf(process.platform === 'win32')('rejects a symlink user-data path before requesting', async () => {
+  it('rejects a linked user-data path before requesting', async () => {
     const userDataPath = await temporaryUserData()
     const linked = `${userDataPath}-link`
     temporaryRoots.push(linked)
-    await symlink(userDataPath, linked, 'dir')
+    await symlink(userDataPath, linked, process.platform === 'win32' ? 'junction' : 'dir')
     let requested = false
     const request = async (): Promise<Response> => {
       requested = true

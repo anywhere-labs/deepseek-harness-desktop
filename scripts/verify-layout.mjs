@@ -98,7 +98,7 @@ for (const notePath of notePaths) {
   // differ per host, while HEAD:<path> is identical everywhere.
   const expected = run('git', ['rev-parse', `HEAD:${notePath}`])
   const recordLine = `${basename(notePath)}: ${expected}`
-  if (!noteRecord.split('\n').includes(recordLine)) {
+  if (!noteRecord.split(/\r?\n/u).includes(recordLine)) {
     fail(`${noteRecordPath} is stale for ${notePath}`)
   }
 }
@@ -107,7 +107,7 @@ const readmeRecord = readFileSync(resolve(root, 'README.i18n.yaml'), 'utf8')
 for (const readmeName of ['README.md', 'README.en.md']) {
   const expected = run('git', ['rev-parse', `HEAD:${readmeName}`])
   const recordLine = `${readmeName}: ${expected}`
-  if (!readmeRecord.split('\n').includes(recordLine)) {
+  if (!readmeRecord.split(/\r?\n/u).includes(recordLine)) {
     fail(`README.i18n.yaml is stale for ${readmeName}`)
   }
 }
