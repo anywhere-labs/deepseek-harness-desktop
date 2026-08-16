@@ -1355,7 +1355,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-client-ui-settings-models@npm:^0.1.0-rc.6":
+"@deepseek-ai/dsh-client-ui-settings-models@npm:0.1.0-rc.6":
   version: 0.1.0-rc.6
   resolution: "@deepseek-ai/dsh-client-ui-settings-models@npm:0.1.0-rc.6"
   peerDependencies:
@@ -1370,6 +1370,24 @@ __metadata:
     "@deepseek-ai/dsh-invariants": ^0.1.0-rc.6
     react: ^18.2.0
   checksum: 10c0/006e90f314aa70641c236fe0f8fa807430e7503fbf418dd8521d206b81e156c17532385b83c620ca05dad86db36562fe276f47be1f3bdd5327cd6b12ab0a5735
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-client-ui-settings-models@patch:@deepseek-ai/dsh-client-ui-settings-models@npm%3A0.1.0-rc.6#./.yarn/patches/@deepseek-ai-dsh-client-ui-settings-models-npm-0.1.0-rc.6-3766bee0bd.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.6
+  resolution: "@deepseek-ai/dsh-client-ui-settings-models@patch:@deepseek-ai/dsh-client-ui-settings-models@npm%3A0.1.0-rc.6#./.yarn/patches/@deepseek-ai-dsh-client-ui-settings-models-npm-0.1.0-rc.6-3766bee0bd.patch::version=0.1.0-rc.6&hash=4e1910&locator=deepseek-harness-desktop%40workspace%3A."
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-api-remotes": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-client-connection": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-client-runtime": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-client-schema-form": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-client-ui-primitives": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-client-ui-slots": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-client-web-react": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.6
+    react: ^18.2.0
+  checksum: 10c0/e5ba436696e1481b9ab1c6e55f933f4a306e580de2102200d9fb4f529e0d18123524f202fdae0e3a827a4a37e553299668243a0fb5bab366fd34287b96fbf05e
   languageName: node
   linkType: hard
 
