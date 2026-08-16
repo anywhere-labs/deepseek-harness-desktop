@@ -86,6 +86,8 @@ describe('published package surface', () => {
       inject: [
         '@deepseek-ai/dsh-client-runtime',
         '@deepseek-ai/dsh-client-ui-theme',
+        '@deepseek-ai/dsh-client-connection',
+        '@deepseek-ai/dsh-client-ui-primitives',
       ],
     })
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop')
@@ -98,6 +100,38 @@ describe('published package surface', () => {
   it('keeps unaudited marketplace packages out of the published runtime', () => {
     expect(manifest.dependencies).not.toHaveProperty('dshmarket')
     expect(manifest.optionalDependencies ?? {}).not.toHaveProperty('dshmarket')
+  })
+
+  it('keeps the file viewer inside one client closure without new public exports or runtime dependencies', () => {
+    const config = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
+    const clientIndex = readFileSync(new URL('src/client/index.ts', packageRoot), 'utf8')
+
+    // The client bundle remains a single closure with only src/client/index.ts as its entry.
+    const clientConfig = config.match(/entry:\s*\{ client: 'src\/client\/index\.ts' \}/u)
+    expect(clientConfig).not.toBeNull()
+
+    // The feature adds no new public exports to the client entry: the public
+    // re-exports are only the shell applier, the environment parser, and its types.
+    const reExports = clientIndex.match(/^export\s+(?:type\s+)?\{[^}]*\}\s+from/gmu) ?? []
+    expect(reExports).toHaveLength(3)
+    expect(reExports.join('\n')).toContain('export { applyAdvancedShell }')
+    expect(reExports.join('\n')).toContain('export { parseDesktopClientEnvironment }')
+    expect(reExports.join('\n'))
+      .toContain('export type { DesktopClientEnvironment, DesktopClientMode, DesktopClientPlatform }')
+    // None of the client entry exports leak file-preview internals.
+    expect(reExports.join('\n')).not.toMatch(/file-preview/iu)
+    expect(clientIndex).not.toMatch(/file-preview/iu)
+
+    // The feature adds no unexpected runtime dependency: jsdom, testing-library, and
+    // react-dom remain devDependencies only and never appear in the runtime deps.
+    expect(manifest.devDependencies?.['jsdom']).toBe('29.1.1')
+    expect(manifest.devDependencies?.['@testing-library/react']).toBe('^16.3.2')
+    expect(manifest.devDependencies?.['@testing-library/dom']).toBe('^10.4.1')
+    expect(manifest.devDependencies?.['react-dom']).toBe('18.3.1')
+    expect(manifest.dependencies).not.toHaveProperty('jsdom')
+    expect(manifest.dependencies).not.toHaveProperty('@testing-library/react')
+    expect(manifest.dependencies).not.toHaveProperty('@testing-library/dom')
+    expect(manifest.dependencies).not.toHaveProperty('react-dom')
   })
 
   it('builds public Host plugins and their private native bootstraps', () => {

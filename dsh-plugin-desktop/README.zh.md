@@ -69,6 +69,16 @@ desktop sidebar surface 会把上游 sidebar-fill token 局部设为透明，因
 
 在 macOS 上，高级窗口使用透明 hidden-inset 标题栏、定位后的红黄绿按钮与原生 `sidebar` vibrancy。其 90 CSS 像素收起列会把官方 56 像素 rail 居中放在 desktop 自有的红绿灯顶部 inset 下方。Sidebar surface 本身不可拖动；红绿灯右侧由 desktop 自有的透明 32 CSS 像素条提供窗口拖动目标。Conversation 与 details 完整 surface 上方的 caption row 会保留 20 CSS 像素视觉间距，同时提供另一块透明的 32 CSS 像素拖动命中区域。按钮、链接、输入框、对话框与显式声明 `app-region: no-drag` 的 contribution 仍可交互；放在顶部 32 像素内的自定义 pointer target 也必须声明同一排除规则。在 Windows 上，官方 sidebar 保持兼容模式几何：收起 56 像素、默认展开 280 像素，并沿用相同的上游过渡行为；透明 surface 会透出 Mica。窗口使用带原生控件的隐藏标题栏、透明 overlay、Mica 背景材质、阴影、圆角与粗可调整边框。Electron 仅在 Windows 11 22H2 及以上版本提供由系统绘制的 Mica 材质。Desktop 自有的 32 CSS 像素 caption row 会横跨 Windows 的 conversation 与 details 两列；完整的上游 slot surface 从该行下方开始，因此官方与第三方 Header contribution 会保持原有相对布局，无需针对具体元素设置 caption offset。Linux 会拒绝高级模式，而不会静默降级到与持久化设置不同的呈现。
 
+### 文件查看器
+
+在高级模式中，点击会话中受支持的普通文件会在右侧列打开只读查看器，而不是启动操作系统默认应用。面板 Header 第一行显示文件名，第二行显示可截断的完整路径；工具栏提供刷新、系统打开与关闭图标操作，均带有 Tooltip 与 `aria-label`。点击同一路径会重新读取，从而可以立即看到 Agent 刚完成的修改。目录、未授权路径（激活 workspace 成员关系之外）、不支持的格式与非 regular file 都会保持原始系统行为，且不短暂显示加载状态。兼容模式不注册任何拦截、RPC、route、wrapper、样式或查看器 UI。
+
+查看器覆盖源码与配置文本、Markdown、JSON、diff 与 patch 文件，以及开发资源图片。格式分类、MIME 与语言通过 desktop 自有的格式表解析。渲染按 Provider 隔离：Source Provider 复用 DSH 的 Shiki/read-block surface，在 512 KiB 或 10,000 行以内提供语法高亮，超过后降级为普通只读文本；Markdown 与 JSON Provider 在 256 KiB 以内提供预览，超过后进入源码模式；Image Provider 在 20 MiB 以内显示 PNG、JPEG、GIF、WebP 与 SVG，超出时显示元数据并保留系统打开操作。Markdown 与 JSON 分别提供预览/源码与树/源码的分段控件。
+
+安全边界中的所有授权都来自 workspace 成员关系，并在每次请求时重新读取 registry；子 agent session 只能通过权威 `sessionQuery` 祖先链继承，普通 loose session 不继承。`fs.resolve`/`contains` 校验 canonical identity 与包含关系，阻止 `..`、绝对路径与符号链接逃逸。控制操作使用仅限 loopback 的 `/desktop-file-preview` RPC channel；图片字节使用带 token 的同源二进制 route，并沿用 Connection 的 Host/Fetch-Metadata/Origin trust fence。渲染进程不会暴露原始 `file://`，不会接触第三方预览服务，并且每种预览都保留显式系统打开退出路径。
+
+该功能由仅高级模式的 `filePreview` 上限配置：`maxTextBytes`（默认 2 MiB）、`maxImageBytes`（默认 20 MiB）、`resourceTtlMs`（默认 60 秒）与 `maxResources`（默认 64）。文件查看器不新增任何公开 package export，也不引入新的运行时依赖；jsdom、Testing Library 与 React DOM 只作为测试用 devDependencies。
+
 ## 开发
 
 该包由仓库根目录的 Yarn workspace 管理。相邻的 `deepseek-harness/` checkout 仍是独立的上游 pnpm 项目，不属于 Yarn workspace。请从仓库根目录安装并验证 DSH Desktop：
@@ -176,6 +186,7 @@ corepack.cmd yarn dist:win
 - 添加或删除 profile bundle 后必须重启 DSH Desktop；Launcher 不监听 profile manifest。从托盘选择其他 profile 时会自动完成该重启。
 - 切换 compatibility/advanced 模式按设计必然重启应用；存活的 generation 不会热切换 Loader row、slot 所有权或原生材质。
 - Linux 不支持高级模式。Linux 继续使用兼容呈现。
+- 内置文件查看器按设计只读。超过 Provider 阈值（例如超大图片）的文件只显示元数据并保留系统打开操作，而不是渲染预览；不提供就地编辑或完整 IDE。
 - macOS 与 Windows 托盘终端会提供私有 `dsh`、`pnpm` 与 `node` shim。除此之外，Host runtime 会在当前 Electron 进程的 `PATH` 中公开内置 `pnpm` 命令作为 ambient compatibility，并提供受管 `desktopPnpm` service；这些命令都不会加入系统 `PATH`，Linux 目前也没有 desktop 终端命令。
 - 在 Windows 上，ambient `pnpm` 命令与 lifecycle Node helper 是 `.cmd` shim。`desktopPnpm.run()` 与 `runPlugin()` 会启动准确的已打包 entry，从而避免 manager process 的 shell lookup；上游 `dsh plugin`、PowerShell 与命令提示符则可通过 command interpreter 解析 ambient shim。第三方插件直接调用 Node `spawn('pnpm', { shell: false })`，或 lifecycle script 直接以 `shell: false` 执行其 `.cmd` `npm_node_execpath`，仍属于不可移植行为，应改用受管 service 或 shell-aware 启动路径。
 - `dshmarket@1.2.3` 仍是用户可选安装的第三方 package，而不是内置 marketplace。只有重新审计的版本同时消费可选 Desktop service、保留普通 DSH fallback，并包含再分发所需的完整 license notice 后，才会重新评估预装。

@@ -127,6 +127,27 @@ try {
           }
         },
       })
+      // The desktop-shell Host plugin unconditionally injects the file-preview
+      // services even though it touches them only in advanced mode. The real
+      // composed profile provides them (verify:profile exercises that path), so
+      // this minimal compatibility-mode tree must offer the same edges for the
+      // launcher-owned entry to activate.
+      host.provide('connection', {
+        rpc: {
+          handle: () => async () => {},
+          call: async () => ({ ok: false, error: { code: 'unavailable' } }),
+        },
+      })
+      host.provide('workspaceRegistry', { list: () => [] })
+      host.provide('sessionQuery', {
+        traceSession: async () => ({ target: { header: {} }, ancestors: [] }),
+      })
+      host.provide('fs', {
+        resolve: async () => ({ targetKey: 'smoke' }),
+        contains: async () => false,
+        stat: async () => ({ type: 'file', size: 0, version: 1 }),
+        readBytes: async () => new Uint8Array(),
+      })
     },
     prepared.bareModuleBaseUrl,
   )
