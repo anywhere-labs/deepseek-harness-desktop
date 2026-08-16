@@ -63,16 +63,19 @@ export const Config: z<Config> = z.object({
  * @param port - active loopback Web server port.
  * @param mode - active native presentation mode.
  * @param platform - active Electron platform.
+ * @param updatesEnabled - whether the packaged updater RPC is available.
  * @returns the URL loaded by the BrowserWindow.
  */
 export function desktopRendererUrl(
   port: number,
   mode: DesktopShellMode,
   platform: Context['desktopRuntime']['platform'],
+  updatesEnabled: boolean,
 ): string {
   const url = new URL(`http://127.0.0.1:${String(port)}/`)
   url.searchParams.set('dsh-desktop-mode', mode)
   url.searchParams.set('dsh-desktop-platform', platform)
+  url.searchParams.set('dsh-desktop-updates', updatesEnabled ? 'enabled' : 'disabled')
   return url.href
 }
 
@@ -139,7 +142,12 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(
     () => ctx.desktopRuntime.schedule({
       ...config,
-      url: desktopRendererUrl(ctx.webServer.port, config.mode, ctx.desktopRuntime.platform),
+      url: desktopRendererUrl(
+        ctx.webServer.port,
+        config.mode,
+        ctx.desktopRuntime.platform,
+        ctx.desktopRuntime.updates.isPackaged,
+      ),
       productName: 'DSH Desktop',
       windowTitle: 'DeepSeek Harness Desktop',
       iconPath,

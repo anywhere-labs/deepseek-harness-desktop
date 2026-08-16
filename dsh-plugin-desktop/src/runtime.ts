@@ -1,5 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { UpdateCheckResult, UpdateRequest } from './update-checker.ts'
+import type {
+  DesktopUpdaterAdapter,
+  UpdateCancellation,
+} from './update-controller.ts'
+import type { DesktopUpdateInstallMode } from './update-contract.ts'
 
 /** Electron platforms supported by the DSH Desktop native adapter. */
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux'
@@ -81,24 +85,22 @@ export interface DesktopNotification {
   body: string
 }
 
-/** Electron capabilities used by the headless update plugin. */
+/** Electron capabilities used by the headless update coordinator. */
 export interface DesktopUpdateAdapter {
   /** Whether the running executable came from an Electron package. */
   readonly isPackaged: boolean
-  /** Whether this platform has a fixed installer download endpoint. */
-  readonly canDownload: boolean
   /** Installed desktop product version. */
   readonly currentVersion: string
-  /** Private file used for update-prompt history. */
-  readonly statePath: string
-  /** Request adapter backed by Electron's native network session. */
-  readonly request: UpdateRequest
-  /** Ask whether one strictly newer version may be downloaded. */
-  confirmDownload(version: string): Promise<boolean>
-  /** Present the outcome of a user-triggered version check. */
-  showManualCheckResult(result: UpdateCheckResult | null): Promise<void>
-  /** Download and hand one confirmed update to the platform installer. */
-  downloadAndOpen(version: string, signal: AbortSignal): Promise<void>
+  /** Installation support encoded into the running application artifact. */
+  readonly installMode: DesktopUpdateInstallMode
+  /** Configured GitHub updater, absent in development and unsupported packages. */
+  readonly updater?: DesktopUpdaterAdapter
+  /** Construct one provider cancellation token. */
+  createCancellation(): UpdateCancellation
+  /** Stop the Host before handing the downloaded artifact to the native installer. */
+  requestInstall(): Promise<void>
+  /** Open the repository's fixed latest-release page. */
+  openReleasePage(): Promise<void>
   /** Present a native status notification without blocking the Host tree. */
   notify(notification: DesktopNotification): void
 }
@@ -138,7 +140,7 @@ export interface DesktopRuntime {
   /** Current Electron platform. */
   readonly platform: DesktopPlatform
 
-  /** Native network, update-download, and notification adapter. */
+  /** Native updater, release-page, and notification adapter. */
   readonly updates: DesktopUpdateAdapter
 
   /**

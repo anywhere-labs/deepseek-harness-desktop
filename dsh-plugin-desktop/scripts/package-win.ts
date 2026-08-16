@@ -1,4 +1,4 @@
-/** Build an unsigned Windows x64 NSIS installer on a native Windows host. */
+/** Build a Windows x64 NSIS updater installer on a native Windows host. */
 
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -34,6 +34,8 @@ export interface WindowsPackageOptions {
   readonly builderCli: string
   /** Absolute packaged-installer verification script. */
   readonly verifier: string
+  /** Absolute updater-metadata marker script. */
+  readonly metadataMarker: string
   /** Node executable used to run package-local scripts. */
   readonly nodeExecutable: string
   /** Execute one packaging command. */
@@ -93,6 +95,7 @@ function defaultOptions(): WindowsPackageOptions {
       : join(windowsRoot, 'System32', 'cmd.exe'),
     builderCli: require.resolve('electron-builder/cli.js'),
     verifier: fileURLToPath(new URL('./verify-win-installer.ts', import.meta.url)),
+    metadataMarker: fileURLToPath(new URL('./mark-update-metadata.ts', import.meta.url)),
     nodeExecutable: process.execPath,
     run,
     log: message => console.log(message),
@@ -100,7 +103,7 @@ function defaultOptions(): WindowsPackageOptions {
 }
 
 /**
- * Run the headless release gates and package one unsigned x64 NSIS installer.
+ * Run the headless release gates and package one x64 NSIS updater installer.
  * @param options - Injectable process and command boundaries.
  */
 export function packageWindowsInstaller(
@@ -121,8 +124,19 @@ export function packageWindowsInstaller(
     )
   }
 
+  const mode = options.env.DSH_WINDOWS_UPDATE_MODE === 'automatic' ? 'automatic' : 'manual'
   const cleanEnvironment = withoutWindowsSigningSecrets(options.env)
-  options.log('Building an unsigned Windows x64 installer; Authenticode is a separate release step.')
+  const buildEnvironment = mode === 'automatic'
+    ? { ...options.env }
+    : { ...cleanEnvironment, CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+  if (mode === 'automatic'
+    && (options.env.CSC_LINK?.trim() === '' || options.env.CSC_LINK === undefined
+      || options.env.CSC_KEY_PASSWORD?.trim() === '' || options.env.CSC_KEY_PASSWORD === undefined)) {
+    throw new Error('Automatic Windows updates require CSC_LINK and CSC_KEY_PASSWORD')
+  }
+  options.log(mode === 'automatic'
+    ? 'Building a signed Windows x64 updater installer.'
+    : 'Building an unsigned Windows x64 installer with GitHub download fallback.')
   options.run(
     options.commandShell,
     [
@@ -143,14 +157,20 @@ export function packageWindowsInstaller(
       '--x64',
       '--publish',
       'never',
-      '--config.win.signExecutable=false',
+      `--config.extraMetadata.desktopUpdateMode=${mode}`,
+      ...(mode === 'automatic'
+        ? ['--config.forceCodeSigning=true']
+        : ['--config.win.signExecutable=false']),
       '--config.npmRebuild=false',
     ],
     options.desktopRoot,
-    {
-      ...cleanEnvironment,
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false',
-    },
+    buildEnvironment,
+  )
+  options.run(
+    options.nodeExecutable,
+    [options.metadataMarker, 'dist/latest.yml', mode],
+    options.desktopRoot,
+    cleanEnvironment,
   )
   options.run(
     options.nodeExecutable,

@@ -129,11 +129,15 @@ npx dsh-plugin-desktop
 
 ## 桌面操作
 
-打包后的 macOS 与 Windows 应用会在启动 60 秒后查询 `https://www.dshdesktop.cn/api/desktop/version`，并在每次检查完成六小时后再次查询。每次 no-cache 请求的期限为 15 秒，并与托盘中的 **Check for Updates…** 命令共用一个 in-flight operation。响应只有在包含规范的 stable Semantic Versioning 时才会被接受。后台检查遇到网络、HTTP、超时、无效响应、相同版本或服务端旧版本时保持静默。手工检查一定会显示原生结果对话框：相同或旧版本会显示当前安装版本，失败会提示用户重试，严格更新的版本则显示 **Download** 或 **Later**。自动更新提示会按版本记录，用户仍可从托盘显式重试。开发运行、未打包启动与 Linux 不会下载安装包。
+打包后的 macOS 与 Windows 应用通过 `electron-updater` 检查 `anywhere-labs/deepseek-harness-desktop` 的正式 GitHub Releases。Host 会在激活 60 秒后首次检查，并在每次检查完成六小时后安排下一次。手动检查、定时检查、下载、取消和安装共用一个控制器。更新器会关闭自动下载、普通退出时安装、预发布版、降级、Web installer 与差分下载。
 
-选择 **Download** 后，应用会先重新确认服务端版本没有变化，然后才首次请求对应平台用于计数的固定下载入口。DSH Desktop 使用 Electron 网络跟随 service redirect，把不超过 1 GiB 的文件流式写入私有、按版本划分的 user-data 目录，并在交付前拒绝不完整的 DMG 或 Windows PE。macOS 会打开下载好的 DMG，并提示用户替换 `Applications` 中的应用后重新打开。Windows 会在 NSIS 安装器准备完成后再次确认；选择 **Restart and Install** 会启动安装器，并在当前进程退出前请求 Cordis 有序 teardown。下载、文件系统与安装器打开失败都会保持静默，同时保留托盘中的可重试版本操作。
+打包后的 renderer 会在同源 loopback URL 中收到更新标记，并在通用设置中注册“软件更新”行。发现版本或完成下载时，界面会显示可关闭的提示。固定的 `/desktop-updates` loopback RPC 只接受空 payload 的状态读取、检查、下载、取消、安装与打开发布页操作。返回内容只包含版本、进度、能力与浏览器安全的错误分类，不暴露本地路径、provider URL、通用 IPC 或 Electron API。开发运行与普通 Web 客户端不会注册更新界面。
 
-Release operator 必须先发布两个平台产物，再让版本可被发现。产物与 download redirect 准备完成后，在 Upstash Redis console 中把 `deepseek-harness-desktop:release:version` 设置为规范的 stable 版本，例如 `SET deepseek-harness-desktop:release:version 2.0.1`。版本 API 会立即生效；key 缺失、服务不可用或值无效时，Desktop 不会显示任何提示。
+设置行会区分待检查、检查中、已是最新版、发现版本、下载中、下载完成、不支持与失败状态。失败状态会进一步指出网络不可用、GitHub 缺少更新元数据、存储空间不足、文件体积超限、取消清理超时、安装无法启动、系统浏览器无法打开或未知 provider 错误。已是最新版时会明确显示当前安装包就是最新正式版；缺少 `latest-mac.yml` 或 `latest.yml` 时会提供固定 GitHub Releases 页面，避免只显示笼统的检查失败。
+
+自动安装要求当前安装包与目标 Release 都发布能力元数据。macOS 使用签名并公证的应用、DMG、ZIP 与 `latest-mac.yml`。Windows 使用 NSIS、blockmap 与 `latest.yml`；签名产物可以在客户端内安装，未签名产物会显示 GitHub 下载入口。下载限制为 1 GiB，并预留额外存储空间、按完整传输字节数执行上限。选择“重启并更新”后，应用会隐藏窗口，释放 Host 及其子进程，再调用原生更新器交接。普通退出不会安装已下载的更新。
+
+v2.0.1 是更新器引导版本，需要手动安装。从 v2.0.2 开始，只要两端安装包都支持自动安装，即可使用完整的一键更新流程。Release 元数据是版本发现来源；更新器不会拉取源码、携带 GitHub Token 或接受任意 URL。
 
 在 macOS 与 Windows 上，**Open DSH Terminal** 会打开以当前激活 profile 为工作目录的系统终端。欢迎信息会显示应用版本、当前 profile、profile 目录与 DSH home，并列出配置与插件管理命令。在该终端内，裸 `dsh`、`dsh --dump-config`，以及没有选择 profile 的 plugin 子命令都会默认使用当前激活 profile；显式 `--profile` 与上游 `web` alias 会保留原有含义。DSH Desktop 会在自身 user-data 目录下按 profile 生成私有 `dsh`、`pnpm` 与 `node` shim，设置 `DSH_HOME`，使用当前 profile 作为工作目录，并且只在该终端的 `PATH` 前置 shim 目录；之后切换 profile 不会改变已经打开的终端命令。它不会修改全局环境或 shell 启动文件。macOS launcher 会先保留用户的交互式 zsh 或 bash 设置，再恢复 desktop 自有变量。Windows 会依次选择 PowerShell 7、Windows PowerShell 或命令提示符，并在新的 Windows Terminal 窗口中打开；如果 `wt.exe` 不可用，则由私有 `cmd start` broker 创建可见控制台。同步启动失败与 broker 非正常退出会显示在原生错误对话框中。Linux 不组合该终端命令。
 
@@ -157,9 +161,9 @@ corepack.cmd yarn dist:win
 
 该流程不要求 Python 或 Visual Studio C++ Build Tools。Windows 命令会直接使用 `node-pty` 内置的 x64 Node-API 二进制，而不会让 Electron Builder 从源码重新编译；如果安装包 staging tree 缺少这些二进制，packaged-runtime gate 会直接拒绝产物。
 
-`dist:win` 会拒绝非 Windows 或非 x64 宿主，先执行一组 Windows 可运行的 gate，其中包括 build、全部 TypeScript compiler face、打包与原生 shell 聚焦测试，以及 runtime-closure verifier；随后再构建 NSIS 安装向导，并校验生成的两个 PE 文件。完整跨平台 suite 仍由 CI 持有，因为其中部分 POSIX 执行测试不是 Windows 程序。安装向导支持当前用户安装或提升权限后的所有用户安装，可更改安装目录，会创建开始菜单与桌面快捷方式，并且卸载应用时保留 DSH 用户数据。版本 `2.0.0` 会输出到 `dsh-plugin-desktop\dist\DSH-Desktop-2.0.0-x64-Setup.exe`；用于 smoke 测试的未封装程序仍位于 `dsh-plugin-desktop\dist\win-unpacked\DSH Desktop.exe`。
+`dist:win` 会拒绝非 Windows 或非 x64 宿主，先执行一组 Windows 可运行的检查，其中包括 build、全部 TypeScript compiler face、打包与原生 shell 聚焦测试，以及 runtime-closure verifier；随后再构建 NSIS 安装向导，并校验生成的两个 PE 文件。完整跨平台 suite 仍由 CI 持有，因为其中部分 POSIX 执行测试不是 Windows 程序。安装向导支持当前用户安装或提升权限后的所有用户安装，可更改安装目录，会创建开始菜单与桌面快捷方式，并且卸载应用时保留 DSH 用户数据。版本 `2.0.1` 会输出到 `dsh-plugin-desktop\dist\DSH-Desktop-2.0.1-x64-Setup.exe`；用于 smoke 测试的未封装程序仍位于 `dsh-plugin-desktop\dist\win-unpacked\DSH Desktop.exe`。
 
-该本地命令会主动移除 Windows 证书变量，并设置 `signExecutable=false`。产物可以安装测试，但没有 Authenticode publisher，因此 Windows 可能显示 Unknown publisher 或 SmartScreen 警告。签名后的 Windows release、证书校验、安装器升级与卸载测试，以及原生 UI 和 sandbox smoke 仍是独立的发布 gate。
+本地命令默认使用手动更新模式，主动移除 Windows 证书变量，并设置 `signExecutable=false`。产物可以安装测试，但没有 Authenticode publisher，因此 Windows 可能显示 Unknown publisher 或 SmartScreen 警告。受保护的发布工作流只有在仓库配置提供签名证书，并且产出的安装器通过 Authenticode 校验时，才会选择自动安装模式。
 
 ## 模型体验
 
@@ -177,7 +181,7 @@ corepack.cmd yarn dist:win
 - macOS 与 Windows 托盘终端会提供私有 `dsh`、`pnpm` 与 `node` shim。除此之外，Host runtime 会在当前 Electron 进程的 `PATH` 中公开内置 `pnpm` 命令作为 ambient compatibility，并提供受管 `desktopPnpm` service；这些命令都不会加入系统 `PATH`，Linux 目前也没有 desktop 终端命令。
 - 在 Windows 上，ambient `pnpm` 命令与 lifecycle Node helper 是 `.cmd` shim。`desktopPnpm.run()` 与 `runPlugin()` 会启动准确的已打包 entry，从而避免 manager process 的 shell lookup；上游 `dsh plugin`、PowerShell 与命令提示符则可通过 command interpreter 解析 ambient shim。第三方插件直接调用 Node `spawn('pnpm', { shell: false })`，或 lifecycle script 直接以 `shell: false` 执行其 `.cmd` `npm_node_execpath`，仍属于不可移植行为，应改用受管 service 或 shell-aware 启动路径。
 - `dshmarket@1.2.3` 仍是用户可选安装的第三方 package，而不是内置 marketplace。只有重新审计的版本同时消费可选 Desktop service、保留普通 DSH fallback，并包含再分发所需的完整 license notice 后，才会重新评估预装。
-- 更新交接只验证下载容器，不验证 publisher 身份。macOS 仍要求用户从已打开的 DMG 替换应用；Windows 会运行已下载的 NSIS 安装器，但本地 `dist:win` 产物没有签名。签名产物、Authenticode/publisher 校验、SmartScreen 信誉与原生升级测试仍是发布 gate。
+- Linux 在 Release 增加 AppImage 更新目标之前会使用固定 GitHub 下载入口。本地 Windows 安装包也会使用该入口，因为这些产物没有签名；Windows 自动安装要求 Release 产物具有有效 Authenticode 签名。
 - 共享 carrier 使用 loopback HTTP 与 WebSocket，而不是 Electron IPC。替换它需要上游 DSH 提供 transport 扩展点，不属于该独立包的范围。
 - 该项目目前固定使用已发布的 DSH `0.1.0-rc.6` family，而相邻的 `deepseek-harness/` 源码 checkout 早于该版本。因此，测试验证的是已发布包接口，而非上游未发布源码。
 - `package:dir` 是用于 smoke 的未封装产物。`dist:win` 会额外生成未签名的 NSIS 测试安装包，但不会建立 Authenticode 身份或 SmartScreen 信誉。安装与升级行为、原生通知与终端、Windows ACL sandbox，以及每台目标机器上的原生材质外观仍属于目标平台验证边界。

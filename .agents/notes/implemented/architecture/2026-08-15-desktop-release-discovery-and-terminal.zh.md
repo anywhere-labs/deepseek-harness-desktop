@@ -10,27 +10,17 @@ DSH Desktop 需要两项不属于上游 Web 呈现的原生操作。用户需要
 
 这些操作必须保留兼容模式与高级模式已经建立的产品边界。固定的上游 checkout 保持不变；兼容模式继续使用没有 override 的官方 Web client；沙箱 renderer 不获得 Electron、Node、文件系统、进程或终端能力。desktop package 也不能修改用户的全局 `PATH` 或 shell 启动文件。
 
-公开 release service 提供一份 no-cache 版本文档与两个计数用 installer redirect，但不提供 Squirrel.Mac 所需的签名 ZIP feed，也不提供 NSIS updater 的 publisher metadata。因此 Desktop 可以负责经用户确认的下载与原生 installer 交接，但不能宣称无人值守替换或经过验证的 publisher 身份。
+GitHub Release 发现、updater 元数据与安装由独立的 [Desktop GitHub 更新决策](2026-08-16-desktop-github-updates.zh.md)负责。本记录保留与隔离终端共享的组合方式，以及终端环境决策。
 
 ## 决策
 
 Desktop 原生操作是围绕同一个 Electron adapter 组合的独立 Cordis Host contribution。profile 会在普通 Web bundle 之后组合 `desktop-shell`、`desktop-terminal` 与 `desktop-updates`。Electron runtime 拥有实体托盘并提供有序 item registry；每个 Host plugin 都在 `ctx.effect()` 中注册命令，并在该 generation dispose 时移除命令。Shell 继续拥有窗口与模式生命周期，terminal 与 update plugin 只拥有各自的命令状态。
 
-该组合在兼容模式与高级模式中完全相同，不增加 Client face、preload bridge、Electron IPC 方法或 renderer global API。托盘菜单构造只对 contribution 分组，不检查上游或第三方 Web 元素。Linux 会在 profile 中禁用 terminal row；如果在 Linux 上直接激活该 Host plugin，则会明确失败，而不会显示一个无法启动的命令。
+Host 组合在兼容模式与高级模式中完全相同。终端不会增加 Client face、preload bridge、Electron IPC 方法或 renderer global API；更新 Client 使用其所属决策描述的现有 loopback carrier。托盘菜单构造只对 contribution 分组，不检查上游或第三方 Web 元素。Linux 会在 profile 中禁用 terminal row；如果在 Linux 上直接激活该 Host plugin，则会明确失败，不会显示无法启动的命令。
 
 ## Stable release 更新交接
 
-`desktop-updates` 只查询 `https://www.dshdesktop.cn/api/desktop/version`。其显式配置默认启用后台检查：首次延迟 60 秒，每次检查完成六小时后安排下一次，并为每个请求设置 15 秒期限。只有 Electron 报告为打包应用时才会自动调度。开发运行与其他未打包启动会保留手工托盘命令，但不会主动发起后台网络流量。
-
-手工检查与定时检查共用一个 in-flight request。Checker 使用 no-cache 语义发送 `GET`，拒绝 redirect 与非 200 响应，把响应正文限制为 4 KiB，并且只接受名为 `version` 的 JSON string 字段及规范的 stable Semantic Versioning。比较过程不会把 SemVer identifier 转成 JavaScript number。定时检查遇到无效、相同、旧版本、HTTP、timeout、cancellation、正文超限与网络结果时保持静默。手工检查得到相同或旧版本时会显示包含当前安装版本的“已是最新”对话框；请求或校验失败时则显示一条固定重试提示，不暴露响应或错误细节。
-
-只有严格更新的远端版本才会进入可用状态。托盘会显示空闲、检查中、下载中或可用版本。后台结果会为每个版本跨重启显示一次原生 **Download** 或 **Later** 提示；手工选择托盘命令时可以再次询问，并直接以该提示作为结果对话框，不会额外弹出通知。Updater 会在 Electron user-data 目录下原子写入 version-2 JSON 文档。文件上限为 4 KiB，只保存 `lastPromptedVersion`，绝不会在未查询 service 的情况下从状态恢复可用 release。状态不存在时从空状态开始；旧版、格式损坏、体积超限或包含不安全值的状态会被静默替换，而不会被信任。
-
-只有用户选择 **Download** 后，固定的 macOS 或 Windows 下载入口才会被访问。Checker 会先重复版本请求，只有仍然发布同一个更新版本时才继续。Electron `net.fetch` 会跟随 service redirect，把不超过 1 GiB 的文件流式写入私有、按版本划分的 user-data 目录，同步并原子重命名完整文件，并在失败或取消后清理 partial 文件。这个即时复查可以缩小 release rotation 窗口，但不能把固定 endpoint 与版本建立加密绑定；后续 service 应返回 versioned URL 与平台 hash。交接前要求 macOS 产物包含 UDIF `koly` trailer，Windows 产物包含 DOS 与 PE signature。这些检查可以拒绝 HTML error 或结构错误的产物，但不能证明 publisher 身份。
-
-macOS 会打开经过校验的 DMG，并说明用户必须替换 `Applications` 中的 DSH Desktop 后重新打开；它不会自行 mount 并修改已安装的签名 bundle。Windows 会在 NSIS installer 准备完成后再次询问。选择 **Restart and Install** 会使用准确 argv 且不经过 shell 启动 installer，等待其 spawn event，然后在当前应用退出前请求既有的有界 Cordis teardown。选择 **Later**，或任何下载、文件系统与 installer 打开错误，都不会显示 failure UI，同时会保留托盘中的可重试版本操作。手工检查失败会使用上述固定重试对话框。
-
-发布顺序是一项运维 invariant：必须先准备好两个 installer artifact 及其 redirect，再修改 Upstash Redis key `deepseek-harness-desktop:release:version`。更新该 key 会立即让版本可被发现，无需重新部署 service。Key 缺失、服务不可用或值无效时，公开 endpoint 不会返回可用版本，Desktop checker 会直接忽略。
+更新控制器、设置 contribution、GitHub 元数据、平台信任要求、发布工作流与 Host 先于安装器停止的顺序由 [Desktop GitHub 更新决策](2026-08-16-desktop-github-updates.zh.md)定义。`desktop-updates` 仍是与 shell、terminal 位于同一 profile generation 的 effect-scoped Host contribution。
 
 ## 隔离终端环境
 
@@ -46,15 +36,13 @@ System terminal 是由本地用户显式发起的能力，而不是 renderer 或
 
 ## 验证
 
-Headless update 测试覆盖 strict SemVer 顺序、固定版本与下载 endpoint、no-cache 请求选项、定时检查失败静默、手工结果对话框、响应与 installer 体积上限、version-2 状态解析、定时与手工请求共享、timeout 与下载 cancellation、计数请求之前的确认和版本复查、单一下载任务、DMG 与 PE rejection、partial 文件清理、动态托盘 label，以及 effect disposal。Electron adapter 测试会在不打开真实窗口的情况下覆盖原生确认与结果对话框、macOS DMG 打开、Windows installer 在退出前 spawn、普通原生通知，以及有序、可 dispose 的托盘 contribution registry。
+更新验证属于 [Desktop GitHub 更新决策](2026-08-16-desktop-github-updates.zh.md)。这里共享的托盘 registry 仍会在不打开真实窗口的情况下验证有序、可 refresh 且可 dispose 的 Host contribution。
 
 Headless terminal 测试会检查生成的 macOS 与 Windows 文件、空格与 shell metacharacter quoting、通过 child environment 携带本地化路径的 ASCII Windows 模板、私有 POSIX mode、`DSH_HOME` 与 `PATH` 隔离、`--expose-internals`、不会覆盖显式 profile 或 `web` alias 的 default-desktop 参数注入、继承 Electron Node mode 的移除、交互式 shell 启动、Windows Terminal 选择、可见控制台 broker、PowerShell 与命令提示符 fallback、launcher 错误处理，以及对不支持平台或不安全生成脚本值的明确拒绝。Packaged-runtime gate 会在签名前要求 `app.asar` 包含 terminal 与 update 模块及 desktop CLI bootstrap，并要求 `app.asar.unpacked` 以物理文件形式包含上游 DSH CLI、Web runtime sentinel 与内置 pnpm 入口。
 
 测试不会启动图形终端、显示操作系统对话框、请求任一生产下载 endpoint、替换 macOS 应用、安装第三方原生 package、验证 Authenticode 或执行签名 installer。这些行为仍是打包后 macOS 与 Windows 产物的目标平台检查。
 
 ## 考虑过的替代方案
-
-**立即使用 Electron `autoUpdater` 或 `electron-updater`。** 当前 macOS endpoint 跳转到 DMG，而不是通过 Squirrel.Mac feed 暴露签名应用 ZIP；Windows release path 也尚未建立无人值守 NSIS 更新所需的 publisher 校验。经确认的下载与 installer 交接可以直接利用现有 service，而不虚构不兼容的 update metadata。
 
 **在 Web renderer 中嵌入终端。** 嵌入式终端需要 renderer UI、preload 与 IPC protocol、pseudo-terminal 所有权、进程 teardown，以及更大的安全面。所需的插件管理工作流只需要一个具有受控环境且由用户显式打开的 system terminal。
 
@@ -68,6 +56,6 @@ Headless terminal 测试会检查生成的 macOS 与 Windows 文件、空格与 
 
 ## 结果
 
-打包后的 DSH Desktop 只有在用户明确确认后才能发现并下载较新的 stable release，同时仍可提供普通 desktop-profile 插件工作流，而无需修改上游 checkout 或削弱 renderer 隔离。macOS 替换仍由用户手工完成；Windows 会在第二次确认后使用下载好的 NSIS 程序安装。生成的 CLI 环境仍只存在于从托盘打开的终端内。
+打包后的 DSH Desktop 可以提供普通 desktop-profile 插件工作流，同时保持上游 checkout 不变、renderer 隔离与全局 shell 状态不变。生成的 CLI 环境只存在于从托盘打开的终端内。
 
-公开 DSH Desktop 版本 service 现在是 release version 的权威来源；各平台 download redirect 则保留为计数用 delivery entry，检查阶段绝不会探测它们。Desktop package 也开始拥有内置 pnpm 版本和生成 shim 行为，这会扩大打包 runtime closure，并且必须持续与 Electron ABI 对齐。Linux 保留兼容模式，但在形成独立平台设计前既没有 installer download path，也没有 desktop 终端。
+Desktop package 拥有内置 pnpm 版本与生成 shim 行为，这会扩大打包 runtime closure，并且必须持续与 Electron ABI 对齐。Linux 保留兼容模式，在形成独立平台设计前没有 desktop 终端。更新结果属于 [Desktop GitHub 更新决策](2026-08-16-desktop-github-updates.zh.md)。

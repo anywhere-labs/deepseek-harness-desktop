@@ -68,7 +68,7 @@ async function start(): Promise<void> {
     {
       prepareToQuit: () => { runtime.prepareToQuit() },
       relaunch: () => { app.relaunch() },
-      exit: code => { app.exit(code) },
+      exit: code => { runtime.finishNativeExit(code) },
     },
     () => { removeShutdownRequests?.() },
   )

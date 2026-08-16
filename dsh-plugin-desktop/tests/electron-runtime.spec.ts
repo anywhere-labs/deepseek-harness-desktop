@@ -2,7 +2,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopShellSpec } from '../src/runtime.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
-const updater = vi.hoisted(() => ({ download: vi.fn() }))
+const electronUpdater = vi.hoisted(() => {
+  const listeners = new Map<string, Array<(...args: unknown[]) => void>>()
+  const autoUpdater = {
+    autoDownload: true,
+    autoInstallOnAppQuit: true,
+    allowPrerelease: true,
+    allowDowngrade: true,
+    disableWebInstaller: false,
+    disableDifferentialDownload: false,
+    checkForUpdates: vi.fn(),
+    downloadUpdate: vi.fn(),
+    quitAndInstall: vi.fn(),
+    on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.set(event, [...(listeners.get(event) ?? []), listener])
+      return autoUpdater
+    }),
+    once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.set(event, [...(listeners.get(event) ?? []), listener])
+      return autoUpdater
+    }),
+    off: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      listeners.set(event, (listeners.get(event) ?? []).filter(candidate => candidate !== listener))
+      return autoUpdater
+    }),
+  }
+  return {
+    autoUpdater,
+    emit(event: string, ...args: unknown[]) {
+      for (const listener of [...(listeners.get(event) ?? [])]) listener(...args)
+    },
+    reset() { listeners.clear() },
+  }
+})
 const childProcess = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
   const listeners = new Map<string, Listener[]>()
@@ -34,11 +66,8 @@ vi.mock('../src/desktop-terminal.ts', async (importOriginal) => ({
   openDesktopTerminal: terminal.open,
 }))
 
-vi.mock('../src/update-download.ts', () => ({
-  downloadDesktopUpdate: updater.download,
-}))
-
 vi.mock('node:child_process', () => ({ spawn: childProcess.spawn }))
+vi.mock('electron-updater', () => ({ default: { autoUpdater: electronUpdater.autoUpdater } }))
 
 const electron = vi.hoisted(() => {
   const browserWindowOptions: unknown[] = []
@@ -86,6 +115,7 @@ const electron = vi.hoisted(() => {
     readonly isMinimized = vi.fn(() => false)
     readonly restore = vi.fn()
     readonly show = vi.fn()
+    readonly hide = vi.fn()
     readonly focus = vi.fn()
     readonly on = browserWindowOn
     readonly off = browserWindowOff
@@ -134,7 +164,9 @@ const electron = vi.hoisted(() => {
       getVersion: vi.fn(() => '43.4.0'),
       isPackaged: false,
       on: vi.fn(),
+      once: vi.fn(),
       off: vi.fn(),
+      exit: vi.fn(),
     },
     appIcon,
     blueIcon,
@@ -210,7 +242,16 @@ describe('Electron compatibility runtime', () => {
     electron.menuTemplates.length = 0
     electron.notifications.length = 0
     childProcess.reset()
+    electronUpdater.reset()
     vi.clearAllMocks()
+    Object.assign(electronUpdater.autoUpdater, {
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      allowPrerelease: true,
+      allowDowngrade: true,
+      disableWebInstaller: false,
+      disableDifferentialDownload: false,
+    })
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
@@ -219,6 +260,7 @@ describe('Electron compatibility runtime', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -474,7 +516,7 @@ describe('Electron compatibility runtime', () => {
         pnpmBinPath: expect.stringMatching(/\/node_modules\/pnpm\/bin\/pnpm\.mjs$/u),
         electronVersion: '43.4.0',
         profileName: 'desktop',
-        productVersion: '2.0.0',
+        productVersion: '2.0.1',
         profileDir: '/tmp/dsh-home/profiles/desktop',
         homeDir: '/tmp/dsh-home',
         stateDir: expect.stringMatching(/^\/tmp\/dsh-desktop-user-data\/cli\/[a-f0-9]{64}$/u),
@@ -528,163 +570,119 @@ describe('Electron compatibility runtime', () => {
     }
   })
 
-  it('uses Electron networking and confirmation-gated macOS update handoff', async () => {
+  it('configures the packaged GitHub updater and keeps release opening bounded', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    const response = Response.json({ version: '2.1.0' })
-    electron.net.fetch.mockResolvedValueOnce(response)
-    updater.download.mockResolvedValueOnce('/tmp/DSH-Desktop-2.1.0-mac.dmg')
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
-
-    await expect(runtime.updates.request('https://www.dshdesktop.cn/api/desktop/version', { method: 'GET' }))
-      .resolves.toBe(response)
-    expect(runtime.updates).toMatchObject({
-      isPackaged: false,
-      canDownload: false,
-      currentVersion: '2.0.0',
-      statePath: '/tmp/dsh-desktop-user-data/updates/state.json',
-    })
     electron.app.isPackaged = true
-    expect(runtime.updates).toMatchObject({ isPackaged: true, canDownload: true })
-
-    await runtime.updates.showManualCheckResult({
-      status: 'up-to-date',
-      currentVersion: '2.0.0',
-      latestVersion: '2.0.0',
-    })
-    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      title: 'DSH Desktop Is Up to Date',
-      detail: 'Installed version: 2.0.0',
-      buttons: ['OK'],
-    }))
-
-    await runtime.updates.showManualCheckResult(null)
-    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      title: 'Unable to Check for Updates',
-      buttons: ['OK'],
-    }))
-
-    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
-    await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(false)
-    expect(updater.download).not.toHaveBeenCalled()
-
-    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false })
-    await expect(runtime.updates.confirmDownload('2.1.0')).resolves.toBe(true)
-    const controller = new AbortController()
-    await runtime.updates.downloadAndOpen('2.1.0', controller.signal)
-    expect(updater.download).toHaveBeenCalledWith({
-      platform: 'darwin',
-      version: '2.1.0',
-      userDataPath: '/tmp/dsh-desktop-user-data',
-      request: expect.any(Function),
-      signal: controller.signal,
-    })
-    expect(electron.shell.openPath).toHaveBeenCalledWith('/tmp/DSH-Desktop-2.1.0-mac.dmg')
-    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      title: 'DSH Desktop Update Downloaded',
-      buttons: ['OK'],
-    }))
-
-    runtime.updates.notify({
-      title: 'Profile Recovered',
-      body: 'Reopened the last-known-good profile.',
-    })
-    const notification = electron.notifications[0]
-    expect(notification?.options).toEqual({
-      title: 'Profile Recovered',
-      body: 'Reopened the last-known-good profile.',
-    })
-    expect(notification?.show).toHaveBeenCalledOnce()
-    expect(notification?.once).not.toHaveBeenCalled()
-  })
-
-  it('starts the downloaded Windows installer before requesting orderly exit', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\DSH-Desktop-2.1.0-windows.exe')
-    const requestQuit = vi.fn()
-    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
-    runtime.schedule({ ...spec, requestQuit })
-
-    const pending = runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
-    await vi.waitFor(() => { expect(childProcess.spawn).toHaveBeenCalledOnce() })
-    expect(childProcess.spawn).toHaveBeenCalledWith(
-      'C:\\Updates\\DSH-Desktop-2.1.0-windows.exe',
-      ['--updated', '--force-run'],
-      {
-        detached: true,
-        stdio: 'ignore',
-        shell: false,
-        windowsHide: false,
+    electronUpdater.autoUpdater.checkForUpdates.mockResolvedValueOnce({
+      updateInfo: {
+        version: '2.1.0',
+        desktopUpdateMode: 'automatic',
+        files: [{ size: 42 }],
       },
-    )
-    expect(requestQuit).not.toHaveBeenCalled()
-    childProcess.emit('spawn')
-    await pending
+    })
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
 
-    expect(childProcess.child.unref).toHaveBeenCalledOnce()
-    expect(requestQuit).toHaveBeenCalledWith(0)
+    expect(electronUpdater.autoUpdater).toMatchObject({
+      autoDownload: false,
+      autoInstallOnAppQuit: false,
+      allowPrerelease: false,
+      allowDowngrade: false,
+      disableWebInstaller: true,
+      disableDifferentialDownload: true,
+    })
+    await expect(runtime.updates.updater?.checkForUpdates()).resolves.toEqual({
+      updateInfo: {
+        version: '2.1.0',
+        desktopUpdateMode: 'automatic',
+        files: [{ size: 42 }],
+      },
+    })
+    await runtime.updates.openReleasePage()
+    await runtime.updates.openReleasePage()
+    expect(electron.shell.openExternal).toHaveBeenCalledOnce()
+    expect(electron.shell.openExternal).toHaveBeenCalledWith(
+      'https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest',
+    )
+
+    runtime.updates.notify({ title: 'Update Available', body: 'Version 2.1.0 is ready.' })
+    expect(electron.notifications[0]?.options).toEqual({
+      title: 'Update Available',
+      body: 'Version 2.1.0 is ready.',
+    })
+    expect(electron.notifications[0]?.show).toHaveBeenCalledOnce()
   })
 
-  it('does not exit when the downloaded Windows installer fails to spawn', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\DSH-Desktop-2.1.0-windows.exe')
+  it('stops the active shell before handing a downloaded update to Electron', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    electron.app.isPackaged = true
     const requestQuit = vi.fn()
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     runtime.schedule({ ...spec, requestQuit })
 
-    const pending = runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
-    await vi.waitFor(() => { expect(childProcess.spawn).toHaveBeenCalledOnce() })
-    childProcess.emit('error', new Error('blocked'))
+    await runtime.updates.requestInstall()
+    await runtime.updates.requestInstall()
+    expect(requestQuit).toHaveBeenCalledOnce()
+    expect(requestQuit).toHaveBeenCalledWith(0)
 
-    await expect(pending).rejects.toThrow('blocked')
-    expect(childProcess.child.unref).not.toHaveBeenCalled()
-    expect(requestQuit).not.toHaveBeenCalled()
+    runtime.finishNativeExit(0)
+    expect(electronUpdater.autoUpdater.quitAndInstall).toHaveBeenCalledOnce()
+    expect(electronUpdater.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+    expect(electron.app.exit).not.toHaveBeenCalled()
+    const beforeQuit = electron.app.once.mock.calls.find(call => call[0] === 'before-quit')?.[1]
+    expect(beforeQuit).toBeTypeOf('function')
+    beforeQuit?.()
   })
 
-  it('keeps a downloaded Windows installer idle when installation is deferred', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    updater.download.mockResolvedValueOnce('C:\\Updates\\DSH-Desktop-2.1.0-windows.exe')
-    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
+  it('uses the ordinary native exit when no update installation was requested', async () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
 
-    await runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal)
+    runtime.finishNativeExit(7)
 
-    expect(childProcess.spawn).not.toHaveBeenCalled()
+    expect(electronUpdater.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+    expect(electron.app.exit).toHaveBeenCalledWith(7)
   })
 
-  it('rejects a macOS handoff when the operating system cannot open the DMG', async () => {
+  it('falls back to a failed exit when native update handoff throws or emits an error', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    updater.download.mockResolvedValueOnce('/tmp/DSH-Desktop-2.1.0-mac.dmg')
-    electron.shell.openPath.mockResolvedValueOnce('Launch Services rejected the image')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    electron.app.isPackaged = true
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
-    const runtime = new ElectronDesktopRuntime(async () => {})
 
-    await expect(runtime.updates.downloadAndOpen('2.1.0', new AbortController().signal))
-      .rejects.toThrow('Launch Services rejected the image')
-    expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
+    const throwing = new ElectronDesktopRuntime(async () => {})
+    throwing.schedule({ ...spec, requestQuit: vi.fn() })
+    await throwing.updates.requestInstall()
+    electronUpdater.autoUpdater.quitAndInstall.mockImplementationOnce(() => { throw new Error('native throw') })
+    throwing.finishNativeExit(0)
+    expect(electron.app.exit).toHaveBeenLastCalledWith(1)
+
+    electron.app.exit.mockClear()
+    const emitting = new ElectronDesktopRuntime(async () => {})
+    emitting.schedule({ ...spec, requestQuit: vi.fn() })
+    await emitting.updates.requestInstall()
+    emitting.finishNativeExit(0)
+    electronUpdater.emit('error', new Error('native event'))
+    expect(electron.app.exit).toHaveBeenCalledWith(1)
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('update install handoff failed'))
   })
 
-  it('does not show macOS completion after the update generation is cancelled', async () => {
+  it('bounds a stalled native update handoff', async () => {
+    vi.useFakeTimers()
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    updater.download.mockResolvedValueOnce('/tmp/DSH-Desktop-2.1.0-mac.dmg')
-    let finishOpen!: (result: string) => void
-    electron.shell.openPath.mockImplementationOnce(async () => new Promise<string>(resolve => {
-      finishOpen = resolve
-    }))
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    electron.app.isPackaged = true
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
-    const controller = new AbortController()
+    runtime.schedule({ ...spec, requestQuit: vi.fn() })
+    await runtime.updates.requestInstall()
 
-    const pending = runtime.updates.downloadAndOpen('2.1.0', controller.signal)
-    await vi.waitFor(() => { expect(electron.shell.openPath).toHaveBeenCalledOnce() })
-    controller.abort()
-    finishOpen('')
+    runtime.finishNativeExit(0)
+    await vi.advanceTimersByTimeAsync(120_000)
 
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
+    expect(electron.app.exit).toHaveBeenCalledWith(1)
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('update install handoff timed out'))
   })
 
   it('uses advanced macOS material options and offers compatibility mode', async () => {

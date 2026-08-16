@@ -18,11 +18,14 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
   build?: {
     productName?: unknown
     appId?: unknown
+    electronUpdaterCompatibility?: unknown
+    extraMetadata?: unknown
+    publish?: unknown
     asarUnpack?: unknown
     afterPack?: unknown
     electronFuses?: unknown
     files?: unknown
-    mac?: { hardenedRuntime?: unknown; icon?: unknown; notarize?: unknown; target?: unknown }
+    mac?: { artifactName?: unknown; hardenedRuntime?: unknown; icon?: unknown; notarize?: unknown; target?: unknown }
     win?: { icon?: unknown; target?: unknown }
     nsis?: Record<string, unknown>
     linux?: { icon?: unknown }
@@ -84,7 +87,10 @@ describe('published package surface', () => {
     expect(manifest.dsh?.client).toEqual({
       platform: 'web',
       inject: [
+        '@deepseek-ai/dsh-client-connection',
+        '@deepseek-ai/dsh-client-locale',
         '@deepseek-ai/dsh-client-runtime',
+        '@deepseek-ai/dsh-client-ui-settings',
         '@deepseek-ai/dsh-client-ui-theme',
       ],
     })
@@ -113,7 +119,8 @@ describe('published package surface', () => {
     expect(config).toContain("pnpm: 'src/pnpm.ts'")
     expect(config).toContain("profiles: 'src/profiles.ts'")
     expect(config).toContain("terminal: 'src/terminal.ts'")
-    expect(config).toContain("'update-download': 'src/update-download.ts'")
+    expect(config).toContain("'update-contract': 'src/update-contract.ts'")
+    expect(config).toContain("'update-controller': 'src/update-controller.ts'")
     expect(config).toContain("updates: 'src/updates.ts'")
   })
 
@@ -136,6 +143,14 @@ describe('published package surface', () => {
     expect(manifest.version).toBe(workspaceManifest.version)
     expect(manifest.build?.productName).toBe('DSH Desktop')
     expect(manifest.build?.appId).toBe('ai.deepseek.dsh.desktop')
+    expect(manifest.build?.electronUpdaterCompatibility).toBe('>=2.16')
+    expect(manifest.build?.extraMetadata).toEqual({ desktopUpdateMode: 'manual' })
+    expect(manifest.build?.publish).toEqual([{
+      provider: 'github',
+      owner: 'anywhere-labs',
+      repo: 'deepseek-harness-desktop',
+      releaseType: 'release',
+    }])
     expect(manifest.build?.asarUnpack).toEqual([
       'package.json',
       'cordis.patch.yml',
@@ -161,6 +176,7 @@ describe('published package surface', () => {
       'package.json',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
+    expect(manifest.build?.mac?.artifactName).toBe('DSH-Desktop-${version}-${arch}.${ext}')
     expect(manifest.build?.win?.icon).toBe('build/app-icon.png')
     expect(manifest.build?.win?.target).toEqual([{
       target: 'nsis',
@@ -190,8 +206,8 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run typecheck')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/package-win.spec.ts')
-    expect(manifest.scripts?.['check:win-package']).toContain('tests/update-checker.spec.ts')
-    expect(manifest.scripts?.['check:win-package']).toContain('tests/update-download.spec.ts')
+    expect(manifest.scripts?.['check:win-package']).toContain('tests/update-controller.spec.ts')
+    expect(manifest.scripts?.['check:win-package']).toContain('tests/updates.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run verify:closure')
     expect(manifest.scripts?.['verify:cli']).toBe('node scripts/verify-cli-runtime.mjs')
     expect(manifest.scripts?.check).toContain('yarn run verify:cli')
@@ -205,6 +221,22 @@ describe('published package surface', () => {
       target: ['dir'],
     }))
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
+    expect(manifest.dependencies?.['electron-updater']).toBe('6.8.9')
+  })
+
+  it('keeps release publication complete, pinned, and separate from verification', () => {
+    const workflow = readFileSync(new URL('../.github/workflows/desktop-release.yml', packageRoot), 'utf8')
+    const publishJob = workflow.slice(workflow.indexOf('\n  publish:'))
+
+    expect(workflow).toContain('git merge-base --is-ancestor "$GITHUB_SHA" origin/master')
+    expect(workflow).toContain('environment: desktop-release-signing')
+    expect(workflow).toContain('desktopUpdateMode')
+    expect(workflow).not.toMatch(/uses:\s+[^\s]+@v\d/gu)
+    expect(publishJob).toContain('contents: write')
+    expect(publishJob).not.toContain('actions/checkout@')
+    expect(publishJob).not.toContain('yarn install')
+    expect(publishJob).toContain('gh release upload')
+    expect(publishJob).toContain('gh release edit')
   })
 
   it('keeps one fixed brand-blue tray source for generated native assets', () => {

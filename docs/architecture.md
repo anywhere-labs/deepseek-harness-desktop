@@ -14,6 +14,7 @@ flowchart LR
   Host --> Upstream[Upstream DSH services]
   Host --> Desktop[Desktop-owned plugins]
   Host --> ThirdParty[Third-party plugins]
+  Desktop --> Releases[正式 GitHub Releases]
   Launcher --> Services[desktopProfiles + desktopPnpm]
   Services --> ThirdParty
 ```
@@ -39,6 +40,8 @@ flowchart LR
 
 兼容模式的 Client face 校验环境后直接返回，不注册 Desktop layout、root、sidebar 或 conversation override。高级模式才安装 Desktop-owned layout、frame 和原生材质，同时尊重上游和第三方 slot 组合。
 
+打包后的 Client 会通过现有 settings 与 overlay slot 增加一个更新设置行和一条 frame 提示。这些组件通过同一个 loopback connection 调用固定的 `/desktop-updates` 方法集合。Host 拥有更新状态与调度；只有 native runtime 持有 `electron-updater`、下载取消、固定外部导航与安装器交接。Renderer 不会获得 Electron IPC 或 preload API。
+
 ## Profile 与服务边界
 
 profile 的名字和绝对目录由 `desktopProfiles.current` 提供，不能从 argv、settings 或 URL 猜测。`list()` 是只读发现；`select()` 记录 pending target，并通过重启完成切换。
@@ -50,6 +53,8 @@ Launcher 私有的 `desktopRuntime`、`desktopPnpmBootstrap`、Electron executab
 ## 打包与运行时闭包
 
 发布包使用 Electron Builder 和 `app.asar`，但需要物理 unpack 的依赖（例如 pnpm、node-pty、Windows ACL/native 文件）会放在 `app.asar.unpacked`。Packaged runtime gate 会检查 ASAR 入口和物理运行时入口，profile fallback 不能把符号链接指向无法被 Node 解析的虚拟 ASAR 路径。
+
+发布工作流会等待两个平台完成，再发布一份完整的正式 GitHub Release。macOS 提供签名并公证的 DMG、ZIP 与 `latest-mac.yml`；Windows 提供 NSIS installer、blockmap 与 `latest.yml`。汇总校验会检查版本、文件集合、大小、SHA-512、平台校验标记与目标安装能力，随后由一个独立的最小任务获得 Release 写权限。
 
 根 workspace 使用 Yarn；固定的 `deepseek-harness/` 子模块保持上游自己的 pnpm workspace。桌面代码、测试、打包配置和发布脚本属于 `dsh-plugin-desktop/`，不修改上游子模块。
 

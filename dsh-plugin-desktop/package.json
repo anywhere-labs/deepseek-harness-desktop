@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "DSH Desktop: an Electron shell composed as a DeepSeek Harness Cordis plugin",
   "license": "MIT",
   "repository": {
@@ -74,7 +74,10 @@
   "dsh": {
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-theme"
       ],
       "platform": "web"
@@ -92,7 +95,7 @@
     "verify:loader": "node scripts/verify-loader-boot.mjs",
     "verify:profile": "node scripts/verify-profile-boot.mjs",
     "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile",
-    "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
+    "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-controller.spec.ts tests/updates.spec.ts tests/verify-win-installer.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
     "start": "node lib/bin.js",
     "dev": "yarn run build && node lib/bin.js",
     "package:dir": "yarn run build && node scripts/package-dir.mjs",
@@ -203,6 +206,8 @@
     "@deepseek-ai/dsh-web-app": "0.1.0-rc.6",
     "@deepseek-ai/dsh-workflow": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "builder-util-runtime": "9.7.0",
+    "electron-updater": "6.8.9",
     "node-addon-require-builtin": "^0.1.4",
     "pnpm": "11.7.0",
     "react": "18.3.1",
@@ -216,8 +221,10 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.0",
     "@types/react": "^18",
+    "@types/semver": "7.8.0",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
+    "lightningcss": "1.33.0",
     "sharp": "0.35.3",
     "tsdown": "0.22.2",
     "typescript": "6.0.3",
@@ -226,6 +233,18 @@
   "build": {
     "appId": "ai.deepseek.dsh.desktop",
     "productName": "DSH Desktop",
+    "electronUpdaterCompatibility": ">=2.16",
+    "extraMetadata": {
+      "desktopUpdateMode": "manual"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "anywhere-labs",
+        "repo": "deepseek-harness-desktop",
+        "releaseType": "release"
+      }
+    ],
     "asar": true,
     "asarUnpack": [
       "package.json",
@@ -258,7 +277,8 @@
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
       "icon": "build/app-icon-mac.png",
-      "notarize": true
+      "notarize": true,
+      "artifactName": "DSH-Desktop-${version}-${arch}.${ext}"
     },
     "win": {
       "target": [

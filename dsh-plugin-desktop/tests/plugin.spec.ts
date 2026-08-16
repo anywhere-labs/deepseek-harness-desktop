@@ -47,13 +47,11 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     platform,
     updates: {
       isPackaged: false,
-      canDownload: platform === 'darwin' || platform === 'win32',
-      currentVersion: '2.0.0',
-      statePath: '/tmp/dsh-desktop-update-state.json',
-      request: async () => new Response(null, { status: 304 }),
-      confirmDownload: async () => false,
-      showManualCheckResult: async () => {},
-      downloadAndOpen: async () => {},
+      currentVersion: '2.0.1',
+      installMode: 'unsupported',
+      createCancellation: () => ({ cancel: () => {} }),
+      requestInstall: async () => {},
+      openReleasePage: async () => {},
       notify: () => {},
     },
     schedule: (spec) => {
@@ -122,12 +120,13 @@ describe('desktop Host plugin', () => {
   })
 
   it('builds the loopback root with validated renderer mode and platform markers', () => {
-    const url = new URL(desktopRendererUrl(43120, 'advanced', 'darwin'))
+    const url = new URL(desktopRendererUrl(43120, 'advanced', 'darwin', true))
     expect(url.origin).toBe('http://127.0.0.1:43120')
     expect(url.pathname).toBe('/')
     expect(Object.fromEntries(url.searchParams)).toEqual({
       'dsh-desktop-mode': 'advanced',
       'dsh-desktop-platform': 'darwin',
+      'dsh-desktop-updates': 'enabled',
     })
   })
 
@@ -146,7 +145,7 @@ describe('desktop Host plugin', () => {
     expect(loaderAwait).not.toHaveBeenCalled()
     expect(harness.shell()).toEqual(expect.objectContaining({
       mode: 'compatibility',
-      url: 'http://127.0.0.1:43120/?dsh-desktop-mode=compatibility&dsh-desktop-platform=darwin',
+      url: 'http://127.0.0.1:43120/?dsh-desktop-mode=compatibility&dsh-desktop-platform=darwin&dsh-desktop-updates=disabled',
       productName: 'DSH Desktop',
       windowTitle: 'DeepSeek Harness Desktop',
       iconPath: expect.stringMatching(/\/build\/app-icon-mac\.png$/u),

@@ -16,17 +16,19 @@ import {
 
 describe('desktop client environment', () => {
   it('accepts the Electron-owned kebab query markers', () => {
-    expect(parseDesktopClientEnvironment('?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin'))
-      .toEqual({ mode: 'advanced', platform: 'darwin' })
-    expect(parseDesktopClientEnvironment('?dsh-desktop-platform=win32&dsh-desktop-mode=compatibility'))
-      .toEqual({ mode: 'compatibility', platform: 'win32' })
+    expect(parseDesktopClientEnvironment('?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin&dsh-desktop-updates=enabled'))
+      .toEqual({ mode: 'advanced', platform: 'darwin', updates: true })
+    expect(parseDesktopClientEnvironment('?dsh-desktop-platform=win32&dsh-desktop-mode=compatibility&dsh-desktop-updates=disabled'))
+      .toEqual({ mode: 'compatibility', platform: 'win32', updates: false })
   })
 
   it.each([
     ['', 'dsh-desktop-mode'],
-    ['?dsh-desktop-mode=glass&dsh-desktop-platform=darwin', 'dsh-desktop-mode'],
-    ['?dsh-desktop-mode=advanced', 'dsh-desktop-platform'],
-    ['?dsh-desktop-mode=advanced&dsh-desktop-platform=android', 'dsh-desktop-platform'],
+    ['?dsh-desktop-mode=glass&dsh-desktop-platform=darwin&dsh-desktop-updates=enabled', 'dsh-desktop-mode'],
+    ['?dsh-desktop-mode=advanced&dsh-desktop-updates=enabled', 'dsh-desktop-platform'],
+    ['?dsh-desktop-mode=advanced&dsh-desktop-platform=android&dsh-desktop-updates=enabled', 'dsh-desktop-platform'],
+    ['?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin', 'dsh-desktop-updates'],
+    ['?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin&dsh-desktop-updates=maybe', 'dsh-desktop-updates'],
   ])('fails loud for malformed marker %s', (search, field) => {
     expect(() => parseDesktopClientEnvironment(search)).toThrow(field)
   })

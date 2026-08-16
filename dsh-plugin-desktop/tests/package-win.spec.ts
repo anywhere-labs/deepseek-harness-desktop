@@ -29,6 +29,7 @@ function options(calls: CommandCall[], logs: string[] = []): WindowsPackageOptio
     commandShell: 'C:\\Windows\\System32\\cmd.exe',
     builderCli: 'C:\\repo\\node_modules\\electron-builder\\cli.js',
     verifier: 'C:\\repo\\dsh-plugin-desktop\\scripts\\verify-win-installer.ts',
+    metadataMarker: 'C:\\repo\\dsh-plugin-desktop\\scripts\\mark-update-metadata.ts',
     nodeExecutable: 'C:\\Program Files\\nodejs\\node.exe',
     run: (command, args, cwd, env) => {
       calls.push({ command, args: [...args], cwd, env: { ...env } })
@@ -38,13 +39,13 @@ function options(calls: CommandCall[], logs: string[] = []): WindowsPackageOptio
 }
 
 describe('Windows x64 installer packaging', () => {
-  it('checks without credentials, builds an unsigned NSIS target, then verifies it', () => {
+  it('checks without credentials, builds a manual NSIS target, marks metadata, then verifies it', () => {
     const calls: CommandCall[] = []
     const logs: string[] = []
 
     packageWindowsInstaller(options(calls, logs))
 
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
     expect(calls[0]).toEqual({
       command: 'C:\\Windows\\System32\\cmd.exe',
       args: [
@@ -65,6 +66,7 @@ describe('Windows x64 installer packaging', () => {
         '--x64',
         '--publish',
         'never',
+        '--config.extraMetadata.desktopUpdateMode=manual',
         '--config.win.signExecutable=false',
         '--config.npmRebuild=false',
       ],
@@ -77,13 +79,59 @@ describe('Windows x64 installer packaging', () => {
     })
     expect(calls[2]).toEqual({
       command: 'C:\\Program Files\\nodejs\\node.exe',
+      args: [
+        'C:\\repo\\dsh-plugin-desktop\\scripts\\mark-update-metadata.ts',
+        'dist/latest.yml',
+        'manual',
+      ],
+      cwd: 'C:\\repo\\dsh-plugin-desktop',
+      env: { PATH: 'C:\\Windows\\System32', SAFE_VALUE: 'kept' },
+    })
+    expect(calls[3]).toEqual({
+      command: 'C:\\Program Files\\nodejs\\node.exe',
       args: ['C:\\repo\\dsh-plugin-desktop\\scripts\\verify-win-installer.ts'],
       cwd: 'C:\\repo\\dsh-plugin-desktop',
       env: { PATH: 'C:\\Windows\\System32', SAFE_VALUE: 'kept' },
     })
     expect(logs).toEqual([
-      'Building an unsigned Windows x64 installer; Authenticode is a separate release step.',
+      'Building an unsigned Windows x64 installer with GitHub download fallback.',
     ])
+  })
+
+  it('keeps signing credentials scoped to an automatic updater build', () => {
+    const calls: CommandCall[] = []
+    const value = options(calls)
+    packageWindowsInstaller({
+      ...value,
+      env: {
+        ...value.env,
+        CSC_KEY_PASSWORD: 'private-generic-password',
+        DSH_WINDOWS_UPDATE_MODE: 'automatic',
+      },
+    })
+
+    expect(calls).toHaveLength(4)
+    expect(calls[0]?.env.CSC_LINK).toBeUndefined()
+    expect(calls[1]?.args).toContain('--config.forceCodeSigning=true')
+    expect(calls[1]?.args).toContain('--config.extraMetadata.desktopUpdateMode=automatic')
+    expect(calls[1]?.env.CSC_LINK).toBe('private-generic-certificate')
+    expect(calls[2]?.env.CSC_LINK).toBeUndefined()
+    expect(calls[2]?.args).toEqual([
+      'C:\\repo\\dsh-plugin-desktop\\scripts\\mark-update-metadata.ts',
+      'dist/latest.yml',
+      'automatic',
+    ])
+    expect(calls[3]?.env.CSC_LINK).toBeUndefined()
+  })
+
+  it('rejects automatic mode without complete signing credentials', () => {
+    const calls: CommandCall[] = []
+    const value = options(calls)
+    expect(() => packageWindowsInstaller({
+      ...value,
+      env: { PATH: value.env.PATH, DSH_WINDOWS_UPDATE_MODE: 'automatic' },
+    })).toThrow('require CSC_LINK and CSC_KEY_PASSWORD')
+    expect(calls).toEqual([])
   })
 
   it.each([

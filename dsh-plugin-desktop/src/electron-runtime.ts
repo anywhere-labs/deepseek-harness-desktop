@@ -7,15 +7,18 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
-  net,
   Notification,
   shell,
   Tray,
 } from 'electron'
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { stat, statfs } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CancellationToken } from 'builder-util-runtime'
+import electronUpdater from 'electron-updater'
 import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-terminal.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import type {
@@ -31,9 +34,28 @@ import type {
   DesktopUpdateAdapter,
 } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
-import { downloadDesktopUpdate } from './update-download.ts'
-import type { UpdateCheckResult } from './update-checker.ts'
+import {
+  DesktopUpdateFailure,
+  MAX_AUTOMATIC_UPDATE_BYTES,
+  type DesktopUpdaterAdapter,
+} from './update-controller.ts'
+import {
+  DESKTOP_RELEASE_URL,
+  type DesktopUpdateInstallMode,
+} from './update-contract.ts'
 import { desktopWindowOptions } from './window-options.ts'
+
+const { autoUpdater } = electronUpdater
+const UPDATE_DISK_RESERVE_BYTES = 512 * 1024 * 1024
+const UPDATE_INSTALL_HANDOFF_TIMEOUT_MS = 120_000
+
+/** Match electron-updater's platform cache root for capacity checks. */
+function updaterCacheBase(): string {
+  const home = homedir()
+  if (process.platform === 'win32') return process.env.LOCALAPPDATA ?? join(home, 'AppData', 'Local')
+  if (process.platform === 'darwin') return join(home, 'Library', 'Caches')
+  return process.env.XDG_CACHE_HOME ?? join(home, '.cache')
+}
 
 /** Return the presentation mode opposite the active generation. */
 export function nextDesktopShellMode(mode: DesktopShellSpec['mode']): DesktopShellSpec['mode'] {
@@ -53,11 +75,36 @@ export function modeToggleLabel(mode: DesktopShellSpec['mode']): string {
  * @returns validated desktop product version.
  */
 export function desktopProductVersion(moduleUrl: string = import.meta.url): string {
-  const value: unknown = JSON.parse(readFileSync(new URL('../package.json', moduleUrl), 'utf8'))
-  if (value === null || typeof value !== 'object' || typeof (value as { version?: unknown }).version !== 'string') {
+  const value = desktopProductManifest(moduleUrl)
+  if (typeof value.version !== 'string') {
     throw new Error('dsh-plugin-desktop: package.json has no product version')
   }
-  return (value as { version: string }).version
+  return value.version
+}
+
+/**
+ * Read the updater capability embedded by the release build.
+ * @param moduleUrl - module below the package's `src` or `lib` directory.
+ * @param packaged - whether the running application is packaged.
+ * @param platform - current Electron platform.
+ * @returns installation capability safe for this running artifact.
+ */
+export function desktopProductUpdateMode(
+  moduleUrl: string = import.meta.url,
+  packaged = app.isPackaged,
+  platform: NodeJS.Platform = process.platform,
+): DesktopUpdateInstallMode {
+  if (!packaged) return 'unsupported'
+  if (platform !== 'darwin' && platform !== 'win32') return 'manual'
+  return desktopProductManifest(moduleUrl).desktopUpdateMode === 'automatic' ? 'automatic' : 'manual'
+}
+
+function desktopProductManifest(moduleUrl: string): { version?: unknown; desktopUpdateMode?: unknown } {
+  const value: unknown = JSON.parse(readFileSync(new URL('../package.json', moduleUrl), 'utf8'))
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('dsh-plugin-desktop: package.json is not an object')
+  }
+  return value as { version?: unknown; desktopUpdateMode?: unknown }
 }
 
 const PRODUCT_VERSION = desktopProductVersion()
@@ -65,17 +112,7 @@ const PRODUCT_VERSION = desktopProductVersion()
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
   readonly platform: DesktopPlatform
-  readonly updates: DesktopUpdateAdapter = {
-    get isPackaged() { return app.isPackaged },
-    get canDownload() { return app.isPackaged && (process.platform === 'darwin' || process.platform === 'win32') },
-    get currentVersion() { return PRODUCT_VERSION },
-    get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },
-    request: (url, init) => net.fetch(url, init),
-    confirmDownload: version => this.confirmUpdateDownload(version),
-    showManualCheckResult: result => this.showManualUpdateCheckResult(result),
-    downloadAndOpen: (version, signal) => this.downloadAndOpenUpdate(version, signal),
-    notify: notification => { this.showNotification(notification) },
-  }
+  readonly updates: DesktopUpdateAdapter
 
   private window: BrowserWindow | undefined
   private tray: Tray | undefined
@@ -83,6 +120,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private mountTask: Promise<void> | undefined
   private release: (() => Promise<void>) | undefined
   private quitting = false
+  private updateInstallRequested = false
+  private releasePageOpened = false
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
 
@@ -91,6 +130,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       throw new Error(`dsh-plugin-desktop: unsupported Electron platform ${process.platform}`)
     }
     this.platform = process.platform
+    this.updates = this.createDesktopUpdateAdapter()
   }
 
   /** @inheritdoc */
@@ -263,136 +303,128 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     nativeNotification.show()
   }
 
-  /** Ask before making the fixed download endpoint's counted request. */
-  private async confirmUpdateDownload(version: string): Promise<boolean> {
-    const result = await dialog.showMessageBox({
-      type: 'info',
-      title: 'DSH Desktop Update Available',
-      message: `DSH Desktop ${version} is available.`,
-      detail: 'Download this update now?',
-      buttons: ['Download', 'Later'],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-    })
-    return result.response === 0
+  /** Build the Electron updater surface once for this process. */
+  private createDesktopUpdateAdapter(): DesktopUpdateAdapter {
+    const updater = this.createUpdaterAdapter()
+    return {
+      get isPackaged() { return app.isPackaged },
+      get currentVersion() { return PRODUCT_VERSION },
+      get installMode() { return desktopProductUpdateMode() },
+      ...(updater === undefined ? {} : { updater }),
+      createCancellation: () => new CancellationToken(),
+      requestInstall: async () => { await this.requestUpdateInstall() },
+      openReleasePage: async () => { await this.openUpdateReleasePage() },
+      notify: notification => { this.showNotification(notification) },
+    }
   }
 
-  /** Report one user-triggered check without exposing network or response details. */
-  private async showManualUpdateCheckResult(result: UpdateCheckResult | null): Promise<void> {
-    if (result === null) {
-      await dialog.showMessageBox({
-        type: 'warning',
-        title: 'Unable to Check for Updates',
-        message: 'DSH Desktop could not check for updates.',
-        detail: 'Please try again later.',
-        buttons: ['OK'],
-        defaultId: 0,
-        noLink: true,
-      })
-      return
+  /** Restrict electron-updater to stable GitHub releases and bounded full downloads. */
+  private createUpdaterAdapter(): DesktopUpdaterAdapter | undefined {
+    if (!app.isPackaged || (this.platform !== 'darwin' && this.platform !== 'win32')) return undefined
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = false
+    autoUpdater.allowPrerelease = false
+    autoUpdater.allowDowngrade = false
+    autoUpdater.disableWebInstaller = true
+    autoUpdater.disableDifferentialDownload = true
+    const updaterEvents = autoUpdater as unknown as {
+      on(event: string, listener: (...args: unknown[]) => void): void
+      off(event: string, listener: (...args: unknown[]) => void): void
     }
-
-    if (result.status === 'up-to-date') {
-      await dialog.showMessageBox({
-        type: 'info',
-        title: 'DSH Desktop Is Up to Date',
-        message: 'No newer version of DSH Desktop is available.',
-        detail: `Installed version: ${result.currentVersion}`,
-        buttons: ['OK'],
-        defaultId: 0,
-        noLink: true,
-      })
-      return
+    return {
+      on(event, listener) { updaterEvents.on(event, listener) },
+      off(event, listener) { updaterEvents.off(event, listener) },
+      async checkForUpdates() {
+        const result = await autoUpdater.checkForUpdates()
+        if (result === null) return null
+        const info = result.updateInfo as typeof result.updateInfo & { readonly desktopUpdateMode?: unknown }
+        return {
+          updateInfo: {
+            version: info.version,
+            ...(info.desktopUpdateMode === undefined ? {} : { desktopUpdateMode: info.desktopUpdateMode }),
+            files: info.files.map(file => ({ size: file.size })),
+          },
+        }
+      },
+      async downloadUpdate(cancellation, expectedBytes) {
+        const cacheStats = await statfs(updaterCacheBase())
+        const availableBytes = BigInt(cacheStats.bavail) * BigInt(cacheStats.bsize)
+        const requiredBytes = BigInt(
+          Math.max(expectedBytes * 2, MAX_AUTOMATIC_UPDATE_BYTES * 2) + UPDATE_DISK_RESERVE_BYTES,
+        )
+        if (availableBytes < requiredBytes) {
+          throw new DesktopUpdateFailure(
+            'insufficient-space',
+            'Insufficient disk space for an automatic update.',
+          )
+        }
+        const downloadedFiles = await autoUpdater.downloadUpdate(cancellation as CancellationToken)
+        const downloadedStats = await Promise.all(downloadedFiles.map(async path => await stat(path)))
+        if (downloadedStats.some(value => value.size > MAX_AUTOMATIC_UPDATE_BYTES)) {
+          throw new DesktopUpdateFailure(
+            'download-too-large',
+            'The downloaded update exceeded the automatic download limit.',
+          )
+        }
+      },
     }
-
-    await dialog.showMessageBox({
-      type: 'info',
-      title: 'DSH Desktop Update Available',
-      message: `DSH Desktop ${result.latestVersion} is available.`,
-      detail: 'Installer downloads are unavailable in this build.',
-      buttons: ['OK'],
-      defaultId: 0,
-      noLink: true,
-    })
   }
 
-  /** Download a confirmed installer and hand it to the native installation flow. */
-  private async downloadAndOpenUpdate(version: string, signal: AbortSignal): Promise<void> {
-    if (this.platform !== 'darwin' && this.platform !== 'win32') {
-      throw new Error(`dsh-plugin-desktop: updates are unavailable on ${this.platform}`)
-    }
-    const artifactPath = await downloadDesktopUpdate({
-      platform: this.platform,
-      version,
-      userDataPath: app.getPath('userData'),
-      request: (url, init) => net.fetch(url, init),
-      signal,
-    })
-    signal.throwIfAborted()
-
-    if (this.platform === 'darwin') {
-      const openError = await shell.openPath(artifactPath)
-      if (openError !== '') throw new Error(`dsh-plugin-desktop: failed to open update disk image: ${openError}`)
-      signal.throwIfAborted()
-      await dialog.showMessageBox({
-        type: 'info',
-        title: 'DSH Desktop Update Downloaded',
-        message: `DSH Desktop ${version} is ready to install.`,
-        detail: 'The disk image has opened. Replace DSH Desktop in Applications, then reopen it.',
-        buttons: ['OK'],
-        defaultId: 0,
-        noLink: true,
-      })
-      return
-    }
-
-    const result = await dialog.showMessageBox({
-      type: 'info',
-      title: 'DSH Desktop Update Downloaded',
-      message: `DSH Desktop ${version} is ready to install.`,
-      detail: 'Restart DSH Desktop and run the installer now?',
-      buttons: ['Restart and Install', 'Later'],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-    })
-    if (result.response !== 0) return
-
+  /** Begin Host teardown before native update handoff. */
+  private async requestUpdateInstall(): Promise<void> {
     const spec = this.scheduled
     if (spec === undefined) throw new Error('dsh-plugin-desktop: no active shell can exit for update installation')
-    signal.throwIfAborted()
-    await this.launchWindowsUpdateInstaller(artifactPath)
+    if (this.updateInstallRequested) return
+    this.updateInstallRequested = true
     this.quitting = true
+    this.window?.hide()
     spec.requestQuit(0)
   }
 
-  /** Start the downloaded NSIS installer before releasing the current process. */
-  private async launchWindowsUpdateInstaller(installerPath: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      let child: ReturnType<typeof spawn>
-      try {
-        child = spawn(installerPath, ['--updated', '--force-run'], {
-          detached: true,
-          stdio: 'ignore',
-          shell: false,
-          windowsHide: false,
-        })
-      } catch (cause) {
-        reject(cause)
-        return
-      }
-      const fail = (cause: Error): void => { reject(cause) }
-      child.once('error', fail)
-      child.once('spawn', () => {
-        child.off('error', fail)
-        child.once('error', cause => {
-          process.stderr.write(`dsh-plugin-desktop: update installer failed after launch: ${cause.message}\n`)
-        })
-        child.unref()
-        resolve()
-      })
-    })
+  /** Open the fixed public release page at most once per application lifetime. */
+  private async openUpdateReleasePage(): Promise<void> {
+    if (this.releasePageOpened) return
+    this.releasePageOpened = true
+    try {
+      await shell.openExternal(DESKTOP_RELEASE_URL)
+    } catch (cause) {
+      this.releasePageOpened = false
+      throw cause
+    }
+  }
+
+  /** Complete ordinary exit or hand a downloaded update to electron-updater. */
+  finishNativeExit(code: number): void {
+    if (!this.updateInstallRequested || code !== 0) {
+      app.exit(code)
+      return
+    }
+    const fallback = (cause: unknown): void => {
+      process.stderr.write(
+        `dsh-plugin-desktop: update install handoff failed: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+      )
+      app.exit(1)
+    }
+    const timeout = setTimeout(() => {
+      fallback(new Error('update install handoff timed out'))
+    }, UPDATE_INSTALL_HANDOFF_TIMEOUT_MS)
+    const release = (): void => {
+      clearTimeout(timeout)
+      autoUpdater.off('error', fail)
+      app.off('before-quit', release)
+    }
+    const fail = (cause: Error): void => {
+      release()
+      fallback(cause)
+    }
+    autoUpdater.once('error', fail)
+    app.once('before-quit', release)
+    try {
+      autoUpdater.quitAndInstall(false, true)
+    } catch (cause) {
+      release()
+      fallback(cause)
+    }
   }
 
   /** Keep native-terminal launch failures visible in a packaged GUI process. */

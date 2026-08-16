@@ -14,6 +14,7 @@ flowchart LR
   Host --> Upstream[Upstream DSH services]
   Host --> Desktop[Desktop-owned plugins]
   Host --> ThirdParty[Third-party plugins]
+  Desktop --> Releases[Stable GitHub Releases]
   Launcher --> Services[desktopProfiles + desktopPnpm]
   Services --> ThirdParty
 ```
@@ -39,6 +40,8 @@ Every profile or mode switch disposes the current generation before starting the
 
 Compatibility mode validates its environment and returns without installing a Desktop layout, root, sidebar, or conversation override. Advanced mode installs the Desktop-owned layout, frame, and native materials while respecting upstream and third-party slot composition.
 
+The packaged Client adds one update row and one frame notice through existing settings and overlay slots. These components call a fixed `/desktop-updates` method set over the same loopback connection. The Host owns update state and scheduling; the native runtime alone owns `electron-updater`, download cancellation, fixed external navigation, and installer handoff. No Electron IPC or preload API enters the renderer.
+
 ## Profile and service boundaries
 
 The profile name and absolute directory come from `desktopProfiles.current`; they must not be inferred from argv, settings, or a URL. `list()` is read-only discovery. `select()` records a pending target and completes the switch through restart.
@@ -50,6 +53,8 @@ The launcher-private `desktopRuntime`, `desktopPnpmBootstrap`, Electron executab
 ## Packaging and runtime closure
 
 Release artifacts use Electron Builder and `app.asar`, while dependencies that must be physical (for example pnpm, node-pty, and Windows ACL/native files) live under `app.asar.unpacked`. The packaged-runtime gate checks both archive entries and physical runtime entries; profile fallback links must not target virtual ASAR paths that Node cannot resolve.
+
+The release workflow publishes one complete stable GitHub Release only after both platforms finish. macOS contributes a signed and notarized DMG, ZIP, and `latest-mac.yml`; Windows contributes an NSIS installer, blockmap, and `latest.yml`. The aggregate verifier checks version, file set, size, SHA-512, platform verification markers, and target installation capability before a separate minimal job receives release-write permission.
 
 The outer workspace uses Yarn. The pinned `deepseek-harness/` submodule keeps its own pnpm workspace. Desktop source, tests, packaging, and release scripts belong to `dsh-plugin-desktop/`; the upstream submodule is not edited from Desktop branches.
 

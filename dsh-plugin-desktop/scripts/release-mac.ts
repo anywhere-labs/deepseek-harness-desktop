@@ -1,4 +1,4 @@
-/** Build a signed and notarized macOS DMG from validated release credentials. */
+/** Build signed and notarized macOS updater artifacts from validated release credentials. */
 
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
@@ -81,9 +81,13 @@ export function releaseMac(options: MacReleaseOptions = defaultReleaseOptions())
   // material is withheld from every build, test, Loader smoke, and layout subprocess.
   options.run('yarn', ['run', 'check'], resolve(options.desktopRoot, '..'), buildEnvironment)
   options.run('yarn', [
-    'exec', 'electron-builder', '--mac', 'dmg',
+    'exec', 'electron-builder', '--mac', 'dmg', 'zip', '--arm64', '--publish', 'never',
     '--config.forceCodeSigning=true', '--config.mac.notarize=true',
+    '--config.extraMetadata.desktopUpdateMode=automatic',
   ], options.desktopRoot, releaseEnvironment)
+  options.run(process.execPath, [
+    'scripts/mark-update-metadata.ts', 'dist/latest-mac.yml', 'automatic',
+  ], options.desktopRoot, buildEnvironment)
   options.run(process.execPath, ['scripts/verify-mac-release.ts'], options.desktopRoot, buildEnvironment)
 }
 

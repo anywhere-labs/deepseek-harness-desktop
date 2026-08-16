@@ -1,0 +1,209 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: node dsh-plugin-desktop/scripts/verify-release-version.ts "${GITHUB_REF_NAME}"
+      - name: Verify the tag commit belongs to the release branch
+        run: |
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+
+  macos:
+    needs: [validate]
+    runs-on: macos-14
+    environment: desktop-release-signing
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: yarn install --immutable
+      - name: Build signed and notarized macOS updater artifacts
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: yarn dist:mac
+      - name: Verify macOS updater files
+        working-directory: dsh-plugin-desktop/dist
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          test -s "DSH-Desktop-${VERSION}-arm64.dmg"
+          test -s "DSH-Desktop-${VERSION}-arm64.zip"
+          test -s latest-mac.yml
+          grep -qx 'desktopUpdateMode: automatic' latest-mac.yml
+          test -s "mac-arm64/DSH Desktop.app/Contents/Resources/app-update.yml"
+          printf '%s\n' 'signed=true' 'notarized=true' > macos-verified.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-macos
+          path: |
+            dsh-plugin-desktop/dist/DSH-Desktop-*.dmg
+            dsh-plugin-desktop/dist/DSH-Desktop-*.zip
+            dsh-plugin-desktop/dist/latest-mac.yml
+            dsh-plugin-desktop/dist/macos-verified.txt
+          if-no-files-found: error
+
+  windows:
+    needs: [validate]
+    runs-on: windows-latest
+    environment: desktop-release-signing
+    env:
+      DSH_WINDOWS_UPDATE_MODE: ${{ vars.DSH_WINDOWS_SIGNING_ENABLED == 'true' && 'automatic' || 'manual' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: yarn install --immutable
+      - name: Build Windows NSIS updater artifacts
+        env:
+          CSC_LINK: ${{ vars.DSH_WINDOWS_SIGNING_ENABLED == 'true' && secrets.WINDOWS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ vars.DSH_WINDOWS_SIGNING_ENABLED == 'true' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
+        run: yarn dist:win
+      - name: Verify Windows signature mode and updater files
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $installer = "dsh-plugin-desktop/dist/DSH-Desktop-$version-x64-Setup.exe"
+          $application = 'dsh-plugin-desktop/dist/win-unpacked/DSH Desktop.exe'
+          $signature = Get-AuthenticodeSignature $installer
+          $applicationSignature = Get-AuthenticodeSignature $application
+          if ($env:DSH_WINDOWS_UPDATE_MODE -eq 'automatic') {
+            if ($signature.Status -ne 'Valid') { throw "Windows installer signature is $($signature.Status)" }
+            if ($applicationSignature.Status -ne 'Valid') { throw "Windows application signature is $($applicationSignature.Status)" }
+            if (-not (Select-String -Path dsh-plugin-desktop/dist/win-unpacked/resources/app-update.yml -Pattern '^publisherName:' -Quiet)) {
+              throw 'Windows updater publisherName is missing'
+            }
+            "signed=true" | Set-Content dsh-plugin-desktop/dist/windows-verified.txt
+          } else {
+            if ($signature.Status -ne 'NotSigned') { throw "Manual Windows installer signature is $($signature.Status), expected NotSigned" }
+            if ($applicationSignature.Status -ne 'NotSigned') { throw "Manual Windows application signature is $($applicationSignature.Status), expected NotSigned" }
+            "signed=false`ninstall=manual" | Set-Content dsh-plugin-desktop/dist/windows-verified.txt
+          }
+          if (-not (Test-Path "$installer.blockmap")) { throw 'Windows blockmap is missing' }
+          if (-not (Test-Path dsh-plugin-desktop/dist/latest.yml)) { throw 'latest.yml is missing' }
+          if (-not (Test-Path dsh-plugin-desktop/dist/win-unpacked/resources/app-update.yml)) { throw 'app-update.yml is missing' }
+          if (-not (Select-String -Path dsh-plugin-desktop/dist/latest.yml -Pattern "^desktopUpdateMode: $env:DSH_WINDOWS_UPDATE_MODE$" -Quiet)) {
+            throw 'Windows updater metadata mode is incorrect'
+          }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-windows
+          path: |
+            dsh-plugin-desktop/dist/DSH-Desktop-*-Setup.exe
+            dsh-plugin-desktop/dist/DSH-Desktop-*-Setup.exe.blockmap
+            dsh-plugin-desktop/dist/latest.yml
+            dsh-plugin-desktop/dist/windows-verified.txt
+          if-no-files-found: error
+
+  verify-release:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: yarn install --immutable
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: desktop-*
+          path: desktop-artifacts
+          merge-multiple: true
+      - name: Verify complete release and generate hashes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node dsh-plugin-desktop/scripts/verify-update-artifacts.ts desktop-artifacts "$VERSION" desktop-artifacts/SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-release-complete
+          path: |
+            desktop-artifacts/DSH-Desktop-*.dmg
+            desktop-artifacts/DSH-Desktop-*.zip
+            desktop-artifacts/latest-mac.yml
+            desktop-artifacts/DSH-Desktop-*-Setup.exe
+            desktop-artifacts/DSH-Desktop-*-Setup.exe.blockmap
+            desktop-artifacts/latest.yml
+            desktop-artifacts/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    needs: [verify-release]
+    runs-on: ubuntu-latest
+    environment: desktop-release-publish
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-release-complete
+          path: desktop-artifacts
+      - name: Publish the complete stable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSETS=(
+            "desktop-artifacts/DSH-Desktop-${VERSION}-arm64.dmg"
+            "desktop-artifacts/DSH-Desktop-${VERSION}-arm64.zip"
+            desktop-artifacts/latest-mac.yml
+            "desktop-artifacts/DSH-Desktop-${VERSION}-x64-Setup.exe"
+            "desktop-artifacts/DSH-Desktop-${VERSION}-x64-Setup.exe.blockmap"
+            desktop-artifacts/latest.yml
+            desktop-artifacts/SHA256SUMS
+          )
+          if IS_DRAFT="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$IS_DRAFT" != true ]; then
+              echo "release $GITHUB_REF_NAME is already public; refusing to replace it" >&2
+              exit 1
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${ASSETS[@]}"
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest

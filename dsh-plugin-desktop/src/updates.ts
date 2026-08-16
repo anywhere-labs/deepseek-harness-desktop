@@ -1,24 +1,23 @@
-/** Cordis Host plugin for scheduled and interactive DSH Desktop updates. */
+/** Cordis Host plugin for scheduled and interactive GitHub desktop updates. */
 
-import { open } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import z from '@deepseek-ai/schemastery'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from './runtime.ts'
+import { createDesktopUpdateController } from './update-controller.ts'
 import {
-  checkForStableUpdate,
-  parseSemVer,
-  type UpdateCheckResult,
-} from './update-checker.ts'
+  DESKTOP_UPDATE_RPC_CHANNEL,
+  type DesktopUpdateRpcMethod,
+  type DesktopUpdateState,
+} from './update-contract.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-updates'
 
-/** Native adapter required for network, tray, confirmation, and installer access. */
-export const inject = ['desktopRuntime']
+/** Native and loopback services required for update coordination. */
+export const inject = ['desktopRuntime', 'connection']
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647
-const MAX_STATE_BYTES = 4 * 1024
 
 /** Scheduled update policy. */
 export interface Config {
@@ -28,8 +27,6 @@ export interface Config {
   initialDelayMs: number
   /** Delay between completion of one background check and the next attempt. */
   intervalMs: number
-  /** Maximum duration of one version request before caller-owned cancellation. */
-  requestTimeoutMs: number
 }
 
 /** Validated scheduled update policy. */
@@ -37,173 +34,94 @@ export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true),
   initialDelayMs: z.number().step(1).min(0).max(MAX_TIMER_DELAY_MS).default(60_000),
   intervalMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(6 * 60 * 60 * 1000),
-  requestTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(15_000),
 })
 
-interface UpdateStateV2 {
-  readonly version: 2
-  readonly lastPromptedVersion?: string
-}
-
-const EMPTY_STATE: UpdateStateV2 = { version: 2 }
-
 /**
- * Register effect-scoped update polling and its dynamic tray command.
- * @param ctx - Host context carrying the desktop native adapter.
- * @param config - validated polling and timeout values.
+ * Register update polling, the loopback RPC channel, and its dynamic tray command.
+ * @param ctx - Host context carrying the native updater and Connection transport.
+ * @param config - validated polling values.
  */
 export function apply(ctx: Context, config: Config): void {
   const adapter = ctx.desktopRuntime.updates
   ctx.effect(() => {
     let disposed = false
-    let checking = false
-    let availableVersion: string | undefined
-    let downloadingVersion: string | undefined
-    let state: UpdateStateV2 = EMPTY_STATE
     let pollTimer: ReturnType<typeof setTimeout> | undefined
-    let requestTimer: ReturnType<typeof setTimeout> | undefined
-    let requestController: AbortController | undefined
-    let downloadController: AbortController | undefined
-    let inFlight: Promise<UpdateCheckResult | null> | undefined
-    let manualTask: Promise<void> | undefined
-    let downloadTask: Promise<void> | undefined
-    let refreshTray = (): void => {}
+    let notifiedAvailableVersion: string | undefined
+    let notifiedDownloadedVersion: string | undefined
 
-    const persistState = async (): Promise<void> => {
-      try {
-        await writeFileAtomic(adapter.statePath, renderState(state), {
-          mode: 0o600,
-          dirMode: 0o700,
+    const controller = createDesktopUpdateController({
+      currentVersion: adapter.currentVersion,
+      installMode: adapter.installMode,
+      ...(adapter.updater === undefined ? {} : { updater: adapter.updater }),
+      createCancellation: adapter.createCancellation,
+      requestInstall: adapter.requestInstall,
+    })
+
+    const invokeTray = async (): Promise<void> => {
+      const state = controller.getState()
+      if (state.phase === 'available') {
+        if (state.installMode === 'automatic') await controller.download()
+        else await adapter.openReleasePage()
+        return
+      }
+      if (state.phase === 'downloading') {
+        await controller.cancel()
+        return
+      }
+      if (state.phase === 'downloaded') {
+        await controller.install()
+        return
+      }
+      if (state.phase === 'unsupported') {
+        await adapter.openReleasePage()
+        return
+      }
+      await controller.check()
+    }
+
+    const registration = ctx.desktopRuntime.registerTrayItem({
+      group: 'status',
+      order: 10,
+      label: () => trayLabel(controller.getState()),
+      invoke: invokeTray,
+    })
+
+    const stopObserving = controller.subscribe((state) => {
+      registration.refresh()
+      if (state.phase === 'available'
+        && state.availableVersion !== undefined
+        && notifiedAvailableVersion !== state.availableVersion) {
+        notifiedAvailableVersion = state.availableVersion
+        adapter.notify({
+          title: 'DSH Desktop Update Available',
+          body: `Version ${state.availableVersion} is ready to download.`,
         })
-      } catch {
-        // Update state is optional; failures must not affect application startup or user activity.
       }
-    }
-
-    const stateReady = (async () => {
-      try {
-        state = parseState(await readState(adapter.statePath))
-      } catch (cause) {
-        if (isEnoent(cause)) return
-        state = EMPTY_STATE
-        if (!disposed) await persistState()
+      if (state.phase === 'downloaded'
+        && state.availableVersion !== undefined
+        && notifiedDownloadedVersion !== state.availableVersion) {
+        notifiedDownloadedVersion = state.availableVersion
+        adapter.notify({
+          title: 'DSH Desktop Update Ready',
+          body: `Restart DSH Desktop to install version ${state.availableVersion}.`,
+        })
       }
-    })()
+    })
 
-    const rememberPrompt = async (version: string): Promise<void> => {
-      await stateReady
-      if (state.lastPromptedVersion === version) return
-      state = { version: 2, lastPromptedVersion: version }
-      await persistState()
-    }
-
-    const startCheck = (): Promise<UpdateCheckResult | null> => {
-      if (inFlight !== undefined) return inFlight
-      checking = true
-      refreshTray()
-      const controller = new AbortController()
-      requestController = controller
-
-      const task = (async () => {
-        requestTimer = setTimeout(() => { controller.abort() }, config.requestTimeoutMs)
-        try {
-          return await checkForStableUpdate({
-            currentVersion: adapter.currentVersion,
-            signal: controller.signal,
-            request: adapter.request,
-          })
-        } catch {
-          return null
-        }
-      })().finally(() => {
-        if (requestTimer !== undefined) clearTimeout(requestTimer)
-        requestTimer = undefined
-        if (requestController === controller) requestController = undefined
-        inFlight = undefined
-        checking = false
-        refreshTray()
-      })
-      inFlight = task
-      return task
-    }
-
-    const observeResult = (result: UpdateCheckResult | null): string | undefined => {
-      if (disposed || result === null) return undefined
-      availableVersion = result.status === 'update-available' && adapter.canDownload
-        ? result.latestVersion
-        : undefined
-      refreshTray()
-      return availableVersion
-    }
-
-    const startDownload = (version: string): Promise<void> => {
-      if (downloadTask !== undefined) return downloadTask
-      const task = (async () => {
-        let confirmed: boolean
-        try {
-          confirmed = await adapter.confirmDownload(version)
-        } catch {
-          return
-        }
-        if (!confirmed || disposed) return
-
-        const confirmedVersion = observeResult(await startCheck())
-        if (confirmedVersion !== version || disposed) return
-
-        const controller = new AbortController()
-        downloadController = controller
-        downloadingVersion = version
-        refreshTray()
-        try {
-          await adapter.downloadAndOpen(version, controller.signal)
-        } catch {
-          // Network, filesystem, and installer-opening failures are deliberately silent.
-        } finally {
-          if (downloadController === controller) downloadController = undefined
-          downloadingVersion = undefined
-          refreshTray()
-        }
-      })().finally(() => {
-        if (downloadTask === task) downloadTask = undefined
-      })
-      downloadTask = task
-      return task
-    }
-
-    const offerDownload = async (version: string, automatic: boolean): Promise<void> => {
-      if (disposed || !adapter.canDownload) return
-      await stateReady
-      if (disposed || (automatic && state.lastPromptedVersion === version)) return
-      await rememberPrompt(version)
-      if (!disposed) await startDownload(version)
-    }
-
-    const runManualCheck = (): Promise<void> => {
-      manualTask ??= (async () => {
-        if (availableVersion !== undefined) {
-          await offerDownload(availableVersion, false)
-          return
-        }
-        const result = await startCheck()
-        if (disposed) return
-        const version = observeResult(result)
-        if (version !== undefined) {
-          await offerDownload(version, false)
-          return
-        }
-        await adapter.showManualCheckResult(result)
-      })().catch(() => undefined).finally(() => { manualTask = undefined })
-      return manualTask
-    }
+    const rpcDispose = ctx.connection.rpc.handle(
+      DESKTOP_UPDATE_RPC_CHANNEL,
+      async (endpoint, payload) => handleUpdateRpc(
+        endpoint,
+        payload,
+        controller,
+        adapter.openReleasePage,
+      ),
+      { authority: 'loopback' },
+    )
 
     const runBackgroundCheck = async (): Promise<void> => {
-      if (inFlight !== undefined || disposed) return
-      try {
-        const version = observeResult(await startCheck())
-        if (version !== undefined) await offerDownload(version, true)
-      } catch {
-        // Scheduled checks never surface failures to the user or the application log.
-      }
+      if (disposed || !controller.canCheck) return
+      await controller.check()
     }
 
     const scheduleBackgroundCheck = (delayMs: number): void => {
@@ -215,74 +133,68 @@ export function apply(ctx: Context, config: Config): void {
       }, delayMs)
     }
 
-    const registration = ctx.desktopRuntime.registerTrayItem({
-      group: 'status',
-      order: 10,
-      label: () => downloadingVersion === undefined
-        ? availableVersion === undefined
-          ? checking ? 'Checking for Updates…' : 'Check for Updates…'
-          : `DSH Desktop ${availableVersion} Available`
-        : `Downloading DSH Desktop ${downloadingVersion}…`,
-      invoke: runManualCheck,
-    })
-    refreshTray = registration.refresh
-
-    if (adapter.isPackaged && config.enabled) scheduleBackgroundCheck(config.initialDelayMs)
+    if (adapter.isPackaged && config.enabled && controller.canCheck) {
+      scheduleBackgroundCheck(config.initialDelayMs)
+    }
 
     return async () => {
       disposed = true
       if (pollTimer !== undefined) clearTimeout(pollTimer)
-      if (requestTimer !== undefined) clearTimeout(requestTimer)
-      requestController?.abort()
-      downloadController?.abort()
+      stopObserving()
       registration.dispose()
-      // Native dialogs are not cancellable. Await only file state and the abortable version request.
-      const pending: Promise<unknown>[] = [stateReady]
-      if (inFlight !== undefined) pending.push(inFlight)
-      await Promise.allSettled(pending)
+      await rpcDispose()
+      await controller.dispose()
     }
-  }, 'dsh-plugin-desktop: update polling, confirmation, and installer handoff')
+  }, 'dsh-plugin-desktop: GitHub update polling, RPC, and installer handoff')
 }
 
-function parseState(text: string): UpdateStateV2 {
-  const value: unknown = JSON.parse(text)
-  if (!isRecord(value)
-    || value.version !== 2
-    || (value.lastPromptedVersion !== undefined && !isStableVersion(value.lastPromptedVersion))
-    || Object.keys(value).some(key => !['version', 'lastPromptedVersion'].includes(key))) {
-    throw new Error('invalid v2 update state')
-  }
-  return value.lastPromptedVersion === undefined
-    ? EMPTY_STATE
-    : { version: 2, lastPromptedVersion: value.lastPromptedVersion as string }
-}
-
-async function readState(filename: string): Promise<string> {
-  const handle = await open(filename, 'r')
-  try {
-    const buffer = Buffer.alloc(MAX_STATE_BYTES + 1)
-    const { bytesRead } = await handle.read(buffer, 0, buffer.byteLength, 0)
-    if (bytesRead > MAX_STATE_BYTES) throw new Error(`update state exceeds ${MAX_STATE_BYTES} bytes`)
-    return new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, bytesRead))
-  } finally {
-    await handle.close()
+function trayLabel(state: DesktopUpdateState): string {
+  switch (state.phase) {
+    case 'idle': return 'Check for Updates…'
+    case 'checking': return 'Checking for Updates…'
+    case 'current': return 'DSH Desktop Is Up to Date'
+    case 'available': return `DSH Desktop ${state.availableVersion ?? ''} Available`
+    case 'downloading': return `Downloading DSH Desktop ${state.availableVersion ?? ''}…`
+    case 'downloaded': return `Restart to Install ${state.availableVersion ?? 'Update'}`
+    case 'error': return state.errorOperation === 'download' ? 'Retry Update Download…' : 'Retry Update Check…'
+    case 'unsupported': return 'View DSH Desktop Releases…'
   }
 }
 
-function renderState(state: UpdateStateV2): string {
-  return `${JSON.stringify(state, null, 2)}\n`
+async function handleUpdateRpc(
+  endpoint: string,
+  payload: unknown,
+  controller: ReturnType<typeof createDesktopUpdateController>,
+  openReleasePage: () => Promise<void>,
+) {
+  if (!isEmptyRecord(payload)) return badRequest('desktop update actions accept no payload fields')
+  switch (endpoint as DesktopUpdateRpcMethod) {
+    case 'state': return success(controller.getState())
+    case 'check': return success(await controller.check())
+    case 'download': return success(await controller.download())
+    case 'cancel': return success(await controller.cancel())
+    case 'install': return success(await controller.install())
+    case 'open-release-page':
+      await openReleasePage()
+      return success(null)
+    default: return badRequest(`unknown desktop update action ${JSON.stringify(endpoint)}`)
+  }
 }
 
-function isStableVersion(value: unknown): value is string {
-  if (typeof value !== 'string') return false
-  const parsed = parseSemVer(value)
-  return parsed !== null && parsed.prerelease.length === 0 && parsed.version === value
+function success<T>(value: T) {
+  return { ok: true as const, value }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+function badRequest(message: string) {
+  return {
+    ok: false as const,
+    error: { code: 'bad-request' as const, message, details: { issues: [] } },
+  }
 }
 
-function isEnoent(value: unknown): boolean {
-  return isRecord(value) && value.code === 'ENOENT'
+function isEmptyRecord(value: unknown): boolean {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && Object.keys(value).length === 0
 }
