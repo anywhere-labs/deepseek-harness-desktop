@@ -18,6 +18,7 @@ import {
   installDesktopPnpmRuntime,
 } from './desktop-runtime-environment.ts'
 import { ElectronDesktopRuntime } from './electron-runtime.ts'
+import { resolveDesktopShellPath } from './shell-environment.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import {
@@ -164,6 +165,19 @@ async function start(): Promise<void> {
   await app.whenReady()
   if (process.platform === 'win32') app.setAppUserModelId('ai.deepseek.dsh.desktop')
   if (app.isPackaged && process.cwd() === '/') process.chdir(app.getPath('home'))
+  const shellPathResolution = await resolveDesktopShellPath({
+    environment: process.env,
+    home: app.getPath('home'),
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+  })
+  if (
+    shellPathResolution.source === 'login-shell'
+    && shellPathResolution.path !== undefined
+    && shellPathResolution.path !== ''
+  ) {
+    process.env.PATH = shellPathResolution.path
+  }
   const homeDir = resolveDshHome()
   const windowsVolumeConcerns = diagnoseWindowsVolumes(process.platform, [
     { label: 'application install', path: process.execPath },
