@@ -28,7 +28,7 @@ The DSH home `settings.yaml` document is the single durable source for `dsh-desk
 
 Users select the other mode from the application tray or edit the same `settings.yaml` document by hand. The tray calls the registered scope's narrow `settings.update({ mode })` path, while the file provider observes manual changes. A watcher compares the committed mode with the active generation and requests one orderly restart when they differ.
 
-Cordis disposal releases Client effects, Host rows, the tray, and the window before the exit coordinator calls `app.relaunch()` after a successful zero-code shutdown. Compatibility never hot-replaces official slots inside a live generation. Linux does not mount a system tray and rejects advanced mode rather than silently falling back.
+Cordis disposal releases Client effects, Host rows, the tray, and the window before the exit coordinator calls `app.relaunch()` after a successful zero-code shutdown. Compatibility never hot-replaces official slots inside a live generation. Linux does not mount a system tray (known defect) and rejects advanced mode rather than silently falling back.
 
 ## Native lifecycle and security
 

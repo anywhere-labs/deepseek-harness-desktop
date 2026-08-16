@@ -4,7 +4,7 @@
 
 从产品下载入口获取 macOS 或 Windows 安装包。安装后的 DSH Desktop 自带运行所需的 Electron、Node 和 DSH 依赖，普通用户不需要另行安装 Node.js 或 pnpm。
 
-首次启动时，应用会准备默认 profile，并在本机启动官方 DSH Web surface。在 macOS 与 Windows 上，关闭窗口通常只会隐藏窗口；可以从托盘重新打开，选择 **退出** 才会结束应用和 Host 进程。Linux 没有系统托盘；关闭窗口会结束应用和 Host 进程。
+首次启动时，应用会准备默认 profile，并在本机启动官方 DSH Web surface。在 macOS 与 Windows 上，关闭窗口通常只会隐藏窗口；可以从托盘重新打开，选择 **退出** 才会结束应用和 Host 进程。Linux 没有系统托盘（已知限制）；关闭窗口会结束应用和 Host 进程。
 
 ## Profile
 
@@ -57,7 +57,7 @@ dsh plugin update
 
 ## 排查
 
-- **窗口消失了**：在 macOS 与 Windows 上先检查系统托盘，关闭窗口不是退出。Linux 没有托盘，关闭窗口会结束应用。
+- **窗口消失了**：在 macOS 与 Windows 上先检查系统托盘，关闭窗口不是退出。Linux 没有托盘（已知限制），关闭窗口会结束应用。
 - **插件没有出现**：确认命令作用于目标 profile，并重启应用。
 - **终端命令找不到**：从托盘重新打开 Desktop 终端；系统 shell 的全局 PATH 不会被 Desktop 修改。
 - **更新没有提示**：后台错误会静默；使用托盘手动检查查看结果。

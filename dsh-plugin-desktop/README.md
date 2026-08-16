@@ -41,7 +41,7 @@ The launcher reads the same file resolved by the active `@deepseek-ai/dsh-settin
 
 Users can select the other mode from the tray or edit the DSH home `settings.yaml` document by hand. The tray updates the registered `dsh-desktop` settings namespace, while a manual edit changes the same file observed by the settings provider. A committed change requests one orderly restart: the current Cordis tree disposes first, then Electron relaunches only after a successful zero-code shutdown. The application never hot-swaps root slots, native window materials, or Loader rows inside a live renderer generation.
 
-Linux supports compatibility mode only. It does not mount a system tray, and an advanced value is rejected rather than silently falling back.
+Linux supports compatibility mode only. It does not mount a system tray (known defect), and an advanced value is rejected rather than silently falling back.
 
 ## Compatibility mode
 
@@ -139,7 +139,7 @@ On macOS and Windows, **Open DSH Terminal** opens a system terminal rooted at th
 
 ## Native lifecycle
 
-On macOS and Windows, closing the window hides it while the Host Cordis tree continues running. Linux does not mount a system tray; closing the window requests an orderly quit of the application and Host process. On macOS and Windows, the tray reopens the window, selects the active profile, opens the isolated DSH terminal, checks for a stable release, changes mode through the standard settings namespace, or requests an explicit quit. Profile and mode changes both dispose the current Cordis tree before Electron relaunches. Native quit, `SIGINT`, and `SIGTERM` also request disposal before exit; a five-second deadline or a repeated request forces the final exit. Navigation and redirects remain on the exact loopback origin; external HTTP, HTTPS, and mail links open in the operating system, while the renderer uses `contextIsolation`, the Chromium sandbox, and no Node integration.
+On macOS and Windows, closing the window hides it while the Host Cordis tree continues running. Linux does not mount a system tray (known defect); closing the window requests an orderly quit of the application and Host process. On macOS and Windows, the tray reopens the window, selects the active profile, opens the isolated DSH terminal, checks for a stable release, changes mode through the standard settings namespace, or requests an explicit quit. Profile and mode changes both dispose the current Cordis tree before Electron relaunches. Native quit, `SIGINT`, and `SIGTERM` also request disposal before exit; a five-second deadline or a repeated request forces the final exit. Navigation and redirects remain on the exact loopback origin; external HTTP, HTTPS, and mail links open in the operating system, while the renderer uses `contextIsolation`, the Chromium sandbox, and no Node integration.
 
 ## Packaging
 
@@ -174,6 +174,7 @@ None. The same DSH Host and client feature plugins assemble model requests.
 - Adding or removing a profile bundle requires restarting DSH Desktop; the launcher does not watch profile manifests. Selecting another profile from the tray performs that restart automatically.
 - Switching compatibility/advanced mode always restarts the application by design; a live generation never hot-swaps Loader rows, slot ownership, or native materials.
 - Advanced mode is unavailable on Linux. Linux continues to use the compatibility presentation.
+- Linux has no system tray. This is a known defect: Electron 43.3+ GNOME StatusNotifierItem is unreliable, so Desktop does not mount a tray and closing the window quits the application. Profile switching on Linux uses the terminal or desktop profile state until a tray host is restored.
 - The macOS and Windows tray terminal exposes private `dsh`, `pnpm`, and `node` shims. Separately, the Host runtime exposes the bundled `pnpm` command on the current Electron process `PATH` for ambient compatibility and provides the managed `desktopPnpm` service; none of these commands are added to the system `PATH`, and Linux currently has no desktop terminal command.
 - On Windows, the ambient `pnpm` command and lifecycle Node helper are `.cmd` shims. `desktopPnpm.run()` and `runPlugin()` avoid shell lookup for the manager process by launching exact packaged entries, while upstream `dsh plugin`, PowerShell, and Command Prompt can resolve the ambient shim through a command interpreter. A third-party plugin that calls Node `spawn('pnpm', { shell: false })`, or a lifecycle script that directly executes its `.cmd` `npm_node_execpath` with `shell: false`, remains non-portable and should use the managed service or a shell-aware launch path.
 - `dshmarket@1.2.3` remains an optional user-installed third-party package, not a bundled marketplace. Preinstallation is deferred until an audited release consumes the optional Desktop services while preserving ordinary DSH fallback and includes the complete license notice required for redistribution.

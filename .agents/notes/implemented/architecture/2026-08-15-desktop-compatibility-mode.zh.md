@@ -28,7 +28,7 @@ DSH home `settings.yaml` 文档是 `dsh-desktop.mode` 的唯一持久化事实�
 
 用户可以从应用托盘选择另一种模式，也可以手工编辑同一份 `settings.yaml` 文档。托盘会调用已注册 scope 范围受限的 `settings.update({ mode })` 路径，file provider 则会观察手工修改。Watcher 会比较已提交模式与当前 generation，并在两者不同时请求一次有序重启。
 
-Cordis disposal 会先释放 Client effect、Host row、托盘与窗口；仅当零退出码 shutdown 成功后，exit coordinator 才调用 `app.relaunch()`。兼容模式绝不会在存活 generation 内热替换官方 slot。Linux 不挂载系统托盘，并拒绝高级模式，而不会静默降级。
+Cordis disposal 会先释放 Client effect、Host row、托盘与窗口；仅当零退出码 shutdown 成功后，exit coordinator 才调用 `app.relaunch()`。兼容模式绝不会在存活 generation 内热替换官方 slot。Linux 不挂载系统托盘（已知缺陷），并拒绝高级模式，而不会静默降级。
 
 ## Native lifecycle and security
 

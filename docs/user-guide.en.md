@@ -4,7 +4,7 @@
 
 Download the macOS or Windows installer from the product download page. DSH Desktop includes Electron, Node, and its pinned DSH dependencies, so normal users do not need to install Node.js or pnpm separately.
 
-On first launch, the application prepares the default profile and starts the official DSH Web surface locally. On macOS and Windows, closing the window normally hides it; use **Quit** from the tray when you want to stop the application and Host process. Linux has no system tray; closing the window quits the application and Host process.
+On first launch, the application prepares the default profile and starts the official DSH Web surface locally. On macOS and Windows, closing the window normally hides it; use **Quit** from the tray when you want to stop the application and Host process. Linux has no system tray (known limitation); closing the window quits the application and Host process.
 
 ## Profiles
 
@@ -57,7 +57,7 @@ After confirmation, the app requests the fixed platform download URL. macOS open
 
 ## Troubleshooting
 
-- **The window disappeared**: on macOS and Windows, check the system tray; closing the window is not quitting. On Linux there is no tray, and closing the window stops the application.
+- **The window disappeared**: on macOS and Windows, check the system tray; closing the window is not quitting. On Linux there is no tray (known limitation), and closing the window stops the application.
 - **A plugin is missing**: confirm the command targeted the intended profile and restart the application.
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.
 - **No update notification appeared**: background failures are silent; use the manual tray check to see the result.
