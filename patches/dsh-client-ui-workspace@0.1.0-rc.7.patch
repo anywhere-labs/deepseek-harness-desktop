@@ -1,0 +1,98 @@
+diff --git a/lib/client.js b/lib/client.js
+index ec779d5750f3810736ee05290bdd45d858cd00e0..2ac6f82629fc23ec74d5d66ef40f52ece1bc403c 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -455,6 +455,9 @@ window.__ModuleLoader__.load({
+ 			const label = row.workspaceId === void 0 ? t("group.ungrouped") : row.label;
+ 			const active = group.expanded && group.containsCurrent;
+ 			const [menuOpen, setMenuOpen] = (0, react.useState)(false);
++			// Right-click opens the same row menu at the pointer; null keeps the
++			// ellipsis anchor behavior for the trigger button.
++			const [pointer, setPointer] = (0, react.useState)(null);
+ 			const workspaceMenuItems = [{
+ 				id: "rename",
+ 				label: t("rename"),
+@@ -470,6 +473,12 @@ window.__ModuleLoader__.load({
+ 				role: "treeitem",
+ 				"aria-expanded": row.expanded,
+ 				onClick: onToggle,
++				onContextMenu: actions === void 0 ? void 0 : (e) => {
++					e.preventDefault();
++					e.stopPropagation();
++					setMenuOpen(true);
++					setPointer({ x: e.clientX, y: e.clientY });
++				},
+ 				draggable: drag !== void 0,
+ 				onDragStart: drag === void 0 ? void 0 : (e) => {
+ 					e.dataTransfer.effectAllowed = "move";
+@@ -499,10 +508,12 @@ window.__ModuleLoader__.load({
+ 							open: menuOpen,
+ 							onClose: () => {
+ 								setMenuOpen(false);
++								setPointer(null);
+ 							},
+ 							items: workspaceMenuItems,
+ 							onSelect: (id) => {
+ 								setMenuOpen(false);
++								setPointer(null);
+ 								/* v8 ignore next -- workspaceMenuItems carries exactly these two rows today. */
+ 								if (id !== "rename" && id !== "delete") return;
+ 								if (id === "rename") actions.rename();
+@@ -510,10 +521,11 @@ window.__ModuleLoader__.load({
+ 							},
+ 							portal: true,
+ 							closeOnPointerLeave: true,
++							...(pointer === null ? {} : { getAnchorRect: () => new DOMRect(pointer.x, pointer.y, 0, 0) }),
+ 							anchor: (0, react_jsx_runtime.jsx)("button", {
+-								type: "button",
+-								className: Rows_module_css_default.iconButton,
+-								"aria-label": t("actions.workspace.aria", { name: label }),
++							type: "button",
++							className: Rows_module_css_default.iconButton,
++							"aria-label": t("actions.workspace.aria", { name: label }),
+ 								onClick: (e) => {
+ 									e.stopPropagation();
+ 									setMenuOpen((v) => !v);
+@@ -696,6 +708,9 @@ window.__ModuleLoader__.load({
+ 			const statuses = sessionStatuses(node, t);
+ 			const showStatus = statuses[0].state !== "done" || row.completed;
+ 			const [menuOpen, setMenuOpen] = (0, react.useState)(false);
++			// Right-click opens the same row menu at the pointer; null keeps the
++			// ellipsis anchor behavior for the trigger button.
++			const [pointer, setPointer] = (0, react.useState)(null);
+ 			const sessionMenuItems = [
+ 				{
+ 					id: "rename",
+@@ -721,6 +736,12 @@ window.__ModuleLoader__.load({
+ 					onClick: () => {
+ 						onOpen(node.id);
+ 					},
++					onContextMenu: row.blank ? void 0 : (e) => {
++						e.preventDefault();
++						e.stopPropagation();
++						setMenuOpen(true);
++						setPointer({ x: e.clientX, y: e.clientY });
++					},
+ 					draggable: drag !== void 0,
+ 					onDragStart: drag === void 0 ? void 0 : (e) => {
+ 						e.dataTransfer.effectAllowed = "move";
+@@ -758,16 +779,19 @@ window.__ModuleLoader__.load({
+ 								open: menuOpen,
+ 								onClose: () => {
+ 									setMenuOpen(false);
++									setPointer(null);
+ 								},
+ 								items: sessionMenuItems,
+ 								onSelect: (id) => {
+ 									setMenuOpen(false);
++									setPointer(null);
+ 									if (id === "rename") onRename(node.id, row.title);
+ 									if (id === "fork") onFork(node.id);
+ 									if (id === "archive") onArchive(node.id);
+ 								},
+ 								portal: true,
+ 								closeOnPointerLeave: true,
++								...(pointer === null ? {} : { getAnchorRect: () => new DOMRect(pointer.x, pointer.y, 0, 0) }),
+ 								anchor: (0, react_jsx_runtime.jsx)("button", {
+ 									type: "button",
+ 									className: Rows_module_css_default.iconButton,
