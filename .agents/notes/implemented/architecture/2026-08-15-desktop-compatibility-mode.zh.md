@@ -28,13 +28,13 @@ DSH home `settings.yaml` 文档是 `dsh-desktop.mode` 的唯一持久化事实�
 
 用户可以从应用托盘选择另一种模式，也可以手工编辑同一份 `settings.yaml` 文档。托盘会调用已注册 scope 范围受限的 `settings.update({ mode })` 路径，file provider 则会观察手工修改。Watcher 会比较已提交模式与当前 generation，并在两者不同时请求一次有序重启。
 
-Cordis disposal 会先释放 Client effect、Host row、托盘与窗口；仅当零退出码 shutdown 成功后，exit coordinator 才调用 `app.relaunch()`。兼容模式绝不会在存活 generation 内热替换官方 slot。Linux 会保持托盘模式命令禁用，并拒绝高级模式，而不会静默降级。
+Cordis disposal 会先释放 Client effect、Host row、托盘与窗口；仅当零退出码 shutdown 成功后，exit coordinator 才调用 `app.relaunch()`。兼容模式绝不会在存活 generation 内热替换官方 slot。Linux 不挂载系统托盘，并拒绝高级模式，而不会静默降级。
 
 ## Native lifecycle and security
 
 兼容适配器创建普通 `BrowserWindow`，并且不设置自定义边框、标题栏、透明、vibrancy 或原生材质选项。macOS 会阻止可见页面标题更新。Windows 保留原生标题栏图标与固定的 `DeepSeek Harness Desktop` 标题，同时移除窗口菜单栏。原生标题栏颜色与外观由操作系统拥有。
 
-Windows 与 Linux 保持使用未经修改的 iOS Default 应用图标。macOS 使用构建派生且带透明视觉边距的副本；打包、运行中的 Dock 与窗口 spec 都使用同一个按平台选择的路径。托盘在 macOS 使用由品牌 SVG 派生的模板图，在 Windows 与 Linux 使用固定品牌蓝图。兼容模式仍保留 renderer 隔离、Chromium sandbox、禁用 Node integration、精确同源导航、托盘所有权、关闭后隐藏、单实例唤醒，以及显式退出时有界 dispose Cordis 的行为。
+Windows 与 Linux 保持使用未经修改的 iOS Default 应用图标。macOS 使用构建派生且带透明视觉边距的副本；打包、运行中的 Dock 与窗口 spec 都使用同一个按平台选择的路径。托盘在 macOS 使用由品牌 SVG 派生的模板图，在 Windows 使用固定品牌蓝图。Linux 不挂载托盘。兼容模式仍保留 renderer 隔离、Chromium sandbox、禁用 Node integration、精确同源导航、macOS 与 Windows 上的托盘所有权与关闭后隐藏、Linux 上关闭窗口即有序退出、单实例唤醒，以及显式退出时有界 dispose Cordis 的行为。
 
 ## Verification
 

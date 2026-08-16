@@ -162,6 +162,7 @@ export interface DesktopRuntime {
 
   /**
    * Contribute one command to the native tray for the current Cordis lifetime.
+   * Linux has no tray; the handle is a no-op so Host rows can keep one registration path.
    * @param item - dynamic label, state, and invocation owned by the caller.
    * @returns a refreshable, idempotent registration handle.
    */

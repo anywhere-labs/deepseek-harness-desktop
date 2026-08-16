@@ -28,13 +28,13 @@ The DSH home `settings.yaml` document is the single durable source for `dsh-desk
 
 Users select the other mode from the application tray or edit the same `settings.yaml` document by hand. The tray calls the registered scope's narrow `settings.update({ mode })` path, while the file provider observes manual changes. A watcher compares the committed mode with the active generation and requests one orderly restart when they differ.
 
-Cordis disposal releases Client effects, Host rows, the tray, and the window before the exit coordinator calls `app.relaunch()` after a successful zero-code shutdown. Compatibility never hot-replaces official slots inside a live generation. Linux keeps the tray mode command disabled and rejects advanced mode rather than silently falling back.
+Cordis disposal releases Client effects, Host rows, the tray, and the window before the exit coordinator calls `app.relaunch()` after a successful zero-code shutdown. Compatibility never hot-replaces official slots inside a live generation. Linux does not mount a system tray and rejects advanced mode rather than silently falling back.
 
 ## Native lifecycle and security
 
 The compatibility adapter creates a normal `BrowserWindow` and omits custom-frame, title-bar, transparency, vibrancy, and native-material options. macOS suppresses visible page-title updates. Windows retains its native caption icon and fixed `DeepSeek Harness Desktop` caption while removing the window menu bar. The operating system owns native title-bar color and appearance.
 
-The application keeps the unmodified iOS Default icon on Windows and Linux. macOS uses a build-derived copy with a transparent visual inset, and the same platform-selected path feeds packaging, the live Dock, and the window specification. The tray uses a macOS template derived from the brand SVG and fixed brand-blue images on Windows and Linux. Compatibility retains renderer isolation, the Chromium sandbox, disabled Node integration, exact-origin navigation, tray ownership, close-to-hide behavior, single-instance activation, and bounded Cordis disposal on explicit quit.
+The application keeps the unmodified iOS Default icon on Windows and Linux. macOS uses a build-derived copy with a transparent visual inset, and the same platform-selected path feeds packaging, the live Dock, and the window specification. The tray uses a macOS template derived from the brand SVG and a fixed brand-blue image on Windows. Linux does not mount a tray. Compatibility retains renderer isolation, the Chromium sandbox, disabled Node integration, exact-origin navigation, tray ownership on macOS and Windows, close-to-hide behavior on macOS and Windows, orderly quit on Linux window close, single-instance activation, and bounded Cordis disposal on explicit quit.
 
 ## Verification
 

@@ -86,6 +86,7 @@ const electron = vi.hoisted(() => {
     readonly isMinimized = vi.fn(() => false)
     readonly restore = vi.fn()
     readonly show = vi.fn()
+    readonly hide = vi.fn()
     readonly focus = vi.fn()
     readonly on = browserWindowOn
     readonly off = browserWindowOff
@@ -302,6 +303,76 @@ describe('Electron compatibility runtime', () => {
 
     await release()
     expect(electron.trays[0]?.off).toHaveBeenCalledWith('click', expect.any(Function))
+  })
+
+  it.each(['darwin', 'win32'] as const)('hides the %s window on close instead of quitting', async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+    const requestQuit = vi.fn()
+    const { ElectronDesktopRuntime, hidesWindowOnClose } = await import('../src/electron-runtime.ts')
+    expect(hidesWindowOnClose(platform)).toBe(true)
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule({ ...spec, requestQuit })
+
+    await runtime.mountScheduled()
+    const close = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1] as
+      | ((event: { preventDefault: () => void }) => void)
+      | undefined
+    expect(close).toEqual(expect.any(Function))
+    const event = { preventDefault: vi.fn() }
+    close?.(event)
+
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.hide).toHaveBeenCalledOnce()
+    expect(requestQuit).not.toHaveBeenCalled()
+
+    await release()
+  })
+
+  it('does not mount a tray and quits when the Linux window closes', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const requestQuit = vi.fn()
+    const { ElectronDesktopRuntime, hidesWindowOnClose, mountsNativeTray } = await import('../src/electron-runtime.ts')
+    expect(mountsNativeTray('linux')).toBe(false)
+    expect(hidesWindowOnClose('linux')).toBe(false)
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const beforeInteractive = vi.fn()
+    const release = runtime.schedule({ ...spec, requestQuit })
+
+    await runtime.mountScheduled(beforeInteractive)
+    expect(beforeInteractive).toHaveBeenCalledOnce()
+    expect(electron.trays).toHaveLength(0)
+    expect(electron.menuTemplates).toHaveLength(0)
+
+    const contributed = runtime.registerTrayItem({
+      group: 'tools',
+      order: 10,
+      label: () => 'Ignored Tool',
+      invoke: vi.fn(),
+    })
+    contributed.refresh()
+    expect(electron.trays).toHaveLength(0)
+    expect(electron.menuTemplates).toHaveLength(0)
+    contributed.dispose()
+
+    const close = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1] as
+      | ((event: { preventDefault: () => void }) => void)
+      | undefined
+    expect(close).toEqual(expect.any(Function))
+    const event = { preventDefault: vi.fn() }
+    close?.(event)
+
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.hide).not.toHaveBeenCalled()
+    expect(requestQuit).toHaveBeenCalledWith(0)
+
+    runtime.prepareToQuit()
+    const finalClose = { preventDefault: vi.fn() }
+    close?.(finalClose)
+    expect(finalClose.preventDefault).not.toHaveBeenCalled()
+    expect(requestQuit).toHaveBeenCalledOnce()
+
+    await release()
+    expect(electron.trays).toHaveLength(0)
   })
 
   it('does not mount a registration disposed before Host boot settles', async () => {

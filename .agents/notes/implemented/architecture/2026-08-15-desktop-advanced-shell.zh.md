@@ -20,7 +20,7 @@ DSH home `settings.yaml` 文档是单一事实源。Launcher 通过当前 `@deep
 
 `desktop-shell` Host plugin 使用包含 `mode: compatibility | advanced` 的 schema 与 `applies: restart` 来注册 `settingsNamespace('dsh-desktop')`。托盘调用该已注册 scope 范围受限的 `settings.update({ mode })` 路径。用户也可以直接编辑同一份 `settings.yaml` 文档；file provider 与已注册 namespace 会观察这个唯一的持久化值。
 
-Linux 只支持兼容模式。托盘会在该平台禁用模式命令，advanced 值也会被拒绝，而不会映射到另一种呈现。
+Linux 只支持兼容模式。该平台不挂载系统托盘，advanced 值也会被拒绝，而不会映射到另一种呈现。
 
 ### 重启是组合边界
 
