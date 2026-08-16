@@ -495,10 +495,20 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     this.window = window
 
     const show = (): void => { this.show() }
+    const hide = (): void => {
+      if (!window.isDestroyed()) window.hide()
+    }
     const close = (event: Electron.Event): void => {
       if (this.quitting) return
       event.preventDefault()
-      window.hide()
+      if (this.platform === 'darwin' && window.isFullScreen()) {
+        // Hiding a fullscreen window on macOS leaves a black fullscreen space
+        // behind (electron/electron#20263); leave fullscreen before hiding.
+        window.once('leave-full-screen', hide)
+        window.setFullScreen(false)
+      } else {
+        window.hide()
+      }
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const navigate = (event: Electron.Event<{ url: string }>): void => {
@@ -562,6 +572,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       released = true
       app.off('activate', show)
       window.off('close', close)
+      window.removeListener('leave-full-screen', hide)
       window.off('page-title-updated', preserveBlankTitle)
       window.webContents.off('will-frame-navigate', navigate)
       window.webContents.off('will-redirect', navigate)
