@@ -49,6 +49,7 @@ try {
     stateDir: join(home, 'runtime-commands'),
     environment: process.env,
   })
+  writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: compatibility\n')
   const prepared = prepareDesktopProfile(undefined, home)
   const thirdPartyDir = join(prepared.profile.dir, 'node_modules', THIRD_PARTY_NAME)
   mkdirSync(thirdPartyDir, { recursive: true })
@@ -102,7 +103,7 @@ try {
     BIN_NAME,
     prepared.rootConfig,
     [{ insert: [
-      { id: 'desktop-shell', name: 'dsh-plugin-desktop' },
+      { id: 'desktop-shell', name: 'dsh-plugin-desktop', config: { mode: 'compatibility' } },
       { id: 'third-party-smoke', name: THIRD_PARTY_NAME },
     ] }],
     (host) => {

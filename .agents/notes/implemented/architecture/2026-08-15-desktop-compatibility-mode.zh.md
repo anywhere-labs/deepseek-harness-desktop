@@ -10,7 +10,7 @@ DSH Desktop 需要原生应用生命周期，同时兼容模式必须保持未�
 
 ## Decision
 
-`desktop-shell` Cordis row 提供 `mode: compatibility | advanced`，标准 `dsh-desktop` settings namespace 会把 `mode` 默认为 `compatibility`。desktop package 同时声明 `dsh.bundle` 与 `dsh.client`；其 Client face 会在两种模式中被发现。
+`desktop-shell` Cordis row 提供 `mode: compatibility | advanced`，标准 `dsh-desktop` settings namespace 会把 `mode` 默认为平台呈现规则：macOS 与 Windows 默认 `advanced`，Linux 默认 `compatibility`（高级模式在那里不受支持）。desktop package 同时声明 `dsh.bundle` 与 `dsh.client`；其 Client face 会在两种模式中被发现。
 
 在兼容模式下，Client 会校验 Host 提供的模式与平台 URL marker，随后直接返回而不安装任何 effect。它不提供或替换 `layout` service，不注册 `root` 或 `sidebar` occupant，不安装样式，也不改动 conversation surface。只有 advanced generation 会调用 advanced-shell installer。
 

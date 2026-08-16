@@ -10,7 +10,7 @@ DSH Desktop needs native application lifecycle while compatibility mode remains 
 
 ## Decision
 
-The `desktop-shell` Cordis row exposes `mode: compatibility | advanced`, and the standard `dsh-desktop` settings namespace defaults `mode` to `compatibility`. The desktop package declares both `dsh.bundle` and `dsh.client`; its Client face is discovered in both modes.
+The `desktop-shell` Cordis row exposes `mode: compatibility | advanced`, and the standard `dsh-desktop` settings namespace defaults `mode` to the platform presentation: `advanced` on macOS and Windows, `compatibility` on Linux where advanced is unsupported. The desktop package declares both `dsh.bundle` and `dsh.client`; its Client face is discovered in both modes.
 
 In compatibility mode, the Client validates the Host-supplied mode and platform URL markers, then returns without installing any effects. It does not provide or replace the `layout` service, register a `root` or `sidebar` occupant, install styles, or alter the conversation surface. Only an advanced generation calls the advanced-shell installer.
 

@@ -52,7 +52,6 @@ const PWSH_SANDBOX_ROW_ID = 'pwsh-sandbox'
 const UPSTREAM_PWSH_SANDBOX_PACKAGE = '@deepseek-ai/dsh-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_ROW_ID = 'desktop-windows-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_PACKAGE = 'dsh-plugin-desktop/windows-pwsh-sandbox'
-const DEFAULT_DESKTOP_SHELL_MODE: DesktopShellMode = 'compatibility'
 const SETTINGS_FILE_PACKAGE = '@deepseek-ai/dsh-settings-file'
 const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
 const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
@@ -60,12 +59,28 @@ const UI_SIDEBAR_PACKAGE = '@deepseek-ai/dsh-client-ui-sidebar'
 const UI_CONVERSATION_PACKAGE = '@deepseek-ai/dsh-client-ui-conversation'
 
 /**
+ * Resolve the presentation default for a host that never persisted a mode.
+ * macOS and Windows support the desktop-owned advanced presentation, so a new
+ * install boots it automatically; every other platform stays on the upstream
+ * native-frame compatibility presentation because advanced is unsupported there.
+ * @param platform - native platform selecting the default presentation.
+ * @returns the platform default shell mode.
+ */
+export function defaultDesktopShellMode(platform: NodeJS.Platform): DesktopShellMode {
+  return platform === 'darwin' || platform === 'win32' ? 'advanced' : 'compatibility'
+}
+
+/**
  * Parse desktop presentation state and reject corrupted values.
  * @param value - untrusted settings value.
+ * @param platform - native platform supplying the default when the value is absent.
  * @returns a supported desktop shell mode.
  */
-export function parseDesktopShellMode(value: unknown): DesktopShellMode {
-  if (value === undefined) return DEFAULT_DESKTOP_SHELL_MODE
+export function parseDesktopShellMode(
+  value: unknown,
+  platform: NodeJS.Platform = process.platform,
+): DesktopShellMode {
+  if (value === undefined) return defaultDesktopShellMode(platform)
   if (value === 'compatibility' || value === 'advanced') return value
   throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.mode must be "compatibility" or "advanced"`)
 }
@@ -73,32 +88,40 @@ export function parseDesktopShellMode(value: unknown): DesktopShellMode {
 /**
  * Read a desktop mode from one parsed settings document.
  * @param document - untrusted settings document root.
- * @returns the selected mode, defaulting to compatibility when absent.
+ * @param platform - native platform supplying the default when the section or mode is absent.
+ * @returns the selected mode, defaulting to the platform presentation when absent.
  */
-export function desktopShellModeFromSettings(document: unknown): DesktopShellMode {
+export function desktopShellModeFromSettings(
+  document: unknown,
+  platform: NodeJS.Platform = process.platform,
+): DesktopShellMode {
   if (typeof document !== 'object' || document === null || Array.isArray(document)) {
     throw new Error(`${BIN_NAME}: settings document must be a map of namespace sections`)
   }
   const section = (document as Record<string, unknown>)[DESKTOP_SETTINGS_NAMESPACE]
-  if (section === undefined) return DEFAULT_DESKTOP_SHELL_MODE
+  if (section === undefined) return defaultDesktopShellMode(platform)
   if (typeof section !== 'object' || section === null || Array.isArray(section)) {
     throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE} settings must be a map`)
   }
-  return parseDesktopShellMode((section as Record<string, unknown>).mode)
+  return parseDesktopShellMode((section as Record<string, unknown>).mode, platform)
 }
 
 /**
  * Read startup mode from the same file resolved by the settings provider.
  * @param config - validated settings-file row config.
+ * @param platform - native platform supplying the default when no mode is persisted.
  * @returns the mode projected into the startup Loader graph.
  */
-export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMode {
+export function readDesktopShellMode(
+  config: SettingsFileConfig,
+  platform: NodeJS.Platform = process.platform,
+): DesktopShellMode {
   const spec = resolveSettingsFileSpec(config)
   let text: string
   try {
     text = readFileSync(spec.filename, 'utf8')
   } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return DEFAULT_DESKTOP_SHELL_MODE
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return defaultDesktopShellMode(platform)
     throw cause
   }
   let document: unknown
@@ -111,7 +134,7 @@ export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMo
   } else {
     document = text.trim().length === 0 ? {} : JSON.parse(text)
   }
-  return desktopShellModeFromSettings(document)
+  return desktopShellModeFromSettings(document, platform)
 }
 
 /** Resolve the public Web template once and reject an incompatible DSH release. */
@@ -266,7 +289,7 @@ export function prepareDesktopProfile(
     dshHome: home,
     ...rowConfig(settings),
   } as SettingsFileConfig)
-  const mode = readDesktopShellMode(settingsConfig)
+  const mode = readDesktopShellMode(settingsConfig, platform)
   patches.push({
     id: 'settings',
     config: settingsConfig,

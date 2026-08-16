@@ -24,6 +24,14 @@ export const DESKTOP_SETTINGS_NAMESPACE = settingsNamespace('dsh-desktop')
 
 const UI_THEME_SETTINGS_NAMESPACE = settingsNamespace(THEME_SETTINGS_NAMESPACE)
 
+/**
+ * Native presentation default for hosts that never persisted a mode, mirroring
+ * `defaultDesktopShellMode` in `profile.ts` so the Host schema and the
+ * launcher projection cannot diverge. macOS and Windows support the
+ * desktop-owned advanced presentation; Linux stays on compatibility.
+ */
+const DEFAULT_SHELL_MODE: DesktopShellMode = process.platform === 'linux' ? 'compatibility' : 'advanced'
+
 /** Desktop settings presented by the standard settings service. */
 export interface DesktopSettings {
   /** Native presentation selected for the next application generation. */
@@ -32,7 +40,7 @@ export interface DesktopSettings {
 
 /** Schema registered with the standard settings service. */
 export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
-  mode: z.union(['compatibility', 'advanced'] as const).default('compatibility'),
+  mode: z.union(['compatibility', 'advanced'] as const).default(DEFAULT_SHELL_MODE),
 })
 
 /** Native window configuration. */
@@ -51,7 +59,7 @@ export interface Config {
 
 /** Validated native window configuration. */
 export const Config: z<Config> = z.object({
-  mode: z.union(['compatibility', 'advanced'] as const).default('compatibility'),
+  mode: z.union(['compatibility', 'advanced'] as const).default(DEFAULT_SHELL_MODE),
   width: z.number().step(1).min(800).default(1280),
   height: z.number().step(1).min(600).default(840),
   minWidth: z.number().step(1).min(640).default(900),

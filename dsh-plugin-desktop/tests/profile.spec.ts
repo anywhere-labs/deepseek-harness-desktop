@@ -78,6 +78,7 @@ describe('desktop profile composition', () => {
 
   it('assembles the Host shell without replacing the upstream client shell', () => {
     const home = temporaryHome()
+    writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: compatibility\n')
     const prepared = prepareDesktopProfile(undefined, home, 'darwin')
     const patches = prepared.patches as Array<Record<string, unknown>>
     const inserted = patches.flatMap((patch) => {
@@ -145,8 +146,28 @@ describe('desktop profile composition', () => {
     }))
   })
 
+  it('defaults absent desktop modes to advanced on macOS and Windows and compatibility on Linux', () => {
+    const home = temporaryHome()
+    for (const platform of ['darwin', 'win32'] as const) {
+      const prepared = prepareDesktopProfile(undefined, home, platform)
+      expect(prepared.mode).toBe('advanced')
+      const rows = composeEntries([prepared.patches])
+      expect(rows.find(row => row.id === 'desktop-shell')).toEqual(expect.objectContaining({
+        config: expect.objectContaining({ mode: 'advanced' }),
+      }))
+      expect(rows.find(row => row.id === 'ui-layout')?.disabled).toBe(true)
+      expect(rows.find(row => row.id === 'ui-sidebar')?.disabled).toBe(false)
+      expect(rows.find(row => row.id === 'ui-conversation')?.disabled).toBe(false)
+    }
+    const linux = prepareDesktopProfile(undefined, home, 'linux')
+    expect(linux.mode).toBe('compatibility')
+    expect(composeEntries([linux.patches]).find(row => row.id === 'desktop-shell'))
+      .toEqual(expect.objectContaining({ config: expect.objectContaining({ mode: 'compatibility' }) }))
+  })
+
   it('boots a selected Web profile without overriding its compatibility UI rows', () => {
     const home = temporaryHome()
+    writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: compatibility\n')
     const webDir = join(home, 'profiles', 'web')
     const bundles = PROFILE_TEMPLATES.web
     if (bundles === undefined) throw new Error('test requires the shipped Web template')
@@ -199,13 +220,15 @@ describe('desktop profile composition', () => {
     expect(rows.find(row => row.id === 'ui-conversation')?.disabled).toBe(false)
   })
 
-  it('reads JSON settings and defaults an absent desktop namespace to compatibility', () => {
+  it('reads JSON settings and defaults an absent desktop namespace per platform', () => {
     const home = temporaryHome()
     const path = join(home, 'desktop-settings.json')
     writeFileSync(path, JSON.stringify({ 'dsh-desktop': { mode: 'advanced' } }))
 
     expect(readDesktopShellMode({ path })).toBe('advanced')
-    expect(desktopShellModeFromSettings({ unrelated: { enabled: true } })).toBe('compatibility')
+    expect(desktopShellModeFromSettings({ unrelated: { enabled: true } }, 'win32')).toBe('advanced')
+    expect(desktopShellModeFromSettings({ unrelated: { enabled: true } }, 'darwin')).toBe('advanced')
+    expect(desktopShellModeFromSettings({ unrelated: { enabled: true } }, 'linux')).toBe('compatibility')
   })
 
   it('rejects invalid settings roots, sections, modes, and YAML', () => {
