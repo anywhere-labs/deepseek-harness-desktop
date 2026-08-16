@@ -1,8 +1,11 @@
 /** BrowserWindow construction for compatibility and advanced shells. */
 
 import type { BrowserWindowConstructorOptions, NativeImage } from 'electron'
+import { fileURLToPath } from 'node:url'
 import type { DesktopPlatform, DesktopShellSpec } from './runtime.ts'
 import { WINDOWS_TITLEBAR_HEIGHT } from './window-chrome.ts'
+
+const DESKTOP_PRELOAD_PATH = fileURLToPath(new URL('./preload.cjs', import.meta.url))
 
 /**
  * Build a secure BrowserWindow while preserving the operating system frame.
@@ -28,6 +31,7 @@ export function compatibilityWindowOptions(
     show: false,
     icon,
     webPreferences: {
+      preload: DESKTOP_PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -62,6 +66,7 @@ export function advancedWindowOptions(
     show: false,
     icon,
     webPreferences: {
+      preload: DESKTOP_PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

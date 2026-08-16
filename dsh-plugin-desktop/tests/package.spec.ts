@@ -108,6 +108,10 @@ describe('published package surface', () => {
     expect(config).toContain("'desktop-cli': 'src/desktop-cli.ts'")
     expect(config).toContain("'desktop-runtime-environment': 'src/desktop-runtime-environment.ts'")
     expect(config).toContain("'desktop-terminal': 'src/desktop-terminal.ts'")
+    expect(config).toContain("entry: { preload: 'src/preload.ts' }")
+    expect(config).toContain("format: 'cjs'")
+    expect(config).toContain('fixedExtension: true')
+    expect(config).toContain("deps: { neverBundle: ['electron'] }")
     expect(config).toContain("'profile-manager': 'src/profile-manager.ts'")
     expect(config).toContain("'profile-service': 'src/profile-service.ts'")
     expect(config).toContain("pnpm: 'src/pnpm.ts'")
@@ -150,6 +154,7 @@ describe('published package surface', () => {
       'build/tray-icon.svg',
       'build/tray-icon*.png',
       'docs/**',
+      'lib/**/*.cjs',
     ]))
     expect(manifest.build?.files).toEqual([
       'build/app-icon.png',
@@ -192,6 +197,7 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['check:win-package']).toContain('tests/package-win.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-checker.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-download.spec.ts')
+    expect(manifest.scripts?.['check:win-package']).toContain('tests/preload.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run verify:closure')
     expect(manifest.scripts?.['verify:cli']).toBe('node scripts/verify-cli-runtime.mjs')
     expect(manifest.scripts?.check).toContain('yarn run verify:cli')

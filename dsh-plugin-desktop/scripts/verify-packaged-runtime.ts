@@ -23,6 +23,7 @@ export interface PackagedRuntimeContext {
 export const REQUIRED_PACKAGED_RUNTIME_ENTRIES = [
   'package.json',
   'lib/main.js',
+  'lib/preload.cjs',
   'lib/client.js',
   'lib/profile.js',
   'lib/profile-manager.js',
@@ -52,6 +53,7 @@ export const REQUIRED_UNPACKED_RUNTIME_ENTRIES = [
   'build/tray-iconTemplate.png',
   'build/tray-icon-blue.png',
   'lib/main.js',
+  'lib/preload.cjs',
   'lib/client.js',
   'lib/index.js',
   'lib/profile.js',

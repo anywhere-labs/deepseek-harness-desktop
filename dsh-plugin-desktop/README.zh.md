@@ -8,7 +8,7 @@
 
 Electron 可执行文件只包含最小启动代码。它获取单实例锁、解析当前选中的 DSH profile、提供原生运行时能力，并在 Electron main 进程中启动 Host Cordis 根。`desktop-shell` Host 插件通过 Cordis effect 拥有 `BrowserWindow`、导航策略、settings namespace，以及关闭与退出生命周期。原生 runtime 拥有实体托盘；`desktop-shell`、`desktop-profiles`、`desktop-terminal` 与 `desktop-updates` 则通过有序 item registry 提供 effect-scoped 命令。
 
-两种呈现模式都复用现有 loopback Web carrier。profile 挂载普通 `dsh-base` 与 `dsh-web-app` bundle；Host 把 HTTP 与 WebSocket surface 绑定到 `127.0.0.1` 的临时端口；Electron 在沙箱 renderer 中加载该同源页面。Electron 不维护自有插件 roster，不使用 preload bridge，renderer 也不会获得原始 Electron API。
+两种呈现模式都复用现有 loopback Web carrier。profile 挂载普通 `dsh-base` 与 `dsh-web-app` bundle；Host 把 HTTP 与 WebSocket surface 绑定到 `127.0.0.1` 的临时端口；Electron 在沙箱 renderer 中加载该同源页面。唯一的窄 preload bridge 会把用户提供的 renderer `File` 映射到 Electron 原生源路径，使附件插件可以保留该源文件；它不接受字符串路径，也不公开 Node、文件系统或 IPC 原语。Electron 不维护自有插件 roster，renderer 也不会获得原始 Electron API。
 
 desktop package 拥有普通 Host 与 Web Client 两个 face。它的 Client face 会在两种模式下校验 Host 提供的模式与平台 marker。兼容模式随后直接返回，不注册 service、slot、样式或呈现；高级模式则安装下文所述的 desktop layout service 与 root 呈现。两种模式下，第三方 Web client 都继续使用普通 DSH 模块图。
 

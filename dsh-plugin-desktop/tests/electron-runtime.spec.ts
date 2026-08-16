@@ -239,6 +239,7 @@ describe('Electron compatibility runtime', () => {
       height: 840,
       show: false,
       webPreferences: {
+        preload: expect.stringMatching(/[\\/]src[\\/]preload\.cjs$/u),
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
