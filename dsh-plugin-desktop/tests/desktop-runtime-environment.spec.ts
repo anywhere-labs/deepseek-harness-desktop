@@ -299,16 +299,53 @@ describe('desktop Host pnpm runtime', () => {
     expect(environment).toEqual({ PATH: '/usr/bin' })
   })
 
-  it('rejects unexpected public commands before changing PATH', () => {
+  it('recovers from stray command files instead of failing startup', () => {
+    const root = temporaryDirectory()
+    const stateDir = join(root, 'runtime')
+    const pathDir = join(stateDir, 'bin')
+    const privateDir = join(stateDir, 'private')
+    const nodeBinDir = join(privateDir, 'node-bin')
+    mkdirSync(pathDir, { recursive: true })
+    mkdirSync(nodeBinDir, { recursive: true })
+    writeFileSync(join(pathDir, 'dsh'), 'stray')
+    writeFileSync(join(nodeBinDir, 'dsh'), 'stray')
+    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
+
+    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+
+    expect(readdirSync(pathDir)).toEqual(['pnpm'])
+    expect(readdirSync(nodeBinDir)).toEqual(['node'])
+    expect(environment.PATH).toBe(`${pathDir}:/usr/bin`)
+    installation.dispose()
+  })
+
+  it('removes stray symlinks without touching their targets', () => {
     const root = temporaryDirectory()
     const stateDir = join(root, 'runtime')
     const pathDir = join(stateDir, 'bin')
     mkdirSync(pathDir, { recursive: true })
-    writeFileSync(join(pathDir, 'node'), 'unexpected')
+    const target = join(root, 'outside')
+    writeFileSync(target, 'outside')
+    symlinkSync(target, join(pathDir, 'dsh'))
+    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
+
+    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+
+    expect(readdirSync(pathDir)).toEqual(['pnpm'])
+    expect(readFileSync(target, 'utf8')).toBe('outside')
+    installation.dispose()
+  })
+
+  it('refuses an unexpected directory in the public command directory', () => {
+    const root = temporaryDirectory()
+    const stateDir = join(root, 'runtime')
+    const pathDir = join(stateDir, 'bin')
+    mkdirSync(pathDir, { recursive: true })
+    mkdirSync(join(pathDir, 'dsh'))
     const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
 
     expect(() => installDesktopPnpmRuntime(options(stateDir, 'linux', environment)))
-      .toThrow('directory contains unexpected entries: node')
+      .toThrow('contains an unexpected directory: dsh')
     expect(environment).toEqual({ PATH: '/usr/bin' })
   })
 

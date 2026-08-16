@@ -135,6 +135,34 @@ function assertOwnedDirectoryEntries(directory: string, allowed: readonly string
   }
 }
 
+/** Remove one stray command-directory entry, refusing only unsafe directories. */
+function removeUnexpectedEntry(directory: string, entry: string): void {
+  const filename = join(directory, entry)
+  const stat = lstatSync(filename)
+  if (stat.isDirectory()) {
+    throw new Error(
+      `dsh-plugin-desktop: command runtime directory contains an unexpected directory: ${entry}`,
+    )
+  }
+  process.stderr.write(
+    `dsh-plugin-desktop: removing unexpected command runtime entry ${JSON.stringify(entry)}\n`,
+  )
+  unlinkSync(filename)
+}
+
+/**
+ * Recover the app-owned command directory to this generation's exact contents.
+ * Stray files left by crashes or external tools must not brick startup: they
+ * are removed instead of failing. An unexpected directory is still refused
+ * because it cannot be removed safely without recursion.
+ */
+function reconcileOwnedDirectoryEntries(directory: string, allowed: readonly string[]): void {
+  for (const entry of readdirSync(directory)) {
+    if (allowed.includes(entry)) continue
+    removeUnexpectedEntry(directory, entry)
+  }
+}
+
 /** Remove only stale atomic-write files generated for one exact target name. */
 function removeStaleTemporaryFiles(directory: string, targetName: string): void {
   const prefix = `.${targetName}.`
@@ -388,8 +416,8 @@ export function installDesktopPnpmRuntime(options: DesktopPnpmRuntimeOptions): D
   removeStaleTemporaryFiles(pathDir, pnpmShimName)
   removeStaleTemporaryFiles(nodeBinDir, nodeShimName)
   removeStaleTemporaryFiles(privateDir, 'clear-env.mjs')
-  assertOwnedDirectoryEntries(pathDir, [pnpmShimName])
-  assertOwnedDirectoryEntries(nodeBinDir, [nodeShimName])
+  reconcileOwnedDirectoryEntries(pathDir, [pnpmShimName])
+  reconcileOwnedDirectoryEntries(nodeBinDir, [nodeShimName])
   const pnpmShimPath = join(pathDir, pnpmShimName)
   const nodeShimPath = join(nodeBinDir, nodeShimName)
   const clearEnvironmentPath = join(privateDir, 'clear-env.mjs')
