@@ -176,6 +176,19 @@ describe('desktop profile service', () => {
     expect(requestRestart).toHaveBeenCalledTimes(2)
   })
 
+  it('resolves after restart disposes the service fiber, matching the launcher restart timing', async () => {
+    // main.ts 的真实链：requestRestart → shutdown.request → fiber.dispose()，
+    // 销毁本服务的 fiber（disposed=true）后才 resolve。
+    let disposeFiber!: () => Promise<unknown>
+    const bootstrap = createBootstrap({
+      requestRestart: async () => { await disposeFiber() },
+    })
+    const mounted = await mount(bootstrap)
+    disposeFiber = mounted.dispose
+
+    await expect(mounted.service.select('work')).resolves.toBeUndefined()
+  })
+
   it('unregisters with its fiber and rejects retained calls after disposal', async () => {
     const pending = deferred<void>()
     const requestRestart = vi.fn(async () => {})

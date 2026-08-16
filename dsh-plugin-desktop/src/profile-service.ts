@@ -112,7 +112,6 @@ export class DesktopProfileService extends Service implements DesktopProfiles {
         return this.runExclusive(name, async () => {
           this.assertActive()
           await this.bootstrap.requestRestart()
-          this.assertActive()
           this.restartCompleted = true
         })
       }
@@ -122,7 +121,6 @@ export class DesktopProfileService extends Service implements DesktopProfiles {
         this.committedName = name
         this.assertActive()
         await this.bootstrap.requestRestart()
-        this.assertActive()
         this.restartCompleted = true
       })
     } catch (cause) {
