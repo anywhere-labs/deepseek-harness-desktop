@@ -1,3 +1,5 @@
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+
 /** Sidebar geometry passed by the desktop root slot. */
 export interface DesktopSidebarOwnerProps {
   /** Whether the sidebar is showing its compact rail. */
@@ -20,6 +22,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Desktop-owned layout service in advanced mode. */
     layout: DesktopLayoutService
+    /** Loopback Connection handle the file-preview gateway issues RPC through. */
+    connection: ConnectionHandle
   }
 }
 

@@ -3,7 +3,8 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { provideDesktopLayout } from '../src/client/layout-service.ts'
 import { parseDesktopClientEnvironment } from '../src/client/environment.ts'
 import {
-  computeDesktopColumns, DesktopLayoutState, MACOS_SIDEBAR_COLLAPSED, SIDEBAR_COLLAPSED,
+  computeDesktopColumns, DesktopLayoutState, DETAILS_DEFAULT, DETAILS_MAX,
+  FILE_DEFAULT, FILE_MAX, FILE_MIN, MACOS_SIDEBAR_COLLAPSED, SIDEBAR_COLLAPSED,
 } from '../src/client/layout-state.ts'
 import { installAdvancedStyles } from '../src/client/styles.ts'
 import {
@@ -102,14 +103,14 @@ describe('advanced desktop layout', () => {
   })
 
   it('uses the compatibility rail on Windows and the wider desktop rail on macOS', () => {
-    expect(computeDesktopColumns(1440, 0, 0)).toEqual({ sidebar: SIDEBAR_COLLAPSED, center: 1384, details: 0 })
-    expect(computeDesktopColumns(1440, 0, 0, MACOS_SIDEBAR_COLLAPSED))
+    expect(computeDesktopColumns(1440, 0, 'closed', 0)).toEqual({ sidebar: SIDEBAR_COLLAPSED, center: 1384, details: 0 })
+    expect(computeDesktopColumns(1440, 0, 'closed', 0, MACOS_SIDEBAR_COLLAPSED))
       .toEqual({ sidebar: MACOS_SIDEBAR_COLLAPSED, center: 1350, details: 0 })
     expect(SIDEBAR_COLLAPSED).toBe(56)
     expect(MACOS_SIDEBAR_COLLAPSED).toBe(90)
   })
 
-  it('publishes mirrored panel transitions', () => {
+  it('publishes mirrored right-surface transitions', () => {
     const layout = new DesktopLayoutState()
     const snapshots: object[] = []
     layout.subscribe(() => { snapshots.push(layout.getSnapshot()) })
@@ -117,10 +118,84 @@ describe('advanced desktop layout', () => {
     layout.openDetails()
     layout.closeDetails()
     expect(snapshots).toEqual([
-      { sidebar: 0, details: 0, narrow: false, narrowExpanded: false },
-      { sidebar: 0, details: 360, narrow: false, narrowExpanded: false },
-      { sidebar: 0, details: 0, narrow: false, narrowExpanded: false },
+      { sidebar: 0, rightSurface: 'closed', detailsWidth: DETAILS_DEFAULT, fileWidth: FILE_DEFAULT, narrow: false, narrowExpanded: false },
+      { sidebar: 0, rightSurface: 'details', detailsWidth: DETAILS_DEFAULT, fileWidth: FILE_DEFAULT, narrow: false, narrowExpanded: false },
+      { sidebar: 0, rightSurface: 'closed', detailsWidth: DETAILS_DEFAULT, fileWidth: FILE_DEFAULT, narrow: false, narrowExpanded: false },
     ])
+  })
+
+  it('details and file surfaces keep independent widths and cannot cross-close', () => {
+    const layout = new DesktopLayoutState()
+    layout.openDetails()
+    expect(layout.getSnapshot()).toMatchObject({ rightSurface: 'details', detailsWidth: DETAILS_DEFAULT })
+    // Resizing details clamps to the details range.
+    layout.setRightWidth(900)
+    expect(layout.getSnapshot().rightSurface).toBe('details')
+    expect(layout.getSnapshot().detailsWidth).toBe(DETAILS_MAX)
+    // closeDetails only ever closes details.
+    layout.closeDetails()
+    expect(layout.getSnapshot().rightSurface).toBe('closed')
+
+    layout.openFile()
+    expect(layout.getSnapshot()).toMatchObject({ rightSurface: 'file', fileWidth: FILE_DEFAULT })
+    // Resizing while file is selected clamps to the file range (and never the details range).
+    layout.setRightWidth(1200)
+    expect(layout.getSnapshot().fileWidth).toBe(FILE_MAX)
+    layout.setRightWidth(100)
+    expect(layout.getSnapshot().fileWidth).toBe(FILE_MIN)
+    // closeFile does not reopen a previously hidden details surface.
+    layout.closeFile()
+    expect(layout.getSnapshot().rightSurface).toBe('closed')
+  })
+
+  it('setRightWidth clamps per the currently selected surface and is a no-op when closed', () => {
+    const layout = new DesktopLayoutState()
+    layout.setRightWidth(500)
+    expect(layout.getSnapshot()).toMatchObject({ rightSurface: 'closed', detailsWidth: DETAILS_DEFAULT, fileWidth: FILE_DEFAULT })
+    layout.openFile()
+    layout.setRightWidth(500)
+    expect(layout.getSnapshot().fileWidth).toBe(500)
+    layout.closeFile()
+    layout.openDetails()
+    layout.setRightWidth(500)
+    expect(layout.getSnapshot().detailsWidth).toBe(500)
+  })
+
+  it('openDetails always notifies details-intent listeners even when already on details', () => {
+    const layout = new DesktopLayoutState()
+    const intents: number[] = []
+    layout.onDetailsIntent(() => { intents.push(intents.length + 1) })
+    layout.openDetails()
+    layout.openDetails()
+    layout.openDetails()
+    expect(intents).toEqual([1, 2, 3])
+  })
+
+  it('keeps the file surface at least FILE_MIN across narrow viewports', () => {
+    // Preferred file width fits at 280 + 640 + 480 <= 1440.
+    expect(computeDesktopColumns(1440, 280, 'file', FILE_DEFAULT)).toEqual({ sidebar: 280, center: 520, details: FILE_DEFAULT })
+    // At 1024 it shrinks toward FILE_MIN and the center falls below the 640 floor.
+    expect(computeDesktopColumns(1024, 280, 'file', FILE_DEFAULT))
+      .toEqual({ sidebar: 280, center: 384, details: 360 })
+    // At 900 (compact rail) the file surface stays at FILE_MIN with a positive (below-floor) center.
+    expect(computeDesktopColumns(900, 0, 'file', FILE_DEFAULT)).toEqual({ sidebar: 56, center: 480, details: 364 })
+    // An extremely narrow viewport never collapses the chosen file to zero even if center clamps.
+    expect(computeDesktopColumns(480, 0, 'file', FILE_DEFAULT)).toEqual({ sidebar: 56, center: 64, details: 360 })
+  })
+
+  it('a closed or details surface keeps the historical shrink/close geometry', () => {
+    // Preferred details fits at 280 + 360 + 640 <= 1440.
+    expect(computeDesktopColumns(1440, 280, 'details', DETAILS_DEFAULT))
+      .toEqual({ sidebar: 280, center: 800, details: DETAILS_DEFAULT })
+    // Details shrinks toward CENTER_MIN before it would close.
+    expect(computeDesktopColumns(1250, 280, 'details', DETAILS_DEFAULT))
+      .toEqual({ sidebar: 280, center: 640, details: 330 })
+    // Too narrow: details closes (details: 0) rather than squeezing the conversation.
+    expect(computeDesktopColumns(1024, 280, 'details', DETAILS_DEFAULT))
+      .toEqual({ sidebar: 280, center: 744, details: 0 })
+    // The file surface clamps its own width only while selected.
+    expect(computeDesktopColumns(1440, 0, 'file', 2000))
+      .toEqual({ sidebar: 56, center: 484, details: FILE_MAX })
   })
 
   it('lets the rail re-expand without losing its wide preference on narrow windows', () => {

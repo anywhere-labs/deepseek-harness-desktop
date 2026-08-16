@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './contracts.ts'
 import type { DesktopClientPlatform } from './environment.ts'
+import { FilePreviewPanel } from './file-preview/FilePreviewPanel.tsx'
+import type { FilePreviewController } from './file-preview/controller.ts'
+import type { FilePreviewRegistry } from './file-preview/registry.ts'
 import {
   computeDesktopColumns, DesktopLayoutState, MACOS_SIDEBAR_COLLAPSED,
   SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT,
@@ -13,6 +16,10 @@ export interface AdvancedFrameInjected {
   layout: DesktopLayoutState
   /** Host platform controlling native title-bar spacing. */
   platform: DesktopClientPlatform
+  /** File-preview external store driving the right file surface. */
+  filePreview: FilePreviewController
+  /** Provider registry the file panel resolves renderers through. */
+  filePreviewRegistry: FilePreviewRegistry
 }
 
 /** Full advanced root slot props. */
@@ -21,12 +28,16 @@ export type AdvancedFrameProps = PropsRuntime<'root'>
   & AdvancedFrameInjected
 
 /** Desktop-owned transparent frame around the unchanged product surfaces. */
-export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: AdvancedFrameProps) {
+export function AdvancedFrame({ layout, platform, filePreview, filePreviewRegistry, renderSlot, useSessions }: AdvancedFrameProps) {
   const subscribeLayout = useCallback((listener: () => void) => layout.subscribe(listener), [layout])
   const readLayout = useCallback(() => layout.getSnapshot(), [layout])
   const panels = useSyncExternalStore(subscribeLayout, readLayout)
+  const subscribeFileView = useCallback((listener: () => void) => filePreview.subscribe(listener), [filePreview])
+  const readFileView = useCallback(() => filePreview.getSnapshot(), [filePreview])
+  const fileView = useSyncExternalStore(subscribeFileView, readFileView)
   const frameRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const currentSessionId = useSessions((state) => state.current)
   const detailsSession = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === false ? current : undefined
@@ -45,12 +56,24 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => { layout.setNarrow(narrow) }, [layout, narrow])
 
-  const previousSession = useRef(detailsSession)
+  // Session identity drives lifecycle cleanup: leaving a defined session for a
+  // different one (or none) closes the file surface and releases its resources.
+  const previousIdentity = useRef(currentSessionId)
   useEffect(() => {
-    if (detailsSession !== undefined && previousSession.current !== undefined && previousSession.current !== detailsSession) {
+    const previous = previousIdentity.current
+    if (previous !== undefined && previous !== currentSessionId) {
+      filePreview.close()
+    }
+    previousIdentity.current = currentSessionId
+  }, [currentSessionId, filePreview])
+
+  // The renderable details session keeps the historical close-on-switch rule.
+  const previousDetails = useRef(detailsSession)
+  useEffect(() => {
+    if (detailsSession !== undefined && previousDetails.current !== undefined && previousDetails.current !== detailsSession) {
       layout.closeDetails()
     }
-    previousSession.current = detailsSession
+    previousDetails.current = detailsSession
   }, [detailsSession, layout])
 
   const collapsed = panels.narrow ? !panels.narrowExpanded : panels.sidebar === 0
@@ -58,7 +81,8 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
   const columns = computeDesktopColumns(
     viewport,
     sidebarPreference,
-    detailsSession === undefined ? 0 : panels.details,
+    panels.rightSurface,
+    panels.rightSurface === 'file' ? panels.fileWidth : panels.detailsWidth,
     platform === 'darwin' ? MACOS_SIDEBAR_COLLAPSED : SIDEBAR_COLLAPSED,
   )
 
@@ -78,7 +102,20 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
         </div>
       </aside>
       <main className="dshDesktopConversationSurface">{renderSlot('conversation', {})}</main>
-      <aside className="dshDesktopDetailsSurface">{renderSlot('details', {})}</aside>
+      <aside className="dshDesktopDetailsSurface">
+        <div className="dshDesktopConversationDetailsSurface" hidden={panels.rightSurface !== 'details'} aria-hidden={panels.rightSurface !== 'details'}>
+          {renderSlot('details', {})}
+        </div>
+        <section className="dshDesktopFilePreviewSurface" hidden={panels.rightSurface !== 'file'} aria-hidden={panels.rightSurface !== 'file'}>
+          <FilePreviewPanel
+            snapshot={fileView}
+            registry={filePreviewRegistry}
+            onRefresh={() => { void filePreview.refresh() }}
+            onClose={() => { filePreview.close() }}
+            onOpenExternally={() => filePreview.openExternally()}
+          />
+        </section>
+      </aside>
       <div className="dshDesktopOverlay" data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
@@ -95,7 +132,7 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
           side="details"
           left={viewport - columns.details}
           size={columns.details}
-          onResize={(width) => { layout.setDetails(width) }}
+          onResize={(width) => { layout.setRightWidth(width) }}
         />
       )}
     </div>
