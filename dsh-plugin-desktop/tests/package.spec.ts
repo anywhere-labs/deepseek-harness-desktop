@@ -145,6 +145,14 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-llm-guardian')
+  })
+
+  it('pins the Provider health and usage plugin to an audited commit', () => {
+    expect(manifest.dependencies).toHaveProperty(
+      'dsh-llm-guardian',
+      'github:ice-kele/dsh-llm-guardian#5e793f25fe6ac9d7cf1ae5f95a03410706a82064',
+    )
   })
 
   it('pins both selectable Market providers in the published runtime', () => {

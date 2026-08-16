@@ -244,6 +244,7 @@
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
     "dshmarket": "1.17.1",
+    "dsh-llm-guardian": "github:ice-kele/dsh-llm-guardian#5e793f25fe6ac9d7cf1ae5f95a03410706a82064",
     "koffi": "3.1.5",
     "node-addon-require-builtin": "^0.1.4",
     "pnpm": "11.7.0",

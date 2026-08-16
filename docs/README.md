@@ -13,6 +13,7 @@
 | 文档 | 你会得到什么 |
 | --- | --- |
 | [用户指南](user-guide.md) | 安装、profile、模式、终端、插件命令和更新 |
+| [Provider 健康与模型用量](provider-usage.md) | Provider 卡片状态、单模型统计、API 查询和本地额度设置 |
 | [常见问题](faq.md) | 支持平台、内置环境、官方边界、数据、插件和更新的直接回答 |
 | [为什么做 Desktop](why-desktop.md) | Desktop 与官方 Harness 的边界，以及为什么坚持插件化 |
 

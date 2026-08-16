@@ -13,6 +13,7 @@ Ordinary users can start with the [user guide](user-guide.en.md) and never need 
 | Document | Covers |
 | --- | --- |
 | [User guide](user-guide.en.md) | Installation, profiles, modes, terminal, plugins, and updates |
+| [Provider health and model usage](provider-usage.en.md) | Provider-card status, per-model statistics, API queries, and local quota settings |
 | [FAQ](faq.en.md) | Direct answers about platforms, bundled runtime, project status, data, plugins, and updates |
 | [Why Desktop](why-desktop.en.md) | The boundary with upstream Harness and the case for plugins |
 
