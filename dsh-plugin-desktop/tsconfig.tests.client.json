@@ -5,5 +5,11 @@
     "noEmit": true,
     "emitDeclarationOnly": false
   },
-  "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "tests/client-environment.spec.ts"]
+  "include": [
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "tests/client-environment.spec.ts",
+    "tests/**/*.client.spec.ts",
+    "tests/**/*.client.spec.tsx"
+  ]
 }
