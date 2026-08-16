@@ -15,7 +15,6 @@ permissions:
 
 env:
   DSH_TELEMETRY_DISABLED: '1'
-  # 避免某些 post-install 脚本触发遥测
   ELECTRON_SKIP_DOWNLOAD: 'false'
   NODE_VERSION: '22.23.2'
 
@@ -45,13 +44,10 @@ jobs:
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           fi
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          # 从 dsh-plugin-desktop/package.json 读桌面端版本
           DESKTOP_VER=$(node -p "require('./dsh-plugin-desktop/package.json').version")
           echo "version=$DESKTOP_VER" >> "$GITHUB_OUTPUT"
-          # 从 upstream.json 读 dsh runtime 版本
           DSH_VER=$(node -p "require('./upstream.json').runtimePackageVersion")
           echo "dsh_version=$DSH_VER" >> "$GITHUB_OUTPUT"
-          # dsh 版本含 -rc / -beta 视为 prerelease
           if [[ "$DSH_VER" =~ -(rc|beta|alpha|pre) ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
@@ -87,12 +83,13 @@ jobs:
         run: corepack yarn workspace dsh-plugin-desktop build
       - name: Package macOS arm64 DMG (ad-hoc, no notarize)
         env:
-          # fork 仓库无 Apple Developer 证书：关闭公证，允许 ad-hoc 签名
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           USE_HARD_LINKS: 'false'
         run: |
           cd dsh-plugin-desktop
-          npx electron-builder --mac dmg --arm64 --publish never \
+          # electron-builder 26.15.3 schema 不认 package.json 顶层 license 字段，临时移除
+          node -e "const p=require('./package.json');delete p.license;require('fs').writeFileSync('./package.json',JSON.stringify(p,null,2))"
+          yarn exec electron-builder --mac dmg --arm64 --publish never \
             --config.mac.notarize=false \
             --config.mac.hardenedRuntime=false \
             --config.mac.target=dmg
@@ -129,7 +126,8 @@ jobs:
           USE_HARD_LINKS: 'false'
         run: |
           cd dsh-plugin-desktop
-          npx electron-builder --mac dmg --x64 --publish never \
+          node -e "const p=require('./package.json');delete p.license;require('fs').writeFileSync('./package.json',JSON.stringify(p,null,2))"
+          yarn exec electron-builder --mac dmg --x64 --publish never \
             --config.mac.notarize=false \
             --config.mac.hardenedRuntime=false \
             --config.mac.target=dmg
@@ -156,6 +154,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: corepack enable
+      - name: Install dependencies
+        run: corepack yarn install --immutable
+      - name: Remove license field (electron-builder schema workaround)
+        run: |
+          node -e "const p=require('./dsh-plugin-desktop/package.json');delete p.license;require('fs').writeFileSync('./dsh-plugin-desktop/package.json',JSON.stringify(p,null,2))"
       - name: Build + Package Windows x64 NSIS (unsigned)
         run: corepack yarn dist:win
         env:
