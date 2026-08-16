@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { apply as applyDesktopClient } from '../src/client/index.ts'
 import { provideDesktopLayout } from '../src/client/layout-service.ts'
 import { parseDesktopClientEnvironment } from '../src/client/environment.ts'
 import {
@@ -23,12 +24,24 @@ describe('desktop client environment', () => {
   })
 
   it.each([
-    ['', 'dsh-desktop-mode'],
     ['?dsh-desktop-mode=glass&dsh-desktop-platform=darwin', 'dsh-desktop-mode'],
     ['?dsh-desktop-mode=advanced', 'dsh-desktop-platform'],
     ['?dsh-desktop-mode=advanced&dsh-desktop-platform=android', 'dsh-desktop-platform'],
   ])('fails loud for malformed marker %s', (search, field) => {
     expect(() => parseDesktopClientEnvironment(search)).toThrow(field)
+  })
+
+  it('ignores an unmarked browser page instead of breaking plugin loading', () => {
+    const effect = vi.fn()
+    expect(parseDesktopClientEnvironment('')).toBeUndefined()
+    vi.stubGlobal('window', { location: { search: '' } })
+    try {
+      expect(() => applyDesktopClient({ effect } as unknown as ClientContext)).not.toThrow()
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
+    expect(effect).not.toHaveBeenCalled()
   })
 })
 
