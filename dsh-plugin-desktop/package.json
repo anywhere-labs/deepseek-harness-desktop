@@ -35,6 +35,10 @@
       "types": "./lib/types/windows-pwsh-sandbox.d.ts",
       "default": "./lib/windows-pwsh-sandbox.js"
     },
+    "./windows-directory-picker": {
+      "types": "./lib/types/windows-directory-picker.d.ts",
+      "default": "./lib/windows-directory-picker.js"
+    },
     "./terminal": {
       "types": "./lib/types/terminal.d.ts",
       "default": "./lib/terminal.js"

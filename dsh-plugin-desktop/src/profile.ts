@@ -46,8 +46,8 @@ const INSTALL_ANCHOR = unpackedAsarPath(fileURLToPath(new URL('../package.json',
 const DESKTOP_PATCH_PATH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
 const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
-const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
-const BROWSE_PICKER_SURFACE = '@deepseek-ai/dsh-client-ui-directory-picker-browse'
+const DESKTOP_WINDOWS_DIRECTORY_PICKER_PACKAGE = 'dsh-plugin-desktop/windows-directory-picker'
+const NATIVE_PICKER_SURFACE = '@deepseek-ai/dsh-client-ui-directory-picker-native'
 const PWSH_SANDBOX_ROW_ID = 'pwsh-sandbox'
 const UPSTREAM_PWSH_SANDBOX_PACKAGE = '@deepseek-ai/dsh-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_ROW_ID = 'desktop-windows-pwsh-sandbox'
@@ -386,12 +386,12 @@ export function prepareDesktopProfile(
       {
         insert: [
           {
-            id: 'desktop-directory-picker-browse-host',
-            name: BROWSE_PICKER_BACKEND,
+            id: 'desktop-windows-directory-picker-host',
+            name: DESKTOP_WINDOWS_DIRECTORY_PICKER_PACKAGE,
           },
           {
-            id: 'desktop-directory-picker-browse-surface',
-            name: BROWSE_PICKER_SURFACE,
+            id: 'desktop-windows-directory-picker-surface',
+            name: NATIVE_PICKER_SURFACE,
           },
         ],
       },
