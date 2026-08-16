@@ -286,6 +286,16 @@ describe('published package surface', () => {
     expect(installedCodeSign).toContain('"-k", keychainPassword, keychainFile')
   })
 
+  it('patches the model settings editor with explicit image input capability', () => {
+    const patchResolution = 'patch:@deepseek-ai/dsh-client-ui-settings-models@npm%3A0.1.0-rc.6#./.yarn/patches/@deepseek-ai-dsh-client-ui-settings-models-npm-0.1.0-rc.6-3766bee0bd.patch'
+    const patch = readFileSync(new URL('.yarn/patches/@deepseek-ai-dsh-client-ui-settings-models-npm-0.1.0-rc.6-3766bee0bd.patch', workspaceRoot), 'utf8')
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-client-ui-settings-models@npm:^0.1.0-rc.6': patchResolution,
+    })
+    expect(patch).toContain('modelImageInput')
+    expect(patch).toContain('input: event.target.checked ? ["text", "image"] : ["text"]')
+  })
+
   it('starts restricted Windows shells with a hidden console show state', () => {
     const patchResolution = 'patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.6#./patches/dsh-sandbox-windows-acl@0.1.0-rc.6.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')

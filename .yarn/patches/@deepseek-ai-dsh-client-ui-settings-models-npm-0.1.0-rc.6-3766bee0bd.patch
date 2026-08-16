@@ -1,0 +1,71 @@
+diff --git a/lib/client.js b/lib/client.js
+index 644a0f2edecdb363a0157d63a67ad4a6af45b638..e8df90fccd240a6e8e1c03e6bc2bbd37f44f87e7 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -666,6 +666,10 @@ window.__ModuleLoader__.load({
+ 			const value = model[key];
+ 			return typeof value === "number" ? value : void 0;
+ 		}
++		/** Whether the model explicitly declares image input among its modalities. */
++		function acceptsImages(model) {
++			return Array.isArray(model.input) && model.input.includes("image");
++		}
+ 		/** Disclosure chevron; rotates to point down while its row is open. */
+ 		function IconChevron({ open }) {
+ 			return (0, react_jsx_runtime.jsx)("svg", {
+@@ -971,6 +975,33 @@ window.__ModuleLoader__.load({
+ 										editCapacity(index, "maxTokens", event.target.value);
+ 									}
+ 								})]
++							}), (0, react_jsx_runtime.jsxs)("label", {
++								style: {
++									display: "flex",
++									gridColumn: "1 / -1",
++									alignItems: "flex-start",
++									gap: "8px",
++									paddingTop: "4px",
++									cursor: "pointer"
++								},
++								children: [(0, react_jsx_runtime.jsx)("input", {
++									type: "checkbox",
++									checked: acceptsImages(model),
++									"aria-label": `${t("modelImageInput")} ${index + 1}`,
++									disabled,
++									onChange: (event) => {
++										patch(index, { input: event.target.checked ? ["text", "image"] : ["text"] });
++									}
++								}), (0, react_jsx_runtime.jsxs)("span", {
++									style: { fontSize: "12px", lineHeight: "18px" },
++									children: [(0, react_jsx_runtime.jsx)("span", {
++										style: { display: "block" },
++										children: t("modelImageInput")
++									}), (0, react_jsx_runtime.jsx)("span", {
++										style: { display: "block", color: "var(--dsw-alias-label-tertiary)" },
++										children: t("modelImageInputHint")
++									})]
++								})]
+ 							})]
+ 						}) : null]
+ 					}, index)),
+@@ -2488,7 +2519,9 @@ window.__ModuleLoader__.load({
+ 			contextWindowPlaceholder: "Uses the provider default",
+ 			maxTokens: "Max output tokens",
+ 			maxTokensPlaceholder: "Uses the provider default",
+-			modelAdvanced: "Capacities",
++			modelAdvanced: "Model capabilities",
++			modelImageInput: "Image input",
++			modelImageInputHint: "Enable only when this model accepts images.",
+ 			addModel: "Add model",
+ 			removeModel: "Delete model",
+ 			modelsEmpty: "No models will be shown in the selector. Unlisted IDs can still be sent directly.",
+@@ -2584,7 +2617,9 @@ window.__ModuleLoader__.load({
+ 			contextWindowPlaceholder: "使用提供方默认值",
+ 			maxTokens: "最大输出 token 数",
+ 			maxTokensPlaceholder: "使用提供方默认值",
+-			modelAdvanced: "容量",
++			modelAdvanced: "模型能力",
++			modelImageInput: "图片输入",
++			modelImageInputHint: "仅在该模型可以接收图片时启用。",
+ 			addModel: "添加模型",
+ 			removeModel: "删除模型",
+ 			modelsEmpty: "模型选择器中将不显示任何模型；目录外 ID 仍可直接发送。",
