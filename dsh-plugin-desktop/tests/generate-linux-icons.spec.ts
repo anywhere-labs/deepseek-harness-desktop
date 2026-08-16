@@ -35,6 +35,7 @@ describe('Linux hicolor icon generator', () => {
           format: 'png',
           width: size,
           height: size,
+          space: 'srgb',
           channels: 4,
           hasAlpha: true,
         }))

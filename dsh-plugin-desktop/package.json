@@ -1,5 +1,6 @@
 {
   "name": "dsh-plugin-desktop",
+  "desktopName": "dsh-plugin-desktop",
   "version": "2.0.0",
   "description": "DSH Desktop: an Electron shell composed as a DeepSeek Harness Cordis plugin",
   "license": "MIT",
@@ -57,6 +58,7 @@
   "files": [
     "build/app-icon.png",
     "build/app-icon-mac.png",
+    "build/icons/**",
     "build/tray-icon.svg",
     "build/tray-icon*.png",
     "cordis.patch.yml",
@@ -245,6 +247,7 @@
     "files": [
       "build/app-icon.png",
       "build/app-icon-mac.png",
+      "build/icons/**",
       "build/tray-icon.svg",
       "build/tray-icon*.png",
       "cordis.patch.yml",
@@ -285,7 +288,10 @@
       "target": [
         "dir"
       ],
-      "icon": "build/icons"
+      "category": "Development",
+      "executableName": "dsh-plugin-desktop",
+      "icon": "build/icons",
+      "syncDesktopName": true
     }
   }
 }

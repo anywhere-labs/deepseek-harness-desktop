@@ -70,6 +70,19 @@ export const REQUIRED_UNPACKED_RUNTIME_ENTRIES = [
   'node_modules/pnpm/bin/pnpm.mjs',
 ] as const
 
+/** Freedesktop hicolor sizes required when Linux packaging copies the icon directory. */
+export const REQUIRED_LINUX_ICON_ENTRIES = [
+  'build/icons/16x16.png',
+  'build/icons/24x24.png',
+  'build/icons/32x32.png',
+  'build/icons/48x48.png',
+  'build/icons/64x64.png',
+  'build/icons/96x96.png',
+  'build/icons/128x128.png',
+  'build/icons/256x256.png',
+  'build/icons/512x512.png',
+] as const
+
 /** Prebuilt Node-API modules required when the Windows package skips native source rebuilds. */
 export const REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES = [
   'node_modules/node-pty/prebuilds/win32-x64/conpty.node',
@@ -223,7 +236,9 @@ export function verifyPackagedRuntime(
   const unpackedRoot = resolvePackagedUnpackedRoot(context)
   const requiredPhysicalEntries = context.electronPlatformName === 'win32'
     ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES]
-    : REQUIRED_UNPACKED_RUNTIME_ENTRIES
+    : context.electronPlatformName === 'linux'
+      ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_LINUX_ICON_ENTRIES]
+      : REQUIRED_UNPACKED_RUNTIME_ENTRIES
   const missing = requiredPhysicalEntries.filter(entry => !exists(join(unpackedRoot, entry)))
   if (missing.length > 0) {
     throw new Error(

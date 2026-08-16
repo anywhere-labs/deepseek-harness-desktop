@@ -203,16 +203,21 @@ describe('desktop Host plugin', () => {
     expect(res.statusCode).toBe(204)
   })
 
-  it.each(['win32', 'linux'] as const)(
-    'keeps the full-size application icon on %s',
-    (platform) => {
-      const harness = createHarness(platform)
+  it('keeps the full-size application icon on win32', () => {
+    const harness = createHarness('win32')
 
-      apply(harness.ctx, config)
+    apply(harness.ctx, config)
 
-      expect(harness.shell()?.iconPath).toMatch(/\/build\/app-icon\.png$/u)
-    },
-  )
+    expect(harness.shell()?.iconPath).toMatch(/\/build\/app-icon\.png$/u)
+  })
+
+  it('uses the generated 8-bit hicolor icon on linux', () => {
+    const harness = createHarness('linux')
+
+    apply(harness.ctx, config)
+
+    expect(harness.shell()?.iconPath).toMatch(/\/build\/icons\/512x512\.png$/u)
+  })
 
   it('requests one orderly restart after the settings scope commits another mode', async () => {
     vi.useFakeTimers()

@@ -9,6 +9,7 @@ const packageRoot = new URL('../', import.meta.url)
 const workspaceRoot = new URL('../', packageRoot)
 const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), 'utf8')) as {
   name?: unknown
+  desktopName?: unknown
   version?: unknown
   bin?: Record<string, unknown>
   exports?: Record<string, unknown>
@@ -25,7 +26,7 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
     mac?: { hardenedRuntime?: unknown; icon?: unknown; notarize?: unknown; target?: unknown }
     win?: { icon?: unknown; target?: unknown }
     nsis?: Record<string, unknown>
-    linux?: { icon?: unknown }
+    linux?: { icon?: unknown; category?: unknown; executableName?: unknown; syncDesktopName?: unknown }
   }
   dependencies?: Record<string, unknown>
   optionalDependencies?: Record<string, unknown>
@@ -41,6 +42,7 @@ const workspaceManifest = JSON.parse(readFileSync(new URL('package.json', worksp
 describe('published package surface', () => {
   it('registers both npm launcher names', () => {
     expect(manifest.name).toBe('dsh-plugin-desktop')
+    expect(manifest.desktopName).toBe('dsh-plugin-desktop')
     expect(manifest.bin).toEqual({
       'dsh-plugin-desktop': 'lib/bin.js',
       'dsh-desktop': 'lib/bin.js',
@@ -147,6 +149,7 @@ describe('published package surface', () => {
     expect(manifest.files).toEqual(expect.arrayContaining([
       'build/app-icon.png',
       'build/app-icon-mac.png',
+      'build/icons/**',
       'build/tray-icon.svg',
       'build/tray-icon*.png',
       'docs/**',
@@ -154,6 +157,7 @@ describe('published package surface', () => {
     expect(manifest.build?.files).toEqual([
       'build/app-icon.png',
       'build/app-icon-mac.png',
+      'build/icons/**',
       'build/tray-icon.svg',
       'build/tray-icon*.png',
       'cordis.patch.yml',
@@ -177,6 +181,9 @@ describe('published package surface', () => {
       artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/icons')
+    expect(manifest.build?.linux?.category).toBe('Development')
+    expect(manifest.build?.linux?.executableName).toBe('dsh-plugin-desktop')
+    expect(manifest.build?.linux?.syncDesktopName).toBe(true)
   })
 
   it('separates unsigned smoke packaging from the signed macOS release', () => {
