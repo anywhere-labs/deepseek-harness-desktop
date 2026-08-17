@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import AdmZip from 'adm-zip'
 import {
   afterPack,
   REQUIRED_PACKAGED_RUNTIME_ENTRIES,
@@ -42,6 +43,22 @@ function completePackageResolver(unpackedRoot: string): PackageResolver {
 }
 
 describe('packaged desktop runtime verification', () => {
+  it('fails the diagnostic Worker smoke when its archive omits the crash dump', async () => {
+    const unpackedRoot = resolvePackagedUnpackedRoot(context('/build', 'win32'))
+    const launch = vi.fn<PackagedDiagnosticWorkerLauncher>(async (_workerPath, workerData) => {
+      const outDir = join(workerData.userDataDir, 'diagnostics')
+      mkdirSync(outDir)
+      const output = join(outDir, 'diagnostics-smoke.zip')
+      const zip = new AdmZip()
+      zip.addFile('system-info.txt', Buffer.from('no dump\n'))
+      zip.writeZip(output)
+      return output
+    })
+
+    await expect(smokePackagedDiagnosticWorker(unpackedRoot, launch))
+      .rejects.toThrow('packaged diagnostic worker omitted crash-dumps/pending/packaged-smoke.dmp')
+  })
+
   it.each(['darwin', 'win32'])(
     'targets the physical diagnostic Worker in the %s unpacked layout and removes smoke files',
     async (platform) => {
@@ -52,11 +69,15 @@ describe('packaged desktop runtime verification', () => {
         expect(workerPath).toBe(join(unpackedRoot, 'lib', 'diagnostic-export-worker.js'))
         expect(readFileSync(join(workerData.logsDir, 'dsh-2000-01-01.log'), 'utf8'))
           .toBe('packaged worker smoke\n')
-        expect(workerData.maxLogBytes).toBe(1024)
+        expect(workerData.maxEvidenceBytes).toBe(1024)
+        const crashDump = readFileSync(join(workerData.crashDumpsDir, 'pending', 'packaged-smoke.dmp'))
+        expect(crashDump.toString('utf8')).toBe('packaged crash dump smoke\n')
         const outDir = join(workerData.userDataDir, 'diagnostics')
         mkdirSync(outDir)
         const output = join(outDir, 'diagnostics-smoke.zip')
-        writeFileSync(output, 'zip')
+        const zip = new AdmZip()
+        zip.addFile('crash-dumps/pending/packaged-smoke.dmp', crashDump)
+        zip.writeZip(output)
         return output
       })
 

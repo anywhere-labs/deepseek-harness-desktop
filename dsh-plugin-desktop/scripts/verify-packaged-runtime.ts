@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { listPackage } from '@electron/asar'
+import AdmZip from 'adm-zip'
 import {
   FORBIDDEN_MACOS_UNIVERSAL_ENTRIES,
   MACOS_UNIVERSAL_NATIVE_ENTRIES,
@@ -131,7 +132,8 @@ export type PackageResolver = (specifier: string) => string
 export interface PackagedDiagnosticWorkerData {
   readonly logsDir: string
   readonly userDataDir: string
-  readonly maxLogBytes: number
+  readonly maxEvidenceBytes: number
+  readonly crashDumpsDir: string
 }
 
 /** Injectable packaged Worker launcher used by focused tests. */
@@ -198,16 +200,23 @@ export async function smokePackagedDiagnosticWorker(
   const root = mkdtempSync(join(tmpdir(), 'dsh-packaged-diagnostics-'))
   const logsDir = join(root, 'logs')
   const userDataDir = join(root, 'user-data')
+  const crashDumpsDir = join(root, 'Crashpad')
   mkdirSync(logsDir)
   mkdirSync(userDataDir)
+  mkdirSync(join(crashDumpsDir, 'pending'), { recursive: true })
   writeFileSync(join(logsDir, 'dsh-2000-01-01.log'), 'packaged worker smoke\n')
+  writeFileSync(join(crashDumpsDir, 'pending', 'packaged-smoke.dmp'), 'packaged crash dump smoke\n')
   try {
     const output = await launch(
       join(unpackedRoot, 'lib', 'diagnostic-export-worker.js'),
-      { logsDir, userDataDir, maxLogBytes: 1024 },
+      { logsDir, userDataDir, maxEvidenceBytes: 1024, crashDumpsDir },
     )
     if (!existsSync(output)) {
       throw new Error(`dsh-plugin-desktop: packaged diagnostic worker produced no archive at ${output}`)
+    }
+    const crashEntry = 'crash-dumps/pending/packaged-smoke.dmp'
+    if (new AdmZip(output).getEntry(crashEntry) === null) {
+      throw new Error(`dsh-plugin-desktop: packaged diagnostic worker omitted ${crashEntry}`)
     }
   } finally {
     rmSync(root, { recursive: true, force: true })
