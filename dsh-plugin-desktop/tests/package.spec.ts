@@ -308,6 +308,24 @@ describe('published package surface', () => {
     expect(installedCodeSign).toContain('"-k", keychainPassword, keychainFile')
   })
 
+  it('preserves streamed DeepSeek tool call identity across empty continuation fields', () => {
+    const patchResolution = 'patch:@deepseek-ai/dsh-llm-deepseek@npm%3A0.1.0-rc.6#./patches/dsh-llm-deepseek@0.1.0-rc.6.patch'
+    const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
+    const patch = readFileSync(new URL('patches/dsh-llm-deepseek@0.1.0-rc.6.patch', workspaceRoot), 'utf8')
+    const workspaceRequire = createRequire(new URL('package.json', packageRoot))
+    const adapterManifest = workspaceRequire.resolve('@deepseek-ai/dsh-llm-deepseek/package.json')
+    const installedAdapter = readFileSync(join(dirname(adapterManifest), 'lib/index.js'), 'utf8')
+
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-llm-deepseek@npm:^0.1.0-rc.6': patchResolution,
+    })
+    expect(lockfile).toContain('@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@npm%3A0.1.0-rc.6#./patches/dsh-llm-deepseek@0.1.0-rc.6.patch')
+    expect(patch).toContain('if (call.id) block.callId = call.id;')
+    expect(patch).toContain('if (call.function?.name) block.name = call.function.name;')
+    expect(installedAdapter).toContain('if (call.id) block.callId = call.id;')
+    expect(installedAdapter).toContain('if (call.function?.name) block.name = call.function.name;')
+  })
+
   it('starts restricted Windows shells with a hidden console show state', () => {
     const patchResolution = 'patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.6#./patches/dsh-sandbox-windows-acl@0.1.0-rc.6.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
