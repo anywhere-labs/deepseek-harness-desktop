@@ -527,10 +527,34 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       }
       if (targetOrigin !== origin) event.preventDefault()
     }
+    const showEditContextMenu = (_event: Electron.Event, params: Electron.ContextMenuParams): void => {
+      const template: Electron.MenuItemConstructorOptions[] = []
+      if (params.isEditable) {
+        template.push(
+          { role: 'cut', enabled: params.editFlags.canCut },
+          { role: 'copy', enabled: params.editFlags.canCopy },
+          { role: 'paste', enabled: params.editFlags.canPaste },
+          { type: 'separator' },
+          { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+        )
+      } else if (params.editFlags.canCopy) {
+        template.push({ role: 'copy' })
+      }
+      if (template.length === 0) return
+
+      Menu.buildFromTemplate(template).popup({
+        window,
+        ...(params.frame === null ? {} : { frame: params.frame }),
+        x: params.x,
+        y: params.y,
+        sourceType: params.menuSourceType,
+      })
+    }
 
     app.on('activate', show)
     window.on('close', close)
     window.on('page-title-updated', preserveBlankTitle)
+    window.webContents.on('context-menu', showEditContextMenu)
     window.webContents.on('will-frame-navigate', navigate)
     window.webContents.on('will-redirect', navigate)
     window.webContents.setWindowOpenHandler(({ url }) => {
@@ -580,6 +604,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       app.off('activate', show)
       window.off('close', close)
       window.off('page-title-updated', preserveBlankTitle)
+      window.webContents.off('context-menu', showEditContextMenu)
       window.webContents.off('will-frame-navigate', navigate)
       window.webContents.off('will-redirect', navigate)
       mountedTray.off('click', show)

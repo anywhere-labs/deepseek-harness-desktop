@@ -48,6 +48,7 @@ const electron = vi.hoisted(() => {
   const browserWindowOn = vi.fn()
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
+  const menuPopup = vi.fn()
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
   const dialog = {
@@ -151,9 +152,10 @@ const electron = vi.hoisted(() => {
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
         menuTemplates.push(template)
-        return {}
+        return { popup: menuPopup }
       }),
     },
+    menuPopup,
     menuTemplates,
     nativeImage: { createFromPath },
     nativeTheme,
@@ -345,6 +347,104 @@ describe('Electron compatibility runtime', () => {
       ]))
 
     await release()
+  })
+
+  it('shows native edit roles only for editable fields or copied selections', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    type ContextMenuListener = (event: unknown, params: {
+      frame: unknown | null
+      x: number
+      y: number
+      isEditable: boolean
+      menuSourceType: 'mouse' | 'keyboard'
+      editFlags: {
+        canCut: boolean
+        canCopy: boolean
+        canPaste: boolean
+        canSelectAll: boolean
+      }
+    }) => void
+    const webContents = electron.browserWindows[0]?.webContents
+    const contextMenu = webContents?.on.mock.calls
+      .find(([event]) => event === 'context-menu')?.[1] as ContextMenuListener | undefined
+    expect(contextMenu).toEqual(expect.any(Function))
+
+    const frame = {}
+    contextMenu?.({}, {
+      frame,
+      x: 24,
+      y: 32,
+      isEditable: true,
+      menuSourceType: 'mouse',
+      editFlags: {
+        canCut: false,
+        canCopy: true,
+        canPaste: true,
+        canSelectAll: true,
+      },
+    })
+    expect(electron.menuTemplates.at(-1)).toEqual([
+      { role: 'cut', enabled: false },
+      { role: 'copy', enabled: true },
+      { role: 'paste', enabled: true },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: true },
+    ])
+    expect(electron.menuPopup).toHaveBeenLastCalledWith({
+      window: electron.browserWindows[0],
+      frame,
+      x: 24,
+      y: 32,
+      sourceType: 'mouse',
+    })
+
+    contextMenu?.({}, {
+      frame: null,
+      x: 40,
+      y: 48,
+      isEditable: false,
+      menuSourceType: 'keyboard',
+      editFlags: {
+        canCut: false,
+        canCopy: true,
+        canPaste: false,
+        canSelectAll: false,
+      },
+    })
+    expect(electron.menuTemplates.at(-1)).toEqual([{ role: 'copy' }])
+    expect(electron.menuPopup).toHaveBeenLastCalledWith({
+      window: electron.browserWindows[0],
+      x: 40,
+      y: 48,
+      sourceType: 'keyboard',
+    })
+
+    const templateCount = electron.menuTemplates.length
+    const popupCount = electron.menuPopup.mock.calls.length
+    contextMenu?.({}, {
+      frame: null,
+      x: 56,
+      y: 64,
+      isEditable: false,
+      menuSourceType: 'mouse',
+      editFlags: {
+        canCut: false,
+        canCopy: false,
+        canPaste: false,
+        canSelectAll: false,
+      },
+    })
+    expect(electron.menuTemplates).toHaveLength(templateCount)
+    expect(electron.menuPopup).toHaveBeenCalledTimes(popupCount)
+
+    await release()
+    expect(webContents?.off).toHaveBeenCalledWith('context-menu', contextMenu)
   })
 
   it('does not mount a registration disposed before Host boot settles', async () => {
