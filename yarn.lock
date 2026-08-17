@@ -2045,7 +2045,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-host-directory-picker-native@npm:0.1.0-rc.6, @deepseek-ai/dsh-host-directory-picker-native@npm:^0.1.0-rc.6":
+"@deepseek-ai/dsh-host-directory-picker-native@npm:0.1.0-rc.6":
   version: 0.1.0-rc.6
   resolution: "@deepseek-ai/dsh-host-directory-picker-native@npm:0.1.0-rc.6"
   dependencies:
@@ -2056,6 +2056,20 @@ __metadata:
     "@deepseek-ai/cordis": ^4.0.1
     "@deepseek-ai/dsh-invariants": ^0.1.0-rc.6
   checksum: 10c0/e26287077ade2f7855d42357c302e10966fdabaf6dbadf40d909c79ffa9edeb4044748fe00eefd1ac92ac9ec152506aa0c4bab96dcad4b6954eb7e3c4e11dd9c
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-host-directory-picker-native@patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.6#./patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.6
+  resolution: "@deepseek-ai/dsh-host-directory-picker-native@patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.6#./patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch::version=0.1.0-rc.6&hash=7b7ccf&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-host-directory-picker": "npm:^0.1.0-rc.6"
+    "@deepseek-ai/dsh-native-command": "npm:^0.1.0-rc.6"
+    koffi: "npm:^3.1.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.6
+  checksum: 10c0/f097a2d34d592777a6e72523c769429a97b97e8ce9d1d0ed4bce3b2bf65339ba25066e48776ef3e155290edfcab551d940844d0b6084a3c4f7a44fac6560f531
   languageName: node
   linkType: hard
 

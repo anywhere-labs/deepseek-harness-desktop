@@ -44,10 +44,6 @@ const REQUIRED_BUNDLES = requiredWebBundles()
 const REQUIRED_BUNDLE_SET = new Set(REQUIRED_BUNDLES)
 const INSTALL_ANCHOR = unpackedAsarPath(fileURLToPath(new URL('../package.json', import.meta.url)))
 const DESKTOP_PATCH_PATH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
-const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
-const AUTO_PICKER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
-const BROWSE_PICKER_BACKEND = '@deepseek-ai/dsh-host-directory-picker-browse'
-const BROWSE_PICKER_SURFACE = '@deepseek-ai/dsh-client-ui-directory-picker-browse'
 const PWSH_SANDBOX_ROW_ID = 'pwsh-sandbox'
 const UPSTREAM_PWSH_SANDBOX_PACKAGE = '@deepseek-ai/dsh-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_ROW_ID = 'desktop-windows-pwsh-sandbox'
@@ -374,28 +370,6 @@ export function prepareDesktopProfile(
     throw new Error(`${BIN_NAME}: desktop profile has no webserver row`)
   }
   if (platform === 'win32') {
-    if (!rows.has(DIRECTORY_PICKER_ROW_ID)) {
-      throw new Error(`${BIN_NAME}: desktop profile has no directory-picker row`)
-    }
-    patches.push(
-      {
-        id: DIRECTORY_PICKER_ROW_ID,
-        name: AUTO_PICKER_PACKAGE,
-        disabled: true,
-      },
-      {
-        insert: [
-          {
-            id: 'desktop-directory-picker-browse-host',
-            name: BROWSE_PICKER_BACKEND,
-          },
-          {
-            id: 'desktop-directory-picker-browse-surface',
-            name: BROWSE_PICKER_SURFACE,
-          },
-        ],
-      },
-    )
     const pwshSandbox = rows.get(PWSH_SANDBOX_ROW_ID)
     if (pwshSandbox?.name === UPSTREAM_PWSH_SANDBOX_PACKAGE
       && !rowDisabledOnPlatform(pwshSandbox, platform)) {

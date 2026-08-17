@@ -288,6 +288,24 @@ describe('published package surface', () => {
     expect(lockfile).not.toContain('@koromix/koffi-win32-x64@npm:3.1.4')
   })
 
+  it('patches the native directory picker to avoid Electron external buffers', () => {
+    const patchResolution = 'patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.6#./patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch'
+    const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
+    const patch = readFileSync(new URL('patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch', workspaceRoot), 'utf8')
+    const workspaceRequire = createRequire(new URL('package.json', packageRoot))
+    const workerPath = workspaceRequire.resolve('@deepseek-ai/dsh-host-directory-picker-native/worker')
+    const installedWorker = readFileSync(workerPath, 'utf8')
+
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-host-directory-picker-native@npm:0.1.0-rc.6': patchResolution,
+      '@deepseek-ai/dsh-host-directory-picker-native@npm:^0.1.0-rc.6': patchResolution,
+    })
+    expect(lockfile).toContain('@deepseek-ai/dsh-host-directory-picker-native@patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.6#./patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch')
+    expect(patch).toContain('return koffi.decode.string16(address)')
+    expect(installedWorker).toContain('return koffi.decode.string16(address)')
+    expect(installedWorker).not.toContain('Buffer.from(koffi.view(address')
+  })
+
   it('resolves electron-builder through the pinned app-builder-lib keychain patch', () => {
     const patchResolution = 'patch:app-builder-lib@npm%3A26.15.3#./patches/app-builder-lib@26.15.3.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')

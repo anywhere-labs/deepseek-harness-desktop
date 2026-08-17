@@ -242,7 +242,7 @@ describe('desktop profile composition', () => {
     expect(() => readDesktopShellMode({ path })).toThrow('invalid settings document')
   })
 
-  it('pins the Windows browse picker and desktop pwsh provider without replacing process boundaries', () => {
+  it('keeps the adaptive Windows picker and replaces only the pwsh provider', () => {
     const home = temporaryHome()
     writeFileSync(join(home, 'cordis.patch.yml'), [
       '- id: pwsh-sandbox',
@@ -258,18 +258,10 @@ describe('desktop profile composition', () => {
 
     expect(picker).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-host-directory-picker-auto',
-      disabled: true,
     }))
-    expect(rows).toContainEqual(expect.objectContaining({
-      id: 'desktop-directory-picker-browse-host',
-      name: '@deepseek-ai/dsh-host-directory-picker-browse',
-    }))
-    expect(rows).toContainEqual(expect.objectContaining({
-      id: 'desktop-directory-picker-browse-surface',
-      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse',
-    }))
-    expect(rows.map(row => row.name)).not.toContain('@deepseek-ai/dsh-host-directory-picker-native')
-    expect(rows.map(row => row.name)).not.toContain('@deepseek-ai/dsh-client-ui-directory-picker-native')
+    expect(picker?.disabled).toBeFalsy()
+    expect(rows.map(row => row.id)).not.toContain('desktop-directory-picker-browse-host')
+    expect(rows.map(row => row.id)).not.toContain('desktop-directory-picker-browse-surface')
     expect(rows.find(row => row.id === 'subprocess')).toEqual({
       id: 'subprocess',
       name: '@deepseek-ai/dsh-subprocess-local',

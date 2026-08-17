@@ -166,12 +166,15 @@ try {
   }
 
   const picker = ctx.directoryPicker.capability()
-  if (picker.kind !== 'browse') {
-    throw new Error(`assembled Windows profile selected ${picker.kind} directory picker`)
+  const expectedPickerKind = process.platform === 'win32' ? 'native' : 'browse'
+  if (picker.kind !== expectedPickerKind) {
+    throw new Error(`assembled Windows profile selected ${picker.kind} instead of ${expectedPickerKind} directory picker`)
   }
-  const listing = await picker.list(home)
-  if (listing.path !== home) {
-    throw new Error(`assembled Windows browse picker listed ${listing.path} instead of ${home}`)
+  if (picker.kind === 'browse') {
+    const listing = await picker.list(home)
+    if (listing.path !== home) {
+      throw new Error(`assembled browse picker listed ${listing.path} instead of ${home}`)
+    }
   }
 
   const expectedUrl = `http://127.0.0.1:${String(ctx.webServer.port)}/?dsh-desktop-mode=advanced&dsh-desktop-platform=win32`
@@ -214,13 +217,13 @@ try {
     'dsh-plugin-desktop',
     '@deepseek-ai/dsh-client-ui-conversation',
     '@deepseek-ai/dsh-client-ui-sidebar',
-    '@deepseek-ai/dsh-client-ui-directory-picker-browse',
+    `@deepseek-ai/dsh-client-ui-directory-picker-${expectedPickerKind}`,
   ]) {
     if (!ids.has(id)) throw new Error(`assembled advanced Web graph is missing ${id}`)
   }
   for (const id of [
     '@deepseek-ai/dsh-client-ui-layout',
-    '@deepseek-ai/dsh-client-ui-directory-picker-native',
+    `@deepseek-ai/dsh-client-ui-directory-picker-${expectedPickerKind === 'native' ? 'browse' : 'native'}`,
   ]) {
     if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
   }
