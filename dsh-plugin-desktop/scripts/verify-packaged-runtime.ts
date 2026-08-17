@@ -96,6 +96,11 @@ export const REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES = [
   'node_modules/node-pty/prebuilds/win32-x64/conpty/conpty.dll',
 ] as const
 
+/** Node-API module staged for Linux packaging without an Electron source rebuild. */
+export const REQUIRED_LINUX_X64_NODE_PTY_ENTRIES = [
+  'node_modules/node-pty/prebuilds/linux-x64/pty.node',
+] as const
+
 /** CPU-specific runtime assets that must coexist in a universal macOS application. */
 export const REQUIRED_MACOS_UNIVERSAL_ENTRIES = [
   ...MACOS_UNIVERSAL_NATIVE_ENTRIES.map(entry => entry.path),
@@ -343,9 +348,11 @@ export function verifyPackagedRuntime(
   const unpackedRoot = resolvePackagedUnpackedRoot(context)
   const requiredPhysicalEntries = context.electronPlatformName === 'win32'
     ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES]
-    : context.electronPlatformName === 'darwin' && context.arch === 4
-      ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_MACOS_UNIVERSAL_ENTRIES]
-      : REQUIRED_UNPACKED_RUNTIME_ENTRIES
+    : context.electronPlatformName === 'linux'
+      ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_LINUX_X64_NODE_PTY_ENTRIES]
+      : context.electronPlatformName === 'darwin' && context.arch === 4
+        ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_MACOS_UNIVERSAL_ENTRIES]
+        : REQUIRED_UNPACKED_RUNTIME_ENTRIES
   const missing = requiredPhysicalEntries.filter(entry => !exists(join(unpackedRoot, entry)))
   if (missing.length > 0) {
     throw new Error(

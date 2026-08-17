@@ -213,6 +213,29 @@ corepack.cmd yarn dist:win-portable
 
 The output is `dsh-plugin-desktop\\dist\\DSH-Desktop-2.0.1-x64-Portable.zip`. Extract it to any writable directory and launch `DSH Desktop.exe` without an installer, administrator access, Start Menu registration, or uninstall step. The application still keeps its profiles, logs, and caches in the normal Windows user-data directory, so this is portable distribution rather than a self-contained data sandbox. Portable archives are not handed to the NSIS updater and must be replaced manually when a new version is released. Local builds are unsigned and may trigger an Unknown publisher or SmartScreen warning; signed portable artifacts remain a release gate.
 
+### Linux x64 AppImage
+
+Use a native glibc-based Linux x64 host with Git, Python 3, a C/C++ build toolchain, and x64 Node `22.23.2` (the same release used by CI). The packaging command accepts Node `22.19+` and Node `24.x`. From a fresh `v2` checkout, run:
+
+```sh
+git submodule update --init --recursive
+corepack yarn install --immutable
+corepack yarn dist:linux
+```
+
+`dist:linux` refuses non-Linux and non-x64 hosts, runs the desktop build, all TypeScript compiler faces, Linux packaging tests, and the runtime-closure verifier, then creates `dsh-plugin-desktop/dist/linux/DSH-Desktop-2.0.1-x86_64.AppImage`. Before packaging, it validates Yarn's built `node-pty` addon as a little-endian x86-64 Node-API module and stages it under the stable Linux prebuild path. The packaged-runtime hook rejects an application that omits that module. The final verifier checks the AppImage and unpacked Electron ELF architecture and permissions, extracts the AppImage without FUSE, inspects its desktop entry and `app.asar`, and checks the native module again inside the sealed payload.
+
+The command removes Electron Builder publishing and certificate variables, passes `--publish never`, and produces an unsigned artifact. The `desktop-linux` CI job repeats this command with read-only repository permissions and uploads the AppImage as a 14-day workflow artifact; it does not create or modify a GitHub Release. The Linux artifact remains compatibility-mode only: advanced presentation, the desktop terminal, installer auto-update, and automatic update downloads are unavailable. This packaging target does not change the existing Linux tray or window-lifecycle policy.
+
+The generated AppImage is directly executable:
+
+```sh
+chmod +x DSH-Desktop-2.0.1-x86_64.AppImage
+./DSH-Desktop-2.0.1-x86_64.AppImage
+```
+
+Legacy AppImage mounting requires FUSE 2 (`libfuse2t64` on Ubuntu 24.04). On a host where FUSE cannot be installed, use `./DSH-Desktop-2.0.1-x86_64.AppImage --appimage-extract-and-run`. The desktop entry does not force `--no-sandbox`; the AppImage launcher keeps Chromium sandboxing when unprivileged user namespaces are available and applies its compatibility fallback only when the host disables them. Linux updates are manual.
+
 ### macOS DMG smoke
 
 `yarn dist:mac-smoke` builds one unsigned universal DMG on a native macOS host. The same package runs natively on Intel and Apple Silicon Macs. The command refuses non-macOS hosts and runs the complete product gate before packaging: repository layout and community-contract checks, the Market build and check, then the Desktop build, every TypeScript compiler face, the full unit-test suite, runtime-closure verification, CLI/Loader/profile headless smokes, and the license audit. This includes the real login-shell tests for each supported shell installed on the macOS runner. It then packages without code-signing material, mounts the DMG, and verifies the property list, executable bit, both `x86_64` and `arm64` slices, and `app.asar`. It mirrors `dist:win`'s secret discipline by stripping every Electron Builder macOS signing and notarization variable, sets `CSC_IDENTITY_AUTO_DISCOVERY=false`, disables notarization, and never publishes. The artifact has no Developer ID signature, so Gatekeeper will block it on other machines; it exists so packaging regressions fail in CI before a manual release. The signed and notarized universal release remains `yarn dist:mac` on a credentialed macOS machine and writes its artifact to `dsh-plugin-desktop/dist/mac-release/`.

@@ -1,6 +1,7 @@
 {
   "name": "dsh-plugin-desktop",
   "version": "2.0.1",
+  "desktopName": "dsh-plugin-desktop",
   "description": "DSH Desktop: an Electron shell composed as a DeepSeek Harness Cordis plugin",
   "license": "MIT",
   "publishConfig": {
@@ -112,11 +113,13 @@
     "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile && yarn run verify:licenses",
     "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-win-portable.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-agent-presets.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
     "check:mac-package": "yarn run -T check",
+    "check:linux-package": "yarn run build && yarn run typecheck && vitest run tests/linux-native-runtime.spec.ts tests/package.spec.ts tests/package-linux.spec.ts tests/update-checker.spec.ts tests/verify-linux-appimage.spec.ts tests/verify-packaged-runtime.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
     "start": "node lib/bin.js",
     "dev": "yarn run build && node lib/bin.js",
     "package:dir": "yarn run build && node scripts/package-dir.mjs",
     "dist:mac": "node scripts/release-mac.ts",
     "dist:mac-smoke": "node scripts/package-mac.ts",
+    "dist:linux": "node scripts/package-linux.ts",
     "dist:win": "node scripts/package-win.ts",
     "dist:win-portable": "node scripts/package-win-portable.ts",
     "prepack": "yarn run check"
@@ -314,9 +317,19 @@
     },
     "linux": {
       "target": [
-        "dir"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "icon": "build/app-icon.png"
+      "artifactName": "DSH-Desktop-${version}-x86_64.${ext}",
+      "category": "Development",
+      "executableArgs": [],
+      "executableName": "dsh-plugin-desktop",
+      "icon": "build/app-icon.png",
+      "syncDesktopName": true
     }
   }
 }

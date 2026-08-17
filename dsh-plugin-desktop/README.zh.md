@@ -213,6 +213,29 @@ corepack.cmd yarn dist:win-portable
 
 产物为 `dsh-plugin-desktop\\dist\\DSH-Desktop-2.0.1-x64-Portable.zip`。用户解压到任意可写目录后运行其中的 `DSH Desktop.exe`，不需要安装器、管理员权限、开始菜单注册或卸载步骤。它仍会把 profile、日志和缓存写入 Windows 默认用户数据目录，因此这是便携分发方式，不是把数据完全封装在 exe 旁边的自包含沙箱。绿色 ZIP 不会交给 NSIS 自动更新流程，新版本需要手动替换并重新解压。本地构建没有签名，Windows 可能显示 Unknown publisher 或 SmartScreen 警告；签名后的绿色版仍属于正式发布 gate。
 
+### Linux x64 AppImage
+
+请使用基于 glibc 的原生 Linux x64 主机，并安装 Git、Python 3、C/C++ 构建工具链与 x64 Node `22.23.2`（与 CI 使用的版本相同）。打包命令接受 Node `22.19+` 与 Node `24.x`。在一个最新的 `v2` checkout 中执行：
+
+```sh
+git submodule update --init --recursive
+corepack yarn install --immutable
+corepack yarn dist:linux
+```
+
+`dist:linux` 会拒绝非 Linux、非 x64 宿主，先运行 desktop build、全部 TypeScript compiler face、Linux 打包测试与 runtime-closure verifier，再生成 `dsh-plugin-desktop/dist/linux/DSH-Desktop-2.0.1-x86_64.AppImage`。打包前，该命令会确认 Yarn 构建出的 `node-pty` addon 是 little-endian x86-64 Node-API 模块，并将它放入稳定的 Linux prebuild 路径；如果产物缺少该模块，packaged-runtime hook 会直接拒绝。最终 verifier 会检查 AppImage 与未封装 Electron 主程序的 ELF 架构和权限，在不依赖 FUSE 的情况下解开 AppImage，检查 desktop entry 与 `app.asar`，并在封装后的 payload 中再次检查原生模块。
+
+该命令会移除 Electron Builder 的发布与证书变量，显式传入 `--publish never`，产出未签名文件。CI 中的 `desktop-linux` job 会使用只读仓库权限重复执行该命令，并把 AppImage 作为保留 14 天的 workflow artifact 上传；它不会创建或修改 GitHub Release。Linux 产物只支持兼容模式，不包含高级呈现、桌面终端、安装器自动更新或自动更新下载；这个打包目标也不会改变现有的 Linux 托盘或窗口生命周期策略。
+
+生成的 AppImage 可以直接执行：
+
+```sh
+chmod +x DSH-Desktop-2.0.1-x86_64.AppImage
+./DSH-Desktop-2.0.1-x86_64.AppImage
+```
+
+传统 AppImage 挂载需要 FUSE 2（Ubuntu 24.04 上对应 `libfuse2t64`）。如果目标机器无法安装 FUSE，请使用 `./DSH-Desktop-2.0.1-x86_64.AppImage --appimage-extract-and-run`。Desktop entry 不会强制传入 `--no-sandbox`；当系统允许非特权用户命名空间时，AppImage launcher 会保留 Chromium sandbox，只有宿主禁用该能力时才会使用自身的兼容回退。Linux 更新需要手工完成。
+
 ### macOS DMG 冒烟构建
 
 `yarn dist:mac-smoke` 会在原生 macOS 宿主机上构建一个未签名的 universal DMG，同一个安装包可以在 Intel 和 Apple Silicon Mac 上原生运行。该命令拒绝非 macOS 宿主，并在打包前运行完整产品 gate：仓库布局与社区契约检查、Market 的 build 与 check，然后再运行 Desktop build、全部 TypeScript compiler face、完整 unit-test suite、runtime-closure 验证、CLI/Loader/profile headless smoke 与 license audit；其中包括对 macOS runner 上已安装的每种受支持 shell 执行真实 login-shell 测试。随后它会在不接触任何签名材料的情况下打包，挂载 DMG，并检查属性列表、主程序执行权限、`x86_64` 与 `arm64` 两个架构切片，以及 `app.asar`。该命令与 `dist:win` 的密钥纪律一致：剥离 Electron Builder 能识别的全部 macOS 签名与公证变量、设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`、关闭 notarization，且从不发布。产物没有 Developer ID 签名，因此 Gatekeeper 会在其他机器上拦截它；它的存在是为了让打包回归在人工发布之前就在 CI 中失败。签名并公证的 universal 正式发布仍是在持有凭证的 macOS 机器上执行 `yarn dist:mac`，产物写入 `dsh-plugin-desktop/dist/mac-release/`。
