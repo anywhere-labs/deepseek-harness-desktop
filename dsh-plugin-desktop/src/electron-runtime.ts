@@ -20,6 +20,7 @@ import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-te
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import type {
   DesktopNotification,
+  DesktopLocale,
   DesktopPlatform,
   DesktopRuntime,
   DesktopShellSpec,
@@ -31,7 +32,14 @@ import type {
   DesktopUpdateAdapter,
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
+import type { DesktopLogger } from './desktop-logger.ts'
+import { exportDiagnosticsZip } from './diagnostic-export.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
+import {
+  desktopDiagnosticsPrivacyCopy,
+  desktopLocaleFromLanguageTag,
+  desktopTrayLabel,
+} from './tray-locale.ts'
 import { downloadDesktopUpdate } from './update-download.ts'
 import type { UpdateCheckResult } from './update-checker.ts'
 import { desktopWindowOptions } from './window-options.ts'
@@ -42,10 +50,10 @@ export function nextDesktopShellMode(mode: DesktopShellSpec['mode']): DesktopShe
 }
 
 /** Return the tray command describing the mode that will be activated. */
-export function modeToggleLabel(mode: DesktopShellSpec['mode']): string {
+export function modeToggleLabel(mode: DesktopShellSpec['mode'], locale: DesktopLocale = 'en'): string {
   return mode === 'compatibility'
-    ? 'Switch to Advanced Mode'
-    : 'Switch to Compatibility Mode'
+    ? desktopTrayLabel(locale, 'switchToAdvanced')
+    : desktopTrayLabel(locale, 'switchToCompatibility')
 }
 
 /**
@@ -79,6 +87,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   private window: BrowserWindow | undefined
+  private currentLocale: DesktopLocale = 'en'
   private tray: Tray | undefined
   private scheduled: DesktopShellSpec | undefined
   private mountTask: Promise<void> | undefined
@@ -86,16 +95,29 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private quitting = false
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
+  private diagnosticExport: Promise<void> | undefined
   private rendererBootReported = false
 
   constructor(
     private readonly restart: () => Promise<void>,
     private readonly onRendererBoot: (report: RendererBootReport) => void = () => {},
+    private readonly logger: DesktopLogger | undefined = undefined,
   ) {
     if (process.platform !== 'darwin' && process.platform !== 'win32' && process.platform !== 'linux') {
       throw new Error(`dsh-plugin-desktop: unsupported Electron platform ${process.platform}`)
     }
     this.platform = process.platform
+  }
+
+  /** Log an Electron-scope error to the sink, falling back to stderr without a logger. */
+  private logError(message: string): void {
+    if (this.logger !== undefined) this.logger.error(message)
+    else process.stderr.write(`${message}\n`)
+  }
+
+  /** @inheritdoc */
+  get locale(): DesktopLocale {
+    return this.currentLocale
   }
 
   /** @inheritdoc */
@@ -206,19 +228,61 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** @inheritdoc */
+  exportDiagnostics(): Promise<void> {
+    if (this.diagnosticExport !== undefined) return this.diagnosticExport
+    const operation = this.performDiagnosticExport().finally(() => {
+      if (this.diagnosticExport === operation) this.diagnosticExport = undefined
+    })
+    this.diagnosticExport = operation
+    return operation
+  }
+
+  private async performDiagnosticExport(): Promise<void> {
+    const copy = desktopDiagnosticsPrivacyCopy(this.locale)
+    try {
+      const confirmation = await dialog.showMessageBox({
+        type: 'warning',
+        title: copy.title,
+        message: copy.message,
+        detail: copy.detail,
+        buttons: [copy.confirm, copy.cancel],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+      })
+      if (confirmation.response !== 0) return
+      const path = await exportDiagnosticsZip(
+        join(app.getPath('userData'), 'logs'),
+        app.getPath('userData'),
+      )
+      shell.showItemInFolder(path)
+    } catch (cause) {
+      this.reportDiagnosticExportError(cause)
+    }
+  }
+
+  /** @inheritdoc */
   reportRendererBoot(report: RendererBootReport): void {
     if (this.rendererBootReported) return
     this.rendererBootReported = true
     try {
       this.onRendererBoot(report)
     } catch (cause) {
-      process.stderr.write(`dsh-plugin-desktop: failed to persist renderer boot health: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+      this.logError(`dsh-plugin-desktop: failed to persist renderer boot health: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
     if (report.status === 'failed') {
       void this.showRendererBootRecovery(report).catch((cause: unknown) => {
-        process.stderr.write(`dsh-plugin-desktop: failed to show plugin recovery: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+        this.logError(`dsh-plugin-desktop: failed to show plugin recovery: ${cause instanceof Error ? cause.message : String(cause)}`)
       })
     }
+  }
+
+  /** @inheritdoc */
+  setLocalePreference(preference: DesktopLocale | undefined): void {
+    const locale = preference ?? desktopLocaleFromLanguageTag(app.getLocale())
+    if (locale === this.currentLocale) return
+    this.currentLocale = locale
+    this.rebuildTrayMenu()
   }
 
   /** @inheritdoc */
@@ -289,7 +353,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private trayCommand(invoke: () => void | Promise<void>): () => void {
     return () => {
       void Promise.resolve().then(invoke).catch((cause: unknown) => {
-        process.stderr.write(`dsh-plugin-desktop: tray command failed: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+        this.logError(`dsh-plugin-desktop: tray command failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       })
     }
   }
@@ -427,7 +491,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       child.once('spawn', () => {
         child.off('error', fail)
         child.once('error', cause => {
-          process.stderr.write(`dsh-plugin-desktop: update installer failed after launch: ${cause.message}\n`)
+          this.logError(`dsh-plugin-desktop: update installer failed after launch: ${cause.message}`)
         })
         child.unref()
         resolve()
@@ -438,11 +502,22 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   /** Keep native-terminal launch failures visible in a packaged GUI process. */
   private reportTerminalLaunchError(cause: unknown): void {
     const error = cause instanceof Error ? cause : new Error(String(cause))
-    process.stderr.write(`dsh-plugin-desktop: failed to open terminal: ${error.message}\n`)
+    this.logError(`dsh-plugin-desktop: failed to open terminal: ${error.message}`)
     try {
       dialog.showErrorBox('Unable to Open DSH Terminal', error.message)
     } catch (dialogCause) {
-      process.stderr.write(`dsh-plugin-desktop: failed to show terminal error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}\n`)
+      this.logError(`dsh-plugin-desktop: failed to show terminal error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}`)
+    }
+  }
+
+  /** Keep diagnostic export failures visible in a packaged GUI process. */
+  private reportDiagnosticExportError(cause: unknown): void {
+    const error = cause instanceof Error ? cause : new Error(String(cause))
+    this.logError(`dsh-plugin-desktop: failed to export diagnostics: ${error.message}`)
+    try {
+      dialog.showErrorBox('Unable to Export Diagnostics', error.message)
+    } catch (dialogCause) {
+      this.logError(`dsh-plugin-desktop: failed to show diagnostics error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}`)
     }
   }
 
@@ -456,7 +531,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const profiles = this.contributedTrayItems('profiles')
     const status = this.contributedTrayItems('status')
     const template: Electron.MenuItemConstructorOptions[] = [
-      { label: `Open ${spec.productName}`, click: show },
+      { label: desktopTrayLabel(this.locale, 'openDesktop', spec.productName), click: show },
     ]
     if (tools.length > 0) template.push({ type: 'separator' }, ...tools)
     if (profiles.length > 0) template.push({ type: 'separator' }, ...profiles)
@@ -464,16 +539,16 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     template.push(
       { type: 'separator' },
       {
-        label: modeToggleLabel(spec.mode),
+        label: modeToggleLabel(spec.mode, this.locale),
         enabled: this.platform !== 'linux',
         click: () => {
           void spec.requestModeChange(nextDesktopShellMode(spec.mode)).catch((cause: unknown) => {
-            process.stderr.write(`dsh-plugin-desktop: failed to change shell mode: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+            this.logError(`dsh-plugin-desktop: failed to change shell mode: ${cause instanceof Error ? cause.message : String(cause)}`)
           })
         },
       },
       { type: 'separator' },
-      { label: 'Quit', click: () => { spec.requestQuit(0) } },
+      { label: desktopTrayLabel(this.locale, 'quit'), click: () => { spec.requestQuit(0) } },
     )
     tray.setContextMenu(Menu.buildFromTemplate(template))
   }
@@ -482,6 +557,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     spec: DesktopShellSpec,
     beforeInteractive: (() => void) | undefined,
   ): Promise<() => Promise<void>> {
+    this.setLocalePreference(spec.readLocalePreference())
     const icon = nativeImage.createFromPath(spec.iconPath)
     if (icon.isEmpty()) {
       throw new Error(`dsh-plugin-desktop: failed to load application icon ${spec.iconPath}`)
@@ -516,12 +592,18 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     window.on('page-title-updated', preserveBlankTitle)
     window.webContents.on('will-frame-navigate', navigate)
     window.webContents.on('will-redirect', navigate)
+    window.webContents.on('render-process-gone', (_event, details) => {
+      this.logError(`dsh-plugin-desktop: renderer process gone (reason: ${details.reason}, exitCode: ${details.exitCode})`)
+    })
+    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      this.logError(`dsh-plugin-desktop: renderer failed to load (${errorCode}: ${errorDescription})`)
+    })
     window.webContents.setWindowOpenHandler(({ url }) => {
       try {
         const target = new URL(url)
         if (target.protocol === 'https:' || target.protocol === 'http:' || target.protocol === 'mailto:') {
           void shell.openExternal(target.href).catch((cause: unknown) => {
-            process.stderr.write(`dsh-plugin-desktop: failed to open external link: ${cause instanceof Error ? cause.message : String(cause)}\n`)
+            this.logError(`dsh-plugin-desktop: failed to open external link: ${cause instanceof Error ? cause.message : String(cause)}`)
           })
         }
       } catch {

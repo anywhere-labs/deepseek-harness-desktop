@@ -1,5 +1,7 @@
 # DSH Desktop Plugin Development
 
+> **Do not confuse current APIs with a Draft:** this guide describes working DSH/Cordis and Desktop services. The manifest, capability, and unified event model in `dsh-community-fabric` remains a [community RFC Draft](../dsh-community-fabric/README.md) and cannot yet be used as a dependency or release target.
+
 ## Understand the two plugin layers
 
 A normal DSH plugin can provide Host services, commands, routes, bundles, or a Web Client. It should depend on upstream DSH contracts whenever possible so the same package can work in the CLI, an ordinary Web profile, and DSH Desktop.
@@ -104,3 +106,17 @@ At minimum, a plugin should cover:
 - Restarting after a plugin change and seeing the bundle in the next Loader composition.
 
 Read the [architecture](architecture.en.md) next, then use the package-level [service contract](../dsh-plugin-desktop/docs/plugin-services.md) as the API reference.
+
+## Ecosystem vision: keep the plugin ecosystem composable
+
+The DSH plugin ecosystem is growing quickly. The more plugins there are, the more their ability to work together matters — if every plugin assumes or overrides another plugin's internals, installing a few plugins starts to conflict and the ecosystem fragments.
+
+We advocate a browser-plugin style of development: everyone extends the same platform against the same conventions, instead of each maintaining a modified runtime of their own. DSH Desktop is the first practitioner of this approach — the desktop shell itself is an ordinary plugin on the same composition path as official and third-party plugins, with no special privileges.
+
+To that end we are starting a development-conventions initiative and hope it becomes a de facto standard through community adoption:
+
+- **Composition first**: compose capabilities through official slots, services, and patches; do not assume or override other plugins' internals.
+- **Declare clearly**: state the services and slots you depend on; do not rely on runtime coincidences.
+- **Compatibility first**: keep upgrades backward compatible and never break existing compositions.
+
+The manifesto is a living document that follows ecosystem practice and accepts community discussion and revisions. Once the plugin marketplace ships, plugins following shared conventions will be easier to discover, install, and evaluate for compatibility, making convention-driven development the beneficial choice for every author. See the [DSH plugin ecosystem manifesto](plugin-ecosystem.en.md) for the vision and [DSH Community Fabric](../dsh-community-fabric/README.md) for the proposed future interoperability contract.

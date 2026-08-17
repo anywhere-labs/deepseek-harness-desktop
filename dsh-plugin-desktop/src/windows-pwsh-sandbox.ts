@@ -2,7 +2,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { win32 } from 'node:path'
 import type { ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
@@ -33,7 +33,7 @@ export interface AdaptedWindowsAclExecution {
   argv: readonly string[]
 }
 
-/** Windows PowerShell paths that do not depend on PATH-provided portable runtimes. */
+/** Windows PowerShell paths that do not depend on PATH-provided portable runtimes. Built with win32 semantics on every host so results are deterministic off Windows. */
 export function desktopWindowsPwshPath(
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
@@ -43,8 +43,8 @@ export function desktopWindowsPwshPath(
   const programFiles = env.ProgramFiles ?? 'C:\\Program Files'
   const systemRoot = env.SystemRoot ?? 'C:\\Windows'
   const candidates = [
-    join(programFiles, 'PowerShell', '7', 'pwsh.exe'),
-    join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'),
+    win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
   ]
   return candidates.find(candidate => exists(candidate))
 }

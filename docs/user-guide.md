@@ -10,7 +10,7 @@
 
 Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profile** 菜单会列出现有 profile，以及可按需创建的 `desktop` 和 `web` 默认 profile。
 
-选择 profile 后应用会有序重启。新 profile 在 Host 和窗口都成功启动后才会被记录为最近一次可用 profile；启动失败会回到上一次可用选择。官方 profile 默认使用同一个 DSH home，所以 sessions、settings 和 storage 通常不需要迁移。自定义 patch 如果主动改写持久化路径，则以该 profile 自己的设置为准。
+选择 profile 后应用会有序重启。新 profile 在 Host、窗口和浏览器客户端都成功启动后才会被记录为最近一次可用 profile；启动失败会回到上一次可用选择。官方 profile 默认使用同一个 DSH home，所以 sessions、settings 和 storage 通常不需要迁移。自定义配置（patch）如果主动改写持久化路径，则以该 profile 自己的设置为准。
 
 切换 profile 不会把旧 profile 的插件偷偷复制到新 profile。要管理目标 profile，请在终端中显式写出 profile，或者在切换后使用终端里的默认命令。
 
@@ -22,6 +22,8 @@ Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profil
 切换模式会重启应用，不会在正在运行的 renderer 中热替换 root slot 或窗口材质。Linux 只提供兼容模式。
 
 ## 插件管理
+
+插件是给 DSH 添加能力的扩展包，例如模型、工具、界面和工作流。DSH Desktop 使用的就是官方 Harness 的插件体系，官方插件可以直接安装使用；多个插件遵循统一的约定，可以一起安装、一起工作。
 
 普通 DSH 插件仍使用官方 CLI 语义：
 
@@ -62,4 +64,4 @@ dsh plugin update
 - **终端命令找不到**：从托盘重新打开 Desktop 终端；系统 shell 的全局 PATH 不会被 Desktop 修改。
 - **更新没有提示**：后台错误会静默；使用托盘手动检查查看结果。
 
-更完整的原生生命周期、打包和平台限制见 [`dsh-plugin-desktop/README.zh.md`](../dsh-plugin-desktop/README.zh.md)。
+更底层的生命周期、打包和平台限制属于开发者文档，见[文档索引](README.md)。

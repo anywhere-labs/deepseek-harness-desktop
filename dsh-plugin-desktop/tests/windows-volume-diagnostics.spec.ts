@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   diagnoseWindowsVolumes,
   formatWindowsVolumeConcern,
+  windowsVolumeQuery,
   type WindowsVolumeInfo,
 } from '../src/windows-volume-diagnostics.ts'
 
@@ -10,6 +11,14 @@ function query(info: WindowsVolumeInfo) {
 }
 
 describe('Windows volume diagnostics', () => {
+  it.runIf(process.platform === 'win32')('queries the host volume through Windows APIs', () => {
+    const info = windowsVolumeQuery()(process.cwd())
+
+    expect(info.root).toMatch(/^[A-Z]:\\$/iu)
+    expect(info.fileSystem.length).toBeGreaterThan(0)
+    expect(info.driveType).toBeGreaterThan(0)
+  })
+
   it('skips non-Windows hosts without touching the query', () => {
     const result = diagnoseWindowsVolumes('darwin', [{ label: 'DSH home', path: '/Users/a/.dsh' }], () => {
       throw new Error('should not run')

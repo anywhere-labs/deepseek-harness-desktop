@@ -1,0 +1,21 @@
+{
+  "manifestVersion": "1.0.0",
+  "providerId": "org.example.invalid",
+  "name": "Invalid source",
+  "attribution": {
+    "name": "Example",
+    "url": "https://example.org/"
+  },
+  "transport": {
+    "kind": "https-json",
+    "endpoint": "https://example.org/v1/plugins",
+    "method": "GET"
+  },
+  "query": {
+    "supported": [],
+    "defaultLimit": 20,
+    "maxLimit": 20,
+    "sorts": []
+  },
+  "enabled": true
+}

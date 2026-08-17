@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from './runtime.ts'
+import { desktopTrayLabel } from './tray-locale.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-terminal'
@@ -21,7 +22,7 @@ export function apply(ctx: Context): void {
     const registration = ctx.desktopRuntime.registerTrayItem({
       group: 'tools',
       order: 10,
-      label: () => 'Open DSH Terminal',
+      label: () => desktopTrayLabel(ctx.desktopRuntime.locale, 'openTerminal'),
       invoke: () => { ctx.desktopRuntime.openTerminal() },
     })
     return () => { registration.dispose() }

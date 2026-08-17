@@ -103,6 +103,7 @@ try {
     prepared.rootConfig,
     [{ insert: [
       { id: 'desktop-shell', name: 'dsh-plugin-desktop' },
+      { id: 'community-market', name: 'dsh-community-market' },
       { id: 'third-party-smoke', name: THIRD_PARTY_NAME },
     ] }],
     (host) => {
@@ -133,12 +134,16 @@ try {
   await runtime.mountScheduled()
 
   const desktopEntry = ctx.loader.resolve('include:desktop-shell')
+  const marketEntry = ctx.loader.resolve('include:community-market')
   const thirdPartyEntry = ctx.loader.resolve('include:third-party-smoke')
   if (desktopEntry?.options.name !== 'dsh-plugin-desktop') {
     throw new Error('launcher-owned desktop plugin did not activate through its bare package name')
   }
   if (thirdPartyEntry?.options.name !== THIRD_PARTY_NAME) {
     throw new Error('profile-local third-party plugin did not activate')
+  }
+  if (marketEntry?.options.name !== 'dsh-community-market') {
+    throw new Error('community market Host plugin did not activate through its bare package name')
   }
   if (mountedSpec?.mode !== 'compatibility') {
     throw new Error(`desktop plugin produced an unexpected shell mode: ${String(mountedSpec?.mode)}`)

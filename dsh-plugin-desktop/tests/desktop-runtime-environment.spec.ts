@@ -10,10 +10,11 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter as pathDelimiter, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  installDesktopDshRuntime,
   installDesktopPnpmRuntime,
   type DesktopPnpmRuntimeOptions,
 } from '../src/desktop-runtime-environment.ts'
@@ -66,12 +67,14 @@ describe('desktop Host pnpm runtime', () => {
 
     expect(readdirSync(installation.pathDir)).toEqual(['pnpm'])
     expect(readdirSync(installation.nodeBinDir)).toEqual(['node'])
-    expect(lstatSync(stateDir).mode & 0o777).toBe(0o700)
-    expect(lstatSync(installation.pathDir).mode & 0o777).toBe(0o700)
-    expect(lstatSync(installation.nodeBinDir).mode & 0o777).toBe(0o700)
-    expect(lstatSync(installation.pnpmShimPath).mode & 0o777).toBe(0o700)
-    expect(lstatSync(installation.nodeShimPath).mode & 0o777).toBe(0o700)
-    expect(lstatSync(installation.clearEnvironmentPath).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') {
+      expect(lstatSync(stateDir).mode & 0o777).toBe(0o700)
+      expect(lstatSync(installation.pathDir).mode & 0o777).toBe(0o700)
+      expect(lstatSync(installation.nodeBinDir).mode & 0o777).toBe(0o700)
+      expect(lstatSync(installation.pnpmShimPath).mode & 0o777).toBe(0o700)
+      expect(lstatSync(installation.nodeShimPath).mode & 0o777).toBe(0o700)
+      expect(lstatSync(installation.clearEnvironmentPath).mode & 0o777).toBe(0o600)
+    }
 
     const clearEnvironmentUrl = pathToFileURL(installation.clearEnvironmentPath).href
     const pnpm = readFileSync(installation.pnpmShimPath, 'utf8')
@@ -94,9 +97,28 @@ describe('desktop Host pnpm runtime', () => {
       ...original,
       PATH: `${installation.pathDir}:/usr/local/bin:/usr/bin:/bin`,
     })
-    expect(spawnSync('/bin/sh', ['-n', installation.pnpmShimPath]).status).toBe(0)
-    expect(spawnSync('/bin/sh', ['-n', installation.nodeShimPath]).status).toBe(0)
+    if (process.platform !== 'win32') {
+      expect(spawnSync('/bin/sh', ['-n', installation.pnpmShimPath]).status).toBe(0)
+      expect(spawnSync('/bin/sh', ['-n', installation.nodeShimPath]).status).toBe(0)
+    }
 
+    installation.dispose()
+    installation.dispose()
+    expect(environment).toEqual(original)
+  })
+
+  it('keeps recovered login-shell PATH beneath the Desktop runtime PATH', () => {
+    const stateDir = join(temporaryDirectory(), 'runtime')
+    const recoveredPath = '/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin'
+    const environment: NodeJS.ProcessEnv = {
+      PATH: recoveredPath,
+      KEEP: 'value',
+    }
+    const original = { ...environment }
+
+    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+
+    expect(environment.PATH).toBe(`${installation.pathDir}:${recoveredPath}`)
     installation.dispose()
     installation.dispose()
     expect(environment).toEqual(original)
@@ -142,28 +164,36 @@ describe('desktop Host pnpm runtime', () => {
       '}))',
       '',
     ].join('\n'))
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
     const environment: NodeJS.ProcessEnv = { PATH: process.env.PATH }
     const installation = installDesktopPnpmRuntime({
-      ...options(stateDir, 'linux', environment),
+      ...options(stateDir, platform, environment),
       appExecutable: process.execPath,
       pnpmBinPath: captureEntry,
     })
 
-    const result = spawnSync(installation.pnpmShimPath, [captureOutput], {
+    const command = process.platform === 'win32'
+      ? process.env.ComSpec ?? 'cmd.exe'
+      : installation.pnpmShimPath
+    const args = process.platform === 'win32'
+      ? ['/d', '/s', '/c', `""${installation.pnpmShimPath}" "${captureOutput}""`]
+      : [captureOutput]
+    const result = spawnSync(command, args, {
       encoding: 'utf8',
       env: environment,
       shell: false,
+      windowsVerbatimArguments: process.platform === 'win32',
     })
 
     expect(result.error).toBeUndefined()
-    expect(result.status).toBe(0)
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     expect(JSON.parse(readFileSync(captureOutput, 'utf8'))).toEqual({
       runAsNode: [],
       runtime: 'electron',
       target: '43.4.0',
       disturl: 'https://electronjs.org/headers',
       node: installation.nodeShimPath,
-      path: `${installation.nodeBinDir}:${environment.PATH ?? ''}`,
+      path: `${installation.nodeBinDir}${pathDelimiter}${environment.PATH ?? ''}`,
     })
     expect(environment).not.toHaveProperty('ELECTRON_RUN_AS_NODE')
     expect(environment).not.toHaveProperty('npm_config_runtime')
@@ -211,25 +241,30 @@ describe('desktop Host pnpm runtime', () => {
 
   it('removes only its own PATH component when another owner changes PATH later', () => {
     const stateDir = join(temporaryDirectory(), 'runtime')
-    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
-    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
-    environment.PATH = `/later/bin:${environment.PATH ?? ''}`
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
+    const originalPath = process.platform === 'win32' ? 'C:\\Windows' : '/usr/bin'
+    const laterPath = process.platform === 'win32' ? 'C:\\later' : '/later/bin'
+    const environment: NodeJS.ProcessEnv = { PATH: originalPath }
+    const installation = installDesktopPnpmRuntime(options(stateDir, platform, environment))
+    environment.PATH = `${laterPath}${pathDelimiter}${environment.PATH ?? ''}`
 
     installation.dispose()
     installation.dispose()
 
-    expect(environment).toEqual({ PATH: '/later/bin:/usr/bin' })
+    expect(environment).toEqual({ PATH: `${laterPath}${pathDelimiter}${originalPath}` })
   })
 
   it('does not duplicate or later remove a PATH component another owner supplied', () => {
     const stateDir = join(temporaryDirectory(), 'runtime')
     const pathDir = join(stateDir, 'bin')
-    const environment: NodeJS.ProcessEnv = { PATH: `${pathDir}:/usr/bin` }
-    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
+    const originalPath = process.platform === 'win32' ? 'C:\\Windows' : '/usr/bin'
+    const environment: NodeJS.ProcessEnv = { PATH: `${pathDir}${pathDelimiter}${originalPath}` }
+    const installation = installDesktopPnpmRuntime(options(stateDir, platform, environment))
 
-    expect(environment.PATH).toBe(`${pathDir}:/usr/bin`)
+    expect(environment.PATH).toBe(`${pathDir}${pathDelimiter}${originalPath}`)
     installation.dispose()
-    expect(environment.PATH).toBe(`${pathDir}:/usr/bin`)
+    expect(environment.PATH).toBe(`${pathDir}${pathDelimiter}${originalPath}`)
   })
 
   it('rejects symlinked state directories before changing PATH', () => {
@@ -300,5 +335,61 @@ describe('desktop Host pnpm runtime', () => {
       ...options(join(root, 'newline-runtime'), 'linux', { PATH: '/usr/bin' }),
       electronVersion: '43.4.0\nmalicious',
     })).toThrow('must not contain NUL or newlines')
+  })
+})
+
+describe('desktop Host dsh runtime', () => {
+  it.runIf(process.platform === 'win32')('makes the active profile available to Host plugin child processes', () => {
+    const root = temporaryDirectory()
+    const stateDir = join(root, 'runtime')
+    const captureEntry = join(root, 'capture.mjs')
+    const captureOutput = join(root, 'capture.json')
+    const homeDir = join(root, 'Harness home')
+    writeFileSync(captureEntry, [
+      "import { writeFileSync } from 'node:fs'",
+      'writeFileSync(process.argv[2], JSON.stringify({',
+      '  args: process.argv.slice(3),',
+      '  defaultProfile: process.env.DSH_DESKTOP_DEFAULT_PROFILE,',
+      '  home: process.env.DSH_HOME,',
+      '}))',
+      '',
+    ].join('\n'))
+    const environment: NodeJS.ProcessEnv = { Path: process.env.PATH }
+    const original = { ...environment }
+
+    const installation = installDesktopDshRuntime({
+      platform: 'win32',
+      appExecutable: process.execPath,
+      dshBootstrapPath: captureEntry,
+      profileName: 'web',
+      homeDir,
+      stateDir,
+      environment,
+    })
+    const result = spawnSync(process.env.ComSpec ?? 'cmd.exe', [
+      '/d',
+      '/s',
+      '/c',
+      `dsh "${captureOutput}" --probe`,
+    ], {
+      encoding: 'utf8',
+      env: environment,
+      shell: false,
+      windowsVerbatimArguments: true,
+    })
+
+    expect(result.error).toBeUndefined()
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(readdirSync(installation.pathDir)).toEqual(['dsh.cmd'])
+    expect(JSON.parse(readFileSync(captureOutput, 'utf8'))).toEqual({
+      args: ['--probe'],
+      defaultProfile: 'web',
+      home: homeDir,
+    })
+    expect(environment.Path).toBe(`${installation.pathDir};${original.Path ?? ''}`)
+
+    installation.dispose()
+    installation.dispose()
+    expect(environment).toEqual(original)
   })
 })

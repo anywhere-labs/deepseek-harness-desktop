@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dsh-community-market:schema:catalog-source:1.0.0",
+  "title": "DSH Community Market catalog source manifest",
+  "description": "A provider-neutral declaration for a user-selectable HTTPS JSON catalog source. User-owned state such as enabled status and source ordering does not belong in this manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "providerId",
+    "name",
+    "attribution",
+    "transport",
+    "query"
+  ],
+  "properties": {
+    "manifestVersion": {
+      "const": "1.0.0"
+    },
+    "providerId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$",
+      "description": "Provider-claimed stable identifier, preferably in reverse-domain form. The Host generates a separate sourceRecordId for local identity."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "pattern": "^https://(?![^/?#]*@)[^#]+$"
+    },
+    "attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "url"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https://(?![^/?#]*@)[^#]+$"
+        },
+        "notice": {
+          "type": "string",
+          "maxLength": 500,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+        }
+      }
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "endpoint",
+        "method"
+      ],
+      "properties": {
+        "kind": {
+          "const": "https-json"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://(?![^/?#]*@)[^/?#\\s]+(?:/[^?#\\s]*)?/v1/plugins$",
+          "description": "Absolute HTTPS endpoint with no query or fragment. The standard endpoint path ends in /v1/plugins."
+        },
+        "method": {
+          "const": "GET"
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported",
+        "defaultLimit",
+        "maxLimit",
+        "sorts"
+      ],
+      "properties": {
+        "supported": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "q",
+              "category",
+              "capability",
+              "cursor",
+              "limit",
+              "sort",
+              "locale"
+            ]
+          }
+        },
+        "defaultLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "sorts": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "relevance",
+              "updated",
+              "name",
+              "downloads"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

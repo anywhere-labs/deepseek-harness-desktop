@@ -10,7 +10,7 @@ On first launch, the application prepares the default profile and starts the off
 
 A profile is a composition of DSH bundles, dependencies, and patches. The tray **Profile** menu lists existing profiles and the lazy `desktop` and `web` defaults.
 
-Selecting a profile performs an orderly restart. The new profile becomes the last-known-good choice only after the Host and window start successfully; a failed startup returns to the previous working choice. Official profiles normally use the same DSH home, so sessions, settings, and storage do not need to be migrated. A custom patch can deliberately redirect a persistence root, in which case that profile's configuration wins.
+Selecting a profile performs an orderly restart. The new profile becomes the last-known-good choice only after the Host, window, and browser client all start successfully; a failed startup returns to the previous working choice. Official profiles normally use the same DSH home, so sessions, settings, and storage do not need to be migrated. A custom configuration (patch) can deliberately redirect a persistence root, in which case that profile's configuration wins.
 
 Switching profiles does not silently copy plugins from the old profile into the new one. Use an explicit profile in the terminal when preparing another profile, or use the default commands after switching.
 
@@ -22,6 +22,8 @@ Switching profiles does not silently copy plugins from the old profile into the 
 Changing mode restarts the application; it does not hot-swap root slots or native materials in a live renderer. Linux provides compatibility mode only.
 
 ## Plugin management
+
+Plugins are extensions that add capabilities to DSH, such as models, tools, interfaces, and workflows. DSH Desktop uses the same plugin system as official Harness, so official plugins install and work directly; multiple plugins follow the same conventions and can be installed and used together.
 
 Ordinary DSH plugins use the upstream CLI semantics:
 
@@ -62,4 +64,4 @@ After confirmation, the app requests the fixed platform download URL. macOS open
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.
 - **No update notification appeared**: background failures are silent; use the manual tray check to see the result.
 
-For the complete native lifecycle, packaging, and platform limits, see [`dsh-plugin-desktop/README.md`](../dsh-plugin-desktop/README.md).
+The lower-level lifecycle, packaging, and platform limits belong to the developer documentation; see the [documentation index](README.md).

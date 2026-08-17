@@ -44,6 +44,7 @@ async function createHarness(options: {
   readonly showManualCheckResult?: (result: UpdateCheckResult | null) => Promise<void>
   readonly downloadAndOpen?: (version: string, signal: AbortSignal) => Promise<void>
   readonly notify?: (notification: DesktopNotification) => void
+  readonly locale?: DesktopRuntime['locale']
   readonly state?: string
 } = {}): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-updates-'))
@@ -62,6 +63,7 @@ async function createHarness(options: {
   let tray: DesktopTrayItem | undefined
   let disposer: (() => void | Promise<void>) | undefined
   const runtime = {
+    locale: options.locale ?? 'en',
     updates: {
       isPackaged: options.packaged ?? true,
       currentVersion: '2.0.0',
@@ -120,6 +122,14 @@ describe('desktop update Host plugin', () => {
     expect(() => Config({ requestTimeoutMs: 0 } as UpdateConfig)).toThrow()
   })
 
+  it('renders the update tray command in the active native locale', async () => {
+    const harness = await createHarness({ packaged: false, locale: 'zh' })
+
+    expect(harness.tray.label()).toBe('检查更新…')
+
+    await harness.dispose()
+  })
+
   it.each([
     { packaged: false, enabled: true },
     { packaged: true, enabled: false },
@@ -163,7 +173,9 @@ describe('desktop update Host plugin', () => {
         lastPromptedVersion: '2.1.0',
       })
     })
-    expect((await stat(harness.statePath)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') {
+      expect((await stat(harness.statePath)).mode & 0o777).toBe(0o600)
+    }
 
     await vi.advanceTimersByTimeAsync(testConfig.intervalMs)
     await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2) })

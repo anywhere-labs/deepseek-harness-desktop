@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { composeEntries, initProfile, PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
 import {
@@ -11,6 +11,7 @@ import {
   ensureDesktopProfile,
   prepareDesktopProfile,
   readDesktopShellMode,
+  shippedPresetRoot,
 } from '../src/profile.ts'
 
 const homes: string[] = []
@@ -47,6 +48,48 @@ afterEach(() => {
 })
 
 describe('desktop profile composition', () => {
+  it('reads packaged Cordis skills from the physical unpacked preset root', () => {
+    const home = temporaryHome()
+    const resources = join(home, 'resources')
+    const archivedDsh = join(resources, 'app.asar', 'node_modules', '@deepseek-ai', 'dsh')
+    const physicalPresetRoot = join(
+      resources,
+      'app.asar.unpacked',
+      'node_modules',
+      '@deepseek-ai',
+      'dsh',
+      'config',
+      'agent-presets',
+    )
+    const skillPath = join(
+      physicalPresetRoot,
+      'cordis',
+      'skills',
+      'cordis-plugin-development',
+      'SKILL.md',
+    )
+    mkdirSync(join(resources, 'app.asar', 'lib'), { recursive: true })
+    mkdirSync(archivedDsh, { recursive: true })
+    mkdirSync(dirname(skillPath), { recursive: true })
+    writeFileSync(join(archivedDsh, 'package.json'), JSON.stringify({
+      name: '@deepseek-ai/dsh',
+      exports: { './package.json': './package.json' },
+    }) + '\n')
+    writeFileSync(skillPath, '# Cordis plugin development\n')
+
+    const moduleUrl = pathToFileURL(join(resources, 'app.asar', 'lib', 'profile.js')).href
+    const resolvedRoot = shippedPresetRoot(moduleUrl)
+
+    expect(resolvedRoot).toBe(physicalPresetRoot)
+    expect(readFileSync(join(
+      resolvedRoot,
+      'cordis',
+      'skills',
+      'cordis-plugin-development',
+      'SKILL.md',
+    ), 'utf8')).toBe('# Cordis plugin development\n')
+  })
+
   it('adds the Web surface before third-party bundles and removes the launcher bundle duplicate', () => {
     expect(desktopBundleList([
       '@deepseek-ai/dsh-base',
@@ -147,6 +190,10 @@ describe('desktop profile composition', () => {
       id: 'sandbox',
       name: '@deepseek-ai/dsh-sandbox-local',
     })
+    expect(rows.find(row => row.id === 'agent-presets')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-agent-presets',
+    }))
+    expect(rows.map(row => row.id)).not.toContain('desktop-windows-agent-presets')
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',
     }))
@@ -278,6 +325,13 @@ describe('desktop profile composition', () => {
       id: 'sandbox',
       name: '@deepseek-ai/dsh-sandbox-local',
     })
+    expect(rows.find(row => row.id === 'agent-presets')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-agent-presets',
+      disabled: true,
+    }))
+    expect(rows.find(row => row.id === 'desktop-windows-agent-presets')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/windows-agent-presets',
+    }))
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',
       disabled: true,

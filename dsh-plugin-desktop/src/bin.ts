@@ -39,9 +39,25 @@ function packageVersion(): string {
 
 /** Launch Electron and mirror its terminal exit status. */
 async function launchElectron(): Promise<number> {
-  const imported = await import('electron')
-  const electronPath = imported.default
-  if (typeof electronPath !== 'string') throw new Error('electron package did not provide its executable path')
+  let electronPath: string
+  try {
+    const imported = await import('electron') as { default?: unknown }
+    const candidate = imported.default
+    if (typeof candidate !== 'string') {
+      throw new Error('electron package did not provide its executable path')
+    }
+    electronPath = candidate
+  } catch {
+    process.stderr.write(
+      'dsh-plugin-desktop: electron is not available in this installation.\n'
+      + 'Install the desktop launcher globally (npm installs the electron peer automatically):\n'
+      + '  npm install -g dsh-plugin-desktop\n'
+      + 'Or add electron to the profile before launching:\n'
+      + '  dsh plugin --profile <name> add electron\n'
+      + 'Or use the packaged DSH Desktop application.\n',
+    )
+    return 1
+  }
   const mainPath = fileURLToPath(new URL('./main.js', import.meta.url))
   return new Promise<number>((resolveExit, reject) => {
     const child = spawn(electronPath, [mainPath], { stdio: 'inherit', env: process.env })

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": {
+    "sourceRecordId": "018f1f77-a5c4-7b73-a9ae-0242ac120002",
+    "providerId": "org.example.community-catalog",
+    "adapterId": "market.standard-v1",
+    "registrationKind": "user-added",
+    "fetchedAt": "2026-08-17T08:00:01Z",
+    "finalUrl": "https://plugins.example.org/v1/plugins",
+    "providerGeneratedAt": "2026-08-17T08:00:00Z",
+    "providerRevision": "2026-08-17T08:00:00Z"
+  },
+  "items": [
+    {
+      "id": "better-sidebar",
+      "name": "dsh-plugin-better-sidebar",
+      "displayName": "Better Sidebar",
+      "summary": "Adds a configurable sidebar panel through declared UI capabilities.",
+      "homepage": "https://github.com/example/dsh-plugin-better-sidebar",
+      "latestVersion": "1.2.0",
+      "license": "MIT",
+      "categories": [
+        "interface"
+      ],
+      "keywords": [
+        "sidebar",
+        "panel"
+      ],
+      "repository": {
+        "url": "https://github.com/example/dsh-plugin-better-sidebar"
+      },
+      "package": {
+        "registry": "npm",
+        "name": "dsh-plugin-better-sidebar"
+      },
+      "publisher": {
+        "name": "Example Maintainers",
+        "url": "https://github.com/example"
+      },
+      "capabilities": {
+        "required": [
+          "ui.panel"
+        ],
+        "optional": [
+          "storage.local"
+        ]
+      },
+      "compatibility": {
+        "apiVersion": "1.x",
+        "hosts": [
+          "gui>=2.0"
+        ]
+      },
+      "updatedAt": "2026-08-16T10:30:00Z",
+      "provenance": {
+        "sourceRecordId": "018f1f77-a5c4-7b73-a9ae-0242ac120002",
+        "providerId": "org.example.community-catalog",
+        "itemId": "better-sidebar"
+      }
+    }
+  ],
+  "page": {
+    "nextCursor": "page_2",
+    "total": 42
+  }
+}
