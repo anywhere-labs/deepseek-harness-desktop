@@ -52,6 +52,10 @@ const PWSH_SANDBOX_ROW_ID = 'pwsh-sandbox'
 const UPSTREAM_PWSH_SANDBOX_PACKAGE = '@deepseek-ai/dsh-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_ROW_ID = 'desktop-windows-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_PACKAGE = 'dsh-plugin-desktop/windows-pwsh-sandbox'
+const AGENT_PRESETS_ROW_ID = 'agent-presets'
+const UPSTREAM_AGENT_PRESETS_PACKAGE = '@deepseek-ai/dsh-agent-presets'
+const DESKTOP_WINDOWS_AGENT_PRESETS_ROW_ID = 'desktop-windows-agent-presets'
+const DESKTOP_WINDOWS_AGENT_PRESETS_PACKAGE = 'dsh-plugin-desktop/windows-agent-presets'
 const DEFAULT_DESKTOP_SHELL_MODE: DesktopShellMode = 'compatibility'
 const SETTINGS_FILE_PACKAGE = '@deepseek-ai/dsh-settings-file'
 const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
@@ -360,15 +364,32 @@ export function prepareDesktopProfile(
       { id: 'ui-conversation', disabled: false },
     )
   }
-  const presets = rows.get('agent-presets')
+  const presets = rows.get(AGENT_PRESETS_ROW_ID)
   if (presets !== undefined) {
-    patches.push({
-      id: 'agent-presets',
-      config: {
-        ...rowConfig(presets),
-        roots: [{ path: shippedPresetRoot(), trust: 'system' }],
-      },
-    })
+    const config = {
+      ...rowConfig(presets),
+      roots: [{ path: shippedPresetRoot(), trust: 'system' }],
+    }
+    if (platform === 'win32'
+      && presets.name === UPSTREAM_AGENT_PRESETS_PACKAGE
+      && !rowDisabledOnPlatform(presets, platform)) {
+      patches.push(
+        {
+          id: AGENT_PRESETS_ROW_ID,
+          name: UPSTREAM_AGENT_PRESETS_PACKAGE,
+          disabled: true,
+        },
+        {
+          insert: [{
+            id: DESKTOP_WINDOWS_AGENT_PRESETS_ROW_ID,
+            name: DESKTOP_WINDOWS_AGENT_PRESETS_PACKAGE,
+            config,
+          }],
+        },
+      )
+    } else {
+      patches.push({ id: AGENT_PRESETS_ROW_ID, config })
+    }
   }
   if (!rows.has('webserver')) {
     throw new Error(`${BIN_NAME}: desktop profile has no webserver row`)
