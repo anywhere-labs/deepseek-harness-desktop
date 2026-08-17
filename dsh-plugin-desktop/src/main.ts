@@ -1,6 +1,6 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
-import { app } from 'electron'
+import { app, dialog } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -39,6 +39,11 @@ import {
   formatWindowsVolumeConcern,
   type WindowsVolumeConcern,
 } from './windows-volume-diagnostics.ts'
+import {
+  createStartupFailureReport,
+  presentStartupFailure,
+  writeStartupFailureLog,
+} from './startup-failure.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const PRODUCT_NAME = 'DSH Desktop'
@@ -274,18 +279,35 @@ async function start(): Promise<void> {
     }
   } catch (cause) {
     process.stderr.write(`${BIN_NAME}: ${cause instanceof Error ? cause.stack ?? cause.message : String(cause)}\n`)
+    const retryLastKnownGood = profileStartup !== undefined
+      && profileStatePath !== undefined
+      && profileStartup.profileName !== profileStartup.state.lastKnownGood
+    const report = createStartupFailureReport(cause, {
+      profileName: profileStartup?.profileName ?? 'unknown',
+      platform: process.platform,
+      logPath: join(app.getPath('logs'), `${BIN_NAME}-startup.log`),
+      recovery: retryLastKnownGood && profileStartup !== undefined
+        ? { kind: 'relaunch', profileName: profileStartup.state.lastKnownGood }
+        : { kind: 'exit' },
+    })
+    const logFailure = writeStartupFailureLog(report)
+    if (logFailure !== undefined) {
+      process.stderr.write(
+        `${BIN_NAME}: failed to write startup failure log: ${logFailure instanceof Error ? logFailure.message : String(logFailure)}\n`,
+      )
+    }
+    presentStartupFailure(report, {
+      notify: notification => { runtime.updates.notify(notification) },
+      showErrorBox: (title, content) => { dialog.showErrorBox(title, content) },
+      writeStderr: line => { process.stderr.write(line) },
+    })
     let exitCode = 1
     if (profileStartup !== undefined && profileStatePath !== undefined) {
-      const retryLastKnownGood = profileStartup.profileName !== profileStartup.state.lastKnownGood
       try {
         markDesktopProfileFailed(profileStatePath, profileStartup.profileName)
         if (retryLastKnownGood) {
           nativeExit.requestRelaunch()
           exitCode = 0
-          notifyProfileRecovery(
-            runtime,
-            `Reopening last-known-good profile ${profileStartup.state.lastKnownGood}.`,
-          )
         }
       } catch (stateCause) {
         process.stderr.write(`${BIN_NAME}: failed to roll back desktop profile state: ${stateCause instanceof Error ? stateCause.message : String(stateCause)}\n`)
