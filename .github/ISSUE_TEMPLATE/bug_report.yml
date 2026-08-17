@@ -1,0 +1,152 @@
+name: Bug report / 问题反馈
+description: Report a reproducible problem with DSH Desktop / 反馈可复现的 DSH Desktop 问题
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve DSH Desktop. Every report is welcome. Reports with exact versions, reproduction steps, and error evidence are usually easier to reproduce and prioritize. You do not need to understand the code or provide a patch.
+
+        感谢你帮助改进 DSH Desktop。所有反馈都会被查看；版本、复现步骤、错误日志等信息越完整，通常越容易被优先复现和处理。你不需要懂代码，也不需要提供补丁。无法获取某项信息时，请填写“Unknown / 不知道”。
+
+        Please remove API keys, tokens, account details, and other sensitive data before attaching logs or screenshots.
+
+  - type: checkboxes
+    id: duplicate_check
+    attributes:
+      label: Existing reports / 提交前查重
+      description: Search open and closed issues before submitting / 请先搜索已打开和已关闭的 Issue
+      options:
+        - label: I searched existing issues and did not find the same problem / 我已搜索现有 Issue，没有发现相同问题
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area / 涉及区域
+      options:
+        - Startup or installation / 启动或安装
+        - Updates / 更新
+        - Profiles or plugins / Profile 或插件
+        - Conversations, models, or tools / 会话、模型或工具
+        - Terminal / 终端
+        - Window, tray, or interface / 窗口、托盘或界面
+        - Other or unknown / 其他或不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system / 操作系统
+      options:
+        - Windows 11 x64
+        - Windows 10 x64
+        - macOS Apple Silicon
+        - Other or unsupported / 其他或未支持平台
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation_method
+    attributes:
+      label: Installation method / 安装方式
+      options:
+        - Windows installer / Windows 安装包
+        - macOS DMG
+        - Built from source / 源码运行
+        - Other or unknown / 其他或不确定
+    validations:
+      required: true
+
+  - type: input
+    id: desktop_version
+    attributes:
+      label: DSH Desktop version / DSH Desktop 版本
+      description: Use the installed version when the app cannot start / 无法启动时填写已安装版本
+      placeholder: "For example: 2.0.1; or Unknown / 不知道"
+    validations:
+      required: true
+
+  - type: input
+    id: dsh_version
+    attributes:
+      label: DSH runtime version / DSH 运行时版本
+      description: If a separate CLI is installed, run `dsh --version` / 如另装了 CLI，可运行 `dsh --version`
+      placeholder: "For example: 0.1.0-rc.7; or Unknown / 不知道"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: What happened? / 实际发生了什么？
+      description: Include the exact error text when possible / 尽量包含准确的错误文字
+      placeholder: Describe what you saw and when it happened / 描述现象及发生时机
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Reproduction steps / 复现步骤
+      description: Start from a normal app launch or installation / 从正常启动或安装开始描述
+      placeholder: |
+        1. Open ... / 打开……
+        2. Click ... / 点击……
+        3. Observe ... / 看到……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior / 预期结果
+      placeholder: What should have happened? / 正常情况下应该发生什么？
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Reproduction frequency / 复现频率
+      options:
+        - Every time / 每次都能复现
+        - Often / 经常出现
+        - Sometimes / 偶尔出现
+        - Once / 只出现过一次
+        - Unknown / 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error details / 日志或错误信息
+      description: Paste the relevant lines or attach a log file. This is especially useful for startup failures / 可粘贴错误附近内容或上传日志文件，启动失败时尤其有帮助
+      placeholder: Optional, but complete evidence usually speeds up diagnosis / 选填；完整证据通常能加快定位
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings / 截图或录屏
+      description: Useful for visible interface problems; not required for background errors / 界面问题建议提供，后台错误不强制
+
+  - type: input
+    id: last_working_version
+    attributes:
+      label: Last known working version / 最后正常版本
+      description: Leave blank if this never worked or you are unsure / 从未正常或不确定时可留空
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context / 补充信息
+      description: Recent updates, installed plugins, profile name, workarounds, or anything else that may matter / 最近更新、已装插件、Profile、临时解决办法等
+
+  - type: checkboxes
+    id: privacy_check
+    attributes:
+      label: Sensitive information / 敏感信息
+      options:
+        - label: I removed API keys, tokens, account details, and other sensitive data from my attachments / 我已从附件中移除 API Key、Token、账号信息等敏感内容
+          required: true
