@@ -82,6 +82,20 @@ export interface DesktopNotification {
   body: string
 }
 
+/** Native confirmation requested by a desktop-owned Host plugin. */
+export interface DesktopConfirmRequest {
+  /** Dialog heading. */
+  readonly title: string
+  /** Primary question presented as the message. */
+  readonly message: string
+  /** Optional supporting detail, for example the affected package list. */
+  readonly detail?: string
+  /** Label of the affirmative button. */
+  readonly confirmLabel?: string
+  /** Label of the dismiss button. */
+  readonly cancelLabel?: string
+}
+
 /** Electron capabilities used by the headless update plugin. */
 export interface DesktopUpdateAdapter {
   /** Whether the running executable came from an Electron package. */
@@ -169,6 +183,9 @@ export interface DesktopRuntime {
 
   /** Open a native terminal containing packaged DSH command shims. */
   openTerminal(): void
+
+  /** Ask the user to confirm one desktop-owned operation. */
+  confirm(request: DesktopConfirmRequest): Promise<boolean>
 
   /** Accept the terminal client Loader outcome for the mounted generation. */
   reportRendererBoot(report: RendererBootReport): void

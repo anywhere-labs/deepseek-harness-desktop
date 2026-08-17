@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-terminal.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import type {
+  DesktopConfirmRequest,
   DesktopNotification,
   DesktopPlatform,
   DesktopRuntime,
@@ -301,6 +302,24 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       body: notification.body,
     })
     nativeNotification.show()
+  }
+
+  /** Ask before applying a desktop-owned change to the active profile. */
+  async confirm(request: DesktopConfirmRequest): Promise<boolean> {
+    const options: Electron.MessageBoxOptions = {
+      type: 'question',
+      title: request.title,
+      message: request.message,
+      ...(request.detail === undefined ? {} : { detail: request.detail }),
+      buttons: [request.confirmLabel ?? 'Confirm', request.cancelLabel ?? 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    }
+    const result = this.window === undefined
+      ? await dialog.showMessageBox(options)
+      : await dialog.showMessageBox(this.window, options)
+    return result.response === 0
   }
 
   /** Ask before making the fixed download endpoint's counted request. */

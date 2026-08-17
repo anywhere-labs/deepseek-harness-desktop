@@ -13,6 +13,7 @@ export default defineConfig([
       'profile-service': 'src/profile-service.ts',
       pnpm: 'src/pnpm.ts',
       profiles: 'src/profiles.ts',
+      'plugin-import': 'src/plugin-import.ts',
       runtime: 'src/runtime.ts',
       'electron-runtime': 'src/electron-runtime.ts',
       'desktop-runtime-environment': 'src/desktop-runtime-environment.ts',

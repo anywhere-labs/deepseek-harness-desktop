@@ -2,12 +2,14 @@
 
 import { app } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   boot,
   installFailLoud,
   loadLayeredEnv,
+  resolveProfileDir,
   type FailLoudProcess,
 } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
@@ -26,7 +28,13 @@ import {
   type DesktopProfileStartup,
 } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
-import { prepareDesktopProfile, type SkippedOptionalEntry } from './profile.ts'
+import { DESKTOP_PROFILE_NAME, prepareDesktopProfile, type SkippedOptionalEntry } from './profile.ts'
+import {
+  desktopOwnedBundles,
+  desktopProfileJustCreated,
+  pluginImportPlanForProfiles,
+} from './profile-plugin-import.ts'
+import { runPluginImportFlow } from './plugin-import.ts'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import {
   createDesktopExitCoordinator,
@@ -97,6 +105,27 @@ function notifyWindowsVolumeConcerns(
       `${BIN_NAME}: failed to show Windows volume warning: ${cause instanceof Error ? cause.message : String(cause)}\n`,
     )
   }
+}
+
+/** Offer a one-shot import of web-profile community plugins when the desktop profile is first created. */
+function offerFirstRunPluginImport(
+  ctx: Context,
+  homeDir: string,
+  activeProfileName: string,
+  hadDesktopProfile: boolean,
+): void {
+  if (!desktopProfileJustCreated(hadDesktopProfile, activeProfileName)) return
+  const plan = pluginImportPlanForProfiles(
+    listDesktopProfiles(homeDir),
+    DESKTOP_PROFILE_NAME,
+    desktopOwnedBundles(),
+  )
+  if (plan === undefined) return
+  void runPluginImportFlow(ctx, plan).catch((cause: unknown) => {
+    process.stderr.write(
+      `${BIN_NAME}: failed to run first-run plugin import: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+    )
+  })
 }
 
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
@@ -202,6 +231,7 @@ async function start(): Promise<void> {
     profileStatePath = selectionStatePath
     profileStartup = beginDesktopProfileStartup(selectionStatePath, homeDir)
     const activeProfileName = profileStartup.profileName
+    const hadDesktopProfile = existsSync(join(resolveProfileDir(DESKTOP_PROFILE_NAME, homeDir), 'package.json'))
     const prepared = prepareDesktopProfile(
       process.env.DSH_TELEMETRY_DISABLED,
       homeDir,
@@ -266,6 +296,7 @@ async function start(): Promise<void> {
     await runtime.mountScheduled()
     notifySkippedOptionalEntries(runtime, prepared.skippedOptionalEntries)
     notifyWindowsVolumeConcerns(runtime, windowsVolumeConcerns)
+    offerFirstRunPluginImport(ctx, homeDir, activeProfileName, hadDesktopProfile)
     if (profileStartup.rolledBackFrom !== undefined) {
       notifyProfileRecovery(
         runtime,

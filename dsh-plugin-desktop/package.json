@@ -51,6 +51,10 @@
       "types": "./lib/types/profiles.d.ts",
       "default": "./lib/profiles.js"
     },
+    "./plugin-import": {
+      "types": "./lib/types/plugin-import.d.ts",
+      "default": "./lib/plugin-import.js"
+    },
     "./updates": {
       "types": "./lib/types/updates.d.ts",
       "default": "./lib/updates.js"

@@ -12,6 +12,8 @@
       name: dsh-plugin-desktop/pnpm
     - id: desktop-profiles
       name: dsh-plugin-desktop/profiles
+    - id: desktop-plugin-import
+      name: dsh-plugin-desktop/plugin-import
     - id: desktop-updates
       name: dsh-plugin-desktop/updates
 
