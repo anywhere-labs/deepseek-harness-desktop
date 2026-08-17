@@ -21,7 +21,7 @@ DSH Desktop 的目标不是重新实现 Harness，而是把同一个运行时放
 2. **桌面能力保持可扩展。** profile 管理和打包环境提供的能力可以通过明确的 Host service 给插件使用，而不是让每个插件猜 Electron 的内部对象。
 3. **边界更容易维护。** 上游 DSH 负责 agent 语义，Desktop 负责原生窗口和系统集成，第三方插件只依赖自己真正需要的 contract。
 
-插件化也意味着不是所有东西都应该暴露。第三方插件可以使用公开的 `desktopProfiles` 和 `desktopPnpm` service，但不能直接控制 BrowserWindow、托盘、Electron IPC、安装器或启动器私有路径。稳定的接口比“什么都能访问”更容易升级和排错。
+插件化也意味着不是所有东西都应该暴露。第三方插件只能使用明确公开的接口，不能直接控制窗口、托盘、安装器等内部实现；稳定的边界比“什么都能访问”更容易升级和排错。公开接口的细节见[插件开发](plugin-development.md)。
 
 ## Desktop 自己提供什么
 
@@ -31,7 +31,7 @@ DSH Desktop 的目标不是重新实现 Harness，而是把同一个运行时放
 - 兼容模式和高级模式。兼容模式保留上游默认客户端；高级模式提供 Desktop 自有的布局、窗口材质和原生拖动区域。
 - 多 profile 选择。当前 generation 的 profile 身份由 Desktop 明确提供，切换通过有序重启生效。
 - 内置终端和固定版本 pnpm 环境。它们只作用于 Desktop 自己创建的进程，不修改用户的全局 PATH。
-- 面向插件的 `desktopProfiles` 与 `desktopPnpm` Host service。
+- 面向插件开发者的一组受控扩展接口（详见[插件开发](plugin-development.md)）。
 - 版本检查、用户确认后的安装包下载，以及 macOS DMG/Windows NSIS 的平台交接。
 
 ## 我们刻意不做什么

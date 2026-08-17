@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   verifyMacRelease,
@@ -22,9 +23,10 @@ function options(overrides: Partial<MacReleaseVerificationOptions> = {}) {
 describe('macOS release artifact verification', () => {
   it('mounts one DMG and verifies signature, Gatekeeper, and the stapled ticket', () => {
     const harness = options()
+    const appPath = join('/private/tmp/dsh-desktop-dmg-test', 'DSH Desktop.app')
 
     expect(verifyMacRelease(harness.value)).toEqual({
-      appPath: '/private/tmp/dsh-desktop-dmg-test/DSH Desktop.app',
+      appPath,
       dmgPath: '/release/dist/DSH Desktop-2.0.0-arm64.dmg',
     })
 
@@ -38,15 +40,15 @@ describe('macOS release artifact verification', () => {
       },
       {
         command: 'codesign',
-        args: ['--verify', '--deep', '--strict', '--verbose=2', '/private/tmp/dsh-desktop-dmg-test/DSH Desktop.app'],
+        args: ['--verify', '--deep', '--strict', '--verbose=2', appPath],
       },
       {
         command: 'spctl',
-        args: ['--assess', '--type', 'execute', '--verbose=4', '/private/tmp/dsh-desktop-dmg-test/DSH Desktop.app'],
+        args: ['--assess', '--type', 'execute', '--verbose=4', appPath],
       },
       {
         command: 'xcrun',
-        args: ['stapler', 'validate', '/private/tmp/dsh-desktop-dmg-test/DSH Desktop.app'],
+        args: ['stapler', 'validate', appPath],
       },
       {
         command: 'hdiutil',

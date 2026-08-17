@@ -1,8 +1,11 @@
 /** Electron adapter for the upstream Windows ACL PowerShell executor. */
 
 import { fileURLToPath } from 'node:url'
+import { existsSync } from 'node:fs'
+import { win32 } from 'node:path'
 import type { ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
+import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const UPSTREAM_RUNNER = fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner'))
@@ -28,6 +31,34 @@ export interface AdaptedWindowsAclExecution {
   spec: ShellExecSpec
   /** Exact argv, with the desktop trampoline inserted when required. */
   argv: readonly string[]
+}
+
+/** Windows PowerShell paths that do not depend on PATH-provided portable runtimes. Built with win32 semantics on every host so results are deterministic off Windows. */
+export function desktopWindowsPwshPath(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  exists: (path: string) => boolean = existsSync,
+): string | undefined {
+  if (platform !== 'win32') return undefined
+  const programFiles = env.ProgramFiles ?? 'C:\\Program Files'
+  const systemRoot = env.SystemRoot ?? 'C:\\Windows'
+  const candidates = [
+    win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'),
+    win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+  ]
+  return candidates.find(candidate => exists(candidate))
+}
+
+/** Keep explicit user config, otherwise avoid PATH-resolved portable pwsh in the Windows ACL sandbox. */
+export function desktopWindowsPwshConfig(
+  config: PwshConfig,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  exists: (path: string) => boolean = existsSync,
+): PwshConfig {
+  if (config.pwshPath !== undefined && config.pwshPath.length > 0) return config
+  const pwshPath = desktopWindowsPwshPath(env, platform, exists)
+  return pwshPath === undefined ? config : { ...config, pwshPath }
 }
 
 /**
@@ -63,6 +94,10 @@ export function adaptWindowsAclExecution(
 
 /** PowerShell sandbox provider that repairs only Electron-hosted Windows ACL launches. */
 export class DesktopWindowsPwshSandbox extends SandboxPwshExecutor {
+  constructor(ctx: ConstructorParameters<typeof SandboxPwshExecutor>[0], config: PwshConfig) {
+    super(ctx, desktopWindowsPwshConfig(config, process.env, process.platform))
+  }
+
   private adapt(spec: ShellExecSpec, argv: readonly string[]): AdaptedWindowsAclExecution {
     return adaptWindowsAclExecution(spec, argv, {
       platform: process.platform,

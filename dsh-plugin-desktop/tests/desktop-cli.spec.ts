@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
   clearElectronRunAsNode,
@@ -79,12 +81,16 @@ describe('packaged dsh bootstrap', () => {
     expect(unpackedAsarPath('/Applications/DSH Desktop.app/Contents/Resources/app.asar/package.json'))
       .toBe('/Applications/DSH Desktop.app/Contents/Resources/app.asar.unpacked/package.json')
     expect(unpackedAsarPath('/workspace/node_modules/pkg')).toBe('/workspace/node_modules/pkg')
-    expect(packagedDependencyPath(
-      'file:///Applications/DSH%20Desktop.app/Contents/Resources/app.asar/lib/desktop-cli.js',
-      '@deepseek-ai/dsh/lib/bin.js',
-    )).toBe(
-      '/Applications/DSH Desktop.app/Contents/Resources/app.asar.unpacked/node_modules/@deepseek-ai/dsh/lib/bin.js',
-    )
+    const moduleUrl = pathToFileURL(join(process.cwd(), 'app.asar', 'lib', 'desktop-cli.js')).href
+    expect(packagedDependencyPath(moduleUrl, '@deepseek-ai/dsh/lib/bin.js')).toBe(join(
+      process.cwd(),
+      'app.asar.unpacked',
+      'node_modules',
+      '@deepseek-ai',
+      'dsh',
+      'lib',
+      'bin.js',
+    ))
     expect(() => packagedDependencyPath(import.meta.url, '../outside.js'))
       .toThrow('relative POSIX path')
   })

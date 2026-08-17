@@ -117,19 +117,24 @@ describe('published package surface', () => {
     expect(config).toContain("updates: 'src/updates.ts'")
   })
 
-  it('installs the private pnpm PATH after the launch snapshot and before profile boot', () => {
+  it('installs Host command PATHs after the launch snapshot and before profile boot', () => {
     const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
     const snapshot = main.indexOf('const environment = loadLayeredEnv')
     const install = main.indexOf('const pnpmRuntime = installDesktopPnpmRuntime')
     const prepare = main.indexOf('const prepared = prepareDesktopProfile')
+    const installDsh = main.indexOf('const dshRuntime = process.platform === \'win32\'')
     const boot = main.indexOf('const ctx = await boot')
 
     expect(snapshot).toBeGreaterThanOrEqual(0)
     expect(install).toBeGreaterThan(snapshot)
     expect(prepare).toBeGreaterThan(install)
+    expect(installDsh).toBeGreaterThan(prepare)
     expect(boot).toBeGreaterThan(prepare)
+    expect(boot).toBeGreaterThan(installDsh)
     expect(main).toContain("'dsh-plugin-desktop: packaged pnpm runtime PATH'")
+    expect(main).toContain("'dsh-plugin-desktop: packaged dsh runtime PATH'")
     expect(main).toContain('disposePnpmRuntime?.()')
+    expect(main).toContain('disposeDshRuntime?.()')
   })
 
   it('fixes the installed application identity', () => {
@@ -167,13 +172,16 @@ describe('published package surface', () => {
       arch: ['x64'],
     }])
     expect(manifest.build?.nsis).toEqual({
+      license: 'THIRD_PARTY_NOTICES.md',
       oneClick: false,
       perMachine: false,
       allowElevation: true,
       allowToChangeInstallationDirectory: true,
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
+      differentialPackage: false,
       shortcutName: 'DSH Desktop',
+      useZip: true,
       artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
@@ -192,6 +200,7 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['check:win-package']).toContain('tests/package-win.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-checker.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-download.spec.ts')
+    expect(manifest.scripts?.['check:win-package']).toContain('tests/windows-volume-diagnostics.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run verify:closure')
     expect(manifest.scripts?.['verify:cli']).toBe('node scripts/verify-cli-runtime.mjs')
     expect(manifest.scripts?.check).toContain('yarn run verify:cli')
@@ -264,6 +273,19 @@ describe('published package surface', () => {
     expect(manifest.peerDependencies?.electron).toBe('43.4.0')
     expect(manifest.devDependencies?.electron).toBe('43.4.0')
     expect(manifest.dependencies?.pnpm).toBe('11.7.0')
+  })
+
+  it('packages the native-compiled Koffi Windows runtime', () => {
+    const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
+
+    expect(manifest.dependencies?.koffi).toBe('3.1.5')
+    expect(workspaceManifest.resolutions).toMatchObject({
+      'koffi@npm:^3.1.0': '3.1.5',
+    })
+    expect(lockfile).toContain('"koffi@npm:3.1.5":')
+    expect(lockfile).toContain('@koromix/koffi-win32-x64@npm:3.1.5')
+    expect(lockfile).not.toContain('"koffi@npm:3.1.4":')
+    expect(lockfile).not.toContain('@koromix/koffi-win32-x64@npm:3.1.4')
   })
 
   it('resolves electron-builder through the pinned app-builder-lib keychain patch', () => {

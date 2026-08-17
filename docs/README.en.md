@@ -2,18 +2,34 @@
 
 [中文文档](README.md)
 
-This directory is the product and developer documentation index for DSH Desktop. The root [`README.en.md`](../README.en.md) is the short product entry point; these pages explain why the project exists, how to use it, and how to build plugins for it.
+This directory is the product and developer documentation index for DSH Desktop. The root [`README.en.md`](../README.en.md) is the short product entry point; these pages explain why the project exists, how to use it, and how to build plugins for it. Want to contribute? See [Contributing](../CONTRIBUTING.en.md).
 
 ## Read by goal
 
-| Audience | Document | Covers |
-| --- | --- | --- |
-| New users | [User guide](user-guide.en.md) | Installation, profiles, modes, terminal, plugins, and updates |
-| Project context | [Why Desktop](why-desktop.en.md) | The boundary with upstream Harness and the case for plugins |
-| Plugin authors | [Plugin development](plugin-development.en.md) | Ordinary DSH plugins, Desktop services, compatibility, and lifecycle |
-| Architecture/maintainers | [Architecture](architecture.en.md) | Electron, Host, loopback Web, profiles, and packaging |
-| Desktop service reference | [`dsh-plugin-desktop/docs/plugin-services.md`](../dsh-plugin-desktop/docs/plugin-services.md) | Stable `desktopProfiles` and `desktopPnpm` contracts with TypeScript examples |
-| Package reference | [`dsh-plugin-desktop/README.md`](../dsh-plugin-desktop/README.md) | Detailed build, runtime, release, and limitation notes |
+Ordinary users can start with the [user guide](user-guide.en.md) and never need the developer documentation.
+
+### User documentation
+
+| Document | Covers |
+| --- | --- |
+| [User guide](user-guide.en.md) | Installation, profiles, modes, terminal, plugins, and updates |
+| [FAQ](faq.en.md) | Direct answers about platforms, bundled runtime, project status, data, plugins, and updates |
+| [Why Desktop](why-desktop.en.md) | The boundary with upstream Harness and the case for plugins |
+
+### Developer and maintainer documentation
+
+| Document | Covers |
+| --- | --- |
+| [Plugin ecosystem manifesto](plugin-ecosystem.en.md) | The vision of an open, composable, sustainable plugin ecosystem and its three principles |
+| [Plugin development](plugin-development.en.md) | Ordinary DSH plugins, Desktop services, compatibility, and lifecycle |
+| [Community Fabric Draft](../dsh-community-fabric/README.md) | Community interoperability drafts spanning manifest/capability foundations, Runtime/Presentation, service composition, and provenance diagnostics |
+| [Fabric community-feedback disposition](../dsh-community-fabric/docs/research/community-issue-23-review.md) | Which Issue #23 proposals were adopted, split into focused RFCs, deferred, or kept out of portable core |
+| [Fabric framework and plugin-needs research](../dsh-community-fabric/docs/research/mature-plugin-frameworks.md) | Mature Koishi, Chrome, and VS Code patterns plus requirements observed in real DSH plugins |
+| [VS Code extension-model research](../dsh-community-fabric/docs/research/vscode-extension-model.md) | Implemented declaration, Provider, UI, placement, and lifecycle patterns, with concrete constraints for the Fabric RFC |
+| [Community Market design](../dsh-community-market/README.md) | The proposed market shell, catalog source, install confirmation, and safety boundary |
+| [Architecture](architecture.en.md) | Electron, Host, loopback Web, profiles, and packaging |
+| [Desktop service reference](../dsh-plugin-desktop/docs/plugin-services.md) | Stable `desktopProfiles` and `desktopPnpm` contracts with TypeScript examples |
+| [Package reference](../dsh-plugin-desktop/README.md) | Detailed build, runtime, release, and limitation notes |
 
 ## How the README files are organized
 
@@ -29,4 +45,4 @@ The outer repository has two formal product READMEs plus one legacy compatibilit
 
 ## Status convention
 
-These pages distinguish shipped behavior, platform limits, and roadmap items. Compatibility mode keeps the upstream default Web client; advanced mode installs the Desktop-owned layout and native materials. The plugin marketplace, mobile remote control, and Channels remain separate roadmap items and are not implied to be part of the current installer.
+These pages distinguish shipped behavior, platform limits, and roadmap items. Compatibility mode keeps the upstream default Web client; advanced mode installs the Desktop-owned layout and native materials. The plugin marketplace now has a documentation scaffold in [`dsh-community-market`](../dsh-community-market/README.md), but no usable page or installer; mobile remote control and Channels also remain separate roadmap items and are not implied to be part of the current installer.

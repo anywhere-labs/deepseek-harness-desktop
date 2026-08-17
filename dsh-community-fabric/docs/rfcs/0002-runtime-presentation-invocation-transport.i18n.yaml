@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record. Both languages carry equal authority.
+# Update both files and record their normalized Git blob hashes after editing either side.
+0002-runtime-presentation-invocation-transport.md: e1ca5364e84b9d28911f619280d2b0e0e7ddfdf2
+0002-runtime-presentation-invocation-transport.zh.md: 21db381adf22e8b8629a3f5f0eac5b3ba5013607

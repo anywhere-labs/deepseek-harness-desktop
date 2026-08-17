@@ -1,3 +1,4 @@
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { releaseMac, type MacReleaseOptions } from '../scripts/release-mac.ts'
 
@@ -54,7 +55,7 @@ describe('macOS release command boundary', () => {
     expect(calls[0]).toEqual({
       command: 'yarn',
       args: ['run', 'check'],
-      cwd: '/repo',
+      cwd: resolve('/repo/dsh-plugin-desktop', '..'),
       env: { PATH: '/usr/bin', SAFE_BUILD_VALUE: 'kept' },
     })
     expect(calls[1]).toEqual({
@@ -140,6 +141,6 @@ describe('macOS release command boundary', () => {
     expect(() => releaseMac(options)).toThrow('headless check failed')
     expect(calls).toHaveLength(1)
     expect(calls[0]?.args).toEqual(['run', 'check'])
-    expect(calls[0]?.cwd).toBe('/repo')
+    expect(calls[0]?.cwd).toBe(resolve('/repo/dsh-plugin-desktop', '..'))
   })
 })

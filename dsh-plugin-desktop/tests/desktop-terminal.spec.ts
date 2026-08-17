@@ -2,7 +2,7 @@ import { spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_proc
 import { EventEmitter } from 'node:events'
 import { lstatSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   desktopTerminalStateDirectory,
@@ -105,8 +105,10 @@ describe('desktop terminal environment', () => {
     const desktop = desktopTerminalStateDirectory('/tmp/dsh-desktop', 'desktop')
     const work = desktopTerminalStateDirectory('/tmp/dsh-desktop', '工作 profile')
 
-    expect(desktop).toMatch(/^\/tmp\/dsh-desktop\/cli\/[a-f0-9]{64}$/u)
-    expect(work).toMatch(/^\/tmp\/dsh-desktop\/cli\/[a-f0-9]{64}$/u)
+    expect(dirname(desktop)).toBe(join('/tmp/dsh-desktop', 'cli'))
+    expect(dirname(work)).toBe(join('/tmp/dsh-desktop', 'cli'))
+    expect(basename(desktop)).toMatch(/^[a-f0-9]{64}$/u)
+    expect(basename(work)).toMatch(/^[a-f0-9]{64}$/u)
     expect(work).not.toBe(desktop)
     expect(desktopTerminalStateDirectory('/tmp/dsh-desktop', 'desktop')).toBe(desktop)
   })
@@ -126,10 +128,12 @@ describe('desktop terminal environment', () => {
       welcomePath: join(stateDir, 'welcome.command'),
       child: harness.child,
     })
-    expect(lstatSync(stateDir).mode & 0o777).toBe(0o700)
-    expect(lstatSync(launch.shimDir).mode & 0o777).toBe(0o700)
-    for (const filename of [launch.dshShimPath, launch.pnpmShimPath, launch.nodeShimPath, launch.welcomePath]) {
-      expect(lstatSync(filename).mode & 0o777).toBe(0o700)
+    if (process.platform !== 'win32') {
+      expect(lstatSync(stateDir).mode & 0o777).toBe(0o700)
+      expect(lstatSync(launch.shimDir).mode & 0o777).toBe(0o700)
+      for (const filename of [launch.dshShimPath, launch.pnpmShimPath, launch.nodeShimPath, launch.welcomePath]) {
+        expect(lstatSync(filename).mode & 0o777).toBe(0o700)
+      }
     }
 
     const dshShim = readFileSync(launch.dshShimPath, 'utf8')

@@ -21,7 +21,8 @@ import type {} from './runtime.ts'
 export const name = 'desktop-shell'
 
 /** Services required before the shell can register its renderer generation. */
-export const inject = ['desktopRuntime', 'webServer', 'webRuntime', 'appExit', 'settings']
+/** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
+export const inject = ['webServer', 'webRuntime', 'appExit', 'settings']
 
 /** Standard settings namespace shared by tray and configuration surfaces. */
 export const DESKTOP_SETTINGS_NAMESPACE = settingsNamespace('dsh-desktop')
@@ -86,6 +87,15 @@ export function desktopRendererUrl(
  * @param config - validated native window values.
  */
 export function apply(ctx: Context, config: Config): void {
+  const runtime = ctx.get('desktopRuntime')
+  if (runtime === undefined) {
+    process.stderr.write(
+      'dsh-plugin-desktop: this profile is composed with the DSH Desktop shell, which requires the desktop launcher (desktopRuntime).\n'
+      + 'Start it with `dsh-desktop`, or select this profile inside the packaged DSH Desktop application.\n'
+      + 'The desktop terminal, profile, and update rows stay inactive in an ordinary DSH boot.\n',
+    )
+    return
+  }
   const appExit = ctx.get('appExit')
   if (appExit === undefined) {
     throw new Error('dsh-plugin-desktop: the launcher did not provide ctx.appExit')
@@ -93,7 +103,7 @@ export function apply(ctx: Context, config: Config): void {
   if (ctx.webServer.host !== '127.0.0.1') {
     throw new Error('dsh-plugin-desktop: desktop shell requires a loopback Web server')
   }
-  const iconFilename = ctx.desktopRuntime.platform === 'darwin'
+  const iconFilename = runtime.platform === 'darwin'
     ? 'app-icon-mac.png'
     : 'app-icon.png'
   const iconPath = fileURLToPath(new URL(`../build/${iconFilename}`, import.meta.url))
@@ -107,7 +117,7 @@ export function apply(ctx: Context, config: Config): void {
     {
       applies: 'restart',
       validate: (value) => {
-        if (value.mode === 'advanced' && ctx.desktopRuntime.platform === 'linux') {
+        if (value.mode === 'advanced' && runtime.platform === 'linux') {
           throw new Error('dsh-plugin-desktop: advanced shell mode is supported on macOS and Windows')
         }
       },
@@ -122,7 +132,7 @@ export function apply(ctx: Context, config: Config): void {
         req,
         res,
         rendererOrigin,
-        report => { ctx.desktopRuntime.reportRendererBoot(report) },
+        report => { runtime.reportRendererBoot(report) },
       ),
     }),
     'dsh-plugin-desktop: renderer boot report route',
@@ -137,7 +147,7 @@ export function apply(ctx: Context, config: Config): void {
       }
       pending ??= setImmediate(() => {
         pending = undefined
-        void ctx.desktopRuntime.requestRestart().catch((cause: unknown) => {
+        void runtime.requestRestart().catch((cause: unknown) => {
           ctx.logger.error('dsh-plugin-desktop: failed to restart after mode change')
           ctx.logger.error(cause)
         })
@@ -151,13 +161,13 @@ export function apply(ctx: Context, config: Config): void {
   if (config.mode === 'advanced') {
     ctx.on('settings/updated', (namespace, next) => {
       if (namespace !== UI_THEME_SETTINGS_NAMESPACE) return
-      ctx.desktopRuntime.setThemeSource((next as ThemeSettings).preference)
+      runtime.setThemeSource((next as ThemeSettings).preference)
     })
   }
   ctx.effect(
-    () => ctx.desktopRuntime.schedule({
+    () => runtime.schedule({
       ...config,
-      url: desktopRendererUrl(ctx.webServer.port, config.mode, ctx.desktopRuntime.platform),
+      url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform),
       productName: 'DSH Desktop',
       windowTitle: 'DeepSeek Harness Desktop',
       iconPath,

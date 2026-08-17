@@ -1,8 +1,11 @@
 {
   "name": "dsh-plugin-desktop",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "DSH Desktop: an Electron shell composed as a DeepSeek Harness Cordis plugin",
   "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/anywhere-labs/deepseek-harness-desktop.git",
@@ -66,7 +69,8 @@
     "lib/types/**/*.d.ts",
     "README.md",
     "README.zh.md",
-    "README.i18n.yaml"
+    "README.i18n.yaml",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -91,8 +95,10 @@
     "verify:cli": "node scripts/verify-cli-runtime.mjs",
     "verify:loader": "node scripts/verify-loader-boot.mjs",
     "verify:profile": "node scripts/verify-profile-boot.mjs",
-    "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile",
-    "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
+    "verify:licenses": "node scripts/verify-licenses.mjs",
+    "verify:notices": "node scripts/verify-licenses.mjs --notices THIRD_PARTY_NOTICES.md",
+    "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile && yarn run verify:licenses",
+    "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
     "start": "node lib/bin.js",
     "dev": "yarn run build && node lib/bin.js",
     "package:dir": "yarn run build && node scripts/package-dir.mjs",
@@ -203,6 +209,7 @@
     "@deepseek-ai/dsh-web-app": "0.1.0-rc.6",
     "@deepseek-ai/dsh-workflow": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "koffi": "3.1.5",
     "node-addon-require-builtin": "^0.1.4",
     "pnpm": "11.7.0",
     "react": "18.3.1",
@@ -272,13 +279,16 @@
       "icon": "build/app-icon.png"
     },
     "nsis": {
+      "license": "THIRD_PARTY_NOTICES.md",
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "differentialPackage": false,
       "shortcutName": "DSH Desktop",
+      "useZip": true,
       "artifactName": "DSH-Desktop-${version}-${arch}-Setup.${ext}"
     },
     "linux": {
