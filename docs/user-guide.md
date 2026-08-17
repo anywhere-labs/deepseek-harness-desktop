@@ -49,6 +49,16 @@ dsh plugin update
 
 欢迎信息会显示：应用版本、当前 profile、profile 目录和 DSH home。Desktop 会在自己的 user-data 目录生成 `dsh`、`pnpm` 和 `node` 私有 shim，只对这个终端进程设置 PATH，不会修改系统 PATH 或用户 shell 配置。
 
+## Web 服务端口
+
+桌面版默认把 Web 界面绑定在 `127.0.0.1` 的随机端口上，每次启动端口都可能变化，多实例并行时也不会冲突。需要固定端口的场景（例如浏览器助手依赖固定端口段发现 DSH 实例）可以设置环境变量 `DSH_DESKTOP_WEB_PORT`：
+
+```bash
+DSH_DESKTOP_WEB_PORT=3080
+```
+
+取值为 0–65535 的十进制整数；`0` 表示显式使用随机端口，不设置或留空时保持默认随机行为。非法值会告警并回退到随机端口，不会导致启动失败。无论端口是否固定，Web 服务始终只绑定 loopback（`127.0.0.1`），不会对外网开放。
+
 ## 更新
 
 打包后的 macOS/Windows 应用会在后台检查 `https://www.dshdesktop.cn/api/desktop/version`。后台检查不阻塞启动；网络错误、非 200、非法版本或服务端版本不新时保持静默。

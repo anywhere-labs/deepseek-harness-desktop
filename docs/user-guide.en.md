@@ -49,6 +49,16 @@ Choose **Open DSH Terminal** from the tray. macOS opens Terminal; Windows prefer
 
 The welcome text shows the application version, active profile, profile directory, and DSH home. Desktop creates private `dsh`, `pnpm`, and `node` shims in its user-data directory and prepends that directory only for the new terminal process. It does not modify the system PATH or the user's shell files.
 
+## Web server port
+
+By default the desktop app binds its Web UI to a random port on `127.0.0.1`, so the port can change on every launch and concurrent instances never collide. Scenarios that need a fixed port (for example, the browser helper discovers DSH instances by a fixed port range) can set the `DSH_DESKTOP_WEB_PORT` environment variable:
+
+```bash
+DSH_DESKTOP_WEB_PORT=3080
+```
+
+The value is a decimal integer between 0 and 65535; `0` explicitly requests a random port, and unset or empty keeps today's random-port behaviour. Invalid values log a warning and fall back to a random port instead of failing startup. Whether the port is pinned or not, the Web server always binds loopback (`127.0.0.1`) only and is never exposed to external networks.
+
 ## Updates
 
 Packaged macOS and Windows applications check `https://www.dshdesktop.cn/api/desktop/version` in the background. Startup is not blocked; network errors, non-200 responses, invalid versions, and a server version that is not newer remain silent in the background.
