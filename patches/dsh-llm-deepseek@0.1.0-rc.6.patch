@@ -1,0 +1,15 @@
+diff --git a/lib/index.js b/lib/index.js
+index b9624f2b453f9056b5dc7ae5cc40c751e995179f..faf76bb7a6702519f6562a3c6d65872b74d23715 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -318,8 +318,8 @@ async function* translate(payloads) {
+ 						blockType: "tool-call"
+ 					};
+ 				}
+-				if (call.id !== void 0) block.callId = call.id;
+-				if (call.function?.name !== void 0) block.name = call.function.name;
++				if (call.id !== void 0 && call.id !== "") block.callId = call.id;
++				if (call.function?.name !== void 0 && call.function.name !== "") block.name = call.function.name;
+ 				const fragment = call.function?.arguments ?? "";
+ 				block.text += fragment;
+ 				yield {

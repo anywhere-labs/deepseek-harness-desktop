@@ -2159,7 +2159,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-llm-deepseek@npm:^0.1.0-rc.6":
+"@deepseek-ai/dsh-llm-deepseek@npm:0.1.0-rc.6":
   version: 0.1.0-rc.6
   resolution: "@deepseek-ai/dsh-llm-deepseek@npm:0.1.0-rc.6"
   dependencies:
@@ -2175,6 +2175,25 @@ __metadata:
     "@deepseek-ai/dsh-settings": ^0.1.0-rc.6
     "@deepseek-ai/dsh-timeout": ^0.1.0-rc.6
   checksum: 10c0/8d3c1bd9e533de502e2366546e0640dc2401bcbffa31901cdbff5aa40993d126dfed6492371de5e45deba01c63529a99ba07dc08d9cc42036c50438ab3f5380b
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@npm%3A0.1.0-rc.6#./patches/dsh-llm-deepseek@0.1.0-rc.6.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.6
+  resolution: "@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@npm%3A0.1.0-rc.6#./patches/dsh-llm-deepseek@0.1.0-rc.6.patch::version=0.1.0-rc.6&hash=0525ca&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/schemastery": "npm:^3.18.1"
+    eventsource-parser: "npm:^3.1.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-anonymous-user-id": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-credentials": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-launch-environment": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-llm": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-settings": ^0.1.0-rc.6
+    "@deepseek-ai/dsh-timeout": ^0.1.0-rc.6
+  checksum: 10c0/a6664a06e528d1a312aaa1075147866326b6ba94bc730bbe90f059e5e036215be82e5b61e2754b32caabf31be24c1f5fa1b9f69d51018d099b397d053b20f666
   languageName: node
   linkType: hard
 
