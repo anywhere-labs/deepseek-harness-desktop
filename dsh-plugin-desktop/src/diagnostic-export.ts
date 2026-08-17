@@ -4,14 +4,16 @@ import { Worker } from 'node:worker_threads'
 import type { DiagnosticExportWorkerResult } from './diagnostic-export-worker.ts'
 
 /** Bound both worker memory and the amount of potentially sensitive log history exported. */
-export const MAX_DIAGNOSTIC_LOG_BYTES = 50 * 1024 * 1024
+export const MAX_DIAGNOSTIC_EVIDENCE_BYTES = 50 * 1024 * 1024
 
 /** Stop an export that cannot complete because its Worker or filesystem is wedged. */
 export const DIAGNOSTIC_EXPORT_TIMEOUT_MS = 60_000
 
 export interface DiagnosticExportOptions {
-  /** Override used by focused tests; production exports use the 50 MB cap. */
-  readonly maxLogBytes?: number
+  /** Override used by focused tests; production logs and dumps share the 50 MB cap. */
+  readonly maxEvidenceBytes?: number
+  /** Electron Crashpad directory whose local minidumps should be included. */
+  readonly crashDumpsDir?: string
 }
 
 function workerEntryUrl(): URL {
@@ -64,14 +66,14 @@ export function exportDiagnosticsZip(
   userDataDir: string,
   options: DiagnosticExportOptions = {},
 ): Promise<string> {
-  const maxLogBytes = options.maxLogBytes ?? MAX_DIAGNOSTIC_LOG_BYTES
-  if (!Number.isSafeInteger(maxLogBytes) || maxLogBytes <= 0) {
-    return Promise.reject(new Error('dsh-plugin-desktop: diagnostic log byte limit must be a positive integer'))
+  const maxEvidenceBytes = options.maxEvidenceBytes ?? MAX_DIAGNOSTIC_EVIDENCE_BYTES
+  if (!Number.isSafeInteger(maxEvidenceBytes) || maxEvidenceBytes <= 0) {
+    return Promise.reject(new Error('dsh-plugin-desktop: diagnostic evidence byte limit must be a positive integer'))
   }
 
   const worker = new Worker(workerEntryUrl(), {
     name: 'dsh-diagnostic-export',
-    workerData: { logsDir, userDataDir, maxLogBytes },
+    workerData: { logsDir, userDataDir, maxEvidenceBytes, crashDumpsDir: options.crashDumpsDir },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
   })
   return waitForDiagnosticExportWorker(worker)
