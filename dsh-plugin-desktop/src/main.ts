@@ -22,14 +22,17 @@ import { installProfilePackageResolver } from './module-resolution.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import {
   beginDesktopProfileStartup,
+  DEFAULT_PROFILE_NAME,
   listDesktopProfiles,
   markDesktopProfileFailed,
   markDesktopProfileHealthy,
   selectDesktopProfile,
+  WEB_PROFILE_NAME,
   type DesktopProfileStartup,
 } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
 import { prepareDesktopProfile, type SkippedOptionalEntry } from './profile.ts'
+import { runProfileSync } from './profile-sync.ts'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import {
   createDesktopExitCoordinator,
@@ -277,6 +280,23 @@ async function start(): Promise<void> {
           args: ['--host', '127.0.0.1', '--port', '0'],
           exit: requestQuit,
         })
+        if (prepared.syncProfiles) {
+          const syncController = new AbortController()
+          hostCtx.effect(
+            () => () => syncController.abort(),
+            'dsh-plugin-desktop: profile sync cancellation',
+          )
+          void runProfileSync(
+            hostCtx,
+            homeDir,
+            [WEB_PROFILE_NAME, DEFAULT_PROFILE_NAME],
+            syncController.signal,
+          ).catch((cause: unknown) => {
+            process.stderr.write(
+              `${BIN_NAME}: profile sync failed: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+            )
+          })
+        }
       },
       prepared.bareModuleBaseUrl,
     ).catch((cause: unknown) => {

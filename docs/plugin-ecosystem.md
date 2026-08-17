@@ -38,6 +38,24 @@ Fabric 的 capability 首先用于兼容判断、用户确认和审计，不会�
 
 市场目前仍处于[产品与安全设计阶段](../dsh-community-market/README.zh.md)，尚未提供可用页面或安装器。目录收录只代表符合目录规则，不等于安全审核或推荐。
 
+## 桌面配置项：跨 Profile 插件同步（可选）
+
+桌面壳同时管理 `web`（`dsh web`）与 `desktop`（桌面壳自身）两个独立的 Profile。两者默认互相隔离：在一个 Profile 里通过 `dsh plugin add` 安装的插件不会自动出现在另一个 Profile。
+
+为满足"装一次、两边都能用"的诉求，桌面壳提供了一个**默认关闭**的配置项 `dsh-desktop.syncProfiles`（写入设置文件，等价于桌面壳命名空间下的 `mode` 开关）。开启后，桌面壳在启动时执行一次单向收敛：
+
+- 取 `web` 与 `desktop` 两个 Profile 中**用户第三方 bundle** 的并集；
+- 仅把缺失的 bundle 写入各自 Profile 的 `package.json`（`dsh.profile.bundles`），**不触碰框架包与桌面壳自身**；
+- 仅对"已在另一个 Profile 安装过"的 bundle 执行补齐安装，避免启动期联网。
+
+这一设计刻意遵循本倡议的三条原则：
+
+- **组合优先**：同步只调整 `dsh.profile.bundles` 声明，不假设或覆盖任何插件的内部实现。
+- **声明清晰**：只搬运用户显式安装的第三方 bundle，框架包与桌面壳 bundle 被显式排除，绝不重新引入被 `profile-manager` 禁止写入 `bundles` 的桌面壳包。
+- **兼容优先**：功能默认关闭；已有 Profile 在开关前后行为完全一致，开启也只是把缺失 bundle 补齐为并集，不会删除任何已有插件。
+
+> 注意：该同步是"尽力而为"的。并非所有插件都在两个 Profile 下行为一致；开启前请确认你希望共享的插件在两边都能正常加载。
+
 ## 如何参与
 
 - 在[插件开发](plugin-development.md)中了解插件如何编写。

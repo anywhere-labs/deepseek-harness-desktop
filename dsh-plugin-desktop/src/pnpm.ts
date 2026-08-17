@@ -174,8 +174,10 @@ export class DesktopPnpm extends Service {
     args: readonly string[],
     invokingDir: string,
     signal?: AbortSignal,
+    profileName: string = this.bootstrap.activeProfileName,
   ): DesktopPnpmHandle {
     const resolvedArgs = validatedArgs(args)
+    assertDesktopProfileName(profileName)
     assertAbsolutePath('plugin invoking directory', invokingDir)
     return this.start({
       argv: [
@@ -184,7 +186,7 @@ export class DesktopPnpm extends Service {
         this.bootstrap.dshBootstrapPath,
         'plugin',
         '--profile',
-        this.bootstrap.activeProfileName,
+        profileName,
         ...resolvedArgs,
       ],
       cwd: invokingDir,

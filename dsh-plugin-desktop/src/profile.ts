@@ -114,6 +114,64 @@ export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMo
   return desktopShellModeFromSettings(document)
 }
 
+/** Default for the opt-in cross-profile bundle synchronization flag. */
+export const DEFAULT_SYNC_PROFILES = false
+
+/**
+ * Parse the cross-profile synchronization flag and reject corrupted values.
+ * @param value - untrusted settings value.
+ * @returns whether web/desktop bundle synchronization is enabled.
+ */
+export function parseDesktopSyncEnabled(value: unknown): boolean {
+  if (value === undefined) return DEFAULT_SYNC_PROFILES
+  if (typeof value === 'boolean') return value
+  throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.syncProfiles must be a boolean`)
+}
+
+/**
+ * Read the cross-profile synchronization flag from one parsed settings document.
+ * @param document - untrusted settings document root.
+ * @returns whether synchronization is enabled, defaulting to off when absent.
+ */
+export function desktopSyncFromSettings(document: unknown): boolean {
+  if (typeof document !== 'object' || document === null || Array.isArray(document)) {
+    throw new Error(`${BIN_NAME}: settings document must be a map of namespace sections`)
+  }
+  const section = (document as Record<string, unknown>)[DESKTOP_SETTINGS_NAMESPACE]
+  if (section === undefined) return DEFAULT_SYNC_PROFILES
+  if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+    throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE} settings must be a map`)
+  }
+  return parseDesktopSyncEnabled((section as Record<string, unknown>).syncProfiles)
+}
+
+/**
+ * Read the cross-profile synchronization flag from the same file resolved by the settings provider.
+ * @param config - validated settings-file row config.
+ * @returns whether synchronization is enabled.
+ */
+export function readDesktopSyncEnabled(config: SettingsFileConfig): boolean {
+  const spec = resolveSettingsFileSpec(config)
+  let text: string
+  try {
+    text = readFileSync(spec.filename, 'utf8')
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return DEFAULT_SYNC_PROFILES
+    throw cause
+  }
+  let document: unknown
+  if (spec.format === 'yaml') {
+    const parsed = parseDocument(text, { prettyErrors: true })
+    if (parsed.errors.length > 0) {
+      throw new Error(`${BIN_NAME}: invalid settings document at ${spec.filename}: ${parsed.errors.map(error => error.message).join('; ')}`)
+    }
+    document = parsed.toJS() ?? {}
+  } else {
+    document = text.trim().length === 0 ? {} : JSON.parse(text)
+  }
+  return desktopSyncFromSettings(document)
+}
+
 /** Resolve the public Web template once and reject an incompatible DSH release. */
 function requiredWebBundles(): string[] {
   const bundles = PROFILE_TEMPLATES.web
@@ -139,6 +197,8 @@ export interface PreparedDesktopProfile {
   skippedOptionalEntries: SkippedOptionalEntry[]
   /** Persisted shell mode applied after every user-owned patch. */
   mode: DesktopShellMode
+  /** Whether web/desktop bundles are synchronized on startup (opt-in). */
+  syncProfiles: boolean
 }
 
 /** User patch entry skipped to keep a profile bootable. */
@@ -340,6 +400,7 @@ export function prepareDesktopProfile(
     ...rowConfig(settings),
   } as SettingsFileConfig)
   const mode = readDesktopShellMode(settingsConfig)
+  const syncProfiles = readDesktopSyncEnabled(settingsConfig)
   patches.push({
     id: 'settings',
     config: settingsConfig,
@@ -447,6 +508,7 @@ export function prepareDesktopProfile(
     patches: structuredClone(patches),
     skippedOptionalEntries,
     mode,
+    syncProfiles,
   }
 }
 
