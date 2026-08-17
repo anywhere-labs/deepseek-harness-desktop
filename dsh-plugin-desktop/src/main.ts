@@ -273,8 +273,14 @@ async function start(): Promise<void> {
           persistSelection: name => { selectDesktopProfile(selectionStatePath, homeDir, name) },
           requestRestart: () => runtime.requestRestart(),
         })
+        const webserverPatch = prepared.patches.find(
+          p => p.id === 'webserver' && (p as { config?: unknown }).config !== undefined,
+        )
+        const wsConfig = webserverPatch !== undefined
+          ? (webserverPatch as { config: { host: string, port: number } }).config
+          : { host: '127.0.0.1', port: 0 }
         provideCmdline(hostCtx, {
-          args: ['--host', '127.0.0.1', '--port', '0'],
+          args: ['--host', wsConfig.host, '--port', String(wsConfig.port)],
           exit: requestQuit,
         })
       },

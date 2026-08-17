@@ -100,8 +100,8 @@ export function apply(ctx: Context, config: Config): void {
   if (appExit === undefined) {
     throw new Error('dsh-plugin-desktop: the launcher did not provide ctx.appExit')
   }
-  if (ctx.webServer.host !== '127.0.0.1') {
-    throw new Error('dsh-plugin-desktop: desktop shell requires a loopback Web server')
+  if (ctx.webServer.host !== '127.0.0.1' && ctx.webServer.host !== '0.0.0.0') {
+    throw new Error('dsh-plugin-desktop: desktop shell requires 127.0.0.1 or 0.0.0.0 Web server')
   }
   const iconFilename = runtime.platform === 'darwin'
     ? 'app-icon-mac.png'
@@ -123,7 +123,7 @@ export function apply(ctx: Context, config: Config): void {
       },
     },
   )
-  const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
+  const rendererOrigin = `http://${ctx.webServer.host}:${String(ctx.webServer.port)}`
   ctx.effect(
     () => ctx.webServer.register({
       kind: 'exact',

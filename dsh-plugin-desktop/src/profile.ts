@@ -53,6 +53,8 @@ const UPSTREAM_PWSH_SANDBOX_PACKAGE = '@deepseek-ai/dsh-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_ROW_ID = 'desktop-windows-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_PACKAGE = 'dsh-plugin-desktop/windows-pwsh-sandbox'
 const DEFAULT_DESKTOP_SHELL_MODE: DesktopShellMode = 'compatibility'
+const DEFAULT_DESKTOP_HOST = '0.0.0.0'
+const DEFAULT_DESKTOP_PORT = 0
 const SETTINGS_FILE_PACKAGE = '@deepseek-ai/dsh-settings-file'
 const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
 const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
@@ -112,6 +114,62 @@ export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMo
     document = text.trim().length === 0 ? {} : JSON.parse(text)
   }
   return desktopShellModeFromSettings(document)
+}
+
+/**
+ * Parse a network host string and reject invalid values.
+ * @param value - untrusted host value.
+ * @returns a valid host binding.
+ */
+export function parseDesktopHost(value: unknown): string {
+  if (value === undefined) return DEFAULT_DESKTOP_HOST
+  if (typeof value !== 'string') throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.host must be a string`)
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return DEFAULT_DESKTOP_HOST
+  return trimmed
+}
+
+/**
+ * Parse a network port and reject invalid values.
+ * @param value - untrusted port value.
+ * @returns a valid port number (0 for dynamic).
+ */
+export function parseDesktopPort(value: unknown): number {
+  if (value === undefined) return DEFAULT_DESKTOP_PORT
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value < 0 || value > 65535) {
+      throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.port must be an integer 0–65535`)
+    }
+    return value
+  }
+  if (typeof value === 'string') {
+    const num = Number(value)
+    if (!Number.isInteger(num) || num < 0 || num > 65535) {
+      throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.port must be an integer 0–65535`)
+    }
+    return num
+  }
+  throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.port must be a number`)
+}
+
+/**
+ * Read the full desktop settings section from one parsed settings document.
+ * @param document - untrusted settings document root.
+ * @returns the parsed host and port with defaults applied.
+ */
+export function readDesktopNetworkSettings(document: unknown): { host: string, port: number } {
+  if (typeof document !== 'object' || document === null || Array.isArray(document)) {
+    return { host: DEFAULT_DESKTOP_HOST, port: DEFAULT_DESKTOP_PORT }
+  }
+  const section = (document as Record<string, unknown>)[DESKTOP_SETTINGS_NAMESPACE]
+  if (section === undefined || typeof section !== 'object' || section === null || Array.isArray(section)) {
+    return { host: DEFAULT_DESKTOP_HOST, port: DEFAULT_DESKTOP_PORT }
+  }
+  const record = section as Record<string, unknown>
+  return {
+    host: parseDesktopHost(record.host),
+    port: parseDesktopPort(record.port),
+  }
 }
 
 /** Resolve the public Web template once and reject an incompatible DSH release. */
@@ -340,6 +398,19 @@ export function prepareDesktopProfile(
     ...rowConfig(settings),
   } as SettingsFileConfig)
   const mode = readDesktopShellMode(settingsConfig)
+  const network = readDesktopNetworkSettings((() => {
+    const spec = resolveSettingsFileSpec(settingsConfig)
+    try {
+      const text = readFileSync(spec.filename, 'utf8')
+      if (spec.format === 'yaml') {
+        const parsed = parseDocument(text, { prettyErrors: true })
+        return parsed.toJS() ?? {}
+      }
+      return text.trim().length === 0 ? {} : JSON.parse(text)
+    } catch {
+      return {}
+    }
+  })())
   patches.push({
     id: 'settings',
     config: settingsConfig,
@@ -418,11 +489,11 @@ export function prepareDesktopProfile(
       )
     }
   }
-  // Loopback-only binding is a launcher security invariant, not user config.
+  // Network binding is configurable; default 0.0.0.0 allows remote access.
   patches.push({
     id: 'webserver',
     disabled: false,
-    config: { host: '127.0.0.1', port: 0 },
+    config: { host: network.host, port: network.port },
   })
   if ((telemetryDisabled ?? '') !== '' && rows.has('session-telemetry-otel')) {
     patches.push({ id: 'session-telemetry-otel', disabled: true })
