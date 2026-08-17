@@ -349,6 +349,20 @@ function isSelectable(home: string, name: string): boolean {
 }
 
 /**
+ * Best recovery target: the preferred profile when still selectable, otherwise
+ * the first other selectable profile, otherwise the default name.
+ * @param home - Harness home used only for read-only profile discovery.
+ * @param preferred - profile to keep when it still selects.
+ * @param blocked - failing profiles that must not be chosen.
+ */
+function recoverableProfile(home: string, preferred: string, blocked: ReadonlySet<string>): string {
+  if (isSelectable(home, preferred)) return preferred
+  const fallback = listDesktopProfiles(home).find(profile =>
+    !blocked.has(profile.name) && profile.problem === undefined && profile.webCapable)
+  return fallback?.name ?? DEFAULT_PROFILE_NAME
+}
+
+/**
  * Consume a pending selection or roll back an unconfirmed prior startup.
  * @param statePath - desktop-owned state file outside the Harness profile tree.
  * @param home - Harness home used only for read-only profile discovery.
@@ -361,30 +375,32 @@ export function beginDesktopProfileStartup(statePath: string, home: string): Des
   let rolledBackFrom: string | undefined
   let recoveredState = loaded.recovered
 
+  const failed = new Set<string>()
   if (current.pending !== undefined) {
     if (isSelectable(home, current.pending)) {
       profileName = current.pending
     } else {
       rolledBackFrom = current.pending
-      profileName = isSelectable(home, current.lastKnownGood) ? current.lastKnownGood : DEFAULT_PROFILE_NAME
+      failed.add(current.pending)
+      profileName = recoverableProfile(home, current.lastKnownGood, failed)
       recoveredState = true
     }
   } else if (current.active !== current.lastKnownGood) {
     rolledBackFrom = current.active
-    profileName = isSelectable(home, current.lastKnownGood) ? current.lastKnownGood : DEFAULT_PROFILE_NAME
+    failed.add(current.active)
+    profileName = recoverableProfile(home, current.lastKnownGood, failed)
     recoveredState = true
   } else if (!isSelectable(home, current.active)) {
     rolledBackFrom = current.active
-    profileName = DEFAULT_PROFILE_NAME
+    failed.add(current.active)
+    profileName = recoverableProfile(home, DEFAULT_PROFILE_NAME, failed)
     recoveredState = true
   }
 
   const next: DesktopProfileStateV1 = {
     version: STATE_VERSION,
     active: profileName,
-    lastKnownGood: isSelectable(home, current.lastKnownGood)
-      ? current.lastKnownGood
-      : DEFAULT_PROFILE_NAME,
+    lastKnownGood: recoverableProfile(home, current.lastKnownGood, failed),
   }
   writeState(statePath, next)
   return {

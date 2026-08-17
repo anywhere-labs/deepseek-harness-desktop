@@ -238,4 +238,33 @@ describe('desktop profile selection state', () => {
       rolledBackFrom: 'work',
     })
   })
+
+  it('recovers from a broken default profile by selecting the next selectable profile', () => {
+    const root = temporaryRoot()
+    const home = join(root, 'harness')
+    const statePath = join(root, 'private', 'state.json')
+    writeProfile(home, 'desktop', 'broken')
+    writeProfile(home, 'work', ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+
+    expect(beginDesktopProfileStartup(statePath, home)).toEqual({
+      profileName: 'web',
+      state: { version: 1, active: 'web', lastKnownGood: 'web' },
+      recoveredState: true,
+      rolledBackFrom: 'desktop',
+    })
+  })
+
+  it('falls back to the web profile when the default is broken and no user profile exists', () => {
+    const root = temporaryRoot()
+    const home = join(root, 'harness')
+    const statePath = join(root, 'private', 'state.json')
+    writeProfile(home, 'desktop', 'broken')
+
+    expect(beginDesktopProfileStartup(statePath, home)).toEqual({
+      profileName: 'web',
+      state: { version: 1, active: 'web', lastKnownGood: 'web' },
+      recoveredState: true,
+      rolledBackFrom: 'desktop',
+    })
+  })
 })
