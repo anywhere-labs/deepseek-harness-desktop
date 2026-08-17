@@ -10,7 +10,9 @@ describe('desktop profiles Host plugin', () => {
     let disposeEffect: (() => void) | undefined
     const events: string[] = []
     const disposeRegistration = vi.fn()
+    let locale: DesktopRuntime['locale'] = 'en'
     const runtime = {
+      get locale() { return locale },
       registerTrayItem: (item: DesktopTrayItem) => {
         trayItem = item
         return { refresh: () => {}, dispose: disposeRegistration }
@@ -51,6 +53,10 @@ describe('desktop profiles Host plugin', () => {
       { label: '工作 profile', checked: false, enabled: true },
       { label: 'headless (Unavailable for Desktop)', checked: false, enabled: false },
     ])
+
+    locale = 'zh'
+    expect(trayItem?.label()).toBe('配置文件：desktop')
+    expect(trayItem?.submenu?.()[2]?.label()).toBe('headless（不可用于桌面端）')
 
     await commands[1]?.invoke()
     expect(events).toEqual(['select:工作 profile'])

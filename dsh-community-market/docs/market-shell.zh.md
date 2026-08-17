@@ -2,7 +2,7 @@
 
 [English](market-shell.md)
 
-状态：设计提案；当前只有文档初始化工程
+状态：设计提案；只读 Host/Client 市场 MVP 已实现并进入集成测试，安装器尚未实现
 
 本文定义 `dsh-community-market` 第一阶段的实现边界。它刻意比完整的插件市场更小：package 只负责产品内的市场壳和适配器，不负责社区目录、包 registry 或 DSH profile 格式。
 
@@ -12,7 +12,7 @@
 - 在用户明确选择操作前，目录浏览始终保持只读。
 - 只安装到当前 profile，并在确认前展示插件来源和目标 profile。
 - 复用现有 DSH 插件与 Desktop profile 行为，不创建平行状态。
-- 让目录 provider 可以替换，避免界面永久绑定某一个服务。
+- 让用户明确选择、排序和添加目录来源，避免界面永久绑定某一个服务。
 - 不依赖 Electron 私有访问也能工作；Desktop 集成是可选能力，不是 renderer 全局对象。
 
 ## 第一版不做什么
@@ -28,7 +28,10 @@
 
 ```mermaid
 flowchart LR
-    Catalog["远程目录 provider"] --> Host["Market Host 插件<br/>请求、限流、校验、标准化"]
+    Selection["用户选择来源<br/>可以不选、选一个或多个"] --> Registry["来源 registry"]
+    Partner["经审查的合作方适配器"] --> Registry
+    Standard["用户添加的标准来源"] --> Registry
+    Registry --> Host["Market Host 插件<br/>请求、隔离、校验、标准化"]
     Host --> Route["普通 DSH route 或 RPC"]
     Route --> Client["Market Client 插件<br/>搜索、详情、确认"]
     Profiles["desktopProfiles<br/>当前 profile"] --> Host
@@ -38,32 +41,29 @@ flowchart LR
 
 renderer 只通过普通 DSH route 或 RPC 接收标准化纯数据，不会获得 Electron、文件系统、进程、`desktopRuntime` 或包管理器访问。Host 负责目录 I/O、校验、安装编排、取消和操作串行化。
 
-## 目录 provider
+## 目录来源与适配器
 
-第一个适配器计划接入 [DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 公开文档中的 registry 接口：
+市场不设默认目录。首次使用时由用户选择不启用来源、启用一个或启用多个，并决定展示顺序。没有选择来源时要展示明确的空状态，不能悄悄退回到某个合作方。
 
-```text
-GET https://deepseek1024.com/api/v1/registry
-```
+Host 支持两条来源路径：
 
-接口及其 schema 属于该独立项目，必须放在 provider 接口之后，不能变成 UI 的隐含假设。标准化快照只需要：
+1. 用户添加的来源实现公开 HTTPS JSON 合同，由标准适配器处理。
+2. 接口不同的合作方，通过随 Market 代码发布且经过审查的适配器接入。
 
-- 来源身份与来源页面；
-- 目录更新时间；
-- 带本地化名称和顺序的分类；
-- 插件身份、名称、作者、仓库 URL、分类和本地化描述；
-- stars 等可选展示信息。
+远程 manifest 可以描述数据，但不能提供适配器代码、凭据、命令、启用状态或优先级。每个适配器都必须先把私有响应转成同一套标准化页面，才能交给 renderer；来源私有字段不能变成 UI 假设。
 
-远程字段只是展示数据，不是可执行指令。provider 必须限制为 HTTPS，设置超时和响应大小上限，校验 JSON 与严格 schema，保证 ID 唯一、字符串有界、仓库 URL 规范。未知字段直接忽略；文本只能按文本渲染，不能作为原始 HTML。
+[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 是目前与项目合作的提供方之一，市场已包含针对其公开 API、经过审查的内置适配器。它不是默认、优先或兜底来源，合作关系也不表示其收录内容经过我们审核或推荐。它的接口和 schema 继续归该独立项目所有。
 
-精简 registry 无法证明 package 所有权、安全审核、兼容性或维护者身份。界面必须始终展示目录来源，并明显说明“收录不等于推荐”。
+面向实现团队的规范是[目录提供方合同](catalog-provider-contract.zh.md)，其中包含来源 manifest、query、不可信 provider page 和 Host 标准化响应的机器可读 Schema。远程字段只是展示数据，不是可执行指令；文本只能按文本渲染，不能作为原始 HTML。
 
 ## 只读浏览
 
 Phase 1 提供：
 
+- 来源选择、来源排序和添加符合规范的来源；
+- 多来源隔离查询，其中一个来源失败不会隐藏其他来源的成功结果；
 - 加载、空目录、离线、非法响应和重试状态；
-- 基于标准化名称与描述的本地搜索；
+- 基于标准化名称与描述的搜索；
 - 分类筛选；
 - 包含源码仓库和目录来源的详情页；
 - 缺少安装能力时的不可用说明。
@@ -75,15 +75,15 @@ Phase 1 提供：
 安装属于 Phase 2，并且只能由用户操作开始。执行前的确认必须展示：
 
 - 插件名称；
-- 规范化源码仓库；
-- 精确推导出的安装目标；
+- 规范化 package 或源码仓库身份；
+- 已锁定的精确 package 版本或不可变 repository commit；
 - 当前 profile 名称；
 - 插件会以用户权限在本地运行的提示；
 - 安装时可能执行 package lifecycle script 的提示。
 
-目录中的 `install` 字段、文档命令或任意命令字符串都不会被执行。对最初的 GitHub 目录，Host 会从经过校验的 `owner/repository[/sub/directory]` 身份推导唯一受支持的 GitHub dependency 形式。启用安装前，推导和引用规则必须由测试锁定。
+目录中的 `install` 字段、文档命令或任意命令字符串都不会被执行。Host 会独立把经过校验的 package identity 解析为精确 SemVer 版本，或把规范仓库身份解析为不可变 commit。目标可变、未解析或重新校验时发生变化，安装都保持禁用。启用安装前，解析、重新校验和引用规则必须由测试锁定。
 
-在 Desktop 中，最初的适配器会使用 `dsh-plugin-desktop` 已提供的公开服务：
+在 Desktop 中，Market Host 会使用 `dsh-plugin-desktop` 已提供的公开服务：
 
 1. 从 `desktopProfiles.current` 读取当前身份。
 2. 调用 `desktopPnpm.runPlugin()`，传入 `add` 操作、明确的绝对 invoking directory 和 `AbortSignal`。
@@ -129,7 +129,8 @@ Phase 1 提供：
 ### Phase 1：只读市场壳
 
 - Host 与 Client 插件入口。
-- 可替换目录 provider 与严格标准化。
+- 用户拥有的来源选择、标准来源、经审查的合作方适配器与严格标准化。
+- 带来源证据与部分失败处理的多来源隔离查询。
 - 搜索、分类、详情和完整状态处理。
 - headless 单元测试与 Loader smoke；不包含安装器。
 
@@ -142,11 +143,10 @@ Phase 1 提供：
 ### 后续工作
 
 - 已安装状态详情、卸载、更新与失败恢复。
-- 多个目录 provider 和来源选择。
 - 基于独立规范证据的更强验证信号。
 
 ## 来源与独立性
 
-本设计参考 [imsai-sh/awesome-deepseek-harness-plugins](https://github.com/imsai-sh/awesome-deepseek-harness-plugins)，该项目也以 DSH 1024Store 展示，并另行发布 `dsh-1024store` 插件。DSH Community Market 不是该插件的 fork、重新打包版本或官方客户端。其应用代码使用 MIT，目录元数据使用 CC0-1.0。当前初始化工程没有复制其代码或素材，也没有打包目录快照。
+本设计参考了多个社区目录项目，其中包括 [imsai-sh/awesome-deepseek-harness-plugins](https://github.com/imsai-sh/awesome-deepseek-harness-plugins)，该项目也以 DSH 1024Store 展示。DSH 1024Store 是当前合作的提供方，并另行发布 `dsh-1024store` 插件。DSH Community Market 不是该插件的 fork、重新打包版本或官方客户端。其应用代码使用 MIT，目录元数据使用 CC0-1.0。当前初始化工程没有复制其代码或素材，也没有打包目录快照。
 
 DSH Community Market 是 Anywhere Labs 的独立项目。目录收录不表示 Anywhere Labs、DSH 1024Store、DeepSeek 或插件作者对项目作出推荐。

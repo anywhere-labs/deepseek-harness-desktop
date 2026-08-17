@@ -5,6 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import z from '@deepseek-ai/schemastery'
 import type {} from './runtime.ts'
+import { desktopTrayLabel } from './tray-locale.ts'
 import {
   checkForStableUpdate,
   parseSemVer,
@@ -220,9 +221,9 @@ export function apply(ctx: Context, config: Config): void {
       order: 10,
       label: () => downloadingVersion === undefined
         ? availableVersion === undefined
-          ? checking ? 'Checking for Updates…' : 'Check for Updates…'
-          : `DSH Desktop ${availableVersion} Available`
-        : `Downloading DSH Desktop ${downloadingVersion}…`,
+          ? desktopTrayLabel(ctx.desktopRuntime.locale, checking ? 'checkingForUpdates' : 'checkForUpdates')
+          : desktopTrayLabel(ctx.desktopRuntime.locale, 'updateAvailable', availableVersion)
+        : desktopTrayLabel(ctx.desktopRuntime.locale, 'downloadingUpdate', downloadingVersion),
       invoke: runManualCheck,
     })
     refreshTray = registration.refresh

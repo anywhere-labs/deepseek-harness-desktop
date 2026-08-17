@@ -23,7 +23,14 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
     afterPack?: unknown
     electronFuses?: unknown
     files?: unknown
-    mac?: { hardenedRuntime?: unknown; icon?: unknown; notarize?: unknown; target?: unknown }
+    mac?: {
+      hardenedRuntime?: unknown
+      icon?: unknown
+      mergeASARs?: unknown
+      notarize?: unknown
+      target?: unknown
+      x64ArchFiles?: unknown
+    }
     win?: { icon?: unknown; target?: unknown }
     nsis?: Record<string, unknown>
     linux?: { icon?: unknown; category?: unknown; executableName?: unknown; syncDesktopName?: unknown }
@@ -38,6 +45,7 @@ const workspaceManifest = JSON.parse(readFileSync(new URL('package.json', worksp
   resolutions?: Record<string, unknown>
   scripts?: Record<string, unknown>
 }
+const ciWorkflow = readFileSync(new URL('.github/workflows/ci.yml', workspaceRoot), 'utf8')
 
 describe('published package surface', () => {
   it('registers both npm launcher names', () => {
@@ -91,6 +99,7 @@ describe('published package surface', () => {
       ],
     })
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-community-market')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/terminal')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/pnpm')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/profiles')
@@ -121,13 +130,17 @@ describe('published package surface', () => {
 
   it('installs Host command PATHs after the launch snapshot and before profile boot', () => {
     const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const recover = main.indexOf('await resolveDesktopShellEnvironment')
+    const applyRecovered = main.indexOf('Object.entries(shellEnvironmentResolution.updates)')
     const snapshot = main.indexOf('const environment = loadLayeredEnv')
     const install = main.indexOf('const pnpmRuntime = installDesktopPnpmRuntime')
     const prepare = main.indexOf('const prepared = prepareDesktopProfile')
     const installDsh = main.indexOf('const dshRuntime = process.platform === \'win32\'')
     const boot = main.indexOf('const ctx = await boot')
 
-    expect(snapshot).toBeGreaterThanOrEqual(0)
+    expect(recover).toBeGreaterThanOrEqual(0)
+    expect(applyRecovered).toBeGreaterThan(recover)
+    expect(snapshot).toBeGreaterThan(applyRecovered)
     expect(install).toBeGreaterThan(snapshot)
     expect(prepare).toBeGreaterThan(install)
     expect(installDsh).toBeGreaterThan(prepare)
@@ -137,6 +150,15 @@ describe('published package surface', () => {
     expect(main).toContain("'dsh-plugin-desktop: packaged dsh runtime PATH'")
     expect(main).toContain('disposePnpmRuntime?.()')
     expect(main).toContain('disposeDshRuntime?.()')
+  })
+
+  it('uses the upstream child-environment scrub around login-shell recovery', () => {
+    const shellEnvironment = readFileSync(new URL('src/shell-environment.ts', packageRoot), 'utf8')
+
+    expect(shellEnvironment).toContain('scrubbedParentEnv')
+    expect(shellEnvironment).toContain('SENSITIVE_ENV_PATTERN')
+    expect(shellEnvironment).toContain('DSH_ENV_PREFIX')
+    expect(shellEnvironment).toContain('DESKTOP_SHELL_ENVIRONMENT_KEYS')
   })
 
   it('fixes the installed application identity', () => {
@@ -168,8 +190,10 @@ describe('published package surface', () => {
       'cordis.patch.yml',
       'lib/**',
       'package.json',
+      '!node_modules/node-pty/build/**',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
+    expect(manifest.build?.mac?.mergeASARs).toBe(false)
     expect(manifest.build?.win?.icon).toBe('build/app-icon.png')
     expect(manifest.build?.win?.target).toEqual([{
       target: 'nsis',
@@ -202,6 +226,7 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['package:dir']).toBe('yarn run build && node scripts/package-dir.mjs')
     expect(packageDir).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
     expect(manifest.scripts?.['dist:mac']).toBe('node scripts/release-mac.ts')
+    expect(manifest.scripts?.['dist:mac-smoke']).toBe('node scripts/package-mac.ts')
     expect(manifest.scripts?.['dist:win']).toBe('node scripts/package-win.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run typecheck')
@@ -210,18 +235,43 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-download.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/windows-volume-diagnostics.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run verify:closure')
+    expect(manifest.scripts?.['check:mac-package']).toBe('yarn run -T check')
     expect(manifest.scripts?.['verify:cli']).toBe('node scripts/verify-cli-runtime.mjs')
     expect(manifest.scripts?.check).toContain('yarn run verify:cli')
-    expect(workspaceManifest.scripts?.['dist:mac']).toBe('yarn workspace dsh-plugin-desktop dist:mac')
+    expect(workspaceManifest.scripts?.['dist:mac'])
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac')
+    expect(workspaceManifest.scripts?.['dist:mac-smoke'])
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac-smoke')
     expect(workspaceManifest.scripts?.['dist:win'])
-      .toBe('yarn workspace dsh-plugin-desktop dist:win')
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win')
     expect(manifest.build?.afterPack).toBe('./scripts/verify-packaged-runtime.ts')
     expect(manifest.build?.mac).toEqual(expect.objectContaining({
       hardenedRuntime: true,
+      mergeASARs: false,
       notarize: true,
       target: ['dir'],
+      x64ArchFiles: expect.stringContaining('node-pty/prebuilds/darwin-*'),
     }))
+    expect(manifest.build?.files).toContain('!node_modules/node-pty/build/**')
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
+  })
+
+  it('runs the full gate on Windows and packages through root scripts on native runners', () => {
+    const windowsJob = ciWorkflow.slice(
+      ciWorkflow.indexOf('  desktop-windows:'),
+      ciWorkflow.indexOf('  desktop-macos:'),
+    )
+    const macosJob = ciWorkflow.slice(
+      ciWorkflow.indexOf('  desktop-macos:'),
+      ciWorkflow.indexOf('  upstream-command-windows:'),
+    )
+
+    expect(windowsJob).toContain('- run: yarn check')
+    expect(windowsJob).toContain('- run: yarn dist:win')
+    expect(windowsJob).not.toContain('yarn workspace dsh-plugin-desktop dist:win')
+    expect(macosJob).toContain('- run: yarn workspace dsh-community-market check')
+    expect(macosJob).toContain('- run: yarn dist:mac-smoke')
+    expect(macosJob).not.toContain('yarn workspace dsh-plugin-desktop dist:mac-smoke')
   })
 
   it('keeps one fixed brand-blue tray source for generated native assets', () => {

@@ -9,8 +9,10 @@ describe('desktop terminal Host plugin', () => {
     let disposeEffect: (() => void) | undefined
     const openTerminal = vi.fn()
     const disposeRegistration = vi.fn()
+    let locale: DesktopRuntime['locale'] = 'en'
     const runtime = {
       platform: 'darwin',
+      get locale() { return locale },
       openTerminal,
       registerTrayItem: (item: DesktopTrayItem) => {
         trayItem = item
@@ -31,6 +33,8 @@ describe('desktop terminal Host plugin', () => {
     expect(inject).toEqual(['desktopRuntime'])
     expect(trayItem).toMatchObject({ group: 'tools', order: 10 })
     expect(trayItem?.label()).toBe('Open DSH Terminal')
+    locale = 'zh'
+    expect(trayItem?.label()).toBe('打开 DSH 终端')
     trayItem?.invoke()
     expect(openTerminal).toHaveBeenCalledOnce()
 

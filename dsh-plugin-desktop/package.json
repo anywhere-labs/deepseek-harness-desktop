@@ -101,10 +101,12 @@
     "verify:notices": "node scripts/verify-licenses.mjs --notices THIRD_PARTY_NOTICES.md",
     "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile && yarn run verify:licenses",
     "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
+    "check:mac-package": "yarn run -T check",
     "start": "node lib/bin.js",
     "dev": "yarn run build && node lib/bin.js",
     "package:dir": "yarn run build && node scripts/package-dir.mjs",
     "dist:mac": "node scripts/release-mac.ts",
+    "dist:mac-smoke": "node scripts/package-mac.ts",
     "dist:win": "node scripts/package-win.ts",
     "prepack": "yarn run check"
   },
@@ -211,6 +213,7 @@
     "@deepseek-ai/dsh-web-app": "0.1.0-rc.6",
     "@deepseek-ai/dsh-workflow": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "dsh-community-market": "0.1.0-dev.0",
     "koffi": "3.1.5",
     "node-addon-require-builtin": "^0.1.4",
     "pnpm": "11.7.0",
@@ -259,7 +262,8 @@
       "build/tray-icon*.png",
       "cordis.patch.yml",
       "lib/**",
-      "package.json"
+      "package.json",
+      "!node_modules/node-pty/build/**"
     ],
     "mac": {
       "target": [
@@ -268,7 +272,9 @@
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
       "icon": "build/app-icon-mac.png",
-      "notarize": true
+      "mergeASARs": false,
+      "notarize": true,
+      "x64ArchFiles": "**/node_modules/{node-pty/prebuilds/darwin-*/**,node-addon-require-builtin-darwin-*/**,@vscode/ripgrep-darwin-*/**,@img/sharp-darwin-*/**,@img/sharp-libvips-darwin-*/**,@koromix/koffi-darwin-*/**}"
     },
     "win": {
       "target": [
