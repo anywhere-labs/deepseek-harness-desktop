@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   REQUIRED_PACKAGED_RUNTIME_ENTRIES,
+  REQUIRED_MACOS_UNIVERSAL_ENTRIES,
   REQUIRED_UNPACKED_PACKAGE_SPECIFIERS,
   REQUIRED_UNPACKED_RUNTIME_ENTRIES,
   REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES,
@@ -13,11 +14,17 @@ import {
   type PackageResolver,
   type PackagedRuntimeContext,
 } from '../scripts/verify-packaged-runtime.ts'
+import { FORBIDDEN_MACOS_UNIVERSAL_ENTRIES } from '../scripts/mac-universal.ts'
 
-function context(appOutDir: string, electronPlatformName: string): PackagedRuntimeContext {
+function context(
+  appOutDir: string,
+  electronPlatformName: string,
+  arch?: number,
+): PackagedRuntimeContext {
   return {
     appOutDir,
     electronPlatformName,
+    ...(arch === undefined ? {} : { arch }),
     packager: { appInfo: { productFilename: 'DSH Desktop' } },
   }
 }
@@ -64,6 +71,48 @@ describe('packaged desktop runtime verification', () => {
   it('rejects an unsupported platform instead of guessing an archive layout', () => {
     expect(() => resolvePackagedAsarPath(context('/build', 'mas')))
       .toThrow('unsupported Electron afterPack platform "mas"')
+  })
+
+  it('requires both CPU variants from a universal macOS runtime', () => {
+    const runtimeContext = context('/build', 'darwin', 4)
+    const unpackedRoot = resolvePackagedUnpackedRoot(runtimeContext)
+    const missing = 'node_modules/@vscode/ripgrep-darwin-x64/bin/rg'
+
+    expect(() => verifyPackagedRuntime(
+      runtimeContext,
+      () => completeArchiveEntries(),
+      filename => filename !== join(unpackedRoot, missing),
+      completePackageResolver(unpackedRoot),
+    )).toThrow(`missing required physical entries: ${missing}`)
+
+    const exists = vi.fn<FileProbe>(filename => !FORBIDDEN_MACOS_UNIVERSAL_ENTRIES
+      .some(entry => filename === join(unpackedRoot, entry)))
+    verifyPackagedRuntime(
+      runtimeContext,
+      () => completeArchiveEntries(),
+      exists,
+      completePackageResolver(unpackedRoot),
+    )
+    expect(exists).toHaveBeenCalledTimes(
+      REQUIRED_UNPACKED_RUNTIME_ENTRIES.length
+        + REQUIRED_MACOS_UNIVERSAL_ENTRIES.length
+        + FORBIDDEN_MACOS_UNIVERSAL_ENTRIES.length,
+    )
+  })
+
+  it('rejects a host-architecture node-pty build from a universal app', () => {
+    const runtimeContext = context('/build', 'darwin', 4)
+    const unpackedRoot = resolvePackagedUnpackedRoot(runtimeContext)
+    const forbidden = FORBIDDEN_MACOS_UNIVERSAL_ENTRIES[0]
+
+    expect(() => verifyPackagedRuntime(
+      runtimeContext,
+      () => completeArchiveEntries(),
+      filename => filename === join(unpackedRoot, forbidden)
+        || !FORBIDDEN_MACOS_UNIVERSAL_ENTRIES
+          .some(entry => filename === join(unpackedRoot, entry)),
+      completePackageResolver(unpackedRoot),
+    )).toThrow(`contains host-architecture build output: ${forbidden}`)
   })
 
   it.each([

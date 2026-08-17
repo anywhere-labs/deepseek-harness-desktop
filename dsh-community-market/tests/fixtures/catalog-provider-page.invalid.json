@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0.0",
+  "items": [
+    {
+      "id": "duplicate",
+      "name": "first",
+      "displayName": "First",
+      "summary": "First item.",
+      "repository": {
+        "url": "https://github.com/example/first"
+      }
+    },
+    {
+      "id": "duplicate",
+      "name": "second",
+      "displayName": "Second",
+      "summary": "Second item.",
+      "repository": {
+        "url": "https://github.com/example/second"
+      }
+    }
+  ],
+  "page": {}
+}

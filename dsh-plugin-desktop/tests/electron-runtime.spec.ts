@@ -132,6 +132,7 @@ const electron = vi.hoisted(() => {
   return {
     app: {
       dock: { setIcon: vi.fn() },
+      getLocale: vi.fn(() => 'en-US'),
       getPath: vi.fn(() => '/tmp/dsh-desktop-user-data'),
       getVersion: vi.fn(() => '43.4.0'),
       isPackaged: false,
@@ -197,6 +198,7 @@ const spec: DesktopShellSpec = {
     templatePath: '/tmp/tray-iconTemplate.png',
     bluePath: '/tmp/tray-icon-blue.png',
   },
+  readLocalePreference: vi.fn(() => undefined),
   readThemeSource: vi.fn(() => 'system' as const),
   requestQuit: () => {},
   requestModeChange: vi.fn(async () => {}),
@@ -434,6 +436,45 @@ describe('Electron compatibility runtime', () => {
     expect(electron.trays).toHaveLength(0)
     expect(electron.browserWindows[0]?.show).toHaveBeenCalledOnce()
     expect(electron.browserWindows[0]?.focus).toHaveBeenCalledOnce()
+
+    await release()
+  })
+
+  it('starts from the saved locale and rebuilds native tray commands when it changes', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const readLocalePreference = vi.fn(() => 'zh' as const)
+    const release = runtime.schedule({ ...spec, readLocalePreference })
+
+    await runtime.mountScheduled()
+    expect(readLocalePreference).toHaveBeenCalledOnce()
+    expect(runtime.locale).toBe('zh')
+    expect((electron.menuTemplates.at(-1) as Array<{ label?: string }>).map(item => item.label))
+      .toEqual(expect.arrayContaining([
+        '打开 DSH Desktop',
+        '切换到高级模式',
+        '退出',
+      ]))
+
+    runtime.setLocalePreference('en')
+    expect(runtime.locale).toBe('en')
+    expect((electron.menuTemplates.at(-1) as Array<{ label?: string }>).map(item => item.label))
+      .toEqual(expect.arrayContaining([
+        'Open DSH Desktop',
+        'Switch to Advanced Mode',
+        'Quit',
+      ]))
+
+    electron.app.getLocale.mockReturnValueOnce('zh-CN')
+    runtime.setLocalePreference(undefined)
+    expect(runtime.locale).toBe('zh')
+    expect((electron.menuTemplates.at(-1) as Array<{ label?: string }>).map(item => item.label))
+      .toEqual(expect.arrayContaining([
+        '打开 DSH Desktop',
+        '切换到高级模式',
+        '退出',
+      ]))
 
     await release()
   })

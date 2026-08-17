@@ -4,6 +4,10 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-cmdline'
+import {
+  LOCALE_SETTINGS_NAMESPACE,
+  type LocaleSettings,
+} from '@deepseek-ai/dsh-client-locale'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
   THEME_SETTINGS_NAMESPACE,
@@ -28,6 +32,7 @@ export const inject = ['webServer', 'webRuntime', 'appExit', 'settings']
 export const DESKTOP_SETTINGS_NAMESPACE = settingsNamespace('dsh-desktop')
 
 const UI_THEME_SETTINGS_NAMESPACE = settingsNamespace(THEME_SETTINGS_NAMESPACE)
+const UI_LOCALE_SETTINGS_NAMESPACE = settingsNamespace(LOCALE_SETTINGS_NAMESPACE)
 
 /** Desktop settings presented by the standard settings service. */
 export interface DesktopSettings {
@@ -164,6 +169,10 @@ export function apply(ctx: Context, config: Config): void {
       runtime.setThemeSource((next as ThemeSettings).preference)
     })
   }
+  ctx.on('settings/updated', (namespace, next) => {
+    if (namespace !== UI_LOCALE_SETTINGS_NAMESPACE) return
+    runtime.setLocalePreference((next as LocaleSettings).preference)
+  })
   ctx.effect(
     () => runtime.schedule({
       ...config,
@@ -172,6 +181,9 @@ export function apply(ctx: Context, config: Config): void {
       windowTitle: 'DeepSeek Harness Desktop',
       iconPath,
       trayIcons,
+      readLocalePreference: () => {
+        return (ctx.settings.get(UI_LOCALE_SETTINGS_NAMESPACE) as LocaleSettings | undefined)?.preference
+      },
       readThemeSource: () => {
         const theme = ctx.settings.get(UI_THEME_SETTINGS_NAMESPACE) as ThemeSettings | undefined
         if (theme === undefined) {

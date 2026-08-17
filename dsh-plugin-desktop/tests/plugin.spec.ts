@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { LocaleId } from '@deepseek-ai/dsh-client-locale'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { ThemePreference } from '@deepseek-ai/dsh-client-ui-theme'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -34,10 +35,12 @@ interface PluginHarness {
   shell(): DesktopShellSpec | undefined
   update: ReturnType<typeof vi.fn<(patch: object) => Promise<void>>>
   restart: ReturnType<typeof vi.fn<() => Promise<void>>>
+  setLocalePreference: ReturnType<typeof vi.fn<(locale: LocaleId | undefined) => void>>
   setThemeSource: ReturnType<typeof vi.fn<(source: ThemePreference) => void>>
   rendererBoot: ReturnType<typeof vi.fn<(report: RendererBootReport) => void>>
   rendererRoute(): WebRoute | undefined
   notify(next: DesktopSettings, prev: DesktopSettings): Promise<void>
+  notifyLocale(preference: LocaleId | undefined): void
   notifyTheme(preference: ThemePreference): void
 }
 
@@ -46,13 +49,16 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   let watcher: ((next: DesktopSettings, prev: DesktopSettings) => void | Promise<void>) | undefined
   const update = vi.fn(async (_patch: object) => {})
   const restart = vi.fn(async () => {})
+  const setLocalePreference = vi.fn<(locale: LocaleId | undefined) => void>()
   const setThemeSource = vi.fn<(source: ThemePreference) => void>()
   const rendererBoot = vi.fn<(report: RendererBootReport) => void>()
   let rendererRoute: WebRoute | undefined
-  let settingsUpdated: ((namespace: unknown, next: unknown) => void) | undefined
+  const settingsUpdated = new Set<(namespace: unknown, next: unknown) => void>()
+  let localePreference: LocaleId | undefined
   let themePreference: ThemePreference = 'system'
   const runtime: DesktopRuntime = {
     platform,
+    locale: 'en',
     updates: {
       isPackaged: false,
       canDownload: platform === 'darwin' || platform === 'win32',
@@ -73,14 +79,17 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     registerTrayItem: () => ({ refresh: () => {}, dispose: () => {} }),
     openTerminal: () => {},
     reportRendererBoot: rendererBoot,
+    setLocalePreference,
     setThemeSource,
     requestRestart: restart,
     prepareToQuit: () => {},
   }
   const settings = {
-    get: vi.fn((namespace: unknown) => String(namespace) === 'ui-theme'
-      ? { preference: themePreference }
-      : undefined),
+    get: vi.fn((namespace: unknown) => {
+      if (String(namespace) === 'ui-theme') return { preference: themePreference }
+      if (String(namespace) === 'locale') return { preference: localePreference }
+      return undefined
+    }),
     register: vi.fn(() => ({
       get: () => ({ mode: config.mode }),
       watch: (callback: typeof watcher) => {
@@ -106,8 +115,8 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     get: vi.fn((key: unknown) => String(key) === 'desktopRuntime' ? runtime : () => {}),
     effect: vi.fn((register: () => unknown) => register()),
     on: vi.fn((event: string, listener: (namespace: unknown, next: unknown) => void) => {
-      if (event === 'settings/updated') settingsUpdated = listener
-      return () => { if (settingsUpdated === listener) settingsUpdated = undefined }
+      if (event === 'settings/updated') settingsUpdated.add(listener)
+      return () => { settingsUpdated.delete(listener) }
     }),
   } as unknown as Context
   return {
@@ -116,13 +125,18 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     shell: () => shell,
     update,
     restart,
+    setLocalePreference,
     setThemeSource,
     rendererBoot,
     rendererRoute: () => rendererRoute,
     notify: async (next, prev) => { await watcher?.(next, prev) },
+    notifyLocale: (preference) => {
+      localePreference = preference
+      for (const listener of settingsUpdated) listener(settingsNamespace('locale'), { preference })
+    },
     notifyTheme: (preference) => {
       themePreference = preference
-      settingsUpdated?.(settingsNamespace('ui-theme'), { preference })
+      for (const listener of settingsUpdated) listener(settingsNamespace('ui-theme'), { preference })
     },
   }
 }
@@ -259,6 +273,21 @@ describe('desktop Host plugin', () => {
     expect(harness.shell()?.readThemeSource()).toBe('system')
     harness.notifyTheme('dark')
     expect(harness.setThemeSource).toHaveBeenCalledWith('dark')
+  })
+
+  it('projects the Host-backed locale preference into the native tray', () => {
+    const harness = createHarness('win32')
+    apply(harness.ctx, config)
+
+    expect(harness.shell()?.readLocalePreference()).toBeUndefined()
+    expect(harness.setLocalePreference).not.toHaveBeenCalled()
+
+    harness.notifyLocale('zh')
+    expect(harness.shell()?.readLocalePreference()).toBe('zh')
+    expect(harness.setLocalePreference).toHaveBeenCalledWith('zh')
+
+    harness.notifyLocale(undefined)
+    expect(harness.setLocalePreference).toHaveBeenLastCalledWith(undefined)
   })
 
   it('requires the desktop Web carrier to remain loopback-only', () => {

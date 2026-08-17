@@ -5,6 +5,8 @@
       name: dsh-plugin-desktop
       config:
         mode: compatibility
+    - id: community-market
+      name: dsh-community-market
     - id: desktop-terminal
       name: dsh-plugin-desktop/terminal
       disabled: !!js process.platform === 'linux'

@@ -68,6 +68,7 @@ try {
   releasePackageResolver = installProfilePackageResolver(prepared.bareModuleBaseUrl)
   const runtime = {
     platform: 'win32',
+    locale: 'en',
     updates: {
       isPackaged: false,
       canDownload: true,
@@ -85,6 +86,7 @@ try {
     },
     async mountScheduled() {
       if (mountedSpec === undefined) throw new Error('desktop shell was not registered')
+      runtime.setLocalePreference(mountedSpec.readLocalePreference())
       nativeThemeSource = mountedSpec.readThemeSource()
     },
     show() {},
@@ -99,6 +101,7 @@ try {
       }
     },
     openTerminal() {},
+    setLocalePreference(preference) { runtime.locale = preference ?? 'en' },
     setThemeSource(source) { nativeThemeSource = source },
     async requestRestart() {},
     prepareToQuit() {},

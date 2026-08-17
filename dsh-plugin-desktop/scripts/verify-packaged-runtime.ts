@@ -4,11 +4,17 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { listPackage } from '@electron/asar'
+import {
+  FORBIDDEN_MACOS_UNIVERSAL_ENTRIES,
+  MACOS_UNIVERSAL_NATIVE_ENTRIES,
+} from './mac-universal.ts'
 
 /** AfterPack fields consumed without importing Electron Builder's incomplete declaration graph. */
 export interface PackagedRuntimeContext {
   /** Completed platform application directory. */
   readonly appOutDir: string
+  /** Electron Builder target architecture (`4` is its stable universal enum value). */
+  readonly arch?: number
   /** Electron target platform selected by the packager. */
   readonly electronPlatformName: string
   /** Product metadata used to locate the macOS application bundle. */
@@ -77,6 +83,11 @@ export const REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES = [
   'node_modules/node-pty/prebuilds/win32-x64/pty.node',
   'node_modules/node-pty/prebuilds/win32-x64/winpty-agent.exe',
   'node_modules/node-pty/prebuilds/win32-x64/winpty.dll',
+] as const
+
+/** CPU-specific runtime assets that must coexist in a universal macOS application. */
+export const REQUIRED_MACOS_UNIVERSAL_ENTRIES = [
+  ...MACOS_UNIVERSAL_NATIVE_ENTRIES.map(entry => entry.path),
 ] as const
 
 /** Package exports that profile fallback links must resolve from the physical application tree. */
@@ -223,12 +234,23 @@ export function verifyPackagedRuntime(
   const unpackedRoot = resolvePackagedUnpackedRoot(context)
   const requiredPhysicalEntries = context.electronPlatformName === 'win32'
     ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES]
-    : REQUIRED_UNPACKED_RUNTIME_ENTRIES
+    : context.electronPlatformName === 'darwin' && context.arch === 4
+      ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_MACOS_UNIVERSAL_ENTRIES]
+      : REQUIRED_UNPACKED_RUNTIME_ENTRIES
   const missing = requiredPhysicalEntries.filter(entry => !exists(join(unpackedRoot, entry)))
   if (missing.length > 0) {
     throw new Error(
       `dsh-plugin-desktop: packaged runtime at ${unpackedRoot} is missing required physical entries: ${missing.join(', ')}`,
     )
+  }
+  if (context.electronPlatformName === 'darwin' && context.arch === 4) {
+    const forbidden = FORBIDDEN_MACOS_UNIVERSAL_ENTRIES
+      .filter(entry => exists(join(unpackedRoot, entry)))
+    if (forbidden.length > 0) {
+      throw new Error(
+        `dsh-plugin-desktop: universal macOS runtime at ${unpackedRoot} contains host-architecture build output: ${forbidden.join(', ')}`,
+      )
+    }
   }
   verifyUnpackedPackageResolution(unpackedRoot, resolvePackage)
 }

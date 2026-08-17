@@ -46,16 +46,17 @@
     }
   },
   "scripts": {
-    "build": "yarn workspace dsh-plugin-desktop build",
+    "build": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop build",
     "typecheck": "yarn workspace dsh-plugin-desktop typecheck",
     "test": "yarn workspace dsh-plugin-desktop test",
     "check:layout": "node scripts/verify-layout.mjs",
     "check": "yarn check:layout && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-plugin-desktop check",
-    "dev": "yarn workspace dsh-plugin-desktop dev",
+    "dev": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dev",
     "start": "yarn workspace dsh-plugin-desktop start",
-    "package:dir": "yarn workspace dsh-plugin-desktop package:dir",
-    "dist:mac": "yarn workspace dsh-plugin-desktop dist:mac",
-    "dist:win": "yarn workspace dsh-plugin-desktop dist:win",
+    "package:dir": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop package:dir",
+    "dist:mac": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac",
+    "dist:mac-smoke": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac-smoke",
+    "dist:win": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win",
     "upstream:version": "cd deepseek-harness && corepack pnpm --version",
     "upstream:install": "cd deepseek-harness && corepack pnpm install --frozen-lockfile",
     "upstream:build": "cd deepseek-harness && corepack pnpm run build"
