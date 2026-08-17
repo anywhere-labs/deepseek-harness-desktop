@@ -59,14 +59,14 @@ const diagnosticsPrivacyCopy: Record<DesktopLocale, DesktopDiagnosticsPrivacyCop
   en: {
     title: 'Export Diagnostics',
     message: 'Review the diagnostic archive before sharing it.',
-    detail: 'The archive contains recent application logs and system information. Logs may contain local paths, workspace IDs, and session IDs. Authentication credentials are masked when recognized, but you should still review the archive before uploading it publicly.',
+    detail: 'The archive contains recent application logs, local crash dumps, and system information. Logs may contain local paths, workspace IDs, and session IDs. Crash dumps may contain fragments of process memory. Authentication credentials are masked in logs when recognized, but you should still review the archive before uploading it publicly.',
     confirm: 'Export',
     cancel: 'Cancel',
   },
   zh: {
     title: '导出诊断信息',
     message: '分享诊断包前请先检查其中的内容。',
-    detail: '诊断包包含最近的应用日志和系统信息。日志可能包含本地路径、工作区 ID 和会话 ID。系统会对可识别的认证凭据进行脱敏，但公开上传前仍应检查诊断包。',
+    detail: '诊断包包含最近的应用日志、本地崩溃转储和系统信息。日志可能包含本地路径、工作区 ID 和会话 ID，崩溃转储可能包含进程内存片段。系统会对日志中可识别的认证凭据进行脱敏，但公开上传前仍应检查诊断包。',
     confirm: '导出',
     cancel: '取消',
   },

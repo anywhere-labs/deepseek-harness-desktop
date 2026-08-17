@@ -254,6 +254,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       const path = await exportDiagnosticsZip(
         join(app.getPath('userData'), 'logs'),
         app.getPath('userData'),
+        { crashDumpsDir: app.getPath('crashDumps') },
       )
       shell.showItemInFolder(path)
     } catch (cause) {
