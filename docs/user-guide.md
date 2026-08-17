@@ -12,7 +12,7 @@ Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profil
 
 选择 profile 后应用会有序重启。新 profile 在 Host、窗口和浏览器客户端都成功启动后才会被记录为最近一次可用 profile；启动失败会回到上一次可用选择。官方 profile 默认使用同一个 DSH home，所以 sessions、settings 和 storage 通常不需要迁移。自定义配置（patch）如果主动改写持久化路径，则以该 profile 自己的设置为准。
 
-切换 profile 不会把旧 profile 的插件偷偷复制到新 profile。要管理目标 profile，请在终端中显式写出 profile，或者在切换后使用终端里的默认命令。
+切换 profile 不会把旧 profile 的插件偷偷复制到新 profile。要管理目标 profile，请在终端中显式写出 profile，或者在切换后使用终端里的默认命令。首次创建 `desktop` profile 时，如果本机已有的 `web` profile 装有社区插件，应用会询问是否一键导入；之后也可以随时用托盘的 **Import Web Profile Plugins…** 命令把 `web` profile 的社区插件导入当前 profile。
 
 ## 兼容模式与高级模式
 
@@ -42,6 +42,10 @@ dsh plugin update
 ```
 
 显式 `--profile <name>` 始终优先。插件变更后需要重启 DSH Desktop，才能让新的 bundle 进入 Loader 组合。
+
+### 从 web profile 导入插件
+
+在官方网页端（`web` profile）安装过的社区插件不会自动出现在其它 profile。首次创建 `desktop` profile 时，如果检测到 `web` profile 装有社区插件，应用会询问是否一键导入；托盘的 **Import Web Profile Plugins…** 命令可以随时把 `web` profile 的社区插件导入当前 profile。导入走官方 `dsh plugin add` 流程，Desktop 自带的 bundle 和已存在的插件会被跳过；全部成功时应用会自动重启以应用新的 bundle，部分失败时会列出失败的插件，重启后再次导入即可。
 
 ## 打开终端
 

@@ -12,7 +12,7 @@ A profile is a composition of DSH bundles, dependencies, and patches. The tray *
 
 Selecting a profile performs an orderly restart. The new profile becomes the last-known-good choice only after the Host, window, and browser client all start successfully; a failed startup returns to the previous working choice. Official profiles normally use the same DSH home, so sessions, settings, and storage do not need to be migrated. A custom configuration (patch) can deliberately redirect a persistence root, in which case that profile's configuration wins.
 
-Switching profiles does not silently copy plugins from the old profile into the new one. Use an explicit profile in the terminal when preparing another profile, or use the default commands after switching.
+Switching profiles does not silently copy plugins from the old profile into the new one. Use an explicit profile in the terminal when preparing another profile, or use the default commands after switching. When the `desktop` profile is created for the first time and an existing `web` profile has community plugins, DSH Desktop asks whether to import them in one step; the **Import Web Profile Plugins…** tray command imports them into the active profile at any time.
 
 ## Compatibility and advanced modes
 
@@ -42,6 +42,10 @@ dsh plugin update
 ```
 
 An explicit `--profile <name>` always wins. Restart DSH Desktop after plugin changes so the new bundle enters the Loader composition.
+
+### Importing plugins from the web profile
+
+Community plugins installed in the official web client (`web` profile) do not appear in other profiles automatically. When the `desktop` profile is created for the first time and a `web` profile with community plugins exists, DSH Desktop asks whether to import them in one step; the **Import Web Profile Plugins…** tray command imports them into the active profile at any time. Imports go through the official `dsh plugin add` flow, and Desktop-owned bundles or already-present plugins are skipped. When every plugin imports successfully the application restarts automatically to apply them; when some fail, the notification lists the failed plugins and you can import again after a restart.
 
 ## Opening the terminal
 

@@ -135,6 +135,10 @@ Invalid argv, an invalid `invokingDir`, a closed or busy generation, and a signa
 
 The fact that a private type is present in emitted declarations does not make its runtime service a supported third-party capability. The two public service names and their contract modules are the compatibility boundary.
 
+### Desktop-owned plugin import surface
+
+`dsh-plugin-desktop/plugin-import` registers the **Import Web Profile Plugins…** tray command for the active profile. It computes a one-shot import offer from the `web` profile's community bundles (skipping launcher-owned and already-present bundles), confirms through a native dialog, runs `desktopPnpm.runPlugin(['add', ...])` once per bundle, and restarts the application when every bundle imports successfully. Like the profile selector, this row is Desktop-owned: the `desktopRuntime.confirm()` native dialog and tray methods are not part of the third-party service contract.
+
 ## Injection patterns
 
 ### Desktop-only plugin: required injection

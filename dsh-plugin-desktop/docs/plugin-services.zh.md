@@ -135,6 +135,10 @@ Service 在每个 generation 同时最多启动一个 package operation；已有
 
 私有类型出现在生成的 declaration 中，并不代表其 runtime service 成为了受支持第三方 capability。两个公开 service 名称及其 contract module 才是兼容边界。
 
+### Desktop 自有的插件导入 surface
+
+`dsh-plugin-desktop/plugin-import` 为当前 profile 注册 **Import Web Profile Plugins…** 托盘命令。它会根据 `web` profile 的社区 bundle 计算一次性导入清单（跳过 Desktop 自带与已存在的 bundle），通过原生对话框确认，逐条调用 `desktopPnpm.runPlugin(['add', ...])`，全部成功时自动重启应用以应用新的 bundle。与 profile 选择器一样，这一 row 由 Desktop 持有：`desktopRuntime.confirm()` 原生对话框与托盘方法不属于第三方 service contract。
+
 ## Injection 模式
 
 ### 仅支持 Desktop 的插件：required injection
