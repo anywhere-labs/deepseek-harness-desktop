@@ -73,10 +73,6 @@ export function advancedWindowOptions(
       ...options,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 16 },
-      transparent: true,
-      backgroundColor: '#00000000',
-      vibrancy: 'sidebar',
-      visualEffectState: 'followWindow',
     }
   }
   if (platform === 'win32') {

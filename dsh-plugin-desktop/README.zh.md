@@ -63,15 +63,15 @@ Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在
 
 高级模式是为 macOS 与 Windows 显式组合的 desktop 呈现。Launcher 会在读取全部用户 patch 后禁用官方 `ui-layout` Loader row，保持官方 `ui-sidebar` 与 `ui-conversation` row 启用，并把所选模式应用到 `desktop-shell`。
 
-desktop Client 随后在自身 Cordis fiber 生命期内提供 `layout` service，并且只注册 `root` slot occupant。其 root 为不变的上游 sidebar、conversation、details 与 overlay contribution 声明 seat。官方 sidebar 继续作为 `sidebar` occupant，并继续声明 workspace browser、settings shell 与纯新增 footer action seat。这样会保留其组件行为、收起动画与第三方扩展点，而 desktop package 只拥有 frame 几何与原生材质。
+desktop Client 随后在自身 Cordis fiber 生命期内提供 `layout` service，并且只注册 `root` slot occupant。其 root 为不变的上游 sidebar、conversation、details 与 overlay contribution 声明 seat。官方 sidebar 继续作为 `sidebar` occupant，并继续声明 workspace browser、settings shell 与纯新增 footer action seat。这样会保留其组件行为、收起动画与第三方扩展点，而 desktop package 只拥有 frame 几何与平台原生窗口装饰。
 
 高级 theme presenter 会把当前上游 theme snapshot 投影到 document，包括 color scheme、解析后的 token 值、深色模式 marker 与 theme-color metadata。它订阅普通 theme 变化，generation dispose 时只移除由自身投影的状态。
 
-对于高级 generation，Electron adapter 还会在 Host boot 完成后读取已注册的 `ui-theme.preference`，并在创建窗口前把内置 `light`、`dark` 或 `system` 值同步到 Electron 原生外观。窗口存续期间提交的 preference 变化会更新原生材质，dispose 则恢复此前的 Electron 外观。仅存在于 Client 的第三方 theme id 不会改变该 Host preference。
+对于高级 generation，Electron adapter 还会在 Host boot 完成后读取已注册的 `ui-theme.preference`，并在创建窗口前把内置 `light`、`dark` 或 `system` 值同步到 Electron 原生外观。窗口存续期间提交的 preference 变化会更新原生窗口框架与 Windows 材质，dispose 则恢复此前的 Electron 外观。仅存在于 Client 的第三方 theme id 不会改变该 Host preference。
 
-desktop sidebar surface 会把上游 sidebar-fill token 局部设为透明，因此官方 sidebar 与 session 列表渐隐可以透出原生材质，而无需改变其组件样式。
+在 macOS 上，desktop sidebar surface 会保留上游 sidebar-fill token，并在 sidebar 与 session 列表渐隐区域之后绘制官方不透明填充色。在 Windows 上，该 surface 会把 token 局部设为透明，使 Mica 保持可见，同时不改变上游组件样式。
 
-在 macOS 上，高级窗口使用透明 hidden-inset 标题栏、定位后的红黄绿按钮与原生 `sidebar` vibrancy。其 90 CSS 像素收起列会把官方 56 像素 rail 居中放在 desktop 自有的红绿灯顶部 inset 下方。Sidebar surface 本身不可拖动；红绿灯右侧由 desktop 自有的透明 32 CSS 像素条提供窗口拖动目标。Conversation 与 details 完整 surface 上方的 caption row 会保留 20 CSS 像素视觉间距，同时提供另一块透明的 32 CSS 像素拖动命中区域。按钮、链接、输入框、对话框与显式声明 `app-region: no-drag` 的 contribution 仍可交互；放在顶部 32 像素内的自定义 pointer target 也必须声明同一排除规则。在 Windows 上，官方 sidebar 保持兼容模式几何：收起 56 像素、默认展开 280 像素，并沿用相同的上游过渡行为；透明 surface 会透出 Mica。窗口使用带原生控件的隐藏标题栏、透明 overlay、Mica 背景材质、阴影、圆角与粗可调整边框。Electron 仅在 Windows 11 22H2 及以上版本提供由系统绘制的 Mica 材质。Desktop 自有的 32 CSS 像素 caption row 会横跨 Windows 的 conversation 与 details 两列；完整的上游 slot surface 从该行下方开始，因此官方与第三方 Header contribution 会保持原有相对布局，无需针对具体元素设置 caption offset。Linux 会拒绝高级模式，而不会静默降级到与持久化设置不同的呈现。
+在 macOS 上，高级窗口会保留不透明 hidden-inset 标题栏与定位后的红黄绿按钮，但不再启用 Electron 透明或 vibrancy。这样会与官方 Web 的 sidebar 填充色保持一致，防止壁纸颜色进入导航 surface，并避免持续把 Web 内容合成到原生模糊层之上。其 90 CSS 像素收起列会把官方 56 像素 rail 居中放在 desktop 自有的红绿灯顶部 inset 下方。Sidebar surface 本身不可拖动；红绿灯右侧由 desktop 自有的无绘制 32 CSS 像素条提供窗口拖动目标。Conversation 与 details 完整 surface 上方的 caption row 会保留 20 CSS 像素视觉间距，同时提供另一块无绘制的 32 CSS 像素拖动命中区域。按钮、链接、输入框、对话框与显式声明 `app-region: no-drag` 的 contribution 仍可交互；放在顶部 32 像素内的自定义 pointer target 也必须声明同一排除规则。在 Windows 上，官方 sidebar 保持兼容模式几何：收起 56 像素、默认展开 280 像素，并沿用相同的上游过渡行为；透明 surface 会透出 Mica。窗口使用带原生控件的隐藏标题栏、透明 overlay、Mica 背景材质、阴影、圆角与粗可调整边框。Electron 仅在 Windows 11 22H2 及以上版本提供由系统绘制的 Mica 材质。Desktop 自有的 32 CSS 像素 caption row 会横跨 Windows 的 conversation 与 details 两列；完整的上游 slot surface 从该行下方开始，因此官方与第三方 Header contribution 会保持原有相对布局，无需针对具体元素设置 caption offset。Linux 会拒绝高级模式，而不会静默降级到与持久化设置不同的呈现。
 
 ## 开发
 

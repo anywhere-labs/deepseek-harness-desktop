@@ -990,7 +990,7 @@ describe('Electron compatibility runtime', () => {
     expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
   })
 
-  it('uses advanced macOS material options and offers compatibility mode', async () => {
+  it('uses advanced macOS opaque chrome and offers compatibility mode', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -1007,9 +1007,10 @@ describe('Electron compatibility runtime', () => {
     expect(electron.nativeTheme.themeSource).toBe('dark')
     expect(electron.browserWindowOptions[0]).toEqual(expect.objectContaining({
       titleBarStyle: 'hiddenInset',
-      transparent: true,
-      vibrancy: 'sidebar',
     }))
+    for (const option of ['transparent', 'backgroundColor', 'vibrancy', 'visualEffectState']) {
+      expect(electron.browserWindowOptions[0]).not.toHaveProperty(option)
+    }
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Compatibility Mode', enabled: true }),
     ]))
