@@ -172,6 +172,7 @@ describe('published package surface', () => {
       'lib/**',
       'package.json',
       '!node_modules/node-pty/build/**',
+      '!**/*.map',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
     expect(manifest.build?.mac?.mergeASARs).toBe(false)
