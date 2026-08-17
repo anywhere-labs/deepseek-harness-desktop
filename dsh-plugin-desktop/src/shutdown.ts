@@ -126,7 +126,7 @@ export function installShutdownRequests(
   requestQuit: (code: number) => void,
 ): () => void {
   const interrupt = (): void => { requestQuit(130) }
-  const terminate = (): void => { requestQuit(0) }
+  const terminate = (): void => { requestQuit(143) }
   const beforeQuit = (event: DesktopQuitEvent): void => {
     event.preventDefault()
     requestQuit(0)
