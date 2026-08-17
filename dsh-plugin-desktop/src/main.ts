@@ -13,6 +13,7 @@ import {
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
+import { hasDesktopQuitFlag } from './desktop-quit-flag.ts'
 import {
   installDesktopDshRuntime,
   installDesktopPnpmRuntime,
@@ -115,6 +116,10 @@ async function start(): Promise<void> {
     app.quit()
     return
   }
+  if (hasDesktopQuitFlag(process.argv)) {
+    app.quit()
+    return
+  }
 
   let current: Context | undefined
   let profileStartup: DesktopProfileStartup | undefined
@@ -191,7 +196,13 @@ async function start(): Promise<void> {
   )
   removeShutdownRequests = installShutdownRequests(process, app, requestQuit)
 
-  app.on('second-instance', () => { runtime.show() })
+  app.on('second-instance', (_event, argv) => {
+    if (hasDesktopQuitFlag(argv)) {
+      requestQuit(0)
+      return
+    }
+    runtime.show()
+  })
   await app.whenReady()
   if (process.platform === 'win32') app.setAppUserModelId('ai.deepseek.dsh.desktop')
   if (app.isPackaged && process.cwd() === '/') process.chdir(app.getPath('home'))
