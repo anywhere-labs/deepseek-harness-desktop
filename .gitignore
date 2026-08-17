@@ -8,6 +8,7 @@
 node_modules/
 *.tsbuildinfo
 .build/
+.worktrees/
 
 dsh-plugin-desktop/dist/
 dsh-plugin-desktop/lib/
