@@ -30,6 +30,7 @@ import {
 } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
 import { prepareDesktopProfile, type SkippedOptionalEntry } from './profile.ts'
+import { resolveWebServerPort } from './web-server-port.ts'
 import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import {
   createDesktopExitCoordinator,
@@ -274,7 +275,7 @@ async function start(): Promise<void> {
           requestRestart: () => runtime.requestRestart(),
         })
         provideCmdline(hostCtx, {
-          args: ['--host', '127.0.0.1', '--port', '0'],
+          args: ['--host', '127.0.0.1', '--port', String(resolveWebServerPort())],
           exit: requestQuit,
         })
       },

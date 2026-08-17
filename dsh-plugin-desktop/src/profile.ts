@@ -28,6 +28,7 @@ import FileSettingsProvider, {
 } from '@deepseek-ai/dsh-settings-file'
 import { parseDocument } from 'yaml'
 import { unpackedAsarPath } from './packaged-runtime-path.ts'
+import { resolveWebServerPort } from './web-server-port.ts'
 import type { DesktopShellMode } from './runtime.ts'
 
 /** Persistent profile managed by the desktop launcher and the ordinary dsh plugin command. */
@@ -419,10 +420,13 @@ export function prepareDesktopProfile(
     }
   }
   // Loopback-only binding is a launcher security invariant, not user config.
+  // The port defaults to 0 (OS-assigned random) so concurrent desktop
+  // instances never collide; DSH_DESKTOP_WEB_PORT pins it for external tools
+  // (e.g. the browser helper) that discover DSH by a fixed port.
   patches.push({
     id: 'webserver',
     disabled: false,
-    config: { host: '127.0.0.1', port: 0 },
+    config: { host: '127.0.0.1', port: resolveWebServerPort() },
   })
   if ((telemetryDisabled ?? '') !== '' && rows.has('session-telemetry-otel')) {
     patches.push({ id: 'session-telemetry-otel', disabled: true })
