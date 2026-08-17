@@ -163,7 +163,9 @@ describe('desktop update Host plugin', () => {
         lastPromptedVersion: '2.1.0',
       })
     })
-    expect((await stat(harness.statePath)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') {
+      expect((await stat(harness.statePath)).mode & 0o777).toBe(0o600)
+    }
 
     await vi.advanceTimersByTimeAsync(testConfig.intervalMs)
     await vi.waitFor(() => { expect(request).toHaveBeenCalledTimes(2) })

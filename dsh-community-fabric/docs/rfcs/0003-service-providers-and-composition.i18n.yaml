@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record. Both languages carry equal authority.
+# Update both files and record their normalized Git blob hashes after editing either side.
+0003-service-providers-and-composition.md: 9684a53bc21171249ca20c77da7ab5f694caadb6
+0003-service-providers-and-composition.zh.md: 49032ecdaee38211f6bde8b6f40aba54cb67729b

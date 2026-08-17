@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { ThemePreference } from '@deepseek-ai/dsh-client-ui-theme'
@@ -102,7 +103,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     },
     settings,
     logger: { warn: vi.fn(), error: vi.fn() },
-    get: vi.fn(() => () => {}),
+    get: vi.fn((key: unknown) => String(key) === 'desktopRuntime' ? runtime : () => {}),
     effect: vi.fn((register: () => unknown) => register()),
     on: vi.fn((event: string, listener: (namespace: unknown, next: unknown) => void) => {
       if (event === 'settings/updated') settingsUpdated = listener
@@ -135,6 +136,31 @@ describe('desktop Host plugin', () => {
     expect(String(DESKTOP_SETTINGS_NAMESPACE)).toBe('dsh-desktop')
   })
 
+  it('prints a launcher reminder and registers nothing without desktopRuntime', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const registerRoute = vi.fn()
+    const ctx = {
+      webServer: { host: '127.0.0.1', port: 43120, register: registerRoute },
+      settings: {
+        register: vi.fn(),
+        get: vi.fn(() => undefined),
+        watch: vi.fn(() => () => {}),
+        update: vi.fn(async () => {}),
+      },
+      logger: { warn: vi.fn(), error: vi.fn() },
+      get: vi.fn(() => undefined),
+      effect: vi.fn((register: () => unknown) => register()),
+      on: vi.fn(() => () => {}),
+    } as unknown as Context
+
+    apply(ctx, config)
+
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('desktop launcher'))
+    expect(registerRoute).not.toHaveBeenCalled()
+    expect(vi.mocked(ctx.settings.register)).not.toHaveBeenCalled()
+    stderr.mockRestore()
+  })
+
   it('builds the loopback root with validated renderer mode and platform markers', () => {
     const url = new URL(desktopRendererUrl(43120, 'advanced', 'darwin'))
     expect(url.origin).toBe('http://127.0.0.1:43120')
@@ -163,13 +189,11 @@ describe('desktop Host plugin', () => {
       url: 'http://127.0.0.1:43120/?dsh-desktop-mode=compatibility&dsh-desktop-platform=darwin',
       productName: 'DSH Desktop',
       windowTitle: 'DeepSeek Harness Desktop',
-      iconPath: expect.stringMatching(/\/build\/app-icon-mac\.png$/u),
-      trayIcons: {
-        templatePath: expect.stringMatching(/\/build\/tray-iconTemplate\.png$/u),
-        bluePath: expect.stringMatching(/\/build\/tray-icon-blue\.png$/u),
-      },
       readThemeSource: expect.any(Function),
     }))
+    expect(harness.shell()?.iconPath.endsWith(join('build', 'app-icon-mac.png'))).toBe(true)
+    expect(harness.shell()?.trayIcons.templatePath.endsWith(join('build', 'tray-iconTemplate.png'))).toBe(true)
+    expect(harness.shell()?.trayIcons.bluePath.endsWith(join('build', 'tray-icon-blue.png'))).toBe(true)
     expect(harness.shell()?.readThemeSource()).toBe('system')
     harness.notifyTheme('dark')
     expect(harness.setThemeSource).not.toHaveBeenCalled()
@@ -208,7 +232,7 @@ describe('desktop Host plugin', () => {
 
     apply(harness.ctx, config)
 
-    expect(harness.shell()?.iconPath).toMatch(/\/build\/app-icon\.png$/u)
+    expect(harness.shell()?.iconPath.endsWith(join('build', 'app-icon.png'))).toBe(true)
   })
 
   it('uses the generated 8-bit hicolor icon on linux', () => {
@@ -216,7 +240,7 @@ describe('desktop Host plugin', () => {
 
     apply(harness.ctx, config)
 
-    expect(harness.shell()?.iconPath).toMatch(/\/build\/icons\/512x512\.png$/u)
+    expect(harness.shell()?.iconPath.endsWith(join('build', 'icons', '512x512.png'))).toBe(true)
   })
 
   it('requests one orderly restart after the settings scope commits another mode', async () => {

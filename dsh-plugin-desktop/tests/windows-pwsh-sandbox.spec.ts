@@ -2,6 +2,8 @@ import type { ShellExecSpec } from '@deepseek-ai/dsh-shell'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   adaptWindowsAclExecution,
+  desktopWindowsPwshConfig,
+  desktopWindowsPwshPath,
   type WindowsAclAdaptation,
 } from '../src/windows-pwsh-sandbox.ts'
 
@@ -27,6 +29,46 @@ const adaptation: WindowsAclAdaptation = {
 }
 
 describe('Windows Electron PowerShell sandbox adaptation', () => {
+  it('prefers stable Windows PowerShell locations over PATH-provided portable pwsh', () => {
+    const programFilesPwsh = desktopWindowsPwshPath({
+      ProgramFiles: 'C:\\Program Files',
+      SystemRoot: 'C:\\Windows',
+      PATH: 'D:\\AI-Agent\\tools\\pwsh',
+    }, 'win32', path => path === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+
+    expect(programFilesPwsh).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+  })
+
+  it('keeps the regular Program Files PowerShell 7 install as the first Windows choice', () => {
+    const programFilesPwsh = desktopWindowsPwshPath({
+      ProgramFiles: 'C:\\Program Files',
+      SystemRoot: 'C:\\Windows',
+    }, 'win32', () => true)
+
+    expect(programFilesPwsh).toBe('C:\\Program Files\\PowerShell\\7\\pwsh.exe')
+  })
+
+  it('keeps explicit pwshPath config and non-Windows config unchanged', () => {
+    const explicit = { cwd: 'C:\\workspace', pwshPath: 'D:\\tools\\pwsh\\pwsh.exe' }
+    expect(desktopWindowsPwshConfig(explicit, {}, 'win32')).toBe(explicit)
+
+    const nonWindows = { cwd: '/workspace' }
+    expect(desktopWindowsPwshConfig(nonWindows, {}, 'darwin')).toBe(nonWindows)
+  })
+
+  it('defaults Windows sandbox config to a stable system PowerShell when available', () => {
+    const result = desktopWindowsPwshConfig({ cwd: 'C:\\workspace' }, {
+      ProgramFiles: 'C:\\missing',
+      SystemRoot: 'C:\\Windows',
+      PATH: 'D:\\portable\\pwsh',
+    }, 'win32', path => path === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+
+    expect(result).toEqual({
+      cwd: 'C:\\workspace',
+      pwshPath: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    })
+  })
+
   it('adapts only the exact Electron-hosted win32 ACL runner argv', () => {
     const env = Object.freeze({ KEEP: 'value' })
     const spec = Object.freeze(shellSpec(env))

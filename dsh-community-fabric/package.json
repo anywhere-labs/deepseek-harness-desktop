@@ -1,0 +1,42 @@
+{
+  "name": "dsh-community-fabric",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Documentation-first home for a community DSH plugin interoperability standard",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anywhere-labs/deepseek-harness-desktop.git",
+    "directory": "dsh-community-fabric"
+  },
+  "homepage": "https://github.com/anywhere-labs/deepseek-harness-desktop/tree/master/dsh-community-fabric#readme",
+  "bugs": {
+    "url": "https://github.com/anywhere-labs/deepseek-harness-desktop/issues"
+  },
+  "type": "module",
+  "files": [
+    "docs/**",
+    "LICENSE",
+    "README.md",
+    "README.zh.md",
+    "README.i18n.yaml"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "check": "node scripts/verify-docs.mjs",
+    "prepack": "yarn run check"
+  },
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "plugin",
+    "interoperability",
+    "community-standard"
+  ]
+}

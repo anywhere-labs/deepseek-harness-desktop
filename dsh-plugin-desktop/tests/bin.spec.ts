@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { DESKTOP_CLI_HELP, parseDesktopCli } from '../src/bin.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { DESKTOP_CLI_HELP, parseDesktopCli, runDesktopCli } from '../src/bin.ts'
+
+vi.mock('electron', () => ({ default: undefined }))
 
 describe('desktop npm launcher', () => {
   it('launches with no arguments', () => {
@@ -22,5 +24,17 @@ describe('desktop npm launcher', () => {
   it('names the installed product and selected profile behavior', () => {
     expect(DESKTOP_CLI_HELP).toContain('DSH Desktop')
     expect(DESKTOP_CLI_HELP).toContain('selected Web-capable profile')
+  })
+
+  it('reports a clear message when electron is missing', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      const code = await runDesktopCli([])
+      expect(code).toBe(1)
+      expect(write).toHaveBeenCalledWith(expect.stringContaining('electron is not available'))
+      expect(write).toHaveBeenCalledWith(expect.stringContaining('npm install -g dsh-plugin-desktop'))
+    } finally {
+      write.mockRestore()
+    }
   })
 })

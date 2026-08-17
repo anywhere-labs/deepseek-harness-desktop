@@ -13,7 +13,10 @@ import {
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { DSH_LAUNCH_ENVIRONMENT_KEY } from '@deepseek-ai/dsh-launch-environment'
-import { installDesktopPnpmRuntime } from './desktop-runtime-environment.ts'
+import {
+  installDesktopDshRuntime,
+  installDesktopPnpmRuntime,
+} from './desktop-runtime-environment.ts'
 import { ElectronDesktopRuntime } from './electron-runtime.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
@@ -34,6 +37,11 @@ import {
   installShutdownRequests,
   type DesktopShutdown,
 } from './shutdown.ts'
+import {
+  diagnoseWindowsVolumes,
+  formatWindowsVolumeConcern,
+  type WindowsVolumeConcern,
+} from './windows-volume-diagnostics.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const PRODUCT_NAME = 'DSH Desktop'
@@ -69,6 +77,31 @@ function notifySkippedOptionalEntries(
   }
 }
 
+/** Surface path/volume risks that otherwise become obscure sandbox or pnpm failures later. */
+function warnWindowsVolumeConcerns(concerns: readonly WindowsVolumeConcern[]): void {
+  for (const concern of concerns) {
+    process.stderr.write(`${BIN_NAME}: Windows volume warning: ${formatWindowsVolumeConcern(concern)}\n`)
+  }
+}
+
+/** Notify once after the UI is ready; stderr carries the exact paths. */
+function notifyWindowsVolumeConcerns(
+  runtime: ElectronDesktopRuntime,
+  concerns: readonly WindowsVolumeConcern[],
+): void {
+  if (concerns.length === 0) return
+  try {
+    runtime.updates.notify({
+      title: 'Storage May Be Unsupported',
+      body: `${concerns[0]?.label ?? 'A configured path'} is on a volume that may break sandboxed commands or plugin installs.`,
+    })
+  } catch (cause) {
+    process.stderr.write(
+      `${BIN_NAME}: failed to show Windows volume warning: ${cause instanceof Error ? cause.message : String(cause)}\n`,
+    )
+  }
+}
+
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
 async function start(): Promise<void> {
   app.setName(PRODUCT_NAME)
@@ -82,6 +115,7 @@ async function start(): Promise<void> {
   let profileStatePath: string | undefined
   let shutdown: DesktopShutdown | undefined
   let removeShutdownRequests: (() => void) | undefined
+  let disposeDshRuntime: (() => void) | undefined
   let disposePnpmRuntime: (() => void) | undefined
   let runtime!: ElectronDesktopRuntime
   const nativeExit = createDesktopExitCoordinator(
@@ -117,6 +151,7 @@ async function start(): Promise<void> {
       try {
         await current?.fiber.dispose()
       } finally {
+        disposeDshRuntime?.()
         disposePnpmRuntime?.()
       }
     },
@@ -129,6 +164,13 @@ async function start(): Promise<void> {
   await app.whenReady()
   if (process.platform === 'win32') app.setAppUserModelId('ai.deepseek.dsh.desktop')
   if (app.isPackaged && process.cwd() === '/') process.chdir(app.getPath('home'))
+  const homeDir = resolveDshHome()
+  const windowsVolumeConcerns = diagnoseWindowsVolumes(process.platform, [
+    { label: 'application install', path: process.execPath },
+    { label: 'desktop user data', path: app.getPath('userData') },
+    { label: 'DSH home', path: homeDir },
+  ])
+  warnWindowsVolumeConcerns(windowsVolumeConcerns)
 
   const failLoudProcess: FailLoudProcess = {
     on: (event, handler) => process.on(event, handler),
@@ -140,6 +182,7 @@ async function start(): Promise<void> {
     try {
       await current?.fiber.dispose()
     } finally {
+      disposeDshRuntime?.()
       disposePnpmRuntime?.()
     }
   })
@@ -161,7 +204,6 @@ async function start(): Promise<void> {
     })
     const releasePnpmRuntime = (): void => { pnpmRuntime.dispose() }
     disposePnpmRuntime = releasePnpmRuntime
-    const homeDir = resolveDshHome()
     const selectionStatePath = join(app.getPath('userData'), 'profile-selection', 'state.json')
     profileStatePath = selectionStatePath
     profileStartup = beginDesktopProfileStartup(selectionStatePath, homeDir)
@@ -172,6 +214,20 @@ async function start(): Promise<void> {
       process.platform,
       activeProfileName,
     )
+    const dshBootstrapPath = fileURLToPath(new URL('./desktop-cli.js', import.meta.url))
+    const dshRuntime = process.platform === 'win32'
+      ? installDesktopDshRuntime({
+          platform: process.platform,
+          appExecutable: process.execPath,
+          dshBootstrapPath,
+          profileName: activeProfileName,
+          homeDir,
+          stateDir: join(app.getPath('userData'), 'host-commands', activeProfileName),
+          environment: process.env,
+        })
+      : undefined
+    const releaseDshRuntime = (): void => { dshRuntime?.dispose() }
+    disposeDshRuntime = releaseDshRuntime
     const desktopPnpmBootstrap: DesktopPnpmBootstrap = {
       activeProfileName,
       activeProfileDir: prepared.profile.dir,
@@ -182,7 +238,7 @@ async function start(): Promise<void> {
       nodeBinDir: pnpmRuntime.nodeBinDir,
       nodeShimPath: pnpmRuntime.nodeShimPath,
       clearEnvironmentPath: pnpmRuntime.clearEnvironmentPath,
-      dshBootstrapPath: fileURLToPath(new URL('./desktop-cli.js', import.meta.url)),
+      dshBootstrapPath,
     }
     const releasePackageResolver = installProfilePackageResolver(prepared.bareModuleBaseUrl)
     const ctx = await boot(
@@ -194,6 +250,12 @@ async function start(): Promise<void> {
           () => releasePnpmRuntime,
           'dsh-plugin-desktop: packaged pnpm runtime PATH',
         )
+        if (dshRuntime !== undefined) {
+          hostCtx.effect(
+            () => releaseDshRuntime,
+            'dsh-plugin-desktop: packaged dsh runtime PATH',
+          )
+        }
         current = hostCtx
         hostCtx.effect(
           () => releasePackageResolver,
@@ -229,6 +291,7 @@ async function start(): Promise<void> {
     })
     await runtime.mountScheduled()
     notifySkippedOptionalEntries(runtime, prepared.skippedOptionalEntries)
+    notifyWindowsVolumeConcerns(runtime, windowsVolumeConcerns)
     if (profileStartup.rolledBackFrom !== undefined) {
       notifyProfileRecovery(
         runtime,

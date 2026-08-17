@@ -1,4 +1,4 @@
-/** App-local pnpm command environment available to desktop Host plugins. */
+/** App-local command environments available to desktop Host plugins. */
 
 import { randomUUID } from 'node:crypto'
 import {
@@ -12,8 +12,11 @@ import {
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { assertDesktopProfileName } from './profile-manager.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
+const DEFAULT_PROFILE = 'DSH_DESKTOP_DEFAULT_PROFILE'
+const DSH_HOME = 'DSH_HOME'
 const PATH = 'PATH'
 const ELECTRON_HEADERS_URL = 'https://electronjs.org/headers'
 const DIRECTORY_MODE = 0o700
@@ -53,13 +56,31 @@ export interface DesktopPnpmRuntimeInstallation {
   dispose(): void
 }
 
+/** Inputs used to publish the packaged DSH command to Windows Host plugins. */
+export interface DesktopDshRuntimeOptions {
+  platform: NodeJS.Platform
+  appExecutable: string
+  dshBootstrapPath: string
+  profileName: string
+  homeDir: string
+  stateDir: string
+  environment?: NodeJS.ProcessEnv
+}
+
+/** Generated DSH command and its reversible Host PATH update. */
+export interface DesktopDshRuntimeInstallation {
+  pathDir: string
+  dshShimPath: string
+  dispose(): void
+}
+
 /** Reject a value that cannot be represented in a generated command file. */
 function assertScriptValue(label: string, value: string): void {
   if (value.length === 0) {
-    throw new Error(`dsh-plugin-desktop: pnpm runtime ${label} must not be empty`)
+    throw new Error(`dsh-plugin-desktop: command runtime ${label} must not be empty`)
   }
   if (/[\0\r\n]/u.test(value)) {
-    throw new Error(`dsh-plugin-desktop: pnpm runtime ${label} must not contain NUL or newlines`)
+    throw new Error(`dsh-plugin-desktop: command runtime ${label} must not contain NUL or newlines`)
   }
 }
 
@@ -99,7 +120,7 @@ function preparePrivateDirectory(directory: string): void {
   mkdirSync(directory, { recursive: true, mode: DIRECTORY_MODE })
   const stat = lstatSync(directory)
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new Error(`dsh-plugin-desktop: pnpm runtime path is not a private directory: ${directory}`)
+    throw new Error(`dsh-plugin-desktop: command runtime path is not a private directory: ${directory}`)
   }
   chmodSync(directory, DIRECTORY_MODE)
 }
@@ -109,7 +130,7 @@ function assertOwnedDirectoryEntries(directory: string, allowed: readonly string
   const unexpected = readdirSync(directory).filter(entry => !allowed.includes(entry))
   if (unexpected.length > 0) {
     throw new Error(
-      `dsh-plugin-desktop: pnpm runtime directory contains unexpected entries: ${unexpected.join(', ')}`,
+      `dsh-plugin-desktop: command runtime directory contains unexpected entries: ${unexpected.join(', ')}`,
     )
   }
 }
@@ -125,7 +146,7 @@ function removeStaleTemporaryFiles(directory: string, targetName: string): void 
     const filename = join(directory, entry)
     const stat = lstatSync(filename)
     if (!stat.isFile() && !stat.isSymbolicLink()) {
-      throw new Error(`dsh-plugin-desktop: pnpm runtime stale temporary path is not a file: ${filename}`)
+      throw new Error(`dsh-plugin-desktop: command runtime stale temporary path is not a file: ${filename}`)
     }
     unlinkSync(filename)
   }
@@ -144,7 +165,7 @@ function unlinkTemporaryFile(filename: string): void {
 function replacePrivateFile(filename: string, contents: string, mode: number): void {
   const existing = lstatOptional(filename)
   if (existing !== undefined && (!existing.isFile() || existing.isSymbolicLink())) {
-    throw new Error(`dsh-plugin-desktop: pnpm runtime file is not a regular file: ${filename}`)
+    throw new Error(`dsh-plugin-desktop: command runtime file is not a regular file: ${filename}`)
   }
   const temporary = join(dirname(filename), `.${basename(filename)}.${process.pid}.${randomUUID()}.tmp`)
   try {
@@ -231,6 +252,20 @@ function windowsPnpmShim(
   ].join('\r\n')
 }
 
+/** Build the public Windows DSH command scoped to one active profile. */
+function windowsDshShim(options: DesktopDshRuntimeOptions): string {
+  return [
+    '@echo off',
+    'setlocal DisableDelayedExpansion',
+    `set "${RUN_AS_NODE}=1"`,
+    `set "${DEFAULT_PROFILE}=${escapeBatchSetValue(options.profileName)}"`,
+    `set "${DSH_HOME}=${escapeBatchSetValue(options.homeDir)}"`,
+    `${quoteBatchWord(options.appExecutable)} --expose-internals ${quoteBatchWord(options.dshBootstrapPath)} %*`,
+    'exit /b %errorlevel%',
+    '',
+  ].join('\r\n')
+}
+
 interface PathEntry {
   key: string
   value: string | undefined
@@ -292,6 +327,34 @@ function installPathDirectory(
       if (entry.value === undefined) continue
       environment[entry.key] = withoutPathDirectory(entry.value, directory, platform)
     }
+  }
+}
+
+/** Install the packaged DSH command into the Windows Host process PATH. */
+export function installDesktopDshRuntime(options: DesktopDshRuntimeOptions): DesktopDshRuntimeInstallation {
+  if (options.platform !== 'win32') {
+    throw new Error(`dsh-plugin-desktop: dsh runtime is unsupported on ${options.platform}`)
+  }
+  assertDesktopProfileName(options.profileName)
+  for (const [label, value] of [
+    ['application executable', options.appExecutable],
+    ['DSH bootstrap', options.dshBootstrapPath],
+    ['Harness home', options.homeDir],
+    ['state directory', options.stateDir],
+  ] as const) assertScriptValue(label, value)
+
+  const pathDir = join(options.stateDir, 'bin')
+  preparePrivateDirectory(options.stateDir)
+  preparePrivateDirectory(pathDir)
+  removeStaleTemporaryFiles(pathDir, 'dsh.cmd')
+  assertOwnedDirectoryEntries(pathDir, ['dsh.cmd'])
+  const dshShimPath = join(pathDir, 'dsh.cmd')
+  replacePrivateFile(dshShimPath, windowsDshShim(options), PRIVATE_FILE_MODE)
+
+  return {
+    pathDir,
+    dshShimPath,
+    dispose: installPathDirectory(options.environment ?? process.env, pathDir, options.platform),
   }
 }
 

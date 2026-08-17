@@ -151,8 +151,10 @@ describe('desktop profile selection state', () => {
     )
     expect(() => selectDesktopProfile(statePath, home, 'embedded-desktop')).toThrow('launcher-owned')
     expect(() => selectDesktopProfile(statePath, home, '../outside')).toThrow()
-    expect(statSync(statePath).mode & 0o777).toBe(0o600)
-    expect(statSync(join(root, 'desktop-private', 'profile-selection')).mode & 0o777).toBe(0o700)
+    if (process.platform !== 'win32') {
+      expect(statSync(statePath).mode & 0o777).toBe(0o600)
+      expect(statSync(join(root, 'desktop-private', 'profile-selection')).mode & 0o777).toBe(0o700)
+    }
   })
 
   it('consumes a pending profile and rolls back an unconfirmed startup on the next launch', () => {

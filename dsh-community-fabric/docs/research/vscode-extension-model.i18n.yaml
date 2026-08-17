@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record. Both languages carry equal authority.
+# Update both files and record their normalized Git blob hashes after editing either side.
+vscode-extension-model.md: b99b6f0b3b9db68c354f76a328198a07e59dab40
+vscode-extension-model.zh.md: 7249a4ec1152daf68b7a8309420a33bd4678d920
