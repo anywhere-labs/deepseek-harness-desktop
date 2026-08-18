@@ -1,7 +1,7 @@
 /** Headless artifact smoke for the Electron-backed dsh and pnpm command entries. */
 
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,8 @@ import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js
 
 const packageRoot = new URL('../', import.meta.url)
 const desktopCli = fileURLToPath(new URL('lib/desktop-cli.js', packageRoot))
+const dshAppBootPackage = fileURLToPath(new URL('node_modules/@deepseek-ai/dsh-app-boot/', packageRoot))
+const dshPackage = fileURLToPath(new URL('node_modules/@deepseek-ai/dsh/', packageRoot))
 const pnpmCli = fileURLToPath(new URL('node_modules/pnpm/bin/pnpm.mjs', packageRoot))
 const dshVersion = JSON.parse(readFileSync(new URL('node_modules/@deepseek-ai/dsh/package.json', packageRoot), 'utf8')).version
 const pnpmVersion = JSON.parse(readFileSync(new URL('node_modules/pnpm/package.json', packageRoot), 'utf8')).version
@@ -39,25 +41,31 @@ function assertNoRunnerEnvironment(label, env) {
   }
 }
 
-function verifyResult(label, result, expectedVersion) {
+function verifyResult(label, result, expectedOutput) {
   if (result.error !== undefined) throw result.error
   if (result.status !== 0) {
     throw new Error(`${label} artifact smoke exited ${String(result.status)}: ${result.stderr.trim()}`)
   }
-  if (result.stdout.trim() !== expectedVersion) {
-    throw new Error(`${label} artifact smoke returned ${JSON.stringify(result.stdout.trim())} instead of ${JSON.stringify(expectedVersion)}`)
+  if (expectedOutput === undefined) return
+  const output = result.stdout.trim()
+  const matches = expectedOutput instanceof RegExp
+    ? expectedOutput.test(output)
+    : output === expectedOutput
+  if (!matches) {
+    throw new Error(`${label} artifact smoke returned ${JSON.stringify(output)} instead of matching ${String(expectedOutput)}`)
   }
 }
 
-function runElectronEntry(label, nodeArgs, entry, expectedVersion) {
+function runElectronEntry(label, nodeArgs, entry, args, expectedOutput, extraEnvironment = {}) {
   const env = cleanEnvironment()
+  Object.assign(env, extraEnvironment)
   env.ELECTRON_RUN_AS_NODE = '1'
-  const result = spawnSync(electronPath, [...nodeArgs, entry, '--version'], {
+  const result = spawnSync(electronPath, [...nodeArgs, entry, ...args], {
     encoding: 'utf8',
     env,
     shell: false,
   })
-  verifyResult(label, result, expectedVersion)
+  verifyResult(label, result, expectedOutput)
 }
 
 function environmentValue(env, name) {
@@ -148,5 +156,30 @@ function runPackagedPnpmShim() {
   }
 }
 
-runElectronEntry('dsh', ['--expose-internals'], desktopCli, dshVersion)
+function runFlatProfileDshEntry() {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-flat-cli-smoke-'))
+  const desktopPackage = join(root, 'node_modules', 'dsh-plugin-desktop')
+  const linkedAppBootPackage = join(root, 'node_modules', '@deepseek-ai', 'dsh-app-boot')
+  const linkedDshPackage = join(root, 'node_modules', '@deepseek-ai', 'dsh')
+  try {
+    mkdirSync(join(root, 'node_modules', '@deepseek-ai'), { recursive: true })
+    cpSync(fileURLToPath(new URL('lib/', packageRoot)), join(desktopPackage, 'lib'), { recursive: true })
+    cpSync(fileURLToPath(new URL('package.json', packageRoot)), join(desktopPackage, 'package.json'))
+    symlinkSync(dshAppBootPackage, linkedAppBootPackage, process.platform === 'win32' ? 'junction' : 'dir')
+    symlinkSync(dshPackage, linkedDshPackage, process.platform === 'win32' ? 'junction' : 'dir')
+    runElectronEntry(
+      'flat profile dsh plugin help',
+      ['--expose-internals'],
+      join(desktopPackage, 'lib', 'desktop-cli.js'),
+      ['plugin', '--help'],
+      undefined,
+      { DSH_DESKTOP_DEFAULT_PROFILE: 'desktop' },
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}
+
+runElectronEntry('dsh', ['--expose-internals'], desktopCli, ['--version'], dshVersion)
+runFlatProfileDshEntry()
 runPackagedPnpmShim()

@@ -178,6 +178,9 @@ export interface DesktopRuntime {
   /** Open a native terminal containing packaged DSH command shims. */
   openTerminal(): void
 
+  /** Export a diagnostics zip and reveal it in the system file manager. */
+  exportDiagnostics(): Promise<void>
+
   /** Accept the terminal client Loader outcome for the mounted generation. */
   reportRendererBoot(report: RendererBootReport): void
 

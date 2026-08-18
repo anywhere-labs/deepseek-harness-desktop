@@ -158,6 +158,12 @@ Release operator 必须先发布两个平台产物，再让版本可被发现。
 
 在 macOS 与 Windows 上，**Open DSH Terminal** 会打开以当前激活 profile 为工作目录的系统终端。欢迎信息会显示应用版本、当前 profile、profile 目录与 DSH home，并列出配置与插件管理命令。在该终端内，裸 `dsh`、`dsh --dump-config`，以及没有选择 profile 的 plugin 子命令都会默认使用当前激活 profile；显式 `--profile` 与上游 `web` alias 会保留原有含义。DSH Desktop 会在自身 user-data 目录下按 profile 生成私有 `dsh`、`pnpm` 与 `node` shim，设置 `DSH_HOME`，使用当前 profile 作为工作目录，并且只在该终端的 `PATH` 前置 shim 目录；之后切换 profile 不会改变已经打开的终端命令。它不会修改全局环境或 shell 启动文件。macOS launcher 会先保留用户的交互式 zsh 或 bash 设置，再恢复 desktop 自有变量。Windows 会依次选择 PowerShell 7、Windows PowerShell 或命令提示符，并在新的 Windows Terminal 窗口中打开；如果 `wt.exe` 不可用，则由私有 `cmd start` broker 创建可见控制台。同步启动失败与 broker 非正常退出会显示在原生错误对话框中。Linux 不组合该终端命令。
 
+## 日志与诊断
+
+DSH Desktop 将 UTF-8 日志写入 Electron 用户数据目录：Windows 位于 `%APPDATA%\DSH Desktop\logs`，macOS 位于 `~/Library/Application Support/DSH Desktop/logs`。完整日志使用 `dsh-YYYY-MM-DD.log`，warning 与 error 还会写入 `dsh-YYYY-MM-DD.error.log`。单文件达到 10 MiB 后轮转，启动时删除七天前的文件，整个目录保持在 200 MiB 以下。`dsh-desktop.logLevel` 设置控制详细程度，默认为 `info`。
+
+在 macOS 与 Windows 上，从托盘选择 **导出诊断信息…**，应用会在相邻的 `diagnostics` 目录创建 ZIP，并在系统文件管理器中定位它。导出在 Electron 主线程之外执行，最多包含最近 50 MiB 的自有日志和一个 `system-info.txt`，只保留最新三份 ZIP。创建任何文件前，确认对话框会说明隐私边界。系统会脱敏可识别的凭据，但日志仍可能包含本地路径、工作区 ID、会话 ID、提示词、工具输出或第三方插件消息。分享诊断包前应先检查内容，公开上传时尤其如此。
+
 ## 原生生命周期
 
 关闭窗口会隐藏窗口，Host Cordis 树继续运行。托盘可以重新打开窗口、选择激活 profile、打开隔离的 DSH 终端、检查 stable release、通过标准 settings namespace 更改模式，或请求显式退出。Profile 与模式切换都会先 dispose 当前 Cordis 树，再让 Electron relaunch。原生退出、`SIGINT` 与 `SIGTERM` 也会在退出前请求 dispose；超过五秒或收到重复请求时会强制完成最终退出。导航与重定向被限制在确切的 loopback origin；外部 HTTP、HTTPS 与邮件链接由操作系统打开；renderer 启用 `contextIsolation` 与 Chromium sandbox，并关闭 Node integration。
@@ -204,5 +210,5 @@ corepack.cmd yarn dist:win
 - `dshmarket@1.2.3` 仍是用户可选安装的第三方 package，而不是内置 marketplace。只有重新审计的版本同时消费可选 Desktop service、保留普通 DSH fallback，并包含再分发所需的完整 license notice 后，才会重新评估预装。
 - 更新交接只验证下载容器，不验证 publisher 身份。macOS 仍要求用户从已打开的 DMG 替换应用；Windows 会运行已下载的 NSIS 安装器，但本地 `dist:win` 产物没有签名。签名产物、Authenticode/publisher 校验、SmartScreen 信誉与原生升级测试仍是发布 gate。
 - 共享 carrier 使用 loopback HTTP 与 WebSocket，而不是 Electron IPC。替换它需要上游 DSH 提供 transport 扩展点，不属于该独立包的范围。
-- 该项目目前固定使用已发布的 DSH `0.1.0-rc.6` family，而相邻的 `deepseek-harness/` 源码 checkout 早于该版本。因此，测试验证的是已发布包接口，而非上游未发布源码。
+- 该项目同时固定到已发布的 DSH `0.1.0-rc.7` family 及其对应的官方 `deepseek-harness/` release 源码。产品构建仍解析已发布包接口，不会直接链接源码 checkout。
 - `package:dir` 是用于 smoke 的未封装产物。`dist:win` 会额外生成未签名的 NSIS 测试安装包，但不会建立 Authenticode 身份或 SmartScreen 信誉。安装与升级行为、原生通知与终端、Windows ACL sandbox，以及每台目标机器上的原生材质外观仍属于目标平台验证边界。
