@@ -10,6 +10,7 @@ const workspaceRoot = new URL('../', packageRoot)
 const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), 'utf8')) as {
   name?: unknown
   version?: unknown
+  desktopName?: unknown
   bin?: Record<string, unknown>
   exports?: Record<string, unknown>
   files?: unknown
@@ -29,10 +30,17 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
       notarize?: unknown
       target?: unknown
       x64ArchFiles?: unknown
+      files?: unknown
     }
-    win?: { icon?: unknown; target?: unknown }
+    win?: { icon?: unknown; target?: unknown; files?: unknown }
     nsis?: Record<string, unknown>
-    linux?: { icon?: unknown }
+    linux?: {
+      icon?: unknown
+      target?: unknown
+      executableName?: unknown
+      artifactName?: unknown
+      syncDesktopName?: unknown
+    }
   }
   dependencies?: Record<string, unknown>
   optionalDependencies?: Record<string, unknown>
@@ -193,15 +201,16 @@ describe('published package surface', () => {
       'cordis.patch.yml',
       'lib/**',
       'package.json',
-      '!node_modules/node-pty/build/**',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
     expect(manifest.build?.mac?.mergeASARs).toBe(false)
+    expect(manifest.build?.mac?.files).toEqual(['!node_modules/node-pty/build/**'])
     expect(manifest.build?.win?.icon).toBe('build/app-icon.png')
     expect(manifest.build?.win?.target).toEqual([{
       target: 'nsis',
       arch: ['x64'],
     }])
+    expect(manifest.build?.win?.files).toEqual(['!node_modules/node-pty/build/**'])
     expect(manifest.build?.nsis).toEqual({
       license: 'THIRD_PARTY_NOTICES.md',
       oneClick: false,
@@ -216,6 +225,11 @@ describe('published package surface', () => {
       artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
+    expect(manifest.build?.linux?.target).toEqual(['deb'])
+    expect(manifest.build?.linux?.executableName).toBe('dsh-desktop')
+    expect(manifest.build?.linux?.artifactName).toBe('DSH-Desktop-${version}-${arch}.${ext}')
+    expect(manifest.build?.linux?.syncDesktopName).toBe(true)
+    expect(manifest.desktopName).toBe('DSH Desktop')
   })
 
   it('separates unsigned smoke packaging from the signed macOS release', () => {
@@ -227,6 +241,7 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['dist:mac']).toBe('node scripts/release-mac.ts')
     expect(manifest.scripts?.['dist:mac-smoke']).toBe('node scripts/package-mac.ts')
     expect(manifest.scripts?.['dist:win']).toBe('node scripts/package-win.ts')
+    expect(manifest.scripts?.['dist:linux']).toBe('node scripts/package-linux.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run typecheck')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/package-win.spec.ts')
@@ -235,6 +250,7 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['check:win-package']).toContain('tests/windows-volume-diagnostics.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run verify:closure')
     expect(manifest.scripts?.['check:mac-package']).toBe('yarn run -T check')
+    expect(manifest.scripts?.['check:linux-package']).toBe('yarn run -T check')
     expect(manifest.scripts?.['verify:cli']).toBe('node scripts/verify-cli-runtime.mjs')
     expect(manifest.scripts?.check).toContain('yarn run verify:cli')
     expect(workspaceManifest.scripts?.['dist:mac'])
@@ -251,7 +267,7 @@ describe('published package surface', () => {
       target: ['dir'],
       x64ArchFiles: expect.stringContaining('node-pty/prebuilds/darwin-*'),
     }))
-    expect(manifest.build?.files).toContain('!node_modules/node-pty/build/**')
+    expect(manifest.build?.mac?.files).toContain('!node_modules/node-pty/build/**')
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
   })
 
@@ -262,6 +278,10 @@ describe('published package surface', () => {
     )
     const macosJob = ciWorkflow.slice(
       ciWorkflow.indexOf('  desktop-macos:'),
+      ciWorkflow.indexOf('  desktop-linux:'),
+    )
+    const linuxJob = ciWorkflow.slice(
+      ciWorkflow.indexOf('  desktop-linux:'),
       ciWorkflow.indexOf('  upstream-command-windows:'),
     )
 
@@ -271,6 +291,9 @@ describe('published package surface', () => {
     expect(macosJob).toContain('- run: yarn workspace dsh-community-market check')
     expect(macosJob).toContain('- run: yarn dist:mac-smoke')
     expect(macosJob).not.toContain('yarn workspace dsh-plugin-desktop dist:mac-smoke')
+    expect(linuxJob).toContain('- run: yarn workspace dsh-community-market check')
+    expect(linuxJob).toContain('- run: yarn dist:linux')
+    expect(linuxJob).not.toContain('yarn workspace dsh-plugin-desktop dist:linux')
   })
 
   it('keeps one fixed brand-blue tray source for generated native assets', () => {

@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   REQUIRED_PACKAGED_RUNTIME_ENTRIES,
+  REQUIRED_LINUX_X64_NODE_PTY_ENTRIES,
   REQUIRED_MACOS_UNIVERSAL_ENTRIES,
   REQUIRED_UNPACKED_PACKAGE_SPECIFIERS,
   REQUIRED_UNPACKED_RUNTIME_ENTRIES,
@@ -47,6 +48,10 @@ describe('packaged desktop runtime verification', () => {
       'win32',
       join('/build', 'resources', 'app.asar'),
     ],
+    [
+      'linux',
+      join('/build', 'resources', 'app.asar'),
+    ],
   ])('inspects the %s app.asar path', (platform, expectedPath) => {
     const list = vi.fn<ArchiveLister>(() => completeArchiveEntries(platform === 'win32' ? '\\' : '/'))
 
@@ -62,7 +67,8 @@ describe('packaged desktop runtime verification', () => {
     expect(resolvePackagedUnpackedRoot(context('/build', platform))).toBe(unpackedRoot)
     expect(exists).toHaveBeenCalledTimes(
       REQUIRED_UNPACKED_RUNTIME_ENTRIES.length
-        + (platform === 'win32' ? REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES.length : 0),
+        + (platform === 'win32' ? REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES.length : 0)
+        + (platform === 'linux' ? REQUIRED_LINUX_X64_NODE_PTY_ENTRIES.length : 0),
     )
     expect(resolvePackage.mock.calls.map(([specifier]) => specifier))
       .toEqual(REQUIRED_UNPACKED_PACKAGE_SPECIFIERS)
@@ -150,6 +156,19 @@ describe('packaged desktop runtime verification', () => {
       runtimeContext,
       () => completeArchiveEntries(),
       filename => filename !== missingPath,
+      completePackageResolver(unpackedRoot),
+    )).toThrow(`missing required physical entries: ${missing}`)
+  })
+
+  it('fails loud when a required Linux node-pty entry is absent from app.asar.unpacked', () => {
+    const runtimeContext = context('/build', 'linux')
+    const unpackedRoot = resolvePackagedUnpackedRoot(runtimeContext)
+    const missing = REQUIRED_LINUX_X64_NODE_PTY_ENTRIES[0]
+
+    expect(() => verifyPackagedRuntime(
+      runtimeContext,
+      () => completeArchiveEntries(),
+      filename => filename !== join(unpackedRoot, missing),
       completePackageResolver(unpackedRoot),
     )).toThrow(`missing required physical entries: ${missing}`)
   })
