@@ -698,6 +698,23 @@ describe('catalog Host route pagination boundary', () => {
     expect(response.body).toEqual({ error: 'invalid catalog query' })
   })
 
+  it('rejects an empty cursor before starting a catalog scan', async () => {
+    const scanCatalog = vi.spyOn(DefaultCatalogService.prototype, 'scanCatalog')
+      .mockRejectedValue(new Error('catalog scan must not start'))
+    try {
+      const response = await requestMarketCatalog(
+        [source()],
+        `${marketRoutes.catalog}?sourceRecordId=${source().sourceRecordId}&cursor=`,
+      )
+
+      expect(response.statusCode).toBe(400)
+      expect(response.body).toEqual({ error: 'invalid catalog query' })
+      expect(scanCatalog).not.toHaveBeenCalled()
+    } finally {
+      scanCatalog.mockRestore()
+    }
+  })
+
   const active = source()
   const inactive = source({
     sourceRecordId: '028f1f77-a5c4-7b73-a9ae-0242ac120003',
@@ -935,6 +952,18 @@ describe('catalog active-source reads', () => {
     const service = new DefaultCatalogService(store, http)
 
     await expect(service.fetch({}, new AbortController().signal)).resolves.toEqual([])
+    expect(http.getJson).not.toHaveBeenCalled()
+  })
+
+  it('rejects a stale expected source before provider I/O', async () => {
+    const store = new MemoryCatalogSourceStore()
+    await store.save([source()])
+    const http: CatalogHttpClient = { getJson: vi.fn() }
+    const service = new DefaultCatalogService(store, http)
+
+    await expect(service.scanCatalog(new AbortController().signal, {
+      expectedSourceRecordId: '038f1f77-a5c4-7b73-a9ae-0242ac120004',
+    })).rejects.toThrow('catalog source is not active')
     expect(http.getJson).not.toHaveBeenCalled()
   })
 

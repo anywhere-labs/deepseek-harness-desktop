@@ -273,6 +273,13 @@ export class DesktopPnpm extends Service {
     return state?.phase === 'rolled-back' ? [state.receiptId] : []
   }
 
+  /** Return the operation id while a protected install still awaits restart verification. */
+  async pendingInstallReceiptIds(): Promise<readonly string[]> {
+    const state = await this.installRecovery.read()
+    if (state === undefined || state.phase === 'verified' || state.phase === 'rolled-back') return []
+    return [state.receiptId]
+  }
+
   /** Clear a rolled-back transaction only after its exact Market receipt has been removed. */
   async acknowledgeRecoveredInstall(receiptId: string): Promise<void> {
     const state = await this.installRecovery.read()

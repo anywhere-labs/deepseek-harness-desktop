@@ -152,7 +152,11 @@ describe('community market browser plugin', () => {
     expect(overlay[0]?.locale).toBe(NS)
     expect((settings[0]?.options.label as () => string)()).toBe(zh.tab)
     expect((launcher[0]?.options.label as () => string)()).toBe(zh.tab)
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(fetch).toHaveBeenCalledWith('/api/community-market/updates/auto-run', expect.objectContaining({
+      method: 'POST',
+      body: '{}',
+    }))
 
     const settingsInject = settings[0]?.inject?.() as { readLocale: () => string }
     const overlayInject = overlay[0]?.inject?.() as { readLocale: () => string }

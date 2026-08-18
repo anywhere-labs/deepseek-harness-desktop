@@ -50,6 +50,7 @@ const SOURCE_SCHEMA = z.object({
 })
 const SETTINGS_SCHEMA = z.object({
   sources: z.array(SOURCE_SCHEMA).default([]),
+  autoUpdate: z.boolean().default(false),
   installReceipts: z.array(z.object({
     receiptId: z.string().required(),
     profileName: z.string().required(),
@@ -63,6 +64,23 @@ const SETTINGS_SCHEMA = z.object({
     displayName: z.string().required(),
     installedAt: z.string().required(),
   })).default([]),
+  updateRollbacks: z.array(z.object({
+    operationId: z.string().required(),
+    profileName: z.string().required(),
+    previousReceipts: z.array(z.object({
+      receiptId: z.string().required(),
+      profileName: z.string().required(),
+      packageName: z.string().required(),
+      version: z.string().required(),
+      integrity: z.string().required(),
+      bundlePatch: z.string().required(),
+      sourceRecordId: z.string().required(),
+      providerId: z.string().required(),
+      itemId: z.string().required(),
+      displayName: z.string().required(),
+      installedAt: z.string().required(),
+    })).required(),
+  })).default([]),
 }) as unknown as z<MarketSettingsDocument>
 
 const ROUTE_STATE = '/api/community-market/state'
@@ -75,6 +93,8 @@ const ROUTE_OPEN_TERMINAL = '/api/community-market/desktop/open-terminal'
 const ROUTE_REQUEST_RESTART = '/api/community-market/desktop/request-restart'
 const ROUTE_OPERATION_PREVIEW = '/api/community-market/operations/preview'
 const ROUTE_OPERATION_EXECUTE = '/api/community-market/operations/execute'
+const ROUTE_UPDATE_SETTINGS = '/api/community-market/updates/settings'
+const ROUTE_AUTO_UPDATE_RUN = '/api/community-market/updates/auto-run'
 const MAX_BODY_BYTES = 16 * 1024
 // The full registry was already about 6.7 MiB in August 2026. Keep bounded
 // headroom without relaxing the 2 MiB default used by user-added sources.
@@ -296,6 +316,8 @@ function asMutation(value: unknown): MarketSourceMutation {
 
 type MarketOperationPreviewRequest =
   | { readonly action: 'install'; readonly sourceRecordId: string; readonly itemId: string }
+  | { readonly action: 'update'; readonly receiptId: string }
+  | { readonly action: 'update-all' }
   | { readonly action: 'uninstall'; readonly receiptId: string }
   | { readonly action: 'disable'; readonly bundleId: string }
   | { readonly action: 'enable'; readonly bundleId: string }
@@ -314,6 +336,12 @@ function asOperationPreview(value: unknown): MarketOperationPreviewRequest {
     throw new MarketInstallError('invalid-request', 'Invalid package operation preview request.')
   }
   const request = value as Record<string, unknown>
+  if (
+    request.action === 'update'
+    && exactKeys(request, ['action', 'receiptId'])
+    && boundedIdentifier(request.receiptId)
+  ) return { action: 'update', receiptId: request.receiptId }
+  if (request.action === 'update-all' && exactKeys(request, ['action'])) return { action: 'update-all' }
   if (
     request.action === 'install'
     && exactKeys(request, ['action', 'sourceRecordId', 'itemId'])
@@ -431,6 +459,7 @@ function validDesktopBundle(value: unknown): value is MarketDesktopPluginBundle 
 function reconcileInstallations(
   receipts: readonly MarketInstallReceipt[],
   value: readonly MarketDesktopPluginBundle[],
+  updates: readonly import('../install/service.js').MarketUpdateCandidate[] = [],
 ): readonly MarketInstallationView[] {
   if (!Array.isArray(value) || value.length > 4_096 || !value.every(validDesktopBundle)) {
     throw new MarketInstallError('operation-failed', 'The desktop plugin inventory was invalid.')
@@ -442,6 +471,7 @@ function reconcileInstallations(
   const packageCounts = new Map<string, number>()
   for (const bundle of value) packageCounts.set(bundle.packageName, (packageCounts.get(bundle.packageName) ?? 0) + 1)
   const receiptsByPackage = new Map(receipts.map(receipt => [receipt.packageName, receipt]))
+  const updatesByReceipt = new Map(updates.map(update => [update.receiptId, update]))
   return value.flatMap((bundle): readonly MarketInstallationView[] => {
     const receipt = packageCounts.get(bundle.packageName) === 1
       ? receiptsByPackage.get(bundle.packageName)
@@ -454,6 +484,7 @@ function reconcileInstallations(
             action: 'uninstall',
             disableBundleId: bundle.bundleId,
             receipt,
+            ...(updatesByReceipt.has(receipt.receiptId) ? { update: updatesByReceipt.get(receipt.receiptId)! } : {}),
           }]
         : bundle.mutable && bundle.status === 'disabled'
         ? [{
@@ -462,8 +493,15 @@ function reconcileInstallations(
             action: 'uninstall',
             enableBundleId: bundle.bundleId,
             receipt,
+            ...(updatesByReceipt.has(receipt.receiptId) ? { update: updatesByReceipt.get(receipt.receiptId)! } : {}),
           }]
-        : [{ kind: 'managed', status: bundle.status, action: 'uninstall', receipt }]
+        : [{
+            kind: 'managed',
+            status: bundle.status,
+            action: 'uninstall',
+            receipt,
+            ...(updatesByReceipt.has(receipt.receiptId) ? { update: updatesByReceipt.get(receipt.receiptId)! } : {}),
+          }]
     }
     if (!bundle.mutable) return []
     return bundle.status === 'active'
@@ -705,10 +743,11 @@ export function registerMarketRoutes(
       }
       try {
         const desktopActions = desktopActionsProvider?.get()
-        const response: MarketStateResponse = {
-          sources: await service.listSources(),
-          builtIns: viewBuiltIns(),
-          desktopActions: {
+          const response: MarketStateResponse = {
+            sources: await service.listSources(),
+            builtIns: viewBuiltIns(),
+            autoUpdate: installProvider?.get()?.autoUpdateEnabled() ?? false,
+            desktopActions: {
             openTerminal: desktopActions !== undefined,
             requestRestart: desktopActions !== undefined
               && (installProvider?.get() !== undefined || desktopPluginsProvider?.get() !== undefined),
@@ -752,7 +791,13 @@ export function registerMarketRoutes(
 
         const sourceRecordIds = requestUrl.searchParams.getAll('sourceRecordId')
         const cursors = requestUrl.searchParams.getAll('cursor')
-        if (sourceRecordIds.length > 1 || cursors.length > 1 || cursors.length > sourceRecordIds.length) {
+        if (
+          sourceRecordIds.length > 1
+          || cursors.length > 1
+          || cursors.length > sourceRecordIds.length
+          || sourceRecordIds.some(value => value.length === 0)
+          || cursors.some(value => value.length === 0)
+        ) {
           throw new Error('catalog cursor requires exactly one source record')
         }
         const scope: CatalogFetchScope | undefined = sourceRecordIds.length === 0
@@ -940,8 +985,19 @@ export function registerMarketRoutes(
           return
         }
         try {
-          const installations = reconcileInstallations(await install.listVerifiedReceipts(), desktopPlugins.list())
-          if (!generationController.signal.aborted && !res.destroyed) sendJson(res, 200, { installations })
+          const signal = generationController.signal
+          const receipts = await install.listVerifiedReceipts(signal)
+          const updates = await install.listUpdates(signal, receipts)
+          const installations = reconcileInstallations(
+            receipts,
+            desktopPlugins.list(),
+            updates,
+          )
+          if (!generationController.signal.aborted && !res.destroyed) sendJson(res, 200, {
+            installations,
+            updateCount: updates.length,
+            autoUpdate: install.autoUpdateEnabled(),
+          })
         } catch (cause) {
           if (!generationController.signal.aborted && !res.destroyed) sendInstallError(res, cause)
         }
@@ -1048,10 +1104,75 @@ export function registerMarketRoutes(
             }
             const preview = request.action === 'install'
               ? await install.previewInstall(request.sourceRecordId, request.itemId, signal)
-              : await install.previewUninstall(request.receiptId, signal)
+              : request.action === 'update'
+                ? await install.previewUpdate(request.receiptId, signal)
+                : request.action === 'update-all'
+                  ? await install.previewUpdateAll(signal)
+                  : await install.previewUninstall(request.receiptId, signal)
             const { intent, ...summary } = preview
             if (!signal.aborted && !res.destroyed) sendJson(res, 200, { ...summary, previewId: intent })
           }
+        } catch (cause) {
+          if (!signal.aborted && !res.destroyed) sendInstallError(res, cause)
+        } finally {
+          stopWatching()
+        }
+      }}),
+      ctx.webServer.register({ kind: 'exact', path: ROUTE_UPDATE_SETTINGS, handler: async (req, res) => {
+        if (req.method !== 'POST' || !mutationAllowed(req, expectedPort)) {
+          sendJson(res, 405, { error: 'market update settings require a local same-origin POST' })
+          return
+        }
+        const controller = new AbortController()
+        const signal = AbortSignal.any([controller.signal, generationController.signal])
+        const stopWatching = abortOnDisconnect(req, res, controller)
+        try {
+          const value = await readOperationJson(req, signal)
+          if (value === null || typeof value !== 'object' || Array.isArray(value)
+            || !exactKeys(value as Record<string, unknown>, ['autoUpdate'])
+            || typeof (value as Record<string, unknown>).autoUpdate !== 'boolean') {
+            throw new MarketInstallError('invalid-request', 'Invalid automatic update setting.')
+          }
+          const install = installProvider.get()
+          if (install === undefined) throw new MarketInstallError('not-available', 'Market package operations are unavailable.')
+          await install.setAutoUpdate((value as { autoUpdate: boolean }).autoUpdate)
+          sendJson(res, 200, { autoUpdate: install.autoUpdateEnabled() })
+        } catch (cause) {
+          if (!signal.aborted && !res.destroyed) sendInstallError(res, cause)
+        } finally {
+          stopWatching()
+        }
+      }}),
+      ctx.webServer.register({ kind: 'exact', path: ROUTE_AUTO_UPDATE_RUN, handler: async (req, res) => {
+        if (req.method !== 'POST' || !mutationAllowed(req, expectedPort)) {
+          sendJson(res, 405, { error: 'automatic market updates require a local same-origin POST' })
+          return
+        }
+        const controller = new AbortController()
+        const signal = AbortSignal.any([controller.signal, generationController.signal])
+        const stopWatching = abortOnDisconnect(req, res, controller)
+        try {
+          asEmptyDesktopAction(await readOperationJson(req, signal))
+          const install = installProvider.get()
+          if (install === undefined || !install.autoUpdateEnabled()) {
+            sendJson(res, 200, { updated: false })
+            return
+          }
+          const index = await service.scanCatalog(signal)
+          if (index === undefined) {
+            sendJson(res, 200, { updated: false })
+            return
+          }
+          await install.listInstallable(index, signal)
+          const updates = await install.listUpdates(signal)
+          if (updates.length === 0) {
+            sendJson(res, 200, { updated: false })
+            return
+          }
+          const preview = await install.previewUpdateAll(signal)
+          const result = await install.executePreview(preview.intent, signal)
+          if (result.action !== 'update-all') throw new MarketInstallError('operation-failed', 'Automatic update result was invalid.')
+          sendJson(res, 200, { updated: true, updateCount: result.receipts.length, restartToken: result.restartToken })
         } catch (cause) {
           if (!signal.aborted && !res.destroyed) sendInstallError(res, cause)
         } finally {
@@ -1235,4 +1356,6 @@ export const marketRoutes = {
   requestRestart: ROUTE_REQUEST_RESTART,
   operationPreview: ROUTE_OPERATION_PREVIEW,
   operationExecute: ROUTE_OPERATION_EXECUTE,
+  updateSettings: ROUTE_UPDATE_SETTINGS,
+  autoUpdateRun: ROUTE_AUTO_UPDATE_RUN,
 }

@@ -127,6 +127,7 @@ async function createProfile(): Promise<string> {
 }
 
 interface LockFixtureOptions {
+  readonly version?: string
   readonly lockfileVersion?: string | number
   readonly specifier?: string
   readonly importerVersion?: string
@@ -138,8 +139,9 @@ interface LockFixtureOptions {
 }
 
 async function writeProfileLock(profileDir: string, options: LockFixtureOptions = {}): Promise<void> {
-  const importerVersion = options.importerVersion ?? version
-  const packageKey = `${options.slashPackageKey === true ? '/' : ''}${packageName}@${version}`
+  const packageVersion = options.version ?? version
+  const importerVersion = options.importerVersion ?? packageVersion
+  const packageKey = `${options.slashPackageKey === true ? '/' : ''}${packageName}@${packageVersion}`
   const snapshotKey = `${options.slashSnapshotKey === true ? '/' : ''}${packageName}@${importerVersion}`
   await writeFile(join(profileDir, 'pnpm-lock.yaml'), stringifyYaml({
     lockfileVersion: options.lockfileVersion ?? '9.0',
@@ -147,7 +149,7 @@ async function writeProfileLock(profileDir: string, options: LockFixtureOptions 
       '.': {
         dependencies: {
           [packageName]: {
-            specifier: options.specifier ?? version,
+            specifier: options.specifier ?? packageVersion,
             version: importerVersion,
           },
         },
@@ -163,17 +165,18 @@ async function writeProfileLock(profileDir: string, options: LockFixtureOptions 
 }
 
 async function writeInstalledPlugin(profileDir: string, lockOptions: LockFixtureOptions = {}): Promise<void> {
+  const packageVersion = lockOptions.version ?? version
   const pluginDir = join(profileDir, 'node_modules', packageName)
   await mkdir(pluginDir, { recursive: true })
   await writeFile(join(pluginDir, 'cordis.patch.yml'), '[]\n')
   await writeFile(join(pluginDir, 'package.json'), JSON.stringify({
     name: packageName,
-    version,
+    version: packageVersion,
     dsh: { bundle: { patch: './cordis.patch.yml' } },
   }))
   await writeFile(join(profileDir, 'package.json'), JSON.stringify({
     name: 'fixture-profile',
-    dependencies: { [packageName]: version },
+    dependencies: { [packageName]: packageVersion },
     dsh: { profile: { bundles: [packageName] } },
   }))
   await writeProfileLock(profileDir, lockOptions)
@@ -240,13 +243,16 @@ function recoverableRunner(
   implementation: Pick<MarketDesktopPnpm, 'runPlugin'>,
 ): MarketDesktopPnpm {
   let pendingPackageName: string | undefined
+  let pendingReceiptId: string | undefined
   return {
     ...implementation,
     async runPluginInstall(args, dir, recovery, signal) {
       pendingPackageName = recovery.packageName
+      pendingReceiptId = recovery.receiptId
       return implementation.runPlugin(args, dir, signal)
     },
     async recoveredInstallReceiptIds() { return [] },
+    async pendingInstallReceiptIds() { return pendingReceiptId === undefined ? [] : [pendingReceiptId] },
     async acknowledgeRecoveredInstall() {},
     async rollbackPluginInstall() {
       if (pendingPackageName === undefined) return false
@@ -255,6 +261,7 @@ function recoverableRunner(
       handle.stderr.resume()
       const outcome = await handle.done
       pendingPackageName = undefined
+      pendingReceiptId = undefined
       return outcome.exitCode === 0 && outcome.signal === null
     },
   }
@@ -339,6 +346,250 @@ describe('manual install display instructions', () => {
 })
 
 describe('market install service', () => {
+  it('discovers and executes an exact managed update while retaining receipt ownership', async () => {
+    const profileDir = await createProfile()
+    const installedVersion = '1.0.0'
+    await writeInstalledPlugin(profileDir, { version: installedVersion })
+    const receipt: MarketInstallReceipt = {
+      receiptId: 'receipt:update-managed-0001',
+      profileName: 'web',
+      packageName,
+      version: installedVersion,
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: 'example/dsh-plugin-safe',
+      displayName: 'Safe Plugin',
+      installedAt: '2026-08-18T00:00:00.000Z',
+    }
+    const settings = memoryScope([receipt])
+    const calls: Array<{ args: readonly string[]; dir: string; signal?: AbortSignal }> = []
+    const service = new MarketInstallService(
+      settings.scope,
+      () => ({ name: 'web', dir: profileDir }),
+      recoverableRunner(profileDir, {
+        runPlugin(args, dir, signal) {
+          calls.push({ args: [...args], dir, ...(signal === undefined ? {} : { signal }) })
+          const done = (async () => {
+            if (args[0] === 'add') await writeInstalledPlugin(profileDir)
+            return { exitCode: 0, signal: null }
+          })()
+          return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
+        },
+      }),
+      { verify: vi.fn(async () => verification) },
+    )
+    service.observeCatalog(snapshot())
+
+    await expect(service.listUpdates()).resolves.toMatchObject([{
+      receiptId: receipt.receiptId,
+      fromVersion: installedVersion,
+      toVersion: version,
+    }])
+    const preview = await service.previewUpdate(receipt.receiptId, new AbortController().signal)
+    expect(preview).toMatchObject({ action: 'update', fromVersion: installedVersion, toVersion: version })
+    const result = await service.executePreview(preview.intent, new AbortController().signal)
+
+    expect(result).toMatchObject({
+      action: 'update',
+      receipt: { receiptId: receipt.receiptId, version },
+      restartToken: expect.any(String),
+    })
+    expect(calls[0]?.args).toEqual([
+      'add',
+      '--save-exact',
+      '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
+      `${packageName}@${version}`,
+    ])
+    expect(settings.receipts()).toMatchObject([{ receiptId: receipt.receiptId, version }])
+  })
+
+  it('executes all available managed updates in one recoverable package transaction', async () => {
+    const profileDir = await createProfile()
+    const installedVersion = '1.0.0'
+    await writeInstalledPlugin(profileDir, { version: installedVersion })
+    const receipt: MarketInstallReceipt = {
+      receiptId: 'receipt:update-all-managed-0001',
+      profileName: 'web',
+      packageName,
+      version: installedVersion,
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: 'example/dsh-plugin-safe',
+      displayName: 'Safe Plugin',
+      installedAt: '2026-08-18T00:00:00.000Z',
+    }
+    const settings = memoryScope([receipt])
+    const calls: string[][] = []
+    const service = new MarketInstallService(
+      settings.scope,
+      () => ({ name: 'web', dir: profileDir }),
+      recoverableRunner(profileDir, {
+        runPlugin(args) {
+          calls.push([...args])
+          const done = (async () => {
+            if (args[0] === 'add') await writeInstalledPlugin(profileDir)
+            return { exitCode: 0, signal: null }
+          })()
+          return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
+        },
+      }),
+      { verify: vi.fn(async () => verification) },
+    )
+    service.observeCatalog(snapshot())
+
+    const preview = await service.previewUpdateAll(new AbortController().signal)
+    expect(preview).toMatchObject({ action: 'update-all', updateCount: 1 })
+    const result = await service.executePreview(preview.intent, new AbortController().signal)
+
+    expect(result).toMatchObject({
+      action: 'update-all',
+      receipts: [{ receiptId: receipt.receiptId, version }],
+      restartToken: expect.any(String),
+    })
+    expect(calls[0]).toEqual([
+      'add',
+      '--save-exact',
+      '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
+      `${packageName}@${version}`,
+    ])
+  })
+
+  it('restores previous receipt ownership after startup rolls an update back', async () => {
+    const profileDir = await createProfile()
+    const previous: MarketInstallReceipt = {
+      receiptId: 'receipt:update-rollback-0001',
+      profileName: 'web',
+      packageName,
+      version: '1.0.0',
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: 'example/dsh-plugin-safe',
+      displayName: 'Safe Plugin',
+      installedAt: '2026-08-18T00:00:00.000Z',
+    }
+    const updated = { ...previous, version, installedAt: '2026-08-18T01:00:00.000Z' }
+    const operationId = 'operation:update-rollback-0001'
+    let document: MarketSettingsDocument = {
+      sources: [],
+      installReceipts: [updated],
+      updateRollbacks: [{ operationId, profileName: 'web', previousReceipts: [previous] }],
+    }
+    const scope = {
+      get: () => document,
+      watch: () => () => {},
+      update: vi.fn(async patch => { document = { ...document, ...patch } as MarketSettingsDocument }),
+      replace: vi.fn(),
+    } as SettingsScope<MarketSettingsDocument>
+    const acknowledge = vi.fn(async () => {})
+    const pnpm: MarketDesktopPnpm = {
+      runPlugin: vi.fn() as never,
+      runPluginInstall: vi.fn() as never,
+      recoveredInstallReceiptIds: vi.fn(async () => [operationId]),
+      pendingInstallReceiptIds: vi.fn(async () => []),
+      acknowledgeRecoveredInstall: acknowledge,
+      rollbackPluginInstall: vi.fn(async () => true),
+    }
+    const service = new MarketInstallService(
+      scope,
+      () => ({ name: 'web', dir: profileDir }),
+      pnpm,
+      { verify: vi.fn(async () => verification) },
+    )
+
+    await expect(service.listReceipts()).resolves.toEqual([previous])
+    expect(document.updateRollbacks).toEqual([])
+    expect(acknowledge).toHaveBeenCalledWith(operationId)
+  })
+
+  it('validates the restored previous bundle after a failed update instead of requiring removal', async () => {
+    const profileDir = await createProfile()
+    const previousVersion = '1.0.0'
+    await writeInstalledPlugin(profileDir, { version: previousVersion })
+    const previous: MarketInstallReceipt = {
+      receiptId: 'receipt:update-runtime-rollback-0001',
+      profileName: 'web',
+      packageName,
+      version: previousVersion,
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: 'example/dsh-plugin-safe',
+      displayName: 'Safe Plugin',
+      installedAt: '2026-08-18T00:00:00.000Z',
+    }
+    const settings = memoryScope([previous])
+    const rollbackPluginInstall = vi.fn(async () => {
+      await writeInstalledPlugin(profileDir, { version: previousVersion })
+      return true
+    })
+    const pnpm: MarketDesktopPnpm = {
+      runPlugin: vi.fn() as never,
+      runPluginInstall: vi.fn(async () => ({
+        stdout: Readable.from([]),
+        stderr: Readable.from([]),
+        done: Promise.resolve({ exitCode: 0, signal: null }),
+        cancel: vi.fn(),
+      })),
+      recoveredInstallReceiptIds: vi.fn(async () => []),
+      pendingInstallReceiptIds: vi.fn(async () => []),
+      acknowledgeRecoveredInstall: vi.fn(async () => {}),
+      rollbackPluginInstall,
+    }
+    const service = new MarketInstallService(
+      settings.scope,
+      () => ({ name: 'web', dir: profileDir }),
+      pnpm,
+      { verify: vi.fn(async () => verification) },
+    )
+    service.observeCatalog(snapshot())
+    const preview = await service.previewUpdate(previous.receiptId, new AbortController().signal)
+
+    await expect(service.executeUpdate(preview.intent, new AbortController().signal)).rejects.toMatchObject({
+      code: 'operation-failed',
+    })
+    expect(rollbackPluginInstall).toHaveBeenCalledWith(previous.receiptId)
+    expect(settings.receipts()).toEqual([previous])
+  })
+
+  it('does not advertise disabled managed plugins as manually or automatically updatable', async () => {
+    const profileDir = await createProfile()
+    const previousVersion = '1.0.0'
+    await writeInstalledPlugin(profileDir, { version: previousVersion })
+    const receipt: MarketInstallReceipt = {
+      receiptId: 'receipt:update-disabled-0001',
+      profileName: 'web',
+      packageName,
+      version: previousVersion,
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: 'example/dsh-plugin-safe',
+      displayName: 'Safe Plugin',
+      installedAt: '2026-08-18T00:00:00.000Z',
+    }
+    const service = new MarketInstallService(
+      memoryScope([receipt]).scope,
+      () => ({ name: 'web', dir: profileDir }),
+      recoverableRunner(profileDir, { runPlugin: vi.fn() as never }),
+      { verify: vi.fn(async () => verification) },
+      { disabledPackageNames: () => [packageName] },
+    )
+    service.observeCatalog(snapshot())
+
+    await expect(service.listUpdates()).resolves.toEqual([])
+    await expect(service.previewUpdateAll(new AbortController().signal)).rejects.toMatchObject({ code: 'not-available' })
+  })
+
   it('removes an exact startup-rolled-back receipt before acknowledging recovery', async () => {
     const profileDir = await createProfile()
     const recovered: MarketInstallReceipt = {
@@ -414,7 +665,13 @@ describe('market install service', () => {
     if (installedResult.action !== 'install') throw new Error('expected install result')
     const installed = installedResult
     expect(calls[0]).toMatchObject({
-      args: ['add', '--save-exact', '--registry=https://registry.npmjs.org/', `${packageName}@${version}`],
+      args: [
+        'add',
+        '--save-exact',
+        '--ignore-scripts',
+        '--registry=https://registry.npmjs.org/',
+        `${packageName}@${version}`,
+      ],
       dir: profileDir,
     })
     expect(verify).toHaveBeenCalledTimes(2)
@@ -644,6 +901,7 @@ describe('market install service', () => {
     expect(calls[0]?.args).toEqual([
       'add',
       '--save-exact',
+      '--ignore-scripts',
       '--registry=https://registry.npmjs.org/',
       '--@example:registry=https://registry.npmjs.org/',
       `${scopedPackage}@${version}`,
@@ -1037,9 +1295,13 @@ describe('market install Host routes', () => {
       expiresAt: '2026-08-18T00:05:00.000Z',
     }))
     const listVerifiedReceipts = vi.fn(async (): Promise<readonly MarketInstallReceipt[]> => [])
+    let autoUpdate = false
     const install = {
       listReceipts: vi.fn(async () => []),
       listVerifiedReceipts,
+      listUpdates: vi.fn(async () => []),
+      autoUpdateEnabled: vi.fn(() => autoUpdate),
+      setAutoUpdate: vi.fn(async (enabled: boolean) => { autoUpdate = enabled }),
       listInstallable: vi.fn(),
       previewInstall,
       previewUninstall: vi.fn(),
@@ -1239,6 +1501,8 @@ describe('market install Host routes', () => {
     expect(installations).toEqual({
       status: 200,
       body: {
+        autoUpdate: false,
+        updateCount: 0,
         installations: [{
           kind: 'external',
           status: 'disabled',
@@ -1247,6 +1511,14 @@ describe('market install Host routes', () => {
           packageName: bundle.packageName,
         }],
       },
+    })
+    await expect(request(marketRoutes.updateSettings, 'POST', { autoUpdate: true })).resolves.toEqual({
+      status: 200,
+      body: { autoUpdate: true },
+    })
+    await expect(request(marketRoutes.autoUpdateRun, 'POST', {})).resolves.toEqual({
+      status: 200,
+      body: { updated: false },
     })
 
     const enablePreview = await request(marketRoutes.operationPreview, 'POST', {
@@ -1370,6 +1642,9 @@ describe('market install Host routes', () => {
     const install = {
       listReceipts: vi.fn(async () => []),
       listVerifiedReceipts: vi.fn(async () => []),
+      listUpdates: vi.fn(async () => []),
+      autoUpdateEnabled: vi.fn(() => false),
+      setAutoUpdate: vi.fn(),
       listInstallable,
       previewInstall: vi.fn(),
       previewUninstall: vi.fn(),

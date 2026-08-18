@@ -37,6 +37,7 @@ export interface MarketStateResponse {
     readonly openTerminal: boolean
     readonly requestRestart: boolean
   }
+  readonly autoUpdate?: boolean
 }
 
 /** Display-only instruction reconstructed by the Host from normalized identity. */
@@ -112,6 +113,10 @@ export type MarketInstallationView =
       /** A disabled mutable bundle can be enabled without surrendering uninstall ownership. */
       readonly enableBundleId?: string
       readonly receipt: MarketInstallReceipt
+      readonly update?: {
+        readonly fromVersion: string
+        readonly toVersion: string
+      }
     }
   | {
       readonly kind: 'external'
@@ -139,6 +144,8 @@ export type MarketInstallationView =
 export interface MarketInstallationsResponse {
   /** Host-reconciled direct bundles for the active profile. */
   readonly installations: readonly MarketInstallationView[]
+  readonly updateCount?: number
+  readonly autoUpdate?: boolean
 }
 
 /** Complete Host-derived structural subset; local install state never changes catalog membership. */
@@ -151,6 +158,13 @@ export interface MarketInstallableResponse {
 
 /** Renderer input for the non-mutating verification stage. */
 export type MarketOperationPreviewRequest =
+  | {
+      readonly action: 'update'
+      readonly receiptId: string
+    }
+  | {
+      readonly action: 'update-all'
+    }
   | {
       readonly action: 'install'
       readonly sourceRecordId: string
@@ -173,16 +187,35 @@ export type MarketOperationPreviewRequest =
 
 /** Host-verified facts shown before the user confirms a package mutation. */
 export interface MarketOperationPreviewResponse {
-  readonly action: 'install' | 'uninstall' | 'disable' | 'enable'
+  readonly action: 'install' | 'update' | 'update-all' | 'uninstall' | 'disable' | 'enable'
   readonly profileName: string
   readonly packageName: string
   readonly version?: string
+  readonly fromVersion?: string
+  readonly toVersion?: string
+  readonly updateCount?: number
+  readonly updates?: readonly {
+    readonly packageName: string
+    readonly displayName: string
+    readonly fromVersion: string
+    readonly toVersion: string
+  }[]
   readonly displayName: string
   readonly expiresAt: string
   readonly previewId: string
 }
 
 export type MarketOperationExecuteResponse =
+  | {
+      readonly action: 'update'
+      readonly receipt: MarketInstallReceipt
+      readonly restartToken: string
+    }
+  | {
+      readonly action: 'update-all'
+      readonly receipts: readonly MarketInstallReceipt[]
+      readonly restartToken: string
+    }
   | {
       readonly action: 'install'
       readonly receipt: MarketInstallReceipt
@@ -208,3 +241,7 @@ export type MarketOperationExecuteResponse =
 export interface MarketDesktopActionResponse {
   readonly ok: true
 }
+
+export type MarketAutoUpdateRunResponse =
+  | { readonly updated: false }
+  | { readonly updated: true; readonly updateCount: number; readonly restartToken: string }

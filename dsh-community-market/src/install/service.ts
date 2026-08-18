@@ -3,11 +3,11 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { SettingsScope } from '@deepseek-ai/dsh-settings'
-import { prerelease, satisfies, valid } from 'semver'
+import { gt, prerelease, satisfies, valid } from 'semver'
 import { parse as parseYaml } from 'yaml'
 import type { MarketInstallableResponse, MarketInstallReceipt } from '../api-types.js'
 import type { CatalogFullIndex } from '../catalog/service.js'
-import type { MarketSettingsDocument } from '../catalog/source-store.js'
+import type { MarketSettingsDocument, MarketUpdateRollback } from '../catalog/source-store.js'
 import { normalizeRepositoryIdentity } from '../contracts/identity.js'
 import type { CatalogHttpClient, NormalizedRepositoryIdentity } from '../contracts/types.js'
 import type { CatalogSnapshot } from '../contracts/index.js'
@@ -65,6 +65,7 @@ export interface MarketDesktopPnpm {
     signal?: AbortSignal,
   ): Promise<MarketDesktopPnpmHandle>
   recoveredInstallReceiptIds(): Promise<readonly string[]>
+  pendingInstallReceiptIds(): Promise<readonly string[]>
   acknowledgeRecoveredInstall(receiptId: string): Promise<void>
   rollbackPluginInstall(receiptId: string): Promise<boolean>
 }
@@ -89,6 +90,36 @@ export interface MarketUninstallPreview {
   readonly expiresAt: string
 }
 
+export interface MarketUpdatePreview {
+  readonly intent: string
+  readonly action: 'update'
+  readonly profileName: string
+  readonly packageName: string
+  readonly fromVersion: string
+  readonly toVersion: string
+  readonly displayName: string
+  readonly expiresAt: string
+}
+
+export interface MarketUpdateAllPreview {
+  readonly intent: string
+  readonly action: 'update-all'
+  readonly profileName: string
+  readonly packageName: string
+  readonly displayName: string
+  readonly updateCount: number
+  readonly updates: readonly MarketUpdateCandidate[]
+  readonly expiresAt: string
+}
+
+export interface MarketUpdateCandidate {
+  readonly receiptId: string
+  readonly packageName: string
+  readonly displayName: string
+  readonly fromVersion: string
+  readonly toVersion: string
+}
+
 export interface MarketInstallResult {
   readonly receipt: MarketInstallReceipt
 }
@@ -100,6 +131,8 @@ export interface MarketUninstallResult {
 
 export type MarketOperationResult =
   | ({ readonly action: 'install'; readonly restartToken: string } & MarketInstallResult)
+  | ({ readonly action: 'update'; readonly restartToken: string } & MarketInstallResult)
+  | { readonly action: 'update-all'; readonly receipts: readonly MarketInstallReceipt[]; readonly restartToken: string }
   | ({ readonly action: 'uninstall'; readonly restartToken: string } & MarketUninstallResult)
 
 export type MarketInstallErrorCode =
@@ -146,7 +179,23 @@ interface UninstallIntent {
   readonly expiresAt: number
 }
 
-type MarketIntent = InstallIntent | UninstallIntent
+interface UpdateIntent {
+  readonly kind: 'update'
+  readonly receipt: MarketInstallReceipt
+  readonly candidate: InstallCandidate
+  readonly verification: MarketNpmPackageVerification
+  readonly profile: MarketDesktopProfile
+  readonly expiresAt: number
+}
+
+interface UpdateAllIntent {
+  readonly kind: 'update-all'
+  readonly updates: readonly Omit<UpdateIntent, 'kind' | 'profile' | 'expiresAt'>[]
+  readonly profile: MarketDesktopProfile
+  readonly expiresAt: number
+}
+
+type MarketIntent = InstallIntent | UpdateIntent | UpdateAllIntent | UninstallIntent
 
 interface RestartIntent {
   readonly profile: MarketDesktopProfile
@@ -671,7 +720,10 @@ export class MarketInstallService {
       }
     }
     for (const [token, intent] of this.intents) {
-      if (intent.kind === 'install' && intent.candidate.sourceRecordId === sourceRecordId) this.intents.delete(token)
+      if ((intent.kind === 'install' || intent.kind === 'update')
+        && intent.candidate.sourceRecordId === sourceRecordId) this.intents.delete(token)
+      if (intent.kind === 'update-all'
+        && intent.updates.some(update => update.candidate.sourceRecordId === sourceRecordId)) this.intents.delete(token)
     }
   }
 
@@ -680,6 +732,15 @@ export class MarketInstallService {
     await this.ensureRecoveredInstallReconciled()
     const profile = this.profile()
     return this.receipts().filter(receipt => receipt.profileName === profile.name)
+  }
+
+  autoUpdateEnabled(): boolean {
+    return this.scope.get().autoUpdate === true
+  }
+
+  async setAutoUpdate(enabled: boolean): Promise<void> {
+    if (typeof enabled !== 'boolean') throw new MarketInstallError('invalid-request', 'Invalid automatic update setting.')
+    await this.scope.update({ autoUpdate: enabled })
   }
 
   /** Receipts that still prove one exact installed bundle in the active profile. */
@@ -713,6 +774,30 @@ export class MarketInstallService {
       }
     }
     return verified
+  }
+
+  async listUpdates(
+    signal: AbortSignal = this.generation.signal,
+    verifiedReceipts?: readonly MarketInstallReceipt[],
+  ): Promise<readonly MarketUpdateCandidate[]> {
+    const receipts = verifiedReceipts ?? await this.listVerifiedReceipts(signal)
+    const disabledPackages = this.disabledPackages()
+    this.purge()
+    return receipts.flatMap(receipt => {
+      const candidate = this.candidates.get(candidateKey(receipt.sourceRecordId, receipt.itemId))
+      if (candidate === undefined
+        || candidate.providerId !== receipt.providerId
+        || candidate.packageName !== receipt.packageName
+        || !gt(candidate.version, receipt.version)
+        || disabledPackages.has(receipt.packageName)) return []
+      return [{
+        receiptId: receipt.receiptId,
+        packageName: receipt.packageName,
+        displayName: candidate.displayName,
+        fromVersion: receipt.version,
+        toVersion: candidate.version,
+      }]
+    })
   }
 
   async listInstallable(
@@ -796,6 +881,93 @@ export class MarketInstallService {
       version: candidate.version,
       displayName: candidate.displayName,
       expiresAt: new Date(this.now() + this.intentTtlMs).toISOString(),
+    }
+  }
+
+  async previewUpdate(receiptId: string, signal: AbortSignal): Promise<MarketUpdatePreview> {
+    const operationSignal = this.operationSignal(signal)
+    await this.ensureRecoveredInstallReconciled()
+    operationSignal.throwIfAborted()
+    this.purge()
+    const profile = this.profile()
+    const receipt = this.receipts().find(value => value.receiptId === receiptId && value.profileName === profile.name)
+    if (receipt === undefined) {
+      throw new MarketInstallError('not-available', 'This plugin is not owned by a market install receipt in the active profile.')
+    }
+    if (this.disabledPackages().has(receipt.packageName)) {
+      throw new MarketInstallError('conflict', 'Enable this plugin before updating it.')
+    }
+    const candidate = this.candidates.get(candidateKey(receipt.sourceRecordId, receipt.itemId))
+    if (candidate === undefined
+      || candidate.providerId !== receipt.providerId
+      || candidate.packageName !== receipt.packageName
+      || !gt(candidate.version, receipt.version)) {
+      throw new MarketInstallError('not-available', 'No newer verified catalog version is available for this plugin.')
+    }
+    try {
+      await assertInstalledBundle(profile, receipt.packageName, receipt.version, receipt.bundlePatch, receipt.integrity)
+    } catch {
+      throw new MarketInstallError('conflict', 'The installed plugin no longer matches its market receipt.')
+    }
+    const verification = await this.verifier.verify(candidate, operationSignal)
+    operationSignal.throwIfAborted()
+    if (this.candidates.get(candidate.key) !== candidate) {
+      throw new MarketInstallError('not-available', 'The catalog source changed during verification. Refresh it and try again.')
+    }
+    const expiresAt = this.now() + this.intentTtlMs
+    const token = this.issueIntent({ kind: 'update', receipt, candidate, verification, profile, expiresAt })
+    return {
+      intent: token,
+      action: 'update',
+      profileName: profile.name,
+      packageName: candidate.packageName,
+      fromVersion: receipt.version,
+      toVersion: candidate.version,
+      displayName: candidate.displayName,
+      expiresAt: new Date(expiresAt).toISOString(),
+    }
+  }
+
+  async previewUpdateAll(signal: AbortSignal): Promise<MarketUpdateAllPreview> {
+    const operationSignal = this.operationSignal(signal)
+    await this.ensureRecoveredInstallReconciled()
+    operationSignal.throwIfAborted()
+    const profile = this.profile()
+    const candidates = await this.listUpdates(operationSignal)
+    if (candidates.length === 0) {
+      throw new MarketInstallError('not-available', 'All managed plugins are already up to date.')
+    }
+    const disabledPackages = this.disabledPackages()
+    const updates = []
+    for (const available of candidates) {
+      const receipt = this.receipts().find(value => value.receiptId === available.receiptId && value.profileName === profile.name)
+      const candidate = receipt === undefined
+        ? undefined
+        : this.candidates.get(candidateKey(receipt.sourceRecordId, receipt.itemId))
+      if (receipt === undefined || candidate === undefined || disabledPackages.has(receipt.packageName)) continue
+      const verification = await this.verifier.verify(candidate, operationSignal)
+      updates.push({ receipt, candidate, verification })
+    }
+    if (updates.length === 0) {
+      throw new MarketInstallError('not-available', 'No enabled managed plugins can be updated.')
+    }
+    const expiresAt = this.now() + this.intentTtlMs
+    const token = this.issueIntent({ kind: 'update-all', updates, profile, expiresAt })
+    return {
+      intent: token,
+      action: 'update-all',
+      profileName: profile.name,
+      packageName: `${updates.length} managed plugins`,
+      displayName: `${updates.length} managed plugins`,
+      updateCount: updates.length,
+      updates: updates.map(({ receipt, candidate }) => ({
+        receiptId: receipt.receiptId,
+        packageName: receipt.packageName,
+        displayName: candidate.displayName,
+        fromVersion: receipt.version,
+        toVersion: candidate.version,
+      })),
+      expiresAt: new Date(expiresAt).toISOString(),
     }
   }
 
@@ -894,6 +1066,164 @@ export class MarketInstallService {
     })
   }
 
+  async executeUpdate(token: string, signal: AbortSignal): Promise<MarketInstallResult> {
+    return await this.runExclusive(async () => {
+      const operationSignal = this.operationSignal(signal)
+      const intent = this.consumeIntent(token, 'update')
+      const profile = this.sameProfile(intent.profile)
+      const currentReceipt = this.receipts().find(receipt => receipt.receiptId === intent.receipt.receiptId)
+      if (currentReceipt === undefined || JSON.stringify(currentReceipt) !== JSON.stringify(intent.receipt)) {
+        throw new MarketInstallError('conflict', 'The market install receipt changed before update.')
+      }
+      const candidate = intent.candidate
+      if (this.candidates.get(candidate.key) !== candidate || !gt(candidate.version, currentReceipt.version)) {
+        throw new MarketInstallError('not-available', 'The verified update is no longer available.')
+      }
+      if (this.disabledPackages().has(candidate.packageName)) {
+        throw new MarketInstallError('conflict', 'Enable this plugin before updating it.')
+      }
+      try {
+        await assertInstalledBundle(
+          profile,
+          currentReceipt.packageName,
+          currentReceipt.version,
+          currentReceipt.bundlePatch,
+          currentReceipt.integrity,
+        )
+      } catch {
+        throw new MarketInstallError('conflict', 'The installed plugin no longer matches its market receipt.')
+      }
+      const verification = await this.verifier.verify(candidate, operationSignal)
+      if (verification.integrity !== intent.verification.integrity
+        || verification.bundlePatch !== intent.verification.bundlePatch
+        || verification.tarball !== intent.verification.tarball) {
+        throw new MarketInstallError('verification-failed', 'The npm package changed after preview. Preview the update again.')
+      }
+      const receipt: MarketInstallReceipt = {
+        ...currentReceipt,
+        version: candidate.version,
+        integrity: verification.integrity,
+        bundlePatch: verification.bundlePatch,
+        displayName: candidate.displayName,
+        installedAt: new Date(this.now()).toISOString(),
+      }
+      await this.rememberUpdateRollback(receipt.receiptId, profile, [currentReceipt])
+      try {
+        await this.runPlugin(
+          this.installArgs(candidate.packageName, candidate.version),
+          profile,
+          operationSignal,
+          true,
+          {
+            packageName: receipt.packageName,
+            packageVersion: receipt.version,
+            receiptId: receipt.receiptId,
+          },
+        )
+        await assertInstalledBundle(
+          profile,
+          receipt.packageName,
+          receipt.version,
+          receipt.bundlePatch,
+          receipt.integrity,
+        )
+        operationSignal.throwIfAborted()
+      } catch {
+        await this.rollbackUpdate(profile, [currentReceipt], receipt.receiptId)
+        await this.forgetUpdateRollback(receipt.receiptId)
+        throw new MarketInstallError('operation-failed', 'The plugin update failed and the previous profile state was restored.')
+      }
+      try {
+        await this.saveReceipts(this.receipts().map(value => value.receiptId === receipt.receiptId ? receipt : value))
+      } catch {
+        await this.rollbackUpdate(profile, [currentReceipt], receipt.receiptId)
+        await this.forgetUpdateRollback(receipt.receiptId)
+        throw new MarketInstallError('persistence-failed', 'The updated receipt could not be saved, so the previous profile state was restored.')
+      }
+      return { receipt }
+    })
+  }
+
+  async executeUpdateAll(token: string, signal: AbortSignal): Promise<readonly MarketInstallReceipt[]> {
+    return await this.runExclusive(async () => {
+      const operationSignal = this.operationSignal(signal)
+      const intent = this.consumeIntent(token, 'update-all')
+      const profile = this.sameProfile(intent.profile)
+      const currentReceipts = this.receipts()
+      const nextReceipts: MarketInstallReceipt[] = []
+      const disabledPackages = this.disabledPackages()
+      for (const update of intent.updates) {
+        const current = currentReceipts.find(receipt => receipt.receiptId === update.receipt.receiptId)
+        if (current === undefined || JSON.stringify(current) !== JSON.stringify(update.receipt)) {
+          throw new MarketInstallError('conflict', 'A market install receipt changed before batch update.')
+        }
+        if (this.candidates.get(update.candidate.key) !== update.candidate
+          || !gt(update.candidate.version, current.version)) {
+          throw new MarketInstallError('not-available', 'A verified batch update is no longer available.')
+        }
+        if (disabledPackages.has(current.packageName)) {
+          throw new MarketInstallError('conflict', 'Enable all managed plugins before updating them.')
+        }
+        try {
+          await assertInstalledBundle(
+            profile,
+            current.packageName,
+            current.version,
+            current.bundlePatch,
+            current.integrity,
+          )
+        } catch {
+          throw new MarketInstallError('conflict', 'An installed plugin no longer matches its market receipt.')
+        }
+        const verification = await this.verifier.verify(update.candidate, operationSignal)
+        if (verification.integrity !== update.verification.integrity
+          || verification.bundlePatch !== update.verification.bundlePatch
+          || verification.tarball !== update.verification.tarball) {
+          throw new MarketInstallError('verification-failed', 'An npm package changed after preview. Preview all updates again.')
+        }
+        nextReceipts.push({
+          ...current,
+          version: update.candidate.version,
+          integrity: verification.integrity,
+          bundlePatch: verification.bundlePatch,
+          displayName: update.candidate.displayName,
+          installedAt: new Date(this.now()).toISOString(),
+        })
+      }
+      const operationId = randomUUID()
+      await this.rememberUpdateRollback(operationId, profile, intent.updates.map(update => update.receipt))
+      try {
+        await this.runPlugin(
+          this.installArgsMany(nextReceipts.map(receipt => ({ packageName: receipt.packageName, version: receipt.version }))),
+          profile,
+          operationSignal,
+          true,
+          {
+            packageName: 'dsh-market-update-batch',
+            packageVersion: `${nextReceipts.length}-updates`,
+            receiptId: operationId,
+          },
+        )
+        for (const receipt of nextReceipts) {
+          await assertInstalledBundle(profile, receipt.packageName, receipt.version, receipt.bundlePatch, receipt.integrity)
+        }
+      } catch {
+        await this.rollbackUpdate(profile, intent.updates.map(update => update.receipt), operationId)
+        await this.forgetUpdateRollback(operationId)
+        throw new MarketInstallError('operation-failed', 'The batch update failed and the previous profile state was restored.')
+      }
+      const replacements = new Map(nextReceipts.map(receipt => [receipt.receiptId, receipt]))
+      try {
+        await this.saveReceipts(currentReceipts.map(receipt => replacements.get(receipt.receiptId) ?? receipt))
+      } catch {
+        await this.rollbackUpdate(profile, intent.updates.map(update => update.receipt), operationId)
+        await this.forgetUpdateRollback(operationId)
+        throw new MarketInstallError('persistence-failed', 'Batch update receipts could not be saved, so the previous profile state was restored.')
+      }
+      return nextReceipts
+    })
+  }
+
   async executePreview(token: string, signal: AbortSignal): Promise<MarketOperationResult> {
     this.assertOpen()
     this.purge()
@@ -903,7 +1233,11 @@ export class MarketInstallService {
     }
     const result: MarketOperationResult = intent.kind === 'install'
       ? { action: 'install', ...await this.executeInstall(token, signal), restartToken: this.issueRestartToken() }
-      : { action: 'uninstall', ...await this.executeUninstall(token, signal), restartToken: this.issueRestartToken() }
+      : intent.kind === 'update'
+        ? { action: 'update', ...await this.executeUpdate(token, signal), restartToken: this.issueRestartToken() }
+        : intent.kind === 'update-all'
+          ? { action: 'update-all', receipts: await this.executeUpdateAll(token, signal), restartToken: this.issueRestartToken() }
+          : { action: 'uninstall', ...await this.executeUninstall(token, signal), restartToken: this.issueRestartToken() }
     return result
   }
 
@@ -1040,6 +1374,39 @@ export class MarketInstallService {
     await this.scope.update({ installReceipts: receipts })
   }
 
+  private updateRollbacks(): readonly MarketUpdateRollback[] {
+    const value = this.scope.get().updateRollbacks ?? []
+    if (!Array.isArray(value) || value.length > MAX_RECEIPTS || !value.every(record => (
+      record !== null
+      && typeof record === 'object'
+      && typeof record.operationId === 'string'
+      && record.operationId.length >= 8
+      && record.operationId.length <= 160
+      && typeof record.profileName === 'string'
+      && Array.isArray(record.previousReceipts)
+      && record.previousReceipts.length > 0
+      && record.previousReceipts.every(validReceipt)
+    ))) throw new MarketInstallError('persistence-failed', 'The market update recovery store is invalid.')
+    return value
+  }
+
+  private async rememberUpdateRollback(
+    operationId: string,
+    profile: MarketDesktopProfile,
+    previousReceipts: readonly MarketInstallReceipt[],
+  ): Promise<void> {
+    const records = this.updateRollbacks().filter(record => record.operationId !== operationId)
+    await this.scope.update({
+      updateRollbacks: [...records, { operationId, profileName: profile.name, previousReceipts }],
+    })
+  }
+
+  private async forgetUpdateRollback(operationId: string): Promise<void> {
+    await this.scope.update({
+      updateRollbacks: this.updateRollbacks().filter(record => record.operationId !== operationId),
+    })
+  }
+
   private async ensureRecoveredInstallReconciled(): Promise<void> {
     const existing = this.recoveryReconciliation
     if (existing !== undefined) return await existing
@@ -1055,11 +1422,29 @@ export class MarketInstallService {
 
   private async reconcileRecoveredInstall(): Promise<void> {
     const receiptIds = await this.pnpm.recoveredInstallReceiptIds()
-    if (receiptIds.length === 0) return
+    const pendingIds = new Set(await this.pnpm.pendingInstallReceiptIds())
+    const rollbackRecords = this.updateRollbacks()
+    if (receiptIds.length === 0 && rollbackRecords.every(record => pendingIds.has(record.operationId))) return
     const uniqueIds = new Set(receiptIds)
     const current = this.receipts()
-    const retained = current.filter(receipt => !uniqueIds.has(receipt.receiptId))
-    if (retained.length !== current.length) await this.saveReceipts(retained)
+    const recordsById = new Map(rollbackRecords.map(record => [record.operationId, record]))
+    let retained = current.filter(receipt => !uniqueIds.has(receipt.receiptId) || recordsById.has(receipt.receiptId))
+    for (const receiptId of uniqueIds) {
+      const rollback = recordsById.get(receiptId)
+      if (rollback === undefined) continue
+      const packages = new Set(rollback.previousReceipts.map(receipt => receipt.packageName))
+      retained = [
+        ...retained.filter(receipt => !packages.has(receipt.packageName)),
+        ...rollback.previousReceipts,
+      ]
+    }
+    const remainingRollbacks = rollbackRecords.filter(record => (
+      pendingIds.has(record.operationId) && !uniqueIds.has(record.operationId)
+    ))
+    if (JSON.stringify(retained) !== JSON.stringify(current)
+      || remainingRollbacks.length !== rollbackRecords.length) {
+      await this.scope.update({ installReceipts: retained, updateRollbacks: remainingRollbacks })
+    }
     for (const receiptId of uniqueIds) await this.pnpm.acknowledgeRecoveredInstall(receiptId)
   }
 
@@ -1183,13 +1568,20 @@ export class MarketInstallService {
   }
 
   private installArgs(packageName: string, version: string): readonly string[] {
-    const scope = packageName.startsWith('@') ? packageName.split('/', 1)[0] : undefined
+    return this.installArgsMany([{ packageName, version }])
+  }
+
+  private installArgsMany(packages: readonly { readonly packageName: string; readonly version: string }[]): readonly string[] {
+    const scopes = [...new Set(packages.flatMap(({ packageName }) => (
+      packageName.startsWith('@') ? [packageName.split('/', 1)[0]!] : []
+    )))]
     return [
       'add',
       '--save-exact',
+      '--ignore-scripts',
       `--registry=${NPM_REGISTRY}`,
-      ...(scope === undefined ? [] : [`--${scope}:registry=${NPM_REGISTRY}`]),
-      `${packageName}@${version}`,
+      ...scopes.map(scope => `--${scope}:registry=${NPM_REGISTRY}`),
+      ...packages.map(({ packageName, version }) => `${packageName}@${version}`),
     ]
   }
 
@@ -1205,6 +1597,31 @@ export class MarketInstallService {
       throw new MarketInstallError(
         'persistence-failed',
         'The failed installation could not be restored safely. Use the saved recovery state before another plugin change.',
+      )
+    }
+  }
+
+  private async rollbackUpdate(
+    profile: MarketDesktopProfile,
+    previousReceipts: readonly MarketInstallReceipt[],
+    operationId: string,
+  ): Promise<void> {
+    try {
+      const restored = await this.pnpm.rollbackPluginInstall(operationId)
+      if (!restored) throw new Error('update recovery transaction is unavailable')
+      for (const receipt of previousReceipts) {
+        await assertInstalledBundle(
+          profile,
+          receipt.packageName,
+          receipt.version,
+          receipt.bundlePatch,
+          receipt.integrity,
+        )
+      }
+    } catch {
+      throw new MarketInstallError(
+        'persistence-failed',
+        'The failed update could not be restored safely. Use the saved recovery state before another plugin change.',
       )
     }
   }

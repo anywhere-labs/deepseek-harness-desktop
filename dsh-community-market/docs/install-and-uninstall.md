@@ -25,7 +25,7 @@ Optional catalog metadata reports `scannedAt`, cache `expiresAt`, optional `prov
 2. The Host checks whether that exact normalized source/item is eligible for managed installation. Presence in **Installable** means only that it passed local, fail-closed structural candidate rules; the Host has not yet queried npm for that package. The catalog's version or command is never execution authority.
 3. Managed preview verifies this one candidate against the official npm registry, including package/repository identity, deprecation, lifecycle scripts, runtime, integrity, tarball, DSH bundle evidence, and current-profile availability. Only success turns the same dialog into a confirmation with the catalog display name, verified exact `packageName@version`, active profile, and expiry.
 4. Read the local-code warning and confirm. The confirmation is one-shot and short-lived. If the active profile or Host candidate changes, or the confirmation expires or is reused, a new preview is required.
-5. Before the package operation starts, Desktop privately snapshots the active profile's `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml`. It then runs the managed add, seals the resulting configuration image, verifies the installed DSH bundle, and saves a receipt. If the command fails after a recognized partial change, Desktop seals that partial image before restoring the snapshot.
+5. Before the package operation starts, Desktop privately snapshots the active profile's `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml`. It then runs the managed add with lifecycle scripts disabled for the target and its dependency tree, seals the resulting configuration image, verifies the installed DSH bundle, and saves a receipt. If the command fails after a recognized partial change, Desktop seals that partial image before restoring the snapshot.
 6. Choose **Restart now** or **Restart later**. A successful install changes the profile on disk, but the running process does not load the new plugin automatically. The immediate action consumes a short-lived one-shot restart grant and never restarts silently. Until the next Desktop generation verifies a healthy startup, another protected plugin add is refused.
 7. On the next launch, Desktop claims the pending recovery record before preparing the profile. The install is committed only after the Host starts successfully and the Renderer reports healthy within its 30-second deadline. If startup fails or remains unconfirmed, Desktop first saves a local diagnostics archive, restores a recognized before/after configuration image, and relaunches at most once.
 
@@ -96,9 +96,15 @@ Desktop stores this versioned, profile-scoped choice in `<Desktop user data>/plu
 
 ## What these checks do not prove
 
-Registry identity, integrity, repository matching, compatibility metadata, and lifecycle-script policy reduce ambiguity around *what* Desktop installs. They do not determine whether the plugin's code or dependency tree is trustworthy, private, correct, or free from vulnerabilities. A plugin runs locally with the user's permissions after restart.
+Registry identity, integrity, repository matching, compatibility metadata, and lifecycle-script policy reduce ambiguity around *what* Desktop installs. Managed installation disables lifecycle scripts across the dependency tree, but this does not determine whether the installed code is trustworthy, private, correct, or free from vulnerabilities. A plugin runs locally with the user's permissions after restart.
 
 Before confirming, users should still review the publisher, repository, requested behavior, and whether they trust the code. Catalog inclusion, an **Installable** card, a successful npm check, and a saved receipt are not security endorsements by Anywhere Labs, DSH 1024Store, DeepSeek, or the catalog provider.
+
+## Update plugins
+
+The **Installed** view compares verified Market receipts with the active catalog and marks newer exact versions. Users may update one plugin or confirm **Update all**, which verifies every target again and applies all selected exact versions in one protected package transaction. Existing receipt identities are retained while their version, integrity, bundle evidence, display name, and installation time are refreshed.
+
+Automatic updates are opt-in and require an explicit warning confirmation covering future Market-managed releases. When enabled, the Desktop client checks the active catalog at startup, runs the same verified batch update path when updates are available, and restarts Desktop after the protected transaction completes. Manual, batch, and automatic updates all disable lifecycle scripts and use the same pre-operation profile snapshot. A failed package operation restores the previous profile image; a startup failure enters the existing native recovery flow and restores previous receipt ownership after rollback.
 
 ## Developer boundary
 

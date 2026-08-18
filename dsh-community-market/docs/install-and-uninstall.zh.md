@@ -25,7 +25,7 @@
 2. Host 会判断这个精确的标准化来源/条目能否使用受管安装。出现在**可安装**中，只表示它通过了本地、fail-closed 的结构候选规则；此时 Host 尚未针对该 package 请求 npm。目录给出的版本或命令始终没有执行授权。
 3. 受管 preview 此时才针对这一个候选访问官方 npm registry，检查 package/仓库身份、deprecated 状态、lifecycle script、runtime、integrity、tarball、DSH bundle 证据和当前 profile 可安装性。只有成功后，同一个弹窗才会切换成确认框，并展示目录显示名、验证过的精确 `packageName@version`、当前 profile 和过期时间。
 4. 阅读“本地代码”提示并确认。确认是一次性且短时有效的；如果当前 profile 或 Host 候选发生变化，或者确认过期、已被使用，就需要重新预览。
-5. Package 操作开始前，Desktop 会私下为当前 profile 的 `package.json`、`pnpm-lock.yaml` 和 `pnpm-workspace.yaml` 创建快照，再执行受管 add、封存产生的配置状态、验证安装后的 DSH bundle 并保存 receipt。如果命令在产生可识别的部分修改后失败，Desktop 会先封存该部分状态，再恢复快照。
+5. Package 操作开始前，Desktop 会私下为当前 profile 的 `package.json`、`pnpm-lock.yaml` 和 `pnpm-workspace.yaml` 创建快照，再执行受管 add，并对目标 package 及其整个依赖树禁用 lifecycle script，然后封存产生的配置状态、验证安装后的 DSH bundle 并保存 receipt。如果命令在产生可识别的部分修改后失败，Desktop 会先封存该部分状态，再恢复快照。
 6. 选择**立即重启**或**稍后重启**。安装成功会修改磁盘上的 profile，但当前运行的进程不会自动加载新插件。立即重启会消费一份短时、一次性重启许可，系统不会静默重启。下一次 Desktop generation 完成健康启动验证前，会拒绝另一次受保护的插件添加。
 7. 下一次启动时，Desktop 会在准备 profile 前认领待验证的恢复记录。只有 Host 成功启动，并且 Renderer 在 30 秒期限内报告健康，安装才会正式提交。如果启动失败或一直未确认，Desktop 会先在本地保存诊断归档，再恢复一份已识别的前后配置状态，并且最多自动重启一次。
 
@@ -96,9 +96,15 @@ Desktop 会把这个带版本、按 profile 隔离的选择保存在 `<Desktop u
 
 ## 这些检查不能证明什么
 
-Registry 身份、integrity、仓库匹配、兼容 metadata 和 lifecycle script 策略，只能减少 Desktop “到底安装了什么”的歧义；它们不能判断插件代码或依赖树是否可信、是否保护隐私、是否正确，或是否没有漏洞。重启后，插件会以用户权限作为本地代码运行。
+Registry 身份、integrity、仓库匹配、兼容 metadata 和 lifecycle script 策略，只能减少 Desktop “到底安装了什么”的歧义。受管安装会禁用整个依赖树的 lifecycle script，但这不能判断已安装代码是否可信、是否保护隐私、是否正确，或是否没有漏洞。重启后，插件会以用户权限作为本地代码运行。
 
 确认前，用户仍应检查 publisher、源码仓库、插件行为，以及自己是否信任这些代码。目录收录、**可安装**卡片、npm 复核成功和本地 receipt，都不代表 Anywhere Labs、DSH 1024Store、DeepSeek 或目录 provider 作出安全背书。
+
+## 更新插件
+
+**已安装**页面会比较验证过的 Market receipt 和当前目录，并标出可用的精确新版本。用户可以更新单个插件，也可以确认**全部更新**；Desktop 会再次验证每个目标，并在一个受保护的 package 事务中应用所有选定的精确版本。原有 receipt 身份保持不变，同时更新版本、integrity、bundle 证据、显示名称和安装时间。
+
+自动更新默认关闭，启用前必须通过明确警告确认，该授权会覆盖今后由 Market 管理的插件版本。启用后，Desktop 客户端会在启动时检查当前目录；发现更新时，会执行同一条经过验证的批量更新路径，并在受保护事务完成后重启 Desktop。手动更新、全部更新和自动更新都会禁用 lifecycle script，并共享操作前的 profile 快照。Package 操作失败会恢复旧 profile 状态；启动失败会进入现有原生恢复流程，并在回滚后恢复旧 receipt 所有权。
 
 ## 开发边界
 

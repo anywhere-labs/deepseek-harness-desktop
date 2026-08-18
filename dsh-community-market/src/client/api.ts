@@ -1,5 +1,6 @@
 import type {
   MarketCatalogResponse,
+  MarketAutoUpdateRunResponse,
   MarketDesktopActionResponse,
   MarketInstallableResponse,
   MarketInstallationsResponse,
@@ -157,6 +158,24 @@ export async function requestMarketRestart(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ restartToken }),
+    ...(signal === undefined ? {} : { signal }),
+  }))
+}
+
+export async function setMarketAutoUpdate(autoUpdate: boolean, signal?: AbortSignal): Promise<{ readonly autoUpdate: boolean }> {
+  return await readJson(await fetch('/api/community-market/updates/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ autoUpdate }),
+    ...(signal === undefined ? {} : { signal }),
+  }))
+}
+
+export async function runMarketAutoUpdate(signal?: AbortSignal): Promise<MarketAutoUpdateRunResponse> {
+  return await readJson(await fetch('/api/community-market/updates/auto-run', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
     ...(signal === undefined ? {} : { signal }),
   }))
 }

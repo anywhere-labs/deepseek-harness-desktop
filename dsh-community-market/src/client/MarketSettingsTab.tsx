@@ -48,6 +48,8 @@ import {
   readMarketState,
   readMoreMarketCatalog,
   requestMarketRestart,
+  runMarketAutoUpdate,
+  setMarketAutoUpdate,
 } from './api.js'
 
 type MarketItem = CatalogSnapshot['items'][number]
@@ -257,6 +259,10 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
   const [installationsLoading, setInstallationsLoading] = useState(false)
   const [installationsUnavailable, setInstallationsUnavailable] = useState(false)
   const [installationsError, setInstallationsError] = useState<string>()
+  const [updateCount, setUpdateCount] = useState(0)
+  const [autoUpdate, setAutoUpdate] = useState(false)
+  const [updateSettingPending, setUpdateSettingPending] = useState(false)
+  const [autoUpdateConfirmOpen, setAutoUpdateConfirmOpen] = useState(false)
   const [selectedInstallation, setSelectedInstallation] = useState<MarketInstallationView>()
   const [selectedInventoryLoading, setSelectedInventoryLoading] = useState(false)
   const [selectedInventoryError, setSelectedInventoryError] = useState<string>()
@@ -389,6 +395,8 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       const response = await readMarketInstallations(request.signal)
       if (request.signal.aborted || installationsRequest.current !== request) return
       setInstallations(response.installations)
+      setUpdateCount(response.updateCount ?? 0)
+      setAutoUpdate(response.autoUpdate ?? false)
       setInstallationsLoaded(true)
       setInstallationsUnavailable(false)
       return { installations: response.installations }
@@ -405,6 +413,24 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       }
     }
   }, [t])
+
+  const changeAutoUpdate = async (enabled: boolean) => {
+    if (updateSettingPending) return
+    setUpdateSettingPending(true)
+    setOperationError(undefined)
+    try {
+      const result = await setMarketAutoUpdate(enabled)
+      setAutoUpdate(result.autoUpdate)
+      if (result.autoUpdate) {
+        const update = await runMarketAutoUpdate()
+        if (update.updated) await requestMarketRestart(update.restartToken)
+      }
+    } catch {
+      setOperationError(t('executeError'))
+    } finally {
+      setUpdateSettingPending(false)
+    }
+  }
 
   const loadInstallable = useCallback(async (refresh = false) => {
     installableRequest.current?.abort()
@@ -523,6 +549,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       const next: MarketStateResponse = {
         sources,
         builtIns: state?.builtIns ?? [],
+        autoUpdate: state?.autoUpdate ?? false,
         desktopActions: state?.desktopActions ?? { openTerminal: false, requestRestart: false },
       }
       const sourceChanged = selectedSource(state?.sources ?? [])?.sourceRecordId
@@ -671,6 +698,8 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       } else {
         setOperationError(t(requestValue.action === 'install'
           ? 'previewError'
+          : requestValue.action === 'update' || requestValue.action === 'update-all'
+            ? 'previewError'
           : requestValue.action === 'uninstall'
             ? 'uninstallPreviewError'
             : requestValue.action === 'disable' ? 'disablePreviewError' : 'enablePreviewError'))
@@ -773,7 +802,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       if (request.signal.aborted || operationRequest.current !== request) return
       if (result.action !== preview.action) throw new Error('operation response action mismatch')
       setInstallations(current => {
-        if (result.action === 'install') return current
+        if (result.action === 'install' || result.action === 'update' || result.action === 'update-all') return current
         if (result.action === 'uninstall') {
           return current.filter(installation => installation.kind !== 'managed'
             || installation.receipt.receiptId !== result.receiptId)
@@ -844,7 +873,8 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       setSelected(undefined)
       setOperationSuccess({ preview, restartToken: result.restartToken })
       if (result.action === 'install' && viewRef.current === 'installable') void loadInstallable()
-      if ((result.action === 'uninstall' || result.action === 'disable' || result.action === 'enable')
+      if ((result.action === 'update' || result.action === 'update-all'
+        || result.action === 'uninstall' || result.action === 'disable' || result.action === 'enable')
         && viewRef.current === 'installed') {
         void loadInstallations()
       }
@@ -990,6 +1020,9 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
         ) : view === 'installed' ? (
           <InstalledView
             installations={installations}
+            updateCount={updateCount}
+            autoUpdate={autoUpdate}
+            updateSettingPending={updateSettingPending}
             loaded={installationsLoaded}
             loading={installationsLoading}
             unavailable={installationsUnavailable}
@@ -998,6 +1031,16 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
             onRetry={() => { void loadInstallations() }}
             onUninstall={receipt => {
               void beginOperationPreview({ action: 'uninstall', receiptId: receipt.receiptId })
+            }}
+            onUpdate={receiptId => {
+              void beginOperationPreview({ action: 'update', receiptId })
+            }}
+            onUpdateAll={() => {
+              void beginOperationPreview({ action: 'update-all' })
+            }}
+            onAutoUpdate={enabled => {
+              if (enabled) setAutoUpdateConfirmOpen(true)
+              else void changeAutoUpdate(false)
             }}
             onDisable={bundleId => {
               void beginOperationPreview({ action: 'disable', bundleId })
@@ -1043,6 +1086,12 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
             setSelectedInstallation(undefined)
             void beginOperationPreview({ action: 'uninstall', receiptId: receipt.receiptId })
           }}
+          onUpdate={receiptId => {
+            selectedKeyRef.current = undefined
+            setSelected(undefined)
+            setSelectedInstallation(undefined)
+            void beginOperationPreview({ action: 'update', receiptId })
+          }}
           onDisable={bundleId => {
             selectedKeyRef.current = undefined
             setSelected(undefined)
@@ -1073,6 +1122,28 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
           t={t}
         />
       )}
+      {autoUpdateConfirmOpen && <Modal
+        open
+        className="dshMarketModal dshMarketConfirmModal"
+        contentClassName="dshMarketModalContent"
+        onClose={() => { if (!updateSettingPending) setAutoUpdateConfirmOpen(false) }}
+        closeLabel={t('cancel')}
+        title={t('confirmAutoUpdateTitle')}
+        description={t('confirmAutoUpdateBody')}
+        footer={<div className="dshMarketModalActions">
+          <Button variant="ghost" disabled={updateSettingPending} onClick={() => setAutoUpdateConfirmOpen(false)}>{t('cancel')}</Button>
+          <Button
+            variant="primary"
+            disabled={updateSettingPending}
+            icon={<IconRefreshOutline16 />}
+            onClick={() => {
+              void changeAutoUpdate(true).then(() => setAutoUpdateConfirmOpen(false))
+            }}
+          >{t('enableAutoUpdate')}</Button>
+        </div>}
+      >
+        <div className="dshMarketOperationWarning"><StateDot state="warning" size={12} /><span>{t('operationWarning')}</span></div>
+      </Modal>}
       {operationSuccess !== undefined && (
         <OperationSuccessModal
           operation={operationSuccess}
@@ -1388,6 +1459,9 @@ function InstallableView(props: {
 
 function InstalledView(props: {
   installations: readonly MarketInstallationView[]
+  updateCount: number
+  autoUpdate: boolean
+  updateSettingPending: boolean
   loaded: boolean
   loading: boolean
   unavailable: boolean
@@ -1395,6 +1469,9 @@ function InstalledView(props: {
   operationPending: boolean
   onRetry: () => void
   onUninstall: (receipt: Extract<MarketInstallationView, { kind: 'managed' }>['receipt']) => void
+  onUpdate: (receiptId: string) => void
+  onUpdateAll: () => void
+  onAutoUpdate: (enabled: boolean) => void
   onDisable: (bundleId: string) => void
   onEnable: (bundleId: string) => void
   t: MarketSettingsTabProps['t']
@@ -1420,13 +1497,30 @@ function InstalledView(props: {
     <div className="dshMarketContent">
       <div className="dshMarketSectionHead">
         <div><h2>{props.t('installed')}</h2><p>{props.t('installedBody')}</p></div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={props.loading || props.operationPending}
-          icon={<IconRefreshOutline16 />}
-          onClick={props.onRetry}
-        >{props.t('refresh')}</Button>
+        <div className="dshMarketReceiptActions">
+          <label>
+            <input
+              type="checkbox"
+              checked={props.autoUpdate}
+              disabled={props.updateSettingPending || props.operationPending}
+              onChange={event => props.onAutoUpdate(event.currentTarget.checked)}
+            /> {props.t('autoUpdate')}
+          </label>
+          {props.updateCount > 0 && <Button
+            variant="primary"
+            size="sm"
+            disabled={props.operationPending}
+            icon={<IconRefreshOutline16 />}
+            onClick={props.onUpdateAll}
+          >{props.t('updateAll')} ({props.updateCount})</Button>}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={props.loading || props.operationPending}
+            icon={<IconRefreshOutline16 />}
+            onClick={props.onRetry}
+          >{props.t('refresh')}</Button>
+        </div>
       </div>
       {props.error !== undefined && <div className="dshMarketBanner" role="alert"><StateDot state="error" />{props.error}</div>}
       {props.installations.length === 0 ? (
@@ -1440,6 +1534,7 @@ function InstalledView(props: {
                 : `${installation.kind}:${installation.packageName}:${index}`}
               installation={installation}
               operationPending={props.operationPending}
+              onUpdate={props.onUpdate}
               onUninstall={props.onUninstall}
               onDisable={props.onDisable}
               onEnable={props.onEnable}
@@ -1456,6 +1551,7 @@ function InstallationCard(props: {
   installation: MarketInstallationView
   operationPending: boolean
   onUninstall: (receipt: Extract<MarketInstallationView, { kind: 'managed' }>['receipt']) => void
+  onUpdate: (receiptId: string) => void
   onDisable: (bundleId: string) => void
   onEnable: (bundleId: string) => void
   t: MarketSettingsTabProps['t']
@@ -1482,10 +1578,21 @@ function InstallationCard(props: {
           <span>{packageName}{receipt === undefined ? '' : `@${receipt.version}`}</span>
           {receipt !== undefined && <span>{props.t('profile')}: {receipt.profileName}</span>}
           {receipt !== undefined && <span>{props.t('installedAt')}: {receipt.installedAt}</span>}
+          {installation.kind === 'managed' && installation.update !== undefined && <span>
+            {installation.update.fromVersion} → {installation.update.toVersion}
+          </span>}
           {installation.status === 'disabled' && <span>{props.t('disabledRestartRequired')}</span>}
         </div>
       </div>
       <div className="dshMarketReceiptActions">
+        {installation.kind === 'managed' && installation.update !== undefined && <Button
+          variant="primary"
+          size="sm"
+          aria-label={`${props.t('update')}: ${displayName}`}
+          disabled={props.operationPending || installation.status === 'disabled'}
+          icon={<IconRefreshOutline16 />}
+          onClick={() => props.onUpdate(installation.receipt.receiptId)}
+        >{props.t('update')}</Button>}
         {installation.kind === 'managed'
           && installation.status === 'active'
           && installation.disableBundleId !== undefined && <Button
@@ -1809,6 +1916,13 @@ function OperationFacts({ operation, showExpiry = true, t }: {
       <div><dt>{t('plugin')}</dt><dd>{operation.displayName}</dd></div>
       <div><dt>{t('package')}</dt><dd>{operation.packageName}</dd></div>
       {operation.version !== undefined && <div><dt>{t('exactVersion')}</dt><dd>{operation.version}</dd></div>}
+      {operation.fromVersion !== undefined && <div><dt>{t('fromVersion')}</dt><dd>{operation.fromVersion}</dd></div>}
+      {operation.toVersion !== undefined && <div><dt>{t('toVersion')}</dt><dd>{operation.toVersion}</dd></div>}
+      {operation.updateCount !== undefined && <div><dt>{t('updatesAvailable')}</dt><dd>{operation.updateCount}</dd></div>}
+      {operation.updates?.map(update => <div key={`${update.packageName}:${update.toVersion}`}>
+        <dt>{update.displayName}</dt>
+        <dd>{update.packageName}: {update.fromVersion} → {update.toVersion}</dd>
+      </div>)}
       <div><dt>{t('profile')}</dt><dd>{operation.profileName}</dd></div>
       {showExpiry && <div><dt>{t('previewExpires')}</dt><dd>{operation.expiresAt}</dd></div>}
     </dl>
@@ -1824,27 +1938,43 @@ function OperationConfirmModal({ preview, pending, error, onCancel, onConfirm, t
   t: MarketSettingsTabProps['t']
 }) {
   const installing = preview.action === 'install'
+  const updating = preview.action === 'update'
+  const updatingAll = preview.action === 'update-all'
   const uninstalling = preview.action === 'uninstall'
   const disabling = preview.action === 'disable'
   const enabling = preview.action === 'enable'
   const title = installing
     ? t('confirmInstallTitle')
+    : updating
+      ? t('confirmUpdateTitle')
+      : updatingAll
+        ? t('confirmUpdateAllTitle')
     : uninstalling
       ? t('confirmUninstallTitle')
       : disabling ? t('confirmDisableTitle') : t('confirmEnableTitle')
   const description = installing
     ? t('confirmInstallBody')
+    : updating
+      ? t('confirmUpdateBody')
+      : updatingAll
+        ? t('confirmUpdateAllBody')
     : uninstalling
       ? t('confirmUninstallBody')
       : disabling ? t('confirmDisableBody') : t('confirmEnableBody')
   const confirmLabel = pending
     ? installing
       ? t('installing')
+      : updating || updatingAll
+        ? t('updating')
       : uninstalling
         ? t('uninstalling')
         : disabling ? t('disabling') : t('enabling')
     : installing
       ? t('confirmInstall')
+      : updating
+        ? t('confirmUpdate')
+        : updatingAll
+          ? t('confirmUpdateAll')
       : uninstalling
         ? t('confirmUninstall')
         : disabling ? t('confirmDisable') : t('confirmEnable')
@@ -1864,6 +1994,8 @@ function OperationConfirmModal({ preview, pending, error, onCancel, onConfirm, t
           disabled={pending}
           icon={installing
             ? <IconDownloadOutline16 />
+            : updating || updatingAll
+              ? <IconRefreshOutline16 />
             : uninstalling
               ? <IconTrashOutline16 />
               : enabling ? <IconPlayOutline16 /> : <IconPauseOutline16 />}
@@ -1873,8 +2005,8 @@ function OperationConfirmModal({ preview, pending, error, onCancel, onConfirm, t
     >
       <div className="dshMarketOperationReview">
         <OperationFacts operation={preview} t={t} />
-        {installing && <div className="dshMarketOperationWarning"><StateDot state="warning" size={12} /><span>{t('operationWarning')}</span></div>}
-        {installing && (
+        {(installing || updating || updatingAll) && <div className="dshMarketOperationWarning"><StateDot state="warning" size={12} /><span>{t('operationWarning')}</span></div>}
+        {(installing || updating || updatingAll) && (
           <div className="dshMarketOperationWarning">
             <StateDot state="warning" size={12} />
             <span>
@@ -1908,6 +2040,10 @@ function OperationSuccessModal({ operation, canRestart, pending, error, onClose,
 }) {
   const title = operation.preview.action === 'install'
     ? t('installComplete')
+    : operation.preview.action === 'update'
+      ? t('updateComplete')
+      : operation.preview.action === 'update-all'
+        ? t('updateAllComplete')
     : operation.preview.action === 'uninstall'
       ? t('uninstallComplete')
       : operation.preview.action === 'disable' ? t('disableComplete') : t('enableComplete')
@@ -1959,6 +2095,7 @@ function ItemActionModal({
   onConfirm,
   onOpenTerminal,
   onUninstall,
+  onUpdate,
   onDisable,
   onEnable,
   t,
@@ -1979,6 +2116,7 @@ function ItemActionModal({
   onConfirm: () => void
   onOpenTerminal: () => void
   onUninstall: (receipt: Extract<MarketInstallationView, { kind: 'managed' }>['receipt']) => void
+  onUpdate: (receiptId: string) => void
   onDisable: (bundleId: string) => void
   onEnable: (bundleId: string) => void
   t: MarketSettingsTabProps['t']
@@ -2065,6 +2203,7 @@ function ItemActionModal({
                   installation={installation}
                   operationPending={pending}
                   onUninstall={onUninstall}
+                  onUpdate={onUpdate}
                   onDisable={onDisable}
                   onEnable={onEnable}
                   t={t}

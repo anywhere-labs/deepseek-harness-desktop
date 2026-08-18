@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { MarketAutoUpdateRunResponse } from '../src/api-types.js'
+
+const marketApi = vi.hoisted(() => ({
+  runMarketAutoUpdate: vi.fn<() => Promise<MarketAutoUpdateRunResponse>>(async () => ({ updated: false })),
+  requestMarketRestart: vi.fn(async () => ({ ok: true } as const)),
+}))
+
+vi.mock('../src/client/api.js', () => marketApi)
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
   const component = () => null
@@ -114,5 +122,17 @@ describe('community market client registration', () => {
     expect(typeof launcher?.label).toBe('function')
     expect(launcher?.store).toBe(overlay?.store)
     expect(typeof overlay?.inject).toBe('function')
+  })
+
+  it('restarts Desktop after an opted-in automatic update completes', async () => {
+    marketApi.runMarketAutoUpdate.mockResolvedValueOnce({
+      updated: true,
+      updateCount: 2,
+      restartToken: 'auto-update-restart-token',
+    })
+    const test = testContext()
+
+    apply(test.context)
+    await vi.waitFor(() => expect(marketApi.requestMarketRestart).toHaveBeenCalledWith('auto-update-restart-token'))
   })
 })

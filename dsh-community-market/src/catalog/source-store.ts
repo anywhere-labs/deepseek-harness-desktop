@@ -6,6 +6,14 @@ import type { CatalogSourceStore, LocalSourceRecord } from '../contracts/types.j
 export interface MarketSettingsDocument {
   readonly sources: readonly LocalSourceRecord[]
   readonly installReceipts?: readonly MarketInstallReceipt[]
+  readonly autoUpdate?: boolean
+  readonly updateRollbacks?: readonly MarketUpdateRollback[]
+}
+
+export interface MarketUpdateRollback {
+  readonly operationId: string
+  readonly profileName: string
+  readonly previousReceipts: readonly MarketInstallReceipt[]
 }
 
 /**

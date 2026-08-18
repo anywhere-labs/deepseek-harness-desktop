@@ -25,6 +25,8 @@ import {
   readMarketState,
   readMoreMarketCatalog,
   requestMarketRestart,
+  runMarketAutoUpdate,
+  setMarketAutoUpdate,
 } from '../src/client/api.js'
 import { en, type MarketLocaleKey } from '../src/client/locales.js'
 
@@ -39,6 +41,8 @@ vi.mock('../src/client/api.js', () => ({
   readMoreMarketCatalog: vi.fn(),
   readMarketState: vi.fn(),
   requestMarketRestart: vi.fn(),
+  runMarketAutoUpdate: vi.fn(),
+  setMarketAutoUpdate: vi.fn(),
 }))
 
 afterEach(() => {
@@ -814,6 +818,86 @@ describe('MarketSettingsTab', () => {
     expectMarketModal(await screen.findByRole('dialog', { name: en.uninstallComplete }), 'dshMarketStatusModal')
     expect(screen.getByText(en.restartRequiredBody)).toBeTruthy()
     expect(readMarketCatalog).not.toHaveBeenCalled()
+  })
+
+  it('offers single, batch, and automatic updates for managed plugins', async () => {
+    const receipt = makeReceipt({ version: '1.0.0' })
+    vi.mocked(readMarketState).mockResolvedValue(emptyState)
+    vi.mocked(readMarketInstallations).mockResolvedValue({
+      installations: [{
+        kind: 'managed',
+        status: 'active',
+        action: 'uninstall',
+        receipt,
+        update: { fromVersion: '1.0.0', toVersion: '1.2.3' },
+      }],
+      updateCount: 1,
+      autoUpdate: false,
+    })
+    vi.mocked(setMarketAutoUpdate).mockResolvedValue({ autoUpdate: true })
+    vi.mocked(runMarketAutoUpdate).mockResolvedValue({ updated: false })
+    vi.mocked(previewMarketOperation)
+      .mockResolvedValueOnce({
+        action: 'update-all',
+        profileName: receipt.profileName,
+        packageName: '1 managed plugin',
+        displayName: '1 managed plugin',
+        updateCount: 1,
+        updates: [{
+          packageName: receipt.packageName,
+          displayName: receipt.displayName,
+          fromVersion: '1.0.0',
+          toVersion: '1.2.3',
+        }],
+        expiresAt: '2026-08-18T00:05:00.000Z',
+        previewId: 'opaque-update-all-preview',
+      })
+      .mockResolvedValueOnce({
+        action: 'update',
+        profileName: receipt.profileName,
+        packageName: receipt.packageName,
+        displayName: receipt.displayName,
+        fromVersion: '1.0.0',
+        toVersion: '1.2.3',
+        expiresAt: '2026-08-18T00:05:00.000Z',
+        previewId: 'opaque-update-preview',
+      })
+    vi.mocked(executeMarketOperation).mockResolvedValue({
+      action: 'update',
+      receipt: { ...receipt, version: '1.2.3' },
+      restartToken: 'opaque-update-restart',
+    })
+    render(<MarketSettingsTab {...props} />)
+
+    await screen.findByRole('heading', { name: en.emptyTitle })
+    fireEvent.click(screen.getByRole('button', { name: en.installed }))
+    expect(await screen.findByRole('button', { name: `${en.update}: ${receipt.displayName}` })).toBeTruthy()
+    expect(screen.getByRole('button', { name: `${en.updateAll} (1)` })).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: en.autoUpdate }))
+    expectMarketModal(await screen.findByRole('dialog', { name: en.confirmAutoUpdateTitle }), 'dshMarketConfirmModal')
+    expect(setMarketAutoUpdate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: en.enableAutoUpdate }))
+    await waitFor(() => expect(setMarketAutoUpdate).toHaveBeenCalledWith(true))
+
+    fireEvent.click(screen.getByRole('button', { name: `${en.updateAll} (1)` }))
+    expectMarketModal(await screen.findByRole('dialog', { name: en.confirmUpdateAllTitle }), 'dshMarketConfirmModal')
+    expect(screen.getByText(`${receipt.packageName}: 1.0.0 → 1.2.3`)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.cancel }))
+
+    fireEvent.click(screen.getByRole('button', { name: `${en.update}: ${receipt.displayName}` }))
+    await waitFor(() => expect(previewMarketOperation).toHaveBeenCalledWith(
+      { action: 'update', receiptId: receipt.receiptId },
+      expect.any(AbortSignal),
+    ))
+    expectMarketModal(await screen.findByRole('dialog', { name: en.confirmUpdateTitle }), 'dshMarketConfirmModal')
+    expect(screen.getByText('1.0.0')).toBeTruthy()
+    expect(screen.getAllByText('1.2.3').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: en.confirmUpdate }))
+    await waitFor(() => expect(executeMarketOperation).toHaveBeenCalledWith(
+      'opaque-update-preview',
+      expect.any(AbortSignal),
+    ))
+    expectMarketModal(await screen.findByRole('dialog', { name: en.updateComplete }), 'dshMarketStatusModal')
   })
 
   it('disables an external bundle through an exact Host preview without offering uninstall', async () => {
