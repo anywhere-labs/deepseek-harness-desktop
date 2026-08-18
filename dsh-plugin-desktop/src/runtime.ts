@@ -85,6 +85,14 @@ export interface DesktopNotification {
   body: string
 }
 
+/** Attention request raised by a background desktop workflow. */
+export interface DesktopAttentionNotification {
+  /** Notification heading. */
+  title: string
+  /** Concise user-facing status. */
+  body: string
+}
+
 /** Electron capabilities used by the headless update plugin. */
 export interface DesktopUpdateAdapter {
   /** Whether the running executable came from an Electron package. */
@@ -167,6 +175,9 @@ export interface DesktopRuntime {
 
   /** Reveal and focus the current window, if mounted. */
   show(): void
+
+  /** Request user attention for background activity in the native shell. */
+  notifyAttention(notification: DesktopAttentionNotification): void
 
   /**
    * Contribute one command to the native tray for the current Cordis lifetime.

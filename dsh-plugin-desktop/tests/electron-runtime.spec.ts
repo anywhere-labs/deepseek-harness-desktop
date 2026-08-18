@@ -93,10 +93,13 @@ const electron = vi.hoisted(() => {
     }
 
     readonly isDestroyed = vi.fn(() => false)
+    readonly isFocused = vi.fn(() => false)
     readonly isMinimized = vi.fn(() => false)
     readonly restore = vi.fn()
+    readonly hide = vi.fn()
     readonly show = vi.fn()
     readonly focus = vi.fn()
+    readonly flashFrame = vi.fn()
     readonly on = browserWindowOn
     readonly off = browserWindowOff
     readonly once = vi.fn()
@@ -148,6 +151,7 @@ const electron = vi.hoisted(() => {
       isPackaged: false,
       on: vi.fn(),
       off: vi.fn(),
+      setBadgeCount: vi.fn(),
     },
     appIcon,
     blueIcon,
@@ -899,6 +903,96 @@ describe('Electron compatibility runtime', () => {
     })
     expect(notification?.show).toHaveBeenCalledOnce()
     expect(notification?.once).not.toHaveBeenCalled()
+  })
+
+  it('does nothing for attention requests when no live window exists or the window is already focused', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+
+    runtime.notifyAttention({ title: 'Background Job Completed', body: 'A background job has finished.' })
+    expect(electron.notifications).toHaveLength(0)
+    expect(electron.app.setBadgeCount).not.toHaveBeenCalled()
+
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+    electron.browserWindows[0]?.isFocused.mockReturnValue(true)
+
+    runtime.notifyAttention({ title: 'Background Job Completed', body: 'A background job has finished.' })
+    expect(electron.notifications).toHaveLength(0)
+    expect(electron.app.setBadgeCount).not.toHaveBeenCalled()
+
+    await release()
+  })
+
+  it.each(['darwin', 'linux'] as const)(
+    'increments and clears native attention badges on %s without Windows flash calls',
+    async (platform) => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+      const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+      const runtime = new ElectronDesktopRuntime(async () => {})
+      const release = runtime.schedule(spec)
+      await runtime.mountScheduled()
+
+      runtime.notifyAttention({ title: 'Background Job Completed', body: 'A background job has finished.' })
+      runtime.notifyAttention({ title: 'Background Job Failed', body: 'A background job needs attention.' })
+
+      expect(electron.notifications).toHaveLength(2)
+      expect(electron.app.setBadgeCount).toHaveBeenNthCalledWith(1, 1)
+      expect(electron.app.setBadgeCount).toHaveBeenNthCalledWith(2, 2)
+      expect(electron.browserWindows[0]?.flashFrame).not.toHaveBeenCalled()
+
+      runtime.show()
+      expect(electron.app.setBadgeCount).toHaveBeenLastCalledWith(0)
+      expect(electron.browserWindows[0]?.flashFrame).not.toHaveBeenCalled()
+
+      await release()
+    },
+  )
+
+  it('flashes and clears attention on Windows without badge calls', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    runtime.notifyAttention({ title: 'Background Job Failed', body: 'A background job needs attention.' })
+
+    expect(electron.notifications).toHaveLength(1)
+    expect(electron.browserWindows[0]?.flashFrame).toHaveBeenCalledWith(true)
+    expect(electron.app.setBadgeCount).not.toHaveBeenCalled()
+
+    const focusListener = electron.browserWindowOn.mock.calls.find(([event]) => event === 'focus')?.[1]
+    expect(focusListener).toEqual(expect.any(Function))
+    focusListener()
+
+    expect(electron.browserWindows[0]?.flashFrame).toHaveBeenLastCalledWith(false)
+    expect(electron.app.setBadgeCount).not.toHaveBeenCalled()
+
+    await release()
+  })
+
+  it('reveals the app and clears attention when the native notification is clicked', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    runtime.notifyAttention({ title: 'Background Job Completed', body: 'A background job has finished.' })
+
+    const notification = electron.notifications[0]
+    const clickListener = notification?.once.mock.calls.find(([event]) => event === 'click')?.[1]
+    expect(clickListener).toEqual(expect.any(Function))
+
+    clickListener()
+
+    expect(electron.browserWindows[0]?.show).toHaveBeenCalled()
+    expect(electron.browserWindows[0]?.focus).toHaveBeenCalled()
+    expect(electron.app.setBadgeCount).toHaveBeenLastCalledWith(0)
+
+    await release()
   })
 
   it('starts the downloaded Windows installer before requesting orderly exit', async () => {

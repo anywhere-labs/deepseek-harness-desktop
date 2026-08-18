@@ -72,6 +72,55 @@ const diagnosticsPrivacyCopy: Record<DesktopLocale, DesktopDiagnosticsPrivacyCop
   },
 }
 
+export interface DesktopAttentionCopy {
+  readonly title: string
+  readonly body: string
+}
+
+const completedJobCopy: Record<DesktopLocale, DesktopAttentionCopy> = {
+  en: {
+    title: 'Background Job Completed',
+    body: 'A background job has finished.',
+  },
+  zh: {
+    title: '后台任务已完成',
+    body: '有一个后台任务已结束。',
+  },
+}
+
+const failedJobCopy: Record<DesktopLocale, DesktopAttentionCopy> = {
+  en: {
+    title: 'Background Job Failed',
+    body: 'A background job needs attention.',
+  },
+  zh: {
+    title: '后台任务失败',
+    body: '有一个后台任务需要处理。',
+  },
+}
+
+const completedTurnCopy: Record<DesktopLocale, DesktopAttentionCopy> = {
+  en: {
+    title: 'Turn Completed',
+    body: 'A direct user turn has finished.',
+  },
+  zh: {
+    title: '用户回合已完成',
+    body: '有一个用户回合已结束。',
+  },
+}
+
+const failedTurnCopy: Record<DesktopLocale, DesktopAttentionCopy> = {
+  en: {
+    title: 'User Turn Failed',
+    body: 'A direct user turn needs attention.',
+  },
+  zh: {
+    title: '用户回合失败',
+    body: '有一个用户回合需要处理。',
+  },
+}
+
 /** Resolve DSH's zh/en locale from an Electron or browser language tag. */
 export function desktopLocaleFromLanguageTag(languageTag: string): DesktopLocale {
   return /^zh(?:[-_]|$)/i.test(languageTag) ? 'zh' : 'en'
@@ -89,4 +138,20 @@ export function desktopTrayLabel(
 /** Resolve the native privacy confirmation shown before diagnostics export. */
 export function desktopDiagnosticsPrivacyCopy(locale: DesktopLocale): DesktopDiagnosticsPrivacyCopy {
   return diagnosticsPrivacyCopy[locale]
+}
+
+/** Resolve the privacy-safe native copy shown for background-job attention. */
+export function desktopJobNotificationCopy(
+  locale: DesktopLocale,
+  status: 'completed' | 'failed',
+): DesktopAttentionCopy {
+  return status === 'completed' ? completedJobCopy[locale] : failedJobCopy[locale]
+}
+
+/** Resolve the privacy-safe native copy shown for direct-user turn attention. */
+export function desktopTurnNotificationCopy(
+  locale: DesktopLocale,
+  status: 'completed' | 'failed',
+): DesktopAttentionCopy {
+  return status === 'completed' ? completedTurnCopy[locale] : failedTurnCopy[locale]
 }

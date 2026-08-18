@@ -158,6 +158,8 @@ Release operator 必须先发布两个平台产物，再让版本可被发现。
 
 在 macOS 与 Windows 上，**Open DSH Terminal** 会打开以当前激活 profile 为工作目录的系统终端。欢迎信息会显示应用版本、当前 profile、profile 目录与 DSH home，并列出配置与插件管理命令。在该终端内，裸 `dsh`、`dsh --dump-config`，以及没有选择 profile 的 plugin 子命令都会默认使用当前激活 profile；显式 `--profile` 与上游 `web` alias 会保留原有含义。DSH Desktop 会在自身 user-data 目录下按 profile 生成私有 `dsh`、`pnpm` 与 `node` shim，设置 `DSH_HOME`，使用当前 profile 作为工作目录，并且只在该终端的 `PATH` 前置 shim 目录；之后切换 profile 不会改变已经打开的终端命令。它不会修改全局环境或 shell 启动文件。macOS launcher 会先保留用户的交互式 zsh 或 bash 设置，再恢复 desktop 自有变量。Windows 会依次选择 PowerShell 7、Windows PowerShell 或命令提示符，并在新的 Windows Terminal 窗口中打开；如果 `wt.exe` 不可用，则由私有 `cmd start` broker 创建可见控制台。同步启动失败与 broker 非正常退出会显示在原生错误对话框中。Linux 不组合该终端命令。
 
+当组合了可选的 jobs service 和/或可选的 sessions service 时，DSH Desktop 会为后台任务和在 `turn/end` 收束的直接用户回合触发保护隐私的原生 attention 提示。任务通知覆盖 `completed` 与 `failed`，`killed` 任务保持静默。回合通知覆盖 `completed`、`error` 与 `max-tokens`，而 `aborted`、`blocked`、`interrupted`、不匹配的 turn 结束事件、plugin 来源回合、只有 continuation 的回合以及 subagent session 都保持静默。实时 `dsh-desktop-notifications` settings namespace 控制 `notifyOnTurnCompletion`、`notifyOnTurnFailure`、`notifyOnJobCompletion` 与 `notifyOnJobFailure`，四者默认都为 `true`。原生文案始终保持泛化，不会包含 prompt 文本、assistant 文本、session id、路径、模型或 provider 名称、错误、tool 数据、任务 label、命令文本或输出内容。
+
 ## 日志与诊断
 
 DSH Desktop 将 UTF-8 日志写入 Electron 用户数据目录：Windows 位于 `%APPDATA%\DSH Desktop\logs`，macOS 位于 `~/Library/Application Support/DSH Desktop/logs`。完整日志使用 `dsh-YYYY-MM-DD.log`，warning 与 error 还会写入 `dsh-YYYY-MM-DD.error.log`。单文件达到 10 MiB 后轮转，启动时删除七天前的文件，整个目录保持在 200 MiB 以下。`dsh-desktop.logLevel` 设置控制详细程度，默认为 `info`。

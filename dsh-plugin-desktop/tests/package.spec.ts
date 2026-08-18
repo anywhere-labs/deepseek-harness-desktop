@@ -46,6 +46,17 @@ const workspaceManifest = JSON.parse(readFileSync(new URL('package.json', worksp
 }
 const ciWorkflow = readFileSync(new URL('.github/workflows/ci.yml', workspaceRoot), 'utf8')
 
+function gitBlobHash(content: string): string {
+  return createHash('sha1')
+    .update(`blob ${Buffer.byteLength(content, 'utf8')}\0${content}`)
+    .digest('hex')
+}
+
+function recordedBlobHash(i18nPath: string, filename: string): string | undefined {
+  const yaml = readFileSync(new URL(i18nPath, packageRoot), 'utf8')
+  return yaml.match(new RegExp(`^${filename}: ([0-9a-f]{40})$`, 'mu'))?.[1]
+}
+
 describe('published package surface', () => {
   it('registers both npm launcher names', () => {
     expect(manifest.name).toBe('dsh-plugin-desktop')
@@ -85,6 +96,11 @@ describe('published package surface', () => {
       types: './lib/types/diagnostics.d.ts',
       default: './lib/diagnostics.js',
     })
+    expect(manifest.exports).toHaveProperty('./notifications', {
+      types: './lib/types/notifications.d.ts',
+      default: './lib/notifications.js',
+    })
+    expect(manifest.exports).not.toHaveProperty('./job-notifications')
     expect(manifest.exports).toHaveProperty('./updates', {
       types: './lib/types/updates.d.ts',
       default: './lib/updates.js',
@@ -110,6 +126,8 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/pnpm')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/profiles')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).not.toContain('name: dsh-plugin-desktop/job-notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
   })
 
@@ -156,10 +174,42 @@ describe('published package surface', () => {
     expect(config).toContain("pnpm: 'src/pnpm.ts'")
     expect(config).toContain("profiles: 'src/profiles.ts'")
     expect(config).toContain("diagnostics: 'src/diagnostics.ts'")
+    expect(config).toContain("notifications: 'src/notifications.ts'")
+    expect(config).not.toContain("'job-notifications': 'src/job-notifications.ts'")
     expect(config).toContain("'diagnostic-export-worker': 'src/diagnostic-export-worker.ts'")
     expect(config).toContain("terminal: 'src/terminal.ts'")
     expect(config).toContain("'update-download': 'src/update-download.ts'")
     expect(config).toContain("updates: 'src/updates.ts'")
+  })
+
+  it('keeps notification docs and bilingual metadata aligned with the renamed live settings', () => {
+    const readmeEn = readFileSync(new URL('README.md', packageRoot), 'utf8')
+    const readmeZh = readFileSync(new URL('README.zh.md', packageRoot), 'utf8')
+    const servicesEn = readFileSync(new URL('docs/plugin-services.md', packageRoot), 'utf8')
+    const servicesZh = readFileSync(new URL('docs/plugin-services.zh.md', packageRoot), 'utf8')
+
+    expect(readmeEn).toContain('dsh-desktop-notifications')
+    expect(readmeEn).toContain('notifyOnTurnCompletion')
+    expect(readmeEn).toContain('notifyOnTurnFailure')
+    expect(readmeEn).toContain('notifyOnJobCompletion')
+    expect(readmeEn).toContain('notifyOnJobFailure')
+    expect(readmeEn).not.toContain('dsh-desktop-job-notifications')
+    expect(readmeEn).not.toContain('notifyOnCompletion')
+    expect(readmeEn).not.toContain('notifyOnFailure')
+
+    expect(readmeZh).toContain('dsh-desktop-notifications')
+    expect(readmeZh).toContain('notifyOnTurnCompletion')
+    expect(readmeZh).toContain('notifyOnTurnFailure')
+    expect(readmeZh).toContain('notifyOnJobCompletion')
+    expect(readmeZh).toContain('notifyOnJobFailure')
+    expect(readmeZh).not.toContain('dsh-desktop-job-notifications')
+    expect(readmeZh).not.toContain('notifyOnCompletion')
+    expect(readmeZh).not.toContain('notifyOnFailure')
+
+    expect(recordedBlobHash('README.i18n.yaml', 'README.md')).toBe(gitBlobHash(readmeEn))
+    expect(recordedBlobHash('README.i18n.yaml', 'README.zh.md')).toBe(gitBlobHash(readmeZh))
+    expect(recordedBlobHash('docs/plugin-services.i18n.yaml', 'plugin-services.md')).toBe(gitBlobHash(servicesEn))
+    expect(recordedBlobHash('docs/plugin-services.i18n.yaml', 'plugin-services.zh.md')).toBe(gitBlobHash(servicesZh))
   })
 
   it('installs Host command PATHs after the launch snapshot and before profile boot', () => {
