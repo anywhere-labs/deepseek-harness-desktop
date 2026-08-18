@@ -182,6 +182,8 @@ describe('published package surface', () => {
     expect(boot).toBeGreaterThan(installDsh)
     expect(main).toContain("'dsh-plugin-desktop: packaged pnpm runtime PATH'")
     expect(main).toContain("'dsh-plugin-desktop: packaged dsh runtime PATH'")
+    expect(main).toContain("args: ['--host', '127.0.0.1', '--port', String(prepared.port)]")
+    expect(main).not.toContain("'--port', '0'")
     expect(main).toContain('disposePnpmRuntime?.()')
     expect(main).toContain('disposeDshRuntime?.()')
   })

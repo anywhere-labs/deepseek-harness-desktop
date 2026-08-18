@@ -21,6 +21,17 @@ Switching profiles does not silently copy plugins from the old profile into the 
 
 Changing mode restarts the application; it does not hot-swap root slots or native materials in a live renderer. Linux provides compatibility mode only.
 
+## Local Web port
+
+Desktop lets the operating system choose a random local Web port by default (`dsh-desktop.port: 0`), which avoids collisions with other services. Browser `localStorage` is isolated by origin, so UI plugins that store settings there need a fixed port to read the same settings after Desktop restarts:
+
+```yaml
+dsh-desktop:
+  port: 43189
+```
+
+The port must be an integer from `0` through `65535`. Changing it performs an orderly restart, and the service remains bound only to `127.0.0.1`. If another program already uses a fixed port, Desktop cannot start; release that port or change the setting back to `0` or another available port.
+
 ## Plugin management
 
 Plugins are extensions that add capabilities to DSH, such as models, tools, interfaces, and workflows. DSH Desktop uses the same plugin system as official Harness, so official plugins install and work directly; multiple plugins follow the same conventions and can be installed and used together.

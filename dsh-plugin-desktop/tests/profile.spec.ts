@@ -7,6 +7,7 @@ import { composeEntries, initProfile, PROFILE_TEMPLATES } from '@deepseek-ai/dsh
 import {
   DESKTOP_PACKAGE_NAME,
   desktopShellModeFromSettings,
+  desktopStartupSettingsFromSettings,
   desktopBundleList,
   ensureDesktopProfile,
   prepareDesktopProfile,
@@ -277,17 +278,21 @@ describe('desktop profile composition', {
     }))
   })
 
-  it('projects advanced YAML settings into the Host and client Loader rows', () => {
+  it('projects YAML startup settings into the Host, Web server, and client Loader rows', () => {
     const home = temporaryHome()
-    writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: advanced\n')
+    writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: advanced\n  port: 43189\n')
 
     const prepared = prepareDesktopProfile(undefined, home, 'darwin')
     const rows = composeEntries([prepared.patches])
 
     expect(prepared.mode).toBe('advanced')
+    expect(prepared.port).toBe(43_189)
     expect(rows.find(row => row.id === 'desktop-shell')).toEqual(expect.objectContaining({
       disabled: false,
-      config: expect.objectContaining({ mode: 'advanced' }),
+      config: expect.objectContaining({ mode: 'advanced', port: 43_189 }),
+    }))
+    expect(rows.find(row => row.id === 'webserver')).toEqual(expect.objectContaining({
+      config: { host: '127.0.0.1', port: 43_189 },
     }))
     expect(rows.find(row => row.id === 'settings')).toEqual(expect.objectContaining({
       config: expect.objectContaining({ dshHome: home }),
@@ -303,6 +308,14 @@ describe('desktop profile composition', {
     writeFileSync(path, JSON.stringify({ 'dsh-desktop': { mode: 'advanced' } }))
 
     expect(readDesktopShellMode({ path })).toBe('advanced')
+    expect(desktopStartupSettingsFromSettings({ 'dsh-desktop': { mode: 'advanced', port: 43_189 } })).toEqual({
+      mode: 'advanced',
+      port: 43_189,
+    })
+    expect(desktopStartupSettingsFromSettings({ 'dsh-desktop': { mode: 'advanced' } })).toEqual({
+      mode: 'advanced',
+      port: 0,
+    })
     expect(desktopShellModeFromSettings({ unrelated: { enabled: true } })).toBe('compatibility')
   })
 
@@ -312,6 +325,11 @@ describe('desktop profile composition', {
     expect(() => desktopShellModeFromSettings({ 'dsh-desktop': { mode: 'glass' } })).toThrow(
       'must be "compatibility" or "advanced"',
     )
+    for (const port of [-1, 1.5, 65_536, '43189']) {
+      expect(() => desktopStartupSettingsFromSettings({ 'dsh-desktop': { port } })).toThrow(
+        'port must be an integer from 0 through 65535',
+      )
+    }
 
     const home = temporaryHome()
     const path = join(home, 'invalid.yaml')

@@ -172,6 +172,21 @@ DSH Desktop 将 UTF-8 日志写入 Electron 用户数据目录：Windows 位于 
 
 `yarn package:dir` 为当前宿主平台创建未封装目录。如果应用归档缺少 desktop 更新与终端模块、DSH CLI bootstrap、内置 pnpm 入口或物理 deployment package，packaged-runtime gate 会拒绝该产物。Electron Builder 会把根 manifest、desktop runtime 与完整依赖树输出到 `app.asar.unpacked`；Host profile boot 与 CLI bootstrap 都会使用这棵物理树，因此 DSH profile fallback 的符号链接不会指向虚拟 ASAR 目录。`build/app-icon.png` 保持为未经修改的 iOS Default 源图，并继续作为 Windows 与 Linux 应用图标。构建过程会运行 `scripts/generate-mac-app-icon.mjs`，把该图缩放为 824 × 824 像素并居中放入透明的 1024 × 1024 画布；macOS 打包与运行中的 Dock 都使用生成的 `build/app-icon-mac.png`。`build/tray-icon.svg` 是品牌蓝托盘源文件：构建过程会派生由 macOS 系统自动着色的模板图，以及固定品牌蓝的 Windows 与 Linux 托盘图。
 
+### WSL Linux 无界面检查
+
+在 Windows 工作站上，WSL2 适合覆盖 Linux 无界面的 build、typecheck 和 unit test。请使用 WSL 内部安装的 Linux Node.js，不要使用 WSL 通过挂载的 Windows `PATH` 继承到的 Windows Node.js 或 Corepack shim。使用 `nvm` 时，每个 shell 先执行 `source ~/.nvm/nvm.sh`，再运行 Corepack 命令：
+
+```bash
+source ~/.nvm/nvm.sh
+git submodule update --init --recursive
+corepack yarn install --immutable
+corepack yarn workspace dsh-plugin-desktop typecheck
+corepack yarn workspace dsh-plugin-desktop test
+corepack yarn build
+```
+
+从 `/mnt/<drive>` 运行命令是有效的，但会比放在 WSL 原生 ext4 文件系统中的 checkout 更慢。WSL 不能替代真实 Linux 桌面会话来验证托盘、窗口管理器、`.desktop` 集成或安装后 smoke test。
+
 ### Windows x64 本地安装包
 
 请使用原生 Windows x64 电脑，并安装 Git 与 x64 Node `22.23.2`（与 CI 使用的版本相同）。打包命令接受官方发行版仍包含所需 Corepack 命令的 Node `22.19+` 与 Node `24.x`。在一个最新的 `v2` checkout 中打开 PowerShell，然后执行：

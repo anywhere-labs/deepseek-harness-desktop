@@ -359,7 +359,7 @@ async function start(): Promise<void> {
           requestRestart: () => runtime.requestRestart(),
         })
         provideCmdline(hostCtx, {
-          args: ['--host', '127.0.0.1', '--port', '0'],
+          args: ['--host', '127.0.0.1', '--port', String(prepared.port)],
           exit: requestQuit,
         })
       },

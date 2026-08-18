@@ -22,6 +22,7 @@ import { RENDERER_BOOT_REPORT_PATH, type RendererBootReport } from '../src/rende
 
 const config: DesktopConfig = {
   mode: 'compatibility',
+  port: 0,
   width: 1280,
   height: 840,
   minWidth: 900,
@@ -151,7 +152,10 @@ describe('desktop Host plugin', () => {
   it('defaults to compatibility mode and validates both schemas', () => {
     expect(Config({} as DesktopConfig)).toEqual(config)
     expect(Config({ mode: 'advanced' } as DesktopConfig)).toEqual({ ...config, mode: 'advanced' })
-    expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', logLevel: 'info' })
+    expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', port: 0, logLevel: 'info' })
+    expect(() => DesktopSettingsSchema({ port: -1 } as DesktopSettings)).toThrow()
+    expect(() => DesktopSettingsSchema({ port: 1.5 } as DesktopSettings)).toThrow()
+    expect(() => DesktopSettingsSchema({ port: 65_536 } as DesktopSettings)).toThrow()
     expect(() => Config({ mode: 'custom' } as never)).toThrow()
     expect(String(DESKTOP_SETTINGS_NAMESPACE)).toBe('dsh-desktop')
   })
@@ -290,11 +294,37 @@ describe('desktop Host plugin', () => {
     const harness = createHarness()
     apply(harness.ctx, config)
 
-    await harness.notify({ mode: 'compatibility', logLevel: 'info' }, { mode: 'compatibility', logLevel: 'info' })
+    await harness.notify(
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+    )
     expect(harness.restart).not.toHaveBeenCalled()
 
     harness.restart.mockImplementation(() => new Promise<void>(() => {}))
-    await harness.notify({ mode: 'advanced', logLevel: 'info' }, { mode: 'compatibility', logLevel: 'info' })
+    await harness.notify(
+      { mode: 'advanced', port: 0, logLevel: 'info' },
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+    )
+    await vi.runAllTimersAsync()
+    expect(harness.restart).toHaveBeenCalledOnce()
+  })
+
+  it('requests one orderly restart after the configured Web port changes', async () => {
+    vi.useFakeTimers()
+    const harness = createHarness()
+    apply(harness.ctx, config)
+
+    await harness.notify(
+      { mode: 'compatibility', port: 0, logLevel: 'debug' },
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+    )
+    expect(harness.restart).not.toHaveBeenCalled()
+
+    harness.restart.mockImplementation(() => new Promise<void>(() => {}))
+    await harness.notify(
+      { mode: 'compatibility', port: 43_189, logLevel: 'debug' },
+      { mode: 'compatibility', port: 0, logLevel: 'debug' },
+    )
     await vi.runAllTimersAsync()
     expect(harness.restart).toHaveBeenCalledOnce()
   })
