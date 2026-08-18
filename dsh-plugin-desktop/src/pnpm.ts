@@ -1,6 +1,7 @@
 /** Desktop-owned package-manager capability for the active DSH profile. */
 
-import { delimiter, isAbsolute } from 'node:path'
+import { createRequire } from 'node:module'
+import { delimiter, dirname, isAbsolute, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Readable } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -117,6 +118,29 @@ function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
   }
 }
 
+/**
+ * Resolve a node-gyp entry pnpm lifecycle scripts can use.
+ *
+ * Packaged pnpm ships its own node-gyp at `dist/node_modules/node-gyp`, but
+ * Electron Builder prunes nested `node_modules` inside the packaged pnpm
+ * release, so that path does not exist in the shipped app (see
+ * `node_modules/pnpm/dist`). Point pnpm at the node-gyp we declare as a
+ * direct dependency instead; `npm_config_node_gyp` is the npm/pnpm knob
+ * that overrides the lifecycle tool without touching the package tree.
+ *
+ * @returns the absolute node-gyp.js path, or undefined when unavailable
+ * (lifecycle scripts then fail loudly with pnpm's own diagnostic).
+ */
+function resolveNodeGyp(): string | undefined {
+  try {
+    const requireFromPlugin = createRequire(import.meta.url)
+    const packageJson = requireFromPlugin.resolve('node-gyp/package.json')
+    return join(dirname(packageJson), 'bin', 'node-gyp.js')
+  } catch {
+    return undefined
+  }
+}
+
 /** Host service providing one managed pnpm operation at a time. */
 export class DesktopPnpm extends Service {
   private active: ActiveOperation | undefined
@@ -206,6 +230,7 @@ export class DesktopPnpm extends Service {
     }
     command.signal?.throwIfAborted()
     const path = inheritedPath()
+    const nodeGyp = resolveNodeGyp()
     const spec: SubprocessSpawnSpec = {
       argv: command.argv,
       cwd: command.cwd,
@@ -227,6 +252,7 @@ export class DesktopPnpm extends Service {
         npm_config_runtime: 'electron',
         npm_config_target: this.bootstrap.electronVersion,
         npm_config_disturl: ELECTRON_HEADERS_URL,
+        ...(nodeGyp === undefined ? {} : { npm_config_node_gyp: nodeGyp }),
       },
     }
     const child = this.ctx.subprocess.spawn(spec)
