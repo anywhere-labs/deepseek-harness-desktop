@@ -32,8 +32,8 @@ import type {
   DesktopUpdateAdapter,
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
-import type { DesktopLogger } from './desktop-logger.ts'
-import { exportDiagnosticsZip } from './diagnostic-export.ts'
+import { formatDesktopExitCode, type DesktopLogger } from './desktop-logger.ts'
+import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import {
   desktopDiagnosticsPrivacyCopy,
@@ -70,6 +70,20 @@ export function desktopProductVersion(moduleUrl: string = import.meta.url): stri
 }
 
 const PRODUCT_VERSION = desktopProductVersion()
+const MIN_ZOOM_LEVEL = -4
+const MAX_ZOOM_LEVEL = 4
+
+function clampedZoomLevel(level: number): number {
+  return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level))
+}
+
+function isZoomShortcut(input: Electron.Input): 'in' | 'out' | 'reset' | undefined {
+  if (input.type !== 'keyDown' || input.alt || (!input.control && !input.meta)) return undefined
+  if (input.key === '+' || input.key === '=') return 'in'
+  if (input.key === '-' || input.key === '_') return 'out'
+  if (input.key === '0') return 'reset'
+  return undefined
+}
 
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
@@ -96,6 +110,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
+  private directoryPickTask: Promise<string | null> | undefined
   private rendererBootReported = false
 
   constructor(
@@ -165,6 +180,33 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()
+  }
+
+  /** @inheritdoc */
+  async pickDirectory(): Promise<string | null> {
+    if (this.platform !== 'win32') {
+      throw new Error(`dsh-plugin-desktop: native workspace picker is unavailable on ${this.platform}`)
+    }
+    if (this.directoryPickTask !== undefined) return await this.directoryPickTask
+    const task = this.showDirectoryPicker()
+    this.directoryPickTask = task
+    try {
+      return await task
+    } finally {
+      if (this.directoryPickTask === task) this.directoryPickTask = undefined
+    }
+  }
+
+  private async showDirectoryPicker(): Promise<string | null> {
+    const options: Electron.OpenDialogOptions = {
+      title: this.currentLocale === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
+      properties: ['openDirectory', 'dontAddToRecent'],
+    }
+    const window = this.window
+    const result = window === undefined || window.isDestroyed()
+      ? await dialog.showOpenDialog(options)
+      : await dialog.showOpenDialog(window, options)
+    return result.canceled ? null : result.filePaths[0] ?? null
   }
 
   /** @inheritdoc */
@@ -251,10 +293,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         noLink: true,
       })
       if (confirmation.response !== 0) return
-      const path = await exportDiagnosticsZip(
-        join(app.getPath('userData'), 'logs'),
-        app.getPath('userData'),
-      )
+      const path = await exportDesktopDiagnostics(app.getPath('userData'), {
+        appVersion: PRODUCT_VERSION,
+        crashDumpsDir: app.getPath('crashDumps'),
+      })
       shell.showItemInFolder(path)
     } catch (cause) {
       this.reportDiagnosticExportError(cause)
@@ -577,6 +619,17 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       window.hide()
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
+    const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
+      const action = isZoomShortcut(input)
+      if (action === undefined) return
+      event.preventDefault()
+      if (action === 'reset') {
+        window.webContents.setZoomLevel(0)
+        return
+      }
+      const step = action === 'in' ? 1 : -1
+      window.webContents.setZoomLevel(clampedZoomLevel(window.webContents.getZoomLevel() + step))
+    }
     const navigate = (event: Electron.Event<{ url: string }>): void => {
       let targetOrigin: string | undefined
       try {
@@ -590,10 +643,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     app.on('activate', show)
     window.on('close', close)
     window.on('page-title-updated', preserveBlankTitle)
+    window.webContents.on('before-input-event', handleZoomShortcut)
     window.webContents.on('will-frame-navigate', navigate)
     window.webContents.on('will-redirect', navigate)
     window.webContents.on('render-process-gone', (_event, details) => {
-      this.logError(`dsh-plugin-desktop: renderer process gone (reason: ${details.reason}, exitCode: ${details.exitCode})`)
+      this.logError(`dsh-plugin-desktop: renderer process gone (reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`)
     })
     window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       this.logError(`dsh-plugin-desktop: renderer failed to load (${errorCode}: ${errorDescription})`)
@@ -625,6 +679,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     } catch (cause) {
       app.off('activate', show)
       window.off('page-title-updated', preserveBlankTitle)
+      window.webContents.off('before-input-event', handleZoomShortcut)
       tray?.off('click', show)
       tray?.destroy()
       window.destroy()
@@ -645,6 +700,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       app.off('activate', show)
       window.off('close', close)
       window.off('page-title-updated', preserveBlankTitle)
+      window.webContents.off('before-input-event', handleZoomShortcut)
       window.webContents.off('will-frame-navigate', navigate)
       window.webContents.off('will-redirect', navigate)
       mountedTray.off('click', show)

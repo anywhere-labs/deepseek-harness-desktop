@@ -1,3 +1,5 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -81,17 +83,67 @@ describe('packaged dsh bootstrap', () => {
     expect(unpackedAsarPath('/Applications/DSH Desktop.app/Contents/Resources/app.asar/package.json'))
       .toBe('/Applications/DSH Desktop.app/Contents/Resources/app.asar.unpacked/package.json')
     expect(unpackedAsarPath('/workspace/node_modules/pkg')).toBe('/workspace/node_modules/pkg')
-    const moduleUrl = pathToFileURL(join(process.cwd(), 'app.asar', 'lib', 'desktop-cli.js')).href
-    expect(packagedDependencyPath(moduleUrl, '@deepseek-ai/dsh/lib/bin.js')).toBe(join(
-      process.cwd(),
-      'app.asar.unpacked',
-      'node_modules',
-      '@deepseek-ai',
-      'dsh',
-      'lib',
-      'bin.js',
-    ))
     expect(() => packagedDependencyPath(import.meta.url, '../outside.js'))
       .toThrow('relative POSIX path')
+  })
+
+  it('maps a resolved ASAR dependency to its physical unpacked path', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-asar-profile-'))
+    const desktopLib = join(root, 'app.asar', 'lib')
+    const dshPackage = join(root, 'app.asar', 'node_modules', '@deepseek-ai', 'dsh')
+    try {
+      mkdirSync(desktopLib, { recursive: true })
+      mkdirSync(join(dshPackage, 'lib'), { recursive: true })
+      writeFileSync(join(dshPackage, 'package.json'), JSON.stringify({
+        name: '@deepseek-ai/dsh',
+        type: 'module',
+      }))
+      writeFileSync(join(dshPackage, 'lib', 'bin.js'), '')
+
+      const moduleUrl = pathToFileURL(join(desktopLib, 'desktop-cli.js')).href
+      expect(packagedDependencyPath(moduleUrl, '@deepseek-ai/dsh/lib/bin.js')).toBe(join(
+        realpathSync(root),
+        'app.asar.unpacked',
+        'node_modules',
+        '@deepseek-ai',
+        'dsh',
+        'lib',
+        'bin.js',
+      ))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('resolves the DSH entry from a pnpm profile with flat package dependencies', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-flat-profile-'))
+    const desktopLib = join(root, 'node_modules', 'dsh-plugin-desktop', 'lib')
+    const dshPackage = join(root, 'node_modules', '@deepseek-ai', 'dsh')
+    const dshEntry = join(dshPackage, 'lib', 'bin.js')
+    const pnpmPackage = join(root, 'node_modules', 'pnpm')
+    const pnpmEntry = join(pnpmPackage, 'bin', 'pnpm.mjs')
+    try {
+      mkdirSync(desktopLib, { recursive: true })
+      mkdirSync(join(dshPackage, 'lib'), { recursive: true })
+      mkdirSync(join(pnpmPackage, 'bin'), { recursive: true })
+      writeFileSync(join(dshPackage, 'package.json'), JSON.stringify({
+        name: '@deepseek-ai/dsh',
+        type: 'module',
+      }))
+      writeFileSync(dshEntry, '')
+      writeFileSync(join(pnpmPackage, 'package.json'), JSON.stringify({
+        name: 'pnpm',
+        exports: { '.': './package.json' },
+      }))
+      writeFileSync(pnpmEntry, '')
+
+      const moduleUrl = pathToFileURL(join(desktopLib, 'desktop-cli.js')).href
+      expect(packagedDependencyPath(moduleUrl, '@deepseek-ai/dsh/lib/bin.js'))
+        .toBe(join(realpathSync(root), 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))
+      expect(packagedDependencyPath(moduleUrl, 'pnpm/bin/pnpm.mjs'))
+        .toBe(join(realpathSync(root), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

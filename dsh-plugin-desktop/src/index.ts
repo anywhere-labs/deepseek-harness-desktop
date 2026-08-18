@@ -18,6 +18,8 @@ import {
   handleRendererBootRequest,
   RENDERER_BOOT_REPORT_PATH,
 } from './renderer-boot.ts'
+import { DESKTOP_DIRECTORY_PICKER_PATH } from './directory-picker-contract.ts'
+import { handleDesktopDirectoryPickerRequest } from './directory-picker-route.ts'
 import type { DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 
@@ -38,6 +40,8 @@ const UI_LOCALE_SETTINGS_NAMESPACE = settingsNamespace(LOCALE_SETTINGS_NAMESPACE
 export interface DesktopSettings {
   /** Native presentation selected for the next application generation. */
   mode: DesktopShellMode
+  /** Loopback Web port selected for the next application generation; zero requests a random port. */
+  port: number
   /** Log verbosity threshold applied to the file logger. */
   logLevel: 'debug' | 'info' | 'warn' | 'error'
 }
@@ -45,6 +49,7 @@ export interface DesktopSettings {
 /** Schema registered with the standard settings service. */
 export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
   mode: z.union(['compatibility', 'advanced'] as const).default('compatibility'),
+  port: z.number().step(1).min(0).max(65_535).default(0),
   logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info'),
 })
 
@@ -52,6 +57,8 @@ export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
 export interface Config {
   /** Native presentation mode selected before BrowserWindow construction. */
   mode: DesktopShellMode
+  /** Configured loopback Web port used to detect restart-applied settings changes. */
+  port: number
   /** Initial window width in CSS pixels. */
   width: number
   /** Initial window height in CSS pixels. */
@@ -65,6 +72,7 @@ export interface Config {
 /** Validated native window configuration. */
 export const Config: z<Config> = z.object({
   mode: z.union(['compatibility', 'advanced'] as const).default('compatibility'),
+  port: z.number().step(1).min(0).max(65_535).default(0),
   width: z.number().step(1).min(800).default(1280),
   height: z.number().step(1).min(600).default(840),
   minWidth: z.number().step(1).min(640).default(900),
@@ -147,10 +155,28 @@ export function apply(ctx: Context, config: Config): void {
     }),
     'dsh-plugin-desktop: renderer boot report route',
   )
+  if (runtime.platform === 'win32') {
+    ctx.effect(
+      () => ctx.webServer.register({
+        kind: 'exact',
+        path: DESKTOP_DIRECTORY_PICKER_PATH,
+        handler: (req, res) => handleDesktopDirectoryPickerRequest(
+          req,
+          res,
+          rendererOrigin,
+          () => runtime.pickDirectory(),
+          cause => {
+            ctx.logger.error(`dsh-plugin-desktop: native directory picker failed: ${cause instanceof Error ? cause.message : String(cause)}`)
+          },
+        ),
+      }),
+      'dsh-plugin-desktop: native directory picker route',
+    )
+  }
   ctx.effect(() => {
     let pending: ReturnType<typeof setImmediate> | undefined
     const stopWatching = settings.watch((next) => {
-      if (next.mode === config.mode) {
+      if (next.mode === config.mode && next.port === config.port) {
         if (pending !== undefined) clearImmediate(pending)
         pending = undefined
         return
@@ -158,7 +184,7 @@ export function apply(ctx: Context, config: Config): void {
       pending ??= setImmediate(() => {
         pending = undefined
         void runtime.requestRestart().catch((cause: unknown) => {
-          ctx.logger.error('dsh-plugin-desktop: failed to restart after mode change')
+          ctx.logger.error('dsh-plugin-desktop: failed to restart after startup setting change')
           ctx.logger.error(cause)
         })
       })
@@ -167,7 +193,7 @@ export function apply(ctx: Context, config: Config): void {
       stopWatching()
       if (pending !== undefined) clearImmediate(pending)
     }
-  }, 'dsh-plugin-desktop: restart after mode change')
+  }, 'dsh-plugin-desktop: restart after startup setting change')
   if (config.mode === 'advanced') {
     ctx.on('settings/updated', (namespace, next) => {
       if (namespace !== UI_THEME_SETTINGS_NAMESPACE) return

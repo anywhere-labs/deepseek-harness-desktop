@@ -26,7 +26,10 @@ const SKIPPABLE_FILE_ERRORS = new Set(['EACCES', 'EBUSY', 'ELOOP', 'ENOENT', 'EN
 interface DiagnosticExportWorkerData {
   readonly logsDir: string
   readonly userDataDir: string
-  readonly maxLogBytes: number
+  readonly appVersion: string
+  readonly maxEvidenceBytes: number
+  readonly crashDumpsDir?: string
+  readonly runStatePath?: string
 }
 
 export type DiagnosticExportWorkerResult =
@@ -56,6 +59,58 @@ function regularLogEntry(logsDir: string, name: string): LogEntry | undefined {
     if (skippableFileError(cause)) return undefined
     throw cause
   }
+}
+
+function regularEvidenceEntry(path: string, name: string): LogEntry | undefined {
+  try {
+    const stats = lstatSync(path)
+    return !stats.isSymbolicLink() && stats.isFile() ? { name, path, stats } : undefined
+  } catch (cause) {
+    if (skippableFileError(cause)) return undefined
+    throw cause
+  }
+}
+
+function crashDumpEntries(crashDumpsDir: string | undefined): LogEntry[] {
+  if (crashDumpsDir === undefined) return []
+  let rootStats: Stats
+  try {
+    rootStats = lstatSync(crashDumpsDir)
+  } catch (cause) {
+    if (skippableFileError(cause)) return []
+    throw cause
+  }
+  if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) {
+    throw new Error('dsh-plugin-desktop: refusing linked crash dump directory')
+  }
+  const entries: LogEntry[] = []
+  const pending = [{ path: crashDumpsDir, relativePath: '' }]
+  while (pending.length > 0) {
+    const directory = pending.pop()!
+    let names: string[]
+    try {
+      names = readdirSync(directory.path)
+    } catch (cause) {
+      if (skippableFileError(cause)) continue
+      throw cause
+    }
+    for (const name of names) {
+      const path = join(directory.path, name)
+      const relativePath = directory.relativePath === '' ? name : `${directory.relativePath}/${name}`
+      try {
+        const stats = lstatSync(path)
+        if (stats.isSymbolicLink()) continue
+        if (stats.isDirectory()) {
+          pending.push({ path, relativePath })
+        } else if (stats.isFile() && name.toLowerCase().endsWith('.dmp')) {
+          entries.push({ name: `crash-dumps/${relativePath}`, path, stats })
+        }
+      } catch (cause) {
+        if (!skippableFileError(cause)) throw cause
+      }
+    }
+  }
+  return entries
 }
 
 function readStableLog(entry: LogEntry, remainingBytes: number): Buffer | undefined {
@@ -102,30 +157,48 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
   const candidates = readdirSync(data.logsDir)
     .flatMap(name => regularLogEntry(data.logsDir, name) ?? [])
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
+  const crashCandidates = crashDumpEntries(data.crashDumpsDir)
+    .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs || b.name.localeCompare(a.name, 'en'))
+  const runStateCandidate = data.runStatePath === undefined
+    ? undefined
+    : regularEvidenceEntry(data.runStatePath, 'crash-evidence/active-run.json')
   const zip = new AdmZip()
   let includedBytes = 0
   let omittedFiles = 0
-  for (const entry of candidates) {
-    const content = readStableLog(entry, data.maxLogBytes - includedBytes)
+  let includedCrashDumps = 0
+  let omittedCrashDumps = 0
+  let includedActiveRunMarker = false
+  let omittedActiveRunMarker = false
+  for (const entry of [...(runStateCandidate === undefined ? [] : [runStateCandidate]), ...crashCandidates, ...candidates]) {
+    const content = readStableLog(entry, data.maxEvidenceBytes - includedBytes)
     if (content === undefined) {
-      omittedFiles += 1
+      if (entry.name.startsWith('crash-dumps/')) omittedCrashDumps += 1
+      else if (entry.name === 'crash-evidence/active-run.json') omittedActiveRunMarker = true
+      else omittedFiles += 1
       continue
     }
     zip.addFile(entry.name, content)
     includedBytes += content.byteLength
+    if (entry.name.startsWith('crash-dumps/')) includedCrashDumps += 1
+    else if (entry.name === 'crash-evidence/active-run.json') includedActiveRunMarker = true
   }
   const info = [
     'app: dsh-plugin-desktop',
+    `desktop-version: ${data.appVersion}`,
     `platform: ${process.platform}`,
     `arch: ${process.arch}`,
     `node: ${process.version}`,
     `electron: ${process.versions.electron ?? 'unknown'}`,
     `exported: ${new Date().toISOString()}`,
     `included-log-files: ${String(candidates.length - omittedFiles)}`,
-    `included-log-bytes: ${String(includedBytes)}`,
+    `included-evidence-bytes: ${String(includedBytes)}`,
     `omitted-log-files: ${String(omittedFiles)}`,
-    `log-byte-limit: ${String(data.maxLogBytes)}`,
-    'privacy: logs may contain local paths, workspace IDs, and session IDs',
+    `included-crash-dumps: ${String(includedCrashDumps)}`,
+    `omitted-crash-dumps: ${String(omittedCrashDumps)}`,
+    `included-active-run-marker: ${String(includedActiveRunMarker)}`,
+    `omitted-active-run-marker: ${String(omittedActiveRunMarker)}`,
+    `evidence-byte-limit: ${String(data.maxEvidenceBytes)}`,
+    'privacy: logs may contain local paths, workspace IDs, and session IDs; crash dumps may contain process memory',
   ].join('\n')
   zip.addFile('system-info.txt', Buffer.from(`${info}\n`, 'utf8'))
 

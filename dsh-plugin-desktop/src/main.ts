@@ -1,6 +1,6 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
-import { app } from 'electron'
+import { app, crashReporter } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -20,9 +20,16 @@ import {
 import { desktopProductVersion, ElectronDesktopRuntime } from './electron-runtime.ts'
 import {
   ElectronStderrLogger,
+  installDesktopChildProcessLogging,
   installDesktopUncaughtExceptionLogging,
   type DesktopLogger,
 } from './desktop-logger.ts'
+import {
+  beginDesktopRun,
+  startDesktopCrashReporting,
+  type DesktopRun,
+} from './crash-evidence.ts'
+import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import { FileExporter } from './file-exporter.ts'
 import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
 import { LogFileSink } from './log-files.ts'
@@ -110,7 +117,6 @@ function notifyWindowsVolumeConcerns(
 
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
 async function start(): Promise<void> {
-  app.setName(PRODUCT_NAME)
   if (!app.requestSingleInstanceLock()) {
     app.quit()
     return
@@ -122,6 +128,7 @@ async function start(): Promise<void> {
   let shutdown: DesktopShutdown | undefined
   let removeShutdownRequests: (() => void) | undefined
   let removeUncaughtExceptionLogging: (() => void) | undefined
+  let removeChildProcessLogging: (() => void) | undefined
   let disposeDshRuntime: (() => void) | undefined
   let disposePnpmRuntime: (() => void) | undefined
   let fileExporter: FileExporter | undefined
@@ -141,6 +148,36 @@ async function start(): Promise<void> {
     logSink = undefined
   }
   const electronLogger = new ElectronStderrLogger(logSink)
+  try {
+    startDesktopCrashReporting(crashReporter, {
+      productName: PRODUCT_NAME,
+      version: desktopProductVersion(),
+      platform: process.platform,
+      arch: process.arch,
+    })
+  } catch (cause) {
+    electronLogger.error(`${BIN_NAME}: local crash reporting unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  let desktopRun: DesktopRun | undefined
+  try {
+    desktopRun = beginDesktopRun(
+      join(app.getPath('userData'), 'crash-evidence', 'active-run.json'),
+      {
+        startedAt: new Date().toISOString(),
+        pid: process.pid,
+        version: desktopProductVersion(),
+      },
+    )
+    const previousRun = desktopRun.previousRun
+    if (previousRun !== undefined) {
+      electronLogger.error('unreadable' in previousRun
+        ? `${BIN_NAME}: previous desktop run did not shut down cleanly (active run marker unreadable)`
+        : `${BIN_NAME}: previous desktop run did not shut down cleanly (startedAt: ${previousRun.startedAt}, pid: ${String(previousRun.pid)}, version: ${previousRun.version})`)
+    }
+  } catch (cause) {
+    electronLogger.error(`${BIN_NAME}: active run tracking unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  removeChildProcessLogging = installDesktopChildProcessLogging(app, electronLogger)
   const nativeExit = createDesktopExitCoordinator(
     {
       prepareToQuit: () => { runtime.prepareToQuit() },
@@ -150,6 +187,12 @@ async function start(): Promise<void> {
     () => {
       removeShutdownRequests?.()
       removeUncaughtExceptionLogging?.()
+      removeChildProcessLogging?.()
+      try {
+        desktopRun?.markClean()
+      } catch (cause) {
+        electronLogger.error(`${BIN_NAME}: failed to clear active run marker: ${cause instanceof Error ? cause.message : String(cause)}`)
+      }
     },
   )
   let restartRequested = false
@@ -316,7 +359,7 @@ async function start(): Promise<void> {
           requestRestart: () => runtime.requestRestart(),
         })
         provideCmdline(hostCtx, {
-          args: ['--host', '127.0.0.1', '--port', '0'],
+          args: ['--host', '127.0.0.1', '--port', String(prepared.port)],
           exit: requestQuit,
         })
       },
@@ -370,4 +413,32 @@ async function start(): Promise<void> {
   }
 }
 
-void start()
+async function run(): Promise<void> {
+  app.setName(PRODUCT_NAME)
+  if (process.argv.includes('--export-diagnostics')) {
+    try {
+      await app.whenReady()
+      const path = await exportDesktopDiagnostics(app.getPath('userData'), {
+        appVersion: desktopProductVersion(),
+        crashDumpsDir: app.getPath('crashDumps'),
+      })
+      await new Promise<void>((resolve, reject) => {
+        process.stdout.write(`${path}\n`, error => {
+          if (error === undefined || error === null) resolve()
+          else reject(error)
+        })
+      })
+      app.exit(0)
+    } catch (cause) {
+      const message = `dsh-plugin-desktop: failed to export diagnostics: ${cause instanceof Error ? cause.stack ?? cause.message : String(cause)}\n`
+      await new Promise<void>(resolve => {
+        process.stderr.write(message, () => { resolve() })
+      })
+      app.exit(1)
+    }
+    return
+  }
+  await start()
+}
+
+void run()

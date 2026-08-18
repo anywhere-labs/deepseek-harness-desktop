@@ -42,6 +42,7 @@ export const DESKTOP_PROFILE_ROOT = 'cordis.yml'
 const BIN_NAME = DESKTOP_PACKAGE_NAME
 const REQUIRED_BUNDLES = requiredWebBundles()
 const REQUIRED_BUNDLE_SET = new Set(REQUIRED_BUNDLES)
+const OBSOLETE_DESKTOP_BUNDLE_SET = new Set(['@deepseek-ai/dsh-desktop-app'])
 const INSTALL_ANCHOR = unpackedAsarPath(fileURLToPath(new URL('../package.json', import.meta.url)))
 const DESKTOP_PATCH_PATH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
 const DIRECTORY_PICKER_ROW_ID = 'directory-picker'
@@ -52,7 +53,12 @@ const PWSH_SANDBOX_ROW_ID = 'pwsh-sandbox'
 const UPSTREAM_PWSH_SANDBOX_PACKAGE = '@deepseek-ai/dsh-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_ROW_ID = 'desktop-windows-pwsh-sandbox'
 const DESKTOP_WINDOWS_PWSH_SANDBOX_PACKAGE = 'dsh-plugin-desktop/windows-pwsh-sandbox'
+const AGENT_PRESETS_ROW_ID = 'agent-presets'
+const UPSTREAM_AGENT_PRESETS_PACKAGE = '@deepseek-ai/dsh-agent-presets'
+const DESKTOP_WINDOWS_AGENT_PRESETS_ROW_ID = 'desktop-windows-agent-presets'
+const DESKTOP_WINDOWS_AGENT_PRESETS_PACKAGE = 'dsh-plugin-desktop/windows-agent-presets'
 const DEFAULT_DESKTOP_SHELL_MODE: DesktopShellMode = 'compatibility'
+const DEFAULT_DESKTOP_PORT = 0
 const SETTINGS_FILE_PACKAGE = '@deepseek-ai/dsh-settings-file'
 const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
 const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
@@ -70,35 +76,61 @@ export function parseDesktopShellMode(value: unknown): DesktopShellMode {
   throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.mode must be "compatibility" or "advanced"`)
 }
 
+/** Parse the requested loopback Web port and reject values Node cannot listen on. */
+export function parseDesktopPort(value: unknown): number {
+  if (value === undefined) return DEFAULT_DESKTOP_PORT
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 65_535) return value
+  throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE}.port must be an integer from 0 through 65535`)
+}
+
+/** Startup settings projected into the Loader graph before the settings plugin boots. */
+export interface DesktopStartupSettings {
+  mode: DesktopShellMode
+  port: number
+}
+
 /**
- * Read a desktop mode from one parsed settings document.
+ * Read Desktop startup settings from one parsed settings document.
  * @param document - untrusted settings document root.
- * @returns the selected mode, defaulting to compatibility when absent.
+ * @returns validated mode and port defaults for the next generation.
  */
-export function desktopShellModeFromSettings(document: unknown): DesktopShellMode {
+export function desktopStartupSettingsFromSettings(document: unknown): DesktopStartupSettings {
   if (typeof document !== 'object' || document === null || Array.isArray(document)) {
     throw new Error(`${BIN_NAME}: settings document must be a map of namespace sections`)
   }
   const section = (document as Record<string, unknown>)[DESKTOP_SETTINGS_NAMESPACE]
-  if (section === undefined) return DEFAULT_DESKTOP_SHELL_MODE
+  if (section === undefined) {
+    return { mode: DEFAULT_DESKTOP_SHELL_MODE, port: DEFAULT_DESKTOP_PORT }
+  }
   if (typeof section !== 'object' || section === null || Array.isArray(section)) {
     throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE} settings must be a map`)
   }
-  return parseDesktopShellMode((section as Record<string, unknown>).mode)
+  const values = section as Record<string, unknown>
+  return {
+    mode: parseDesktopShellMode(values.mode),
+    port: parseDesktopPort(values.port),
+  }
+}
+
+/** Read only the shell mode from one parsed settings document. */
+export function desktopShellModeFromSettings(document: unknown): DesktopShellMode {
+  return desktopStartupSettingsFromSettings(document).mode
 }
 
 /**
- * Read startup mode from the same file resolved by the settings provider.
+ * Read startup settings from the same file resolved by the settings provider.
  * @param config - validated settings-file row config.
- * @returns the mode projected into the startup Loader graph.
+ * @returns the values projected into the startup Loader graph.
  */
-export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMode {
+export function readDesktopStartupSettings(config: SettingsFileConfig): DesktopStartupSettings {
   const spec = resolveSettingsFileSpec(config)
   let text: string
   try {
     text = readFileSync(spec.filename, 'utf8')
   } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return DEFAULT_DESKTOP_SHELL_MODE
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { mode: DEFAULT_DESKTOP_SHELL_MODE, port: DEFAULT_DESKTOP_PORT }
+    }
     throw cause
   }
   let document: unknown
@@ -111,7 +143,12 @@ export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMo
   } else {
     document = text.trim().length === 0 ? {} : JSON.parse(text)
   }
-  return desktopShellModeFromSettings(document)
+  return desktopStartupSettingsFromSettings(document)
+}
+
+/** Read only the shell mode from the settings provider's resolved file. */
+export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMode {
+  return readDesktopStartupSettings(config).mode
 }
 
 /** Resolve the public Web template once and reject an incompatible DSH release. */
@@ -139,6 +176,8 @@ export interface PreparedDesktopProfile {
   skippedOptionalEntries: SkippedOptionalEntry[]
   /** Persisted shell mode applied after every user-owned patch. */
   mode: DesktopShellMode
+  /** Persisted loopback Web port applied to every startup consumer. */
+  port: number
 }
 
 /** User patch entry skipped to keep a profile bootable. */
@@ -155,7 +194,9 @@ export interface SkippedOptionalEntry {
  * @returns base, Web carrier, then every third-party bundle in prior order.
  */
 export function desktopBundleList(current: readonly string[]): string[] {
-  const thirdParty = current.filter(name => !REQUIRED_BUNDLE_SET.has(name) && name !== DESKTOP_PACKAGE_NAME)
+  const thirdParty = current.filter(name => !REQUIRED_BUNDLE_SET.has(name)
+    && name !== DESKTOP_PACKAGE_NAME
+    && !OBSOLETE_DESKTOP_BUNDLE_SET.has(name))
   return [...REQUIRED_BUNDLES, ...thirdParty]
 }
 
@@ -196,9 +237,11 @@ export function ensureDesktopProfile(home: string = resolveDshHome()): string {
 }
 
 /** Resolve the agent presets shipped by the matching dsh CLI dependency. */
-function shippedPresetRoot(): string {
-  const require = createRequire(import.meta.url)
-  return join(dirname(require.resolve('@deepseek-ai/dsh/package.json')), 'config', 'agent-presets')
+export function shippedPresetRoot(moduleUrl: string = import.meta.url): string {
+  const require = createRequire(moduleUrl)
+  return unpackedAsarPath(
+    join(dirname(require.resolve('@deepseek-ai/dsh/package.json')), 'config', 'agent-presets'),
+  )
 }
 
 /** Read a row's object config without trusting arbitrary YAML values. */
@@ -339,7 +382,7 @@ export function prepareDesktopProfile(
     dshHome: home,
     ...rowConfig(settings),
   } as SettingsFileConfig)
-  const mode = readDesktopShellMode(settingsConfig)
+  const { mode, port } = readDesktopStartupSettings(settingsConfig)
   patches.push({
     id: 'settings',
     config: settingsConfig,
@@ -360,15 +403,32 @@ export function prepareDesktopProfile(
       { id: 'ui-conversation', disabled: false },
     )
   }
-  const presets = rows.get('agent-presets')
+  const presets = rows.get(AGENT_PRESETS_ROW_ID)
   if (presets !== undefined) {
-    patches.push({
-      id: 'agent-presets',
-      config: {
-        ...rowConfig(presets),
-        roots: [{ path: shippedPresetRoot(), trust: 'system' }],
-      },
-    })
+    const config = {
+      ...rowConfig(presets),
+      roots: [{ path: shippedPresetRoot(), trust: 'system' }],
+    }
+    if (platform === 'win32'
+      && presets.name === UPSTREAM_AGENT_PRESETS_PACKAGE
+      && !rowDisabledOnPlatform(presets, platform)) {
+      patches.push(
+        {
+          id: AGENT_PRESETS_ROW_ID,
+          name: UPSTREAM_AGENT_PRESETS_PACKAGE,
+          disabled: true,
+        },
+        {
+          insert: [{
+            id: DESKTOP_WINDOWS_AGENT_PRESETS_ROW_ID,
+            name: DESKTOP_WINDOWS_AGENT_PRESETS_PACKAGE,
+            config,
+          }],
+        },
+      )
+    } else {
+      patches.push({ id: AGENT_PRESETS_ROW_ID, config })
+    }
   }
   if (!rows.has('webserver')) {
     throw new Error(`${BIN_NAME}: desktop profile has no webserver row`)
@@ -422,7 +482,7 @@ export function prepareDesktopProfile(
   patches.push({
     id: 'webserver',
     disabled: false,
-    config: { host: '127.0.0.1', port: 0 },
+    config: { host: '127.0.0.1', port },
   })
   if ((telemetryDisabled ?? '') !== '' && rows.has('session-telemetry-otel')) {
     patches.push({ id: 'session-telemetry-otel', disabled: true })
@@ -437,6 +497,7 @@ export function prepareDesktopProfile(
     config: {
       ...rowConfig(desktopShell),
       mode,
+      port,
     },
   })
   return {
@@ -447,6 +508,7 @@ export function prepareDesktopProfile(
     patches: structuredClone(patches),
     skippedOptionalEntries,
     mode,
+    port,
   }
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { apply } from '../src/client/index.ts'
 import { provideDesktopLayout } from '../src/client/layout-service.ts'
 import { parseDesktopClientEnvironment } from '../src/client/environment.ts'
 import {
@@ -15,6 +16,20 @@ import {
 } from '../src/window-chrome.ts'
 
 describe('desktop client environment', () => {
+  it('does not activate desktop effects for an ordinary browser URL', () => {
+    vi.stubGlobal('window', { location: { search: '' } })
+    const effect = vi.fn()
+
+    try {
+      expect(parseDesktopClientEnvironment('')).toBeUndefined()
+      apply({ effect } as unknown as ClientContext)
+      expect(effect).not.toHaveBeenCalled()
+    }
+    finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('accepts the Electron-owned kebab query markers', () => {
     expect(parseDesktopClientEnvironment('?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin'))
       .toEqual({ mode: 'advanced', platform: 'darwin' })
@@ -23,9 +38,9 @@ describe('desktop client environment', () => {
   })
 
   it.each([
-    ['', 'dsh-desktop-mode'],
     ['?dsh-desktop-mode=glass&dsh-desktop-platform=darwin', 'dsh-desktop-mode'],
     ['?dsh-desktop-mode=advanced', 'dsh-desktop-platform'],
+    ['?dsh-desktop-platform=darwin', 'dsh-desktop-mode'],
     ['?dsh-desktop-mode=advanced&dsh-desktop-platform=android', 'dsh-desktop-platform'],
   ])('fails loud for malformed marker %s', (search, field) => {
     expect(() => parseDesktopClientEnvironment(search)).toThrow(field)

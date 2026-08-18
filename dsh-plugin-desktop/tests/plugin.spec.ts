@@ -16,11 +16,13 @@ import {
   type Config as DesktopConfig,
   type DesktopSettings,
 } from '../src/index.ts'
+import { DESKTOP_DIRECTORY_PICKER_PATH } from '../src/directory-picker-contract.ts'
 import type { DesktopRuntime, DesktopShellSpec } from '../src/runtime.ts'
 import { RENDERER_BOOT_REPORT_PATH, type RendererBootReport } from '../src/renderer-boot-contract.ts'
 
 const config: DesktopConfig = {
   mode: 'compatibility',
+  port: 0,
   width: 1280,
   height: 840,
   minWidth: 900,
@@ -38,7 +40,8 @@ interface PluginHarness {
   setLocalePreference: ReturnType<typeof vi.fn<(locale: LocaleId | undefined) => void>>
   setThemeSource: ReturnType<typeof vi.fn<(source: ThemePreference) => void>>
   rendererBoot: ReturnType<typeof vi.fn<(report: RendererBootReport) => void>>
-  rendererRoute(): WebRoute | undefined
+  pickDirectory: ReturnType<typeof vi.fn<() => Promise<string | null>>>
+  route(path: string): WebRoute | undefined
   notify(next: DesktopSettings, prev: DesktopSettings): Promise<void>
   notifyLocale(preference: LocaleId | undefined): void
   notifyTheme(preference: ThemePreference): void
@@ -52,7 +55,8 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   const setLocalePreference = vi.fn<(locale: LocaleId | undefined) => void>()
   const setThemeSource = vi.fn<(source: ThemePreference) => void>()
   const rendererBoot = vi.fn<(report: RendererBootReport) => void>()
-  let rendererRoute: WebRoute | undefined
+  const pickDirectory = vi.fn(async () => null)
+  const routes = new Map<string, WebRoute>()
   const settingsUpdated = new Set<(namespace: unknown, next: unknown) => void>()
   let localePreference: LocaleId | undefined
   let themePreference: ThemePreference = 'system'
@@ -79,6 +83,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     registerTrayItem: () => ({ refresh: () => {}, dispose: () => {} }),
     openTerminal: () => {},
     exportDiagnostics: async () => {},
+    pickDirectory,
     reportRendererBoot: rendererBoot,
     setLocalePreference,
     setThemeSource,
@@ -107,8 +112,8 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
       host: '127.0.0.1',
       port: 43120,
       register: vi.fn((route: WebRoute) => {
-        rendererRoute = route
-        return () => { if (rendererRoute === route) rendererRoute = undefined }
+        routes.set(route.path, route)
+        return () => { if (routes.get(route.path) === route) routes.delete(route.path) }
       }),
     },
     settings,
@@ -129,7 +134,8 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     setLocalePreference,
     setThemeSource,
     rendererBoot,
-    rendererRoute: () => rendererRoute,
+    pickDirectory,
+    route: path => routes.get(path),
     notify: async (next, prev) => { await watcher?.(next, prev) },
     notifyLocale: (preference) => {
       localePreference = preference
@@ -146,7 +152,10 @@ describe('desktop Host plugin', () => {
   it('defaults to compatibility mode and validates both schemas', () => {
     expect(Config({} as DesktopConfig)).toEqual(config)
     expect(Config({ mode: 'advanced' } as DesktopConfig)).toEqual({ ...config, mode: 'advanced' })
-    expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', logLevel: 'info' })
+    expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', port: 0, logLevel: 'info' })
+    expect(() => DesktopSettingsSchema({ port: -1 } as DesktopSettings)).toThrow()
+    expect(() => DesktopSettingsSchema({ port: 1.5 } as DesktopSettings)).toThrow()
+    expect(() => DesktopSettingsSchema({ port: 65_536 } as DesktopSettings)).toThrow()
     expect(() => Config({ mode: 'custom' } as never)).toThrow()
     expect(String(DESKTOP_SETTINGS_NAMESPACE)).toBe('dsh-desktop')
   })
@@ -220,7 +229,7 @@ describe('desktop Host plugin', () => {
   it('forwards same-origin renderer boot reports through the Host route', async () => {
     const harness = createHarness()
     apply(harness.ctx, config)
-    const route = harness.rendererRoute()
+    const route = harness.route(RENDERER_BOOT_REPORT_PATH)
     expect(route).toEqual(expect.objectContaining({
       kind: 'exact',
       path: RENDERER_BOOT_REPORT_PATH,
@@ -242,6 +251,33 @@ describe('desktop Host plugin', () => {
     expect(res.statusCode).toBe(204)
   })
 
+  it('serves the Windows native picker through a same-origin desktop route', async () => {
+    const harness = createHarness('win32')
+    harness.pickDirectory.mockResolvedValue('C:\\Work')
+    apply(harness.ctx, config)
+    const route = harness.route(DESKTOP_DIRECTORY_PICKER_PATH)
+    expect(route).toEqual(expect.objectContaining({
+      kind: 'exact',
+      path: DESKTOP_DIRECTORY_PICKER_PATH,
+    }))
+    const req = {
+      method: 'POST',
+      headers: { origin: 'http://127.0.0.1:43120' },
+    } as unknown as IncomingMessage
+    let body = ''
+    const res = {
+      statusCode: 200,
+      setHeader: vi.fn(),
+      end: vi.fn((value?: string) => { body = value ?? '' }),
+    } as unknown as ServerResponse
+
+    await route?.handler(req, res)
+
+    expect(harness.pickDirectory).toHaveBeenCalledOnce()
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(body)).toEqual({ path: 'C:\\Work' })
+  })
+
   it.each([
     ['win32', 'app-icon.png'],
     ['linux', 'app-icon-linux.png'],
@@ -261,11 +297,37 @@ describe('desktop Host plugin', () => {
     const harness = createHarness()
     apply(harness.ctx, config)
 
-    await harness.notify({ mode: 'compatibility', logLevel: 'info' }, { mode: 'compatibility', logLevel: 'info' })
+    await harness.notify(
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+    )
     expect(harness.restart).not.toHaveBeenCalled()
 
     harness.restart.mockImplementation(() => new Promise<void>(() => {}))
-    await harness.notify({ mode: 'advanced', logLevel: 'info' }, { mode: 'compatibility', logLevel: 'info' })
+    await harness.notify(
+      { mode: 'advanced', port: 0, logLevel: 'info' },
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+    )
+    await vi.runAllTimersAsync()
+    expect(harness.restart).toHaveBeenCalledOnce()
+  })
+
+  it('requests one orderly restart after the configured Web port changes', async () => {
+    vi.useFakeTimers()
+    const harness = createHarness()
+    apply(harness.ctx, config)
+
+    await harness.notify(
+      { mode: 'compatibility', port: 0, logLevel: 'debug' },
+      { mode: 'compatibility', port: 0, logLevel: 'info' },
+    )
+    expect(harness.restart).not.toHaveBeenCalled()
+
+    harness.restart.mockImplementation(() => new Promise<void>(() => {}))
+    await harness.notify(
+      { mode: 'compatibility', port: 43_189, logLevel: 'debug' },
+      { mode: 'compatibility', port: 0, logLevel: 'debug' },
+    )
     await vi.runAllTimersAsync()
     expect(harness.restart).toHaveBeenCalledOnce()
   })
