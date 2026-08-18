@@ -1,6 +1,9 @@
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import AdmZip from 'adm-zip'
 import {
+  afterPack,
   REQUIRED_PACKAGED_RUNTIME_ENTRIES,
   REQUIRED_MACOS_UNIVERSAL_ENTRIES,
   REQUIRED_UNPACKED_PACKAGE_SPECIFIERS,
@@ -8,11 +11,13 @@ import {
   REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES,
   resolvePackagedAsarPath,
   resolvePackagedUnpackedRoot,
+  smokePackagedDiagnosticWorker,
   verifyPackagedRuntime,
   type ArchiveLister,
   type FileProbe,
   type PackageResolver,
   type PackagedRuntimeContext,
+  type PackagedDiagnosticWorkerLauncher,
 } from '../scripts/verify-packaged-runtime.ts'
 import { FORBIDDEN_MACOS_UNIVERSAL_ENTRIES } from '../scripts/mac-universal.ts'
 
@@ -38,6 +43,74 @@ function completePackageResolver(unpackedRoot: string): PackageResolver {
 }
 
 describe('packaged desktop runtime verification', () => {
+  it('fails the diagnostic Worker smoke when its archive omits the crash dump', async () => {
+    const unpackedRoot = resolvePackagedUnpackedRoot(context('/build', 'win32'))
+    const launch = vi.fn<PackagedDiagnosticWorkerLauncher>(async (_workerPath, workerData) => {
+      const outDir = join(workerData.userDataDir, 'diagnostics')
+      mkdirSync(outDir)
+      const output = join(outDir, 'diagnostics-smoke.zip')
+      const zip = new AdmZip()
+      zip.addFile('system-info.txt', Buffer.from('no dump\n'))
+      zip.writeZip(output)
+      return output
+    })
+
+    await expect(smokePackagedDiagnosticWorker(unpackedRoot, launch))
+      .rejects.toThrow('packaged diagnostic worker omitted crash-dumps/pending/packaged-smoke.dmp')
+  })
+
+  it.each(['darwin', 'win32'])(
+    'targets the physical diagnostic Worker in the %s unpacked layout and removes smoke files',
+    async (platform) => {
+      const unpackedRoot = resolvePackagedUnpackedRoot(context('/build', platform))
+      let smokeRoot: string | undefined
+      const launch = vi.fn<PackagedDiagnosticWorkerLauncher>(async (workerPath, workerData) => {
+        smokeRoot = join(workerData.logsDir, '..')
+        expect(workerPath).toBe(join(unpackedRoot, 'lib', 'diagnostic-export-worker.js'))
+        expect(readFileSync(join(workerData.logsDir, 'dsh-2000-01-01.log'), 'utf8'))
+          .toBe('packaged worker smoke\n')
+        expect(workerData.maxEvidenceBytes).toBe(1024)
+        const crashDump = readFileSync(join(workerData.crashDumpsDir, 'pending', 'packaged-smoke.dmp'))
+        expect(crashDump.toString('utf8')).toBe('packaged crash dump smoke\n')
+        const outDir = join(workerData.userDataDir, 'diagnostics')
+        mkdirSync(outDir)
+        const output = join(outDir, 'diagnostics-smoke.zip')
+        const zip = new AdmZip()
+        zip.addFile('crash-dumps/pending/packaged-smoke.dmp', crashDump)
+        zip.writeZip(output)
+        return output
+      })
+
+      await smokePackagedDiagnosticWorker(unpackedRoot, launch)
+
+      expect(launch).toHaveBeenCalledOnce()
+      expect(smokeRoot).toBeDefined()
+      expect(existsSync(smokeRoot as string)).toBe(false)
+    },
+  )
+
+  it('runs the static package gate before the diagnostic Worker smoke', async () => {
+    const runtimeContext = context('/build', 'win32')
+    const calls: string[] = []
+
+    await afterPack(
+      runtimeContext,
+      () => { calls.push('static') },
+      async (unpackedRoot) => { calls.push(unpackedRoot) },
+    )
+
+    expect(calls).toEqual(['static', resolvePackagedUnpackedRoot(runtimeContext)])
+  })
+
+  it('tracks the ConPTY-only native surface shipped by node-pty 1.2', () => {
+    expect(REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES).toEqual([
+      'node_modules/node-pty/prebuilds/win32-x64/conpty.node',
+      'node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node',
+      'node_modules/node-pty/prebuilds/win32-x64/conpty/OpenConsole.exe',
+      'node_modules/node-pty/prebuilds/win32-x64/conpty/conpty.dll',
+    ])
+  })
+
   it.each([
     [
       'darwin',
@@ -119,8 +192,11 @@ describe('packaged desktop runtime verification', () => {
     'lib/client.js',
     'lib/desktop-runtime-environment.js',
     'lib/profile-service.js',
+    'lib/diagnostics.js',
+    'lib/diagnostic-export-worker.js',
     'lib/pnpm.js',
     'lib/update-download.js',
+    'lib/windows-agent-presets.js',
   ])('fails loud when required runtime entry %s is absent', (missing) => {
     const entries = completeArchiveEntries().filter(entry => entry !== `/${missing}`)
 
@@ -133,7 +209,10 @@ describe('packaged desktop runtime verification', () => {
     'build/app-icon-mac.png',
     'build/tray-iconTemplate.png',
     'lib/terminal.js',
+    'lib/diagnostics.js',
+    'lib/diagnostic-export-worker.js',
     'lib/update-download.js',
+    'lib/windows-agent-presets.js',
     'node_modules/@deepseek-ai/dsh/lib/bin.js',
     'node_modules/pnpm/bin/pnpm.mjs',
     'node_modules/node-pty/prebuilds/win32-x64/conpty.node',
@@ -148,6 +227,25 @@ describe('packaged desktop runtime verification', () => {
       filename => filename !== missingPath,
       completePackageResolver(unpackedRoot),
     )).toThrow(`missing required physical entries: ${missing}`)
+  })
+
+  it('requires the physical Cordis preset and its bundled skills', () => {
+    const runtimeContext = context('/build', 'win32')
+    const unpackedRoot = resolvePackagedUnpackedRoot(runtimeContext)
+    const requiredPresetEntries = [
+      'node_modules/@deepseek-ai/dsh/config/agent-presets/cordis/agent.cordis.yml',
+      'node_modules/@deepseek-ai/dsh/config/agent-presets/cordis/skills/cordis-plugin-development/SKILL.md',
+      'node_modules/@deepseek-ai/dsh/config/agent-presets/cordis/skills/editing-cordis-compositions/SKILL.md',
+    ]
+
+    for (const missing of requiredPresetEntries) {
+      expect(() => verifyPackagedRuntime(
+        runtimeContext,
+        () => completeArchiveEntries(),
+        filename => filename !== join(unpackedRoot, missing),
+        completePackageResolver(unpackedRoot),
+      )).toThrow(`missing required physical entries: ${missing}`)
+    }
   })
 
   it('fails loud when a required package export cannot resolve from app.asar.unpacked', () => {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopShellSpec } from '../src/runtime.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
+const diagnostics = vi.hoisted(() => ({ export: vi.fn() }))
 const updater = vi.hoisted(() => ({ download: vi.fn() }))
 const childProcess = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
@@ -35,6 +36,10 @@ vi.mock('../src/desktop-terminal.ts', async (importOriginal) => ({
   openDesktopTerminal: terminal.open,
 }))
 
+vi.mock('../src/diagnostic-export.ts', () => ({
+  exportDiagnosticsZip: diagnostics.export,
+}))
+
 vi.mock('../src/update-download.ts', () => ({
   downloadDesktopUpdate: updater.download,
 }))
@@ -50,6 +55,7 @@ const electron = vi.hoisted(() => {
   const loadURL = vi.fn(async (_url: string) => {})
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
+  let zoomLevel = 0
   const dialog = {
     showErrorBox: vi.fn(),
     showMessageBox: vi.fn(async () => ({ response: 0, checkboxChecked: false })),
@@ -67,8 +73,10 @@ const electron = vi.hoisted(() => {
     setTemplateImage: vi.fn(),
   }
   const webContents = {
+    getZoomLevel: vi.fn(() => zoomLevel),
     on: vi.fn(),
     off: vi.fn(),
+    setZoomLevel: vi.fn((level: number) => { zoomLevel = level }),
     setWindowOpenHandler: vi.fn(),
   }
   const nativeTheme = { themeSource: 'system' }
@@ -133,7 +141,9 @@ const electron = vi.hoisted(() => {
     app: {
       dock: { setIcon: vi.fn() },
       getLocale: vi.fn(() => 'en-US'),
-      getPath: vi.fn(() => '/tmp/dsh-desktop-user-data'),
+      getPath: vi.fn((name: string) => name === 'crashDumps'
+        ? '/tmp/dsh-desktop-user-data/Crashpad'
+        : '/tmp/dsh-desktop-user-data'),
       getVersion: vi.fn(() => '43.4.0'),
       isPackaged: false,
       on: vi.fn(),
@@ -161,13 +171,16 @@ const electron = vi.hoisted(() => {
     net: { fetch: vi.fn() },
     Notification,
     notifications,
+    resetZoomLevel: () => { zoomLevel = 0 },
     shell: {
       openExternal: vi.fn(async () => {}),
       openPath: vi.fn(async () => ''),
+      showItemInFolder: vi.fn(),
     },
     templateIcon,
     Tray,
     trays,
+    webContents,
   }
 })
 
@@ -216,11 +229,13 @@ describe('Electron compatibility runtime', () => {
     childProcess.reset()
     vi.clearAllMocks()
     updater.download.mockReset()
+    diagnostics.export.mockReset()
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
     electron.shell.openPath.mockResolvedValue('')
     electron.nativeTheme.themeSource = 'system'
+    electron.resetZoomLevel()
   })
 
   afterEach(() => {
@@ -436,7 +451,25 @@ describe('Electron compatibility runtime', () => {
     expect(electron.trays).toHaveLength(0)
     expect(electron.browserWindows[0]?.show).toHaveBeenCalledOnce()
     expect(electron.browserWindows[0]?.focus).toHaveBeenCalledOnce()
+    await release()
+  })
 
+  it('logs renderer crashes with the Windows exception code', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    const gone = electron.browserWindows[0]?.webContents.on.mock.calls
+      .find(([event]) => event === 'render-process-gone')?.[1]
+    expect(gone).toEqual(expect.any(Function))
+    gone({}, { reason: 'crashed', exitCode: -1073741819 })
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'dsh-plugin-desktop: renderer process gone (reason: crashed, exitCode: -1073741819 / 0xc0000005)',
+    )
     await release()
   })
 
@@ -490,6 +523,46 @@ describe('Electron compatibility runtime', () => {
     expect(electron.trays).toHaveLength(0)
     await expect(release()).rejects.toThrow('renderer unavailable')
     expect(electron.trays).toHaveLength(0)
+  })
+
+  it('handles desktop zoom shortcuts without relying on the native menu', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    const zoomListener = electron.webContents.on.mock.calls
+      .find(([event]) => event === 'before-input-event')?.[1]
+    expect(zoomListener).toEqual(expect.any(Function))
+
+    const zoomIn = { preventDefault: vi.fn() }
+    zoomListener(zoomIn, { type: 'keyDown', control: true, key: '=' })
+    expect(zoomIn.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.webContents.setZoomLevel).toHaveBeenLastCalledWith(1)
+
+    const zoomInRelease = { preventDefault: vi.fn() }
+    zoomListener(zoomInRelease, { type: 'keyUp', control: true, key: '=' })
+    expect(zoomInRelease.preventDefault).not.toHaveBeenCalled()
+    expect(electron.webContents.setZoomLevel).toHaveBeenCalledTimes(1)
+
+    const zoomOut = { preventDefault: vi.fn() }
+    zoomListener(zoomOut, { type: 'keyDown', control: true, key: '-' })
+    expect(zoomOut.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.webContents.setZoomLevel).toHaveBeenLastCalledWith(0)
+
+    const zoomReset = { preventDefault: vi.fn() }
+    zoomListener(zoomReset, { type: 'keyDown', control: true, key: '0' })
+    expect(zoomReset.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.webContents.setZoomLevel).toHaveBeenLastCalledWith(0)
+
+    const plainPlus = { preventDefault: vi.fn() }
+    zoomListener(plainPlus, { type: 'keyDown', key: '=' })
+    expect(plainPlus.preventDefault).not.toHaveBeenCalled()
+
+    await release()
+    expect(electron.webContents.off).toHaveBeenCalledWith('before-input-event', zoomListener)
   })
 
   it('does not mount a registration disposed before Host boot settles', async () => {
@@ -679,6 +752,86 @@ describe('Electron compatibility runtime', () => {
     } finally {
       delete (process.versions as { electron?: string }).electron
     }
+  })
+
+  it('coalesces concurrent diagnostic exports and reveals the completed archive', async () => {
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    let finishExport: ((path: string) => void) | undefined
+    diagnostics.export.mockReturnValue(new Promise(resolve => { finishExport = resolve }))
+
+    const first = runtime.exportDiagnostics()
+    const second = runtime.exportDiagnostics()
+    finishExport?.('C:\\Users\\Example\\diagnostics.zip')
+    await Promise.all([first, second])
+
+    expect(diagnostics.export).toHaveBeenCalledOnce()
+    expect(diagnostics.export).toHaveBeenCalledWith(
+      join('/tmp/dsh-desktop-user-data', 'logs'),
+      '/tmp/dsh-desktop-user-data',
+      { crashDumpsDir: '/tmp/dsh-desktop-user-data/Crashpad' },
+    )
+    expect(electron.shell.showItemInFolder).toHaveBeenCalledOnce()
+    expect(electron.shell.showItemInFolder).toHaveBeenCalledWith('C:\\Users\\Example\\diagnostics.zip')
+  })
+
+  it('does not export diagnostics when the privacy confirmation is cancelled', async () => {
+    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+
+    await expect(runtime.exportDiagnostics()).resolves.toBeUndefined()
+
+    expect(diagnostics.export).not.toHaveBeenCalled()
+    expect(electron.shell.showItemInFolder).not.toHaveBeenCalled()
+    expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'warning',
+      cancelId: 1,
+      defaultId: 1,
+      buttons: ['Export', 'Cancel'],
+      detail: expect.stringContaining('local paths, workspace IDs, and session IDs'),
+    }))
+    expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
+      detail: expect.stringContaining('process memory'),
+    }))
+  })
+
+  it('localizes the diagnostics privacy confirmation', async () => {
+    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    runtime.setLocalePreference('zh')
+
+    await runtime.exportDiagnostics()
+
+    expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
+      buttons: ['导出', '取消'],
+      detail: expect.stringContaining('本地路径、工作区 ID 和会话 ID'),
+    }))
+    expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
+      detail: expect.stringContaining('进程内存'),
+    }))
+  })
+
+  it('shows a native error when diagnostic export fails', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    diagnostics.export
+      .mockRejectedValueOnce(new Error('disk is full'))
+      .mockResolvedValueOnce('C:\\Users\\Example\\diagnostics-retry.zip')
+
+    await expect(runtime.exportDiagnostics()).resolves.toBeUndefined()
+    await expect(runtime.exportDiagnostics()).resolves.toBeUndefined()
+
+    expect(diagnostics.export).toHaveBeenCalledTimes(2)
+    expect(electron.shell.showItemInFolder)
+      .toHaveBeenCalledWith('C:\\Users\\Example\\diagnostics-retry.zip')
+    expect(electron.dialog.showErrorBox).toHaveBeenCalledWith(
+      'Unable to Export Diagnostics',
+      'disk is full',
+    )
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('failed to export diagnostics: disk is full'))
   })
 
   it('shows native errors for synchronous and asynchronous terminal launch failures', async () => {

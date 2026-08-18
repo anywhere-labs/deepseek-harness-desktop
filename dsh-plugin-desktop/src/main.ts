@@ -1,6 +1,6 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
-import { app } from 'electron'
+import { app, crashReporter } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,7 +17,22 @@ import {
   installDesktopDshRuntime,
   installDesktopPnpmRuntime,
 } from './desktop-runtime-environment.ts'
-import { ElectronDesktopRuntime } from './electron-runtime.ts'
+import { desktopProductVersion, ElectronDesktopRuntime } from './electron-runtime.ts'
+import {
+  ElectronStderrLogger,
+  installDesktopChildProcessLogging,
+  installDesktopUncaughtExceptionLogging,
+  type DesktopLogger,
+} from './desktop-logger.ts'
+import {
+  beginDesktopRun,
+  startDesktopCrashReporting,
+  type DesktopRun,
+} from './crash-evidence.ts'
+import { FileExporter } from './file-exporter.ts'
+import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
+import { LogFileSink } from './log-files.ts'
+import { maskSecrets } from './mask-secrets.ts'
 import { resolveDesktopShellEnvironment } from './shell-environment.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
@@ -48,19 +63,18 @@ const BIN_NAME = 'dsh-plugin-desktop'
 const PRODUCT_NAME = 'DSH Desktop'
 
 /** Report profile recovery without changing startup or rollback outcomes. */
-function notifyProfileRecovery(runtime: ElectronDesktopRuntime, body: string): void {
+function notifyProfileRecovery(runtime: ElectronDesktopRuntime, logger: DesktopLogger, body: string): void {
   try {
     runtime.updates.notify({ title: 'Unable to Open Profile', body })
   } catch (cause) {
-    process.stderr.write(
-      `${BIN_NAME}: failed to show profile recovery notification: ${cause instanceof Error ? cause.message : String(cause)}\n`,
-    )
+    logger.error(`${BIN_NAME}: failed to show profile recovery notification: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 }
 
 /** Report optional user UI plugins skipped to keep startup recoverable. */
 function notifySkippedOptionalEntries(
   runtime: ElectronDesktopRuntime,
+  logger: DesktopLogger,
   entries: readonly SkippedOptionalEntry[],
 ): void {
   if (entries.length === 0) return
@@ -72,22 +86,21 @@ function notifySkippedOptionalEntries(
       body: `${names[0]} is not installed in this profile${suffix}.`,
     })
   } catch (cause) {
-    process.stderr.write(
-      `${BIN_NAME}: failed to show skipped plugin notification: ${cause instanceof Error ? cause.message : String(cause)}\n`,
-    )
+    logger.error(`${BIN_NAME}: failed to show skipped plugin notification: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 }
 
 /** Surface path/volume risks that otherwise become obscure sandbox or pnpm failures later. */
-function warnWindowsVolumeConcerns(concerns: readonly WindowsVolumeConcern[]): void {
+function warnWindowsVolumeConcerns(logger: DesktopLogger, concerns: readonly WindowsVolumeConcern[]): void {
   for (const concern of concerns) {
-    process.stderr.write(`${BIN_NAME}: Windows volume warning: ${formatWindowsVolumeConcern(concern)}\n`)
+    logger.error(`${BIN_NAME}: Windows volume warning: ${formatWindowsVolumeConcern(concern)}`)
   }
 }
 
 /** Notify once after the UI is ready; stderr carries the exact paths. */
 function notifyWindowsVolumeConcerns(
   runtime: ElectronDesktopRuntime,
+  logger: DesktopLogger,
   concerns: readonly WindowsVolumeConcern[],
 ): void {
   if (concerns.length === 0) return
@@ -97,9 +110,7 @@ function notifyWindowsVolumeConcerns(
       body: `${concerns[0]?.label ?? 'A configured path'} is on a volume that may break sandboxed commands or plugin installs.`,
     })
   } catch (cause) {
-    process.stderr.write(
-      `${BIN_NAME}: failed to show Windows volume warning: ${cause instanceof Error ? cause.message : String(cause)}\n`,
-    )
+    logger.error(`${BIN_NAME}: failed to show Windows volume warning: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 }
 
@@ -116,16 +127,73 @@ async function start(): Promise<void> {
   let profileStatePath: string | undefined
   let shutdown: DesktopShutdown | undefined
   let removeShutdownRequests: (() => void) | undefined
+  let removeUncaughtExceptionLogging: (() => void) | undefined
+  let removeChildProcessLogging: (() => void) | undefined
   let disposeDshRuntime: (() => void) | undefined
   let disposePnpmRuntime: (() => void) | undefined
+  let fileExporter: FileExporter | undefined
   let runtime!: ElectronDesktopRuntime
+  let logSink: LogFileSink | undefined
+  try {
+    logSink = new LogFileSink(join(app.getPath('userData'), 'logs'), {
+      maxFileBytes: 10 * 1024 * 1024,
+      maxDirectoryBytes: 200 * 1024 * 1024,
+    })
+    logSink.enforceDirectoryCap()
+    logSink.purgeOlderThan(7)
+    logSink.writeHeader(`--- ${BIN_NAME} ${PRODUCT_NAME} ${desktopProductVersion()} ${process.platform} node ${process.version} run ${Date.now()} ---`)
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    process.stderr.write(`${BIN_NAME}: file logging unavailable: ${maskSecrets(detail)}\n`)
+    logSink = undefined
+  }
+  const electronLogger = new ElectronStderrLogger(logSink)
+  try {
+    startDesktopCrashReporting(crashReporter, {
+      productName: PRODUCT_NAME,
+      version: desktopProductVersion(),
+      platform: process.platform,
+      arch: process.arch,
+    })
+  } catch (cause) {
+    electronLogger.error(`${BIN_NAME}: local crash reporting unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  let desktopRun: DesktopRun | undefined
+  try {
+    desktopRun = beginDesktopRun(
+      join(app.getPath('userData'), 'crash-evidence', 'active-run.json'),
+      {
+        startedAt: new Date().toISOString(),
+        pid: process.pid,
+        version: desktopProductVersion(),
+      },
+    )
+    const previousRun = desktopRun.previousRun
+    if (previousRun !== undefined) {
+      electronLogger.error('unreadable' in previousRun
+        ? `${BIN_NAME}: previous desktop run did not shut down cleanly (active run marker unreadable)`
+        : `${BIN_NAME}: previous desktop run did not shut down cleanly (startedAt: ${previousRun.startedAt}, pid: ${String(previousRun.pid)}, version: ${previousRun.version})`)
+    }
+  } catch (cause) {
+    electronLogger.error(`${BIN_NAME}: active run tracking unavailable: ${cause instanceof Error ? cause.message : String(cause)}`)
+  }
+  removeChildProcessLogging = installDesktopChildProcessLogging(app, electronLogger)
   const nativeExit = createDesktopExitCoordinator(
     {
       prepareToQuit: () => { runtime.prepareToQuit() },
       relaunch: () => { app.relaunch() },
       exit: code => { app.exit(code) },
     },
-    () => { removeShutdownRequests?.() },
+    () => {
+      removeShutdownRequests?.()
+      removeUncaughtExceptionLogging?.()
+      removeChildProcessLogging?.()
+      try {
+        desktopRun?.markClean()
+      } catch (cause) {
+        electronLogger.error(`${BIN_NAME}: failed to clear active run marker: ${cause instanceof Error ? cause.message : String(cause)}`)
+      }
+    },
   )
   let restartRequested = false
   runtime = new ElectronDesktopRuntime(async () => {
@@ -145,7 +213,7 @@ async function start(): Promise<void> {
     } else {
       markDesktopProfileFailed(profileStatePath, profileStartup.profileName)
     }
-  })
+  }, electronLogger)
   const finalExit = (code: number): void => { nativeExit.finish(code) }
   shutdown = createDesktopShutdown(
     async () => {
@@ -159,6 +227,11 @@ async function start(): Promise<void> {
     finalExit,
   )
   const requestQuit = (code: number): void => { void shutdown.request(code) }
+  removeUncaughtExceptionLogging = installDesktopUncaughtExceptionLogging(
+    process,
+    electronLogger,
+    requestQuit,
+  )
   removeShutdownRequests = installShutdownRequests(process, app, requestQuit)
 
   app.on('second-instance', () => { runtime.show() })
@@ -178,12 +251,12 @@ async function start(): Promise<void> {
     { label: 'desktop user data', path: app.getPath('userData') },
     { label: 'DSH home', path: homeDir },
   ])
-  warnWindowsVolumeConcerns(windowsVolumeConcerns)
+  warnWindowsVolumeConcerns(electronLogger, windowsVolumeConcerns)
 
   const failLoudProcess: FailLoudProcess = {
     on: (event, handler) => process.on(event, handler),
     off: (event, handler) => process.off(event, handler),
-    stderr: process.stderr,
+    stderr: electronLogger,
     exit: finalExit,
   }
   installFailLoud(BIN_NAME, failLoudProcess, async () => {
@@ -272,6 +345,10 @@ async function start(): Promise<void> {
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, environment)
         hostCtx.provide('desktopRuntime', runtime)
         hostCtx.provide('desktopPnpmBootstrap', desktopPnpmBootstrap)
+        if (logSink !== undefined) {
+          fileExporter = new FileExporter(logSink)
+          hostCtx.logger.exporter(fileExporter)
+        }
         await hostCtx.plugin(DesktopProfileService, {
           current: {
             name: activeProfileName,
@@ -292,22 +369,28 @@ async function start(): Promise<void> {
       throw cause
     })
     current = ctx
+    fileExporter?.setThreshold((ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings | undefined)?.logLevel ?? 'info')
+    ctx.on('settings/updated', (namespace, next) => {
+      if (namespace !== DESKTOP_SETTINGS_NAMESPACE) return
+      fileExporter?.setThreshold((next as DesktopSettings).logLevel)
+    })
     runtime.configureTerminal({
       profileName: activeProfileName,
       profileDir: prepared.profile.dir,
       homeDir: prepared.homeDir,
     })
     await runtime.mountScheduled()
-    notifySkippedOptionalEntries(runtime, prepared.skippedOptionalEntries)
-    notifyWindowsVolumeConcerns(runtime, windowsVolumeConcerns)
+    notifySkippedOptionalEntries(runtime, electronLogger, prepared.skippedOptionalEntries)
+    notifyWindowsVolumeConcerns(runtime, electronLogger, windowsVolumeConcerns)
     if (profileStartup.rolledBackFrom !== undefined) {
       notifyProfileRecovery(
         runtime,
+        electronLogger,
         `Reopened last-known-good profile ${activeProfileName}.`,
       )
     }
   } catch (cause) {
-    process.stderr.write(`${BIN_NAME}: ${cause instanceof Error ? cause.stack ?? cause.message : String(cause)}\n`)
+    electronLogger.errorCause(cause)
     let exitCode = 1
     if (profileStartup !== undefined && profileStatePath !== undefined) {
       const retryLastKnownGood = profileStartup.profileName !== profileStartup.state.lastKnownGood
@@ -318,11 +401,12 @@ async function start(): Promise<void> {
           exitCode = 0
           notifyProfileRecovery(
             runtime,
+            electronLogger,
             `Reopening last-known-good profile ${profileStartup.state.lastKnownGood}.`,
           )
         }
       } catch (stateCause) {
-        process.stderr.write(`${BIN_NAME}: failed to roll back desktop profile state: ${stateCause instanceof Error ? stateCause.message : String(stateCause)}\n`)
+        electronLogger.error(`dsh-plugin-desktop: failed to roll back desktop profile state: ${stateCause instanceof Error ? stateCause.message : String(stateCause)}`)
       }
     }
     await shutdown.request(exitCode)

@@ -28,7 +28,13 @@ let nativeThemeSource = 'system'
 const trayItems = []
 
 try {
-  writeFileSync(join(home, 'settings.yaml'), 'dsh-desktop:\n  mode: advanced\n')
+  writeFileSync(join(home, 'settings.yaml'), [
+    'dsh-desktop:',
+    '  mode: advanced',
+    'agent-presets:',
+    '  default: minimal',
+    '',
+  ].join('\n'))
   const prepared = prepareDesktopProfile('1', home, 'win32')
   const hostServicePluginDir = join(
     prepared.profile.dir,
@@ -155,6 +161,21 @@ try {
   if (ctx.desktopProfiles.current.name !== 'desktop'
     || ctx.desktopProfiles.current.dir !== prepared.profile.dir) {
     throw new Error('assembled desktop profile service has the wrong active identity')
+  }
+  const agentPresets = ctx.get('agentPresets')
+  if (agentPresets === undefined) {
+    throw new Error('assembled Windows profile is missing the agent preset roster')
+  }
+  const presetIds = (await agentPresets.list()).map(preset => preset.id)
+  if (presetIds.includes('minimal') || !presetIds.includes('standard')) {
+    throw new Error(`assembled Windows profile exposes unexpected presets: ${presetIds.join(', ')}`)
+  }
+  if (agentPresets.defaultId !== 'standard') {
+    throw new Error(`assembled Windows profile selected unsupported default ${agentPresets.defaultId}`)
+  }
+  const legacyPreset = await agentPresets.resolve('minimal')
+  if (legacyPreset.id !== 'minimal') {
+    throw new Error(`assembled Windows profile remapped legacy preset to ${legacyPreset.id}`)
   }
   const hostServiceProbe = ctx.get(HOST_SERVICE_PROBE_KEY)
   if (hostServiceProbe?.current?.name !== 'desktop'
