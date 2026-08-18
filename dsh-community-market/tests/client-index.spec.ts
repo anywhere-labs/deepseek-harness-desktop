@@ -6,13 +6,17 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
     Button: component,
     Input: component,
     Modal: component,
+    Pill: component,
+    StateDot: component,
     Tooltip: component,
     IconCheckOutline16: component,
+    IconChevronDownOutline14: component,
+    IconChevronUpOutline14: component,
     IconCloseOutline16: component,
     IconCordisPluginOutline14: component,
     IconDataOutline16: component,
+    IconDownloadOutline16: component,
     IconGlobeOutline14: component,
-    IconLoadingOutline16: component,
     IconPlusOutline16: component,
     IconRefreshOutline16: component,
     IconRightUpOutline16: component,
@@ -60,7 +64,7 @@ describe('community market client registration', () => {
     expect(NS).toBe('community-market')
   })
 
-  it('registers locale, styles, sidebar launcher, and shell overlay effects', () => {
+  it('registers locale, styles, settings tab, sidebar launcher, and shell overlay effects', () => {
     const test = testContext()
 
     apply(test.context)
@@ -70,19 +74,26 @@ describe('community market client registration', () => {
       'community-market: styles',
     ])
     expect(test.injections.map(value => value.name)).toEqual([
+      'settings.plugins.tab',
       'sidebar.footer.action',
       'shell.overlay',
     ])
   })
 
-  it('projects both slot registrations with the market identity and locale', () => {
+  it('projects all slot registrations with the market identity, locale, and shared view store', () => {
     const test = testContext()
 
     apply(test.context)
     test.injections.forEach(value => { value.factory() })
 
-    expect(test.registrations).toHaveLength(2)
+    expect(test.registrations).toHaveLength(3)
     expect(test.registrations.map(value => value.spec)).toEqual([
+      expect.objectContaining({
+        name: 'settings.plugins.tab',
+        id: 'community-market',
+        order: 20,
+        locale: NS,
+      }),
       expect.objectContaining({
         name: 'sidebar.footer.action',
         id: 'community-market',
@@ -96,6 +107,11 @@ describe('community market client registration', () => {
         locale: NS,
       }),
     ])
-    expect(test.registrations.every(value => typeof value.spec.inject === 'function')).toBe(true)
+    const [settings, launcher, overlay] = test.registrations.map(value => value.spec)
+    expect(typeof settings?.label).toBe('function')
+    expect(typeof settings?.inject).toBe('function')
+    expect(typeof launcher?.label).toBe('function')
+    expect(launcher?.store).toBe(overlay?.store)
+    expect(typeof overlay?.inject).toBe('function')
   })
 })

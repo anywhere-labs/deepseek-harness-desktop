@@ -37,6 +37,13 @@
         "name": "Example Maintainers",
         "url": "https://github.com/example"
       },
+      "media": {
+        "icon": {
+          "assetRef": "mktimg_0123456789abcdefghijklmnopqrstuv",
+          "role": "plugin-icon",
+          "alt": "Better Sidebar plugin icon"
+        }
+      },
       "capabilities": {
         "required": [
           "ui.panel"

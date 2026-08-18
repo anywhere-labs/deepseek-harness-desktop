@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "items": [
+    {
+      "id": "better-sidebar",
+      "name": "dsh-plugin-better-sidebar",
+      "displayName": "Better Sidebar",
+      "summary": "Adds a configurable sidebar panel.",
+      "categories": [
+        "interface"
+      ],
+      "package": {
+        "registry": "npm",
+        "name": "dsh-plugin-better-sidebar"
+      }
+    }
+  ],
+  "page": {}
+}

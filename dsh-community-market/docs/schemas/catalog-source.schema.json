@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dsh-community-market:schema:catalog-source:1.0.0",
   "title": "DSH Community Market catalog source manifest",
-  "description": "A provider-neutral declaration for a user-selectable HTTPS JSON catalog source. User-owned state such as enabled status and source ordering does not belong in this manifest.",
+  "description": "A provider-neutral declaration for one user-selectable HTTPS JSON catalog endpoint. A user registers its manifest URL; selection and all other user-owned state stay local. The smallest recommended profile supports q, category, cursor, and limit and uses 50 as an example page size, not a global cap.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -39,7 +39,7 @@
       "type": "string",
       "format": "uri",
       "maxLength": 2048,
-      "pattern": "^https://(?![^/?#]*@)[^#]+$"
+      "pattern": "^https://(?![^/?#]*@)(?![^/?#]*:)[^#]+$"
     },
     "attribution": {
       "type": "object",
@@ -59,7 +59,7 @@
           "type": "string",
           "format": "uri",
           "maxLength": 2048,
-          "pattern": "^https://(?![^/?#]*@)[^#]+$"
+          "pattern": "^https://(?![^/?#]*@)(?![^/?#]*:)[^#]+$"
         },
         "notice": {
           "type": "string",
@@ -83,8 +83,9 @@
         "endpoint": {
           "type": "string",
           "format": "uri",
-          "pattern": "^https://(?![^/?#]*@)[^/?#\\s]+(?:/[^?#\\s]*)?/v1/plugins$",
-          "description": "Absolute HTTPS endpoint with no query or fragment. The standard endpoint path ends in /v1/plugins."
+          "maxLength": 2048,
+          "pattern": "^https://(?![^/?#]*@)(?![^/?#]*:)[^/?#\\s]+(?:/[^?#\\s]*)?/v1/plugins$",
+          "description": "Absolute HTTPS endpoint on standard port 443 with no query or fragment. It must share the user-approved manifest origin, and the standard endpoint path ends in /v1/plugins."
         },
         "method": {
           "const": "GET"
@@ -93,6 +94,7 @@
     },
     "query": {
       "type": "object",
+      "description": "The endpoint query features advertised by this source. The minimal fixture uses supported=[q, category, cursor, limit], defaultLimit=50, maxLimit=50, and sorts=[]. Standard sources may declare limits through the Schema maximum of 100.",
       "additionalProperties": false,
       "required": [
         "supported",
@@ -121,12 +123,14 @@
         "defaultLimit": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 100
+          "maximum": 100,
+          "default": 50
         },
         "maxLimit": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 100
+          "maximum": 100,
+          "default": 50
         },
         "sorts": {
           "type": "array",

@@ -29,6 +29,12 @@
         "name": "Example Maintainers",
         "url": "https://github.com/example"
       },
+      "media": {
+        "icon": {
+          "url": "https://plugins.example.org/assets/better-sidebar.png",
+          "alt": "Better Sidebar plugin icon"
+        }
+      },
       "capabilities": {
         "required": [
           "ui.panel"

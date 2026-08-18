@@ -32,8 +32,9 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
       x64ArchFiles?: unknown
       files?: unknown
     }
-    win?: { icon?: unknown; target?: unknown; files?: unknown }
+    win?: { icon?: unknown; target?: unknown; artifactName?: unknown; files?: unknown }
     nsis?: Record<string, unknown>
+    portable?: Record<string, unknown>
     linux?: {
       icon?: unknown
       target?: unknown
@@ -58,6 +59,11 @@ describe('published package surface', () => {
   it('runs desktop and community market typechecks from the root command', () => {
     expect(workspaceManifest.scripts?.typecheck)
       .toBe('yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-community-market typecheck')
+  })
+
+  it('runs desktop and community market tests from the root command', () => {
+    expect(workspaceManifest.scripts?.test)
+      .toBe('yarn workspace dsh-plugin-desktop test && yarn workspace dsh-community-market test')
   })
 
   it('registers both npm launcher names', () => {
@@ -267,6 +273,7 @@ describe('published package surface', () => {
       arch: ['x64'],
     }])
     expect(manifest.build?.win?.files).toEqual(['!node_modules/node-pty/build/**'])
+    expect(manifest.build?.win?.artifactName).toBe('DSH-Desktop-${version}-${arch}-Portable.${ext}')
     expect(manifest.build?.nsis).toEqual({
       license: 'THIRD_PARTY_NOTICES.md',
       oneClick: false,
@@ -298,9 +305,11 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['dist:mac-smoke']).toBe('node scripts/package-mac.ts')
     expect(manifest.scripts?.['dist:win']).toBe('node scripts/package-win.ts')
     expect(manifest.scripts?.['dist:linux']).toBe('node scripts/package-linux.ts')
+    expect(manifest.scripts?.['dist:win-portable']).toBe('node scripts/package-win-portable.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run typecheck')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/package-win.spec.ts')
+    expect(manifest.scripts?.['check:win-package']).toContain('tests/verify-win-portable.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-checker.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-download.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/windows-volume-diagnostics.spec.ts')
@@ -315,6 +324,8 @@ describe('published package surface', () => {
       .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac-smoke')
     expect(workspaceManifest.scripts?.['dist:win'])
       .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win')
+    expect(workspaceManifest.scripts?.['dist:win-portable'])
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win-portable')
     expect(manifest.build?.afterPack).toBe('./scripts/verify-packaged-runtime.ts')
     expect(manifest.build?.mac).toEqual(expect.objectContaining({
       hardenedRuntime: true,
@@ -343,6 +354,7 @@ describe('published package surface', () => {
 
     expect(windowsJob).toContain('- run: yarn check')
     expect(windowsJob).toContain('- run: yarn dist:win')
+    expect(windowsJob).toContain('- run: yarn dist:win-portable')
     expect(windowsJob).not.toContain('yarn workspace dsh-plugin-desktop dist:win')
     expect(macosJob).toContain('- run: yarn workspace dsh-community-market check')
     expect(macosJob).toContain('- run: yarn dist:mac-smoke')

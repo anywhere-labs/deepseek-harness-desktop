@@ -44,6 +44,16 @@ function installWebClient(
   return webDir
 }
 
+function installBundle(home: string, packageName: string, patch: string): void {
+  const bundleDir = join(home, 'profiles', 'desktop', 'node_modules', packageName)
+  mkdirSync(bundleDir, { recursive: true })
+  writeFileSync(join(bundleDir, 'package.json'), JSON.stringify({
+    name: packageName,
+    dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }) + '\n')
+  writeFileSync(join(bundleDir, 'cordis.patch.yml'), patch)
+}
+
 afterEach(() => {
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true })
 })
@@ -390,6 +400,35 @@ describe('desktop profile composition', {
       disabled: { __jsExpr: "process.platform !== 'win32'" },
       config: { cwd: 'C:\\workspace' },
     }))
+  })
+
+  it('rejects a bundle and user patch that register the same loader entry id', () => {
+    const home = temporaryHome()
+    const packageName = 'dsh-usage-stats'
+    const bundlePatch = [
+      '- insert:',
+      '    - id: usage-stats',
+      `      name: '${packageName}'`,
+      '',
+    ].join('\n')
+    installBundle(home, packageName, bundlePatch)
+    const profileDir = join(home, 'profiles', 'desktop')
+    writeFileSync(join(profileDir, 'package.json'), JSON.stringify({
+      name: 'dsh-profile-desktop',
+      private: true,
+      dependencies: {},
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', packageName] } },
+    }) + '\n')
+    writeFileSync(join(home, 'cordis.patch.yml'), [
+      '- insert:',
+      '    - id: usage-stats',
+      `      name: '${packageName}'`,
+      '',
+    ].join('\n'))
+
+    expect(() => prepareDesktopProfile(undefined, home, 'win32')).toThrow(
+      'duplicate loader entry id "usage-stats" in the composed profile',
+    )
   })
 
   it('keeps a Web Client in its owning profile and omits it from desktop', () => {

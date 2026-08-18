@@ -4,6 +4,20 @@ import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+/** Verify a complete in-memory Windows PE image. */
+export function assertPortableExecutableBuffer(data: Buffer, label: string, source: string): void {
+  if (data.byteLength < 68 || data.subarray(0, 2).toString('ascii') !== 'MZ') {
+    throw new Error(`${label} does not have a Windows PE header: ${source}`)
+  }
+  const peOffset = data.readUInt32LE(0x3c)
+  if (peOffset > data.byteLength - 4) {
+    throw new Error(`${label} has an invalid Windows PE offset: ${source}`)
+  }
+  if (!data.subarray(peOffset, peOffset + 4).equals(Buffer.from('PE\0\0'))) {
+    throw new Error(`${label} does not have a Windows PE signature: ${source}`)
+  }
+}
+
 /** Paths returned after Windows installer verification succeeds. */
 export interface WindowsInstallerArtifacts {
   /** NSIS installer path. */
@@ -30,7 +44,8 @@ function readVersion(desktopRoot: string): string {
   return manifest.version
 }
 
-function assertPortableExecutable(path: string, label: string): void {
+/** Verify that a generated Windows artifact has a valid PE header. */
+export function assertPortableExecutable(path: string, label: string): void {
   const stat = statSync(path)
   if (!stat.isFile() || stat.size < 68) {
     throw new Error(`${label} is not a non-empty regular file: ${path}`)

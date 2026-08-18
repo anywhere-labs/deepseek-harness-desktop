@@ -1,23 +1,25 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useSyncExternalStore, type ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MarketStateResponse } from '../src/api-types.js'
 import type { MarketCatalogResponse, MarketSourceView } from '../src/api-types.js'
 import type {} from '../src/client/index.js'
-import { MarketController } from '../src/client/controller.js'
 import { MarketOverlay, type MarketOverlayProps } from '../src/client/MarketOverlay.js'
+import { createMarketViewStore } from '../src/client/market-view-store.js'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
   const passthrough = ({ children }: { children?: ReactNode }) => <>{children}</>
   const Button = ({
     children,
     icon,
+    size: _size,
+    variant: _variant,
     type = 'button',
     ...props
-  }: { children?: ReactNode; icon?: ReactNode; type?: 'button' | 'submit'; [key: string]: unknown }) => (
+  }: { children?: ReactNode; icon?: ReactNode; size?: string; variant?: string; type?: 'button' | 'submit'; [key: string]: unknown }) => (
     <button type={type} {...props}>{icon}{children}</button>
   )
   const Input = ({ icon: _icon, ...props }: { icon?: ReactNode; [key: string]: unknown }) => <input {...props} />
@@ -27,18 +29,25 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
     children,
     footer,
   }: { open: boolean; title: string; children?: ReactNode; footer?: ReactNode }) => open
-    ? <div role="dialog"><h2>{title}</h2>{children}{footer}</div>
+    ? <div role="dialog" aria-label={title}><h2>{title}</h2>{children}{footer}</div>
     : null
   const icon = () => null
   return {
     Button,
     Input,
     Modal,
+    Pill: ({ active: _active, children, ...props }: { active?: boolean; children?: ReactNode; [key: string]: unknown }) => (
+      props.onClick === undefined ? <span>{children}</span> : <button {...props}>{children}</button>
+    ),
+    StateDot: ({ state }: { state: string }) => <span data-state={state} />,
     Tooltip: passthrough,
     IconCheckOutline16: icon,
+    IconChevronDownOutline14: icon,
+    IconChevronUpOutline14: icon,
     IconCloseOutline16: icon,
     IconCordisPluginOutline14: icon,
     IconDataOutline16: icon,
+    IconDownloadOutline16: icon,
     IconGlobeOutline14: icon,
     IconLoadingOutline16: icon,
     IconPlusOutline16: icon,
@@ -58,14 +67,21 @@ afterEach(() => {
 
 const t = ((key: string) => key) as PropsLocale<'community-market'>['t']
 
-function props(controller: MarketController): MarketOverlayProps {
-  return {
-    controller,
+function renderOpenOverlay() {
+  const instance = createMarketViewStore().create()
+  const useStore = <T,>(selector: (state: { open: boolean }) => T): T => useSyncExternalStore(
+    instance.subscribe,
+    () => selector(instance.getSnapshot()),
+  )
+  const props = {
+    actions: instance.actions,
+    useStore,
     readLocale: () => 'en',
     t,
-    useSessions: (() => undefined) as MarketOverlayProps['useSessions'],
-    useWorkspaces: (() => undefined) as MarketOverlayProps['useWorkspaces'],
-  }
+  } as unknown as MarketOverlayProps
+  const rendered = render(<MarketOverlay {...props} />)
+  act(() => { instance.actions.open() })
+  return { ...rendered, instance }
 }
 
 function response(value: unknown, status = 200): Response {
@@ -91,10 +107,13 @@ const source: MarketSourceView = {
 const stateWithSource: MarketStateResponse = {
   sources: [source],
   builtIns: [],
+  desktopActions: { openTerminal: true, requestRestart: true },
 }
 
 const catalogWithItem: MarketCatalogResponse = {
   query: {},
+  categories: [],
+  manualInstall: [],
   fetchedAt: '2026-08-18T04:00:00.000Z',
   results: [{
     source,
@@ -128,13 +147,14 @@ const catalogWithItem: MarketCatalogResponse = {
 
 describe('community market overlay', () => {
   it('shows the empty source state without requesting a catalog', async () => {
-    const state: MarketStateResponse = { sources: [], builtIns: [] }
+    const state: MarketStateResponse = {
+      sources: [],
+      builtIns: [],
+      desktopActions: { openTerminal: true, requestRestart: true },
+    }
     const request = vi.fn<typeof fetch>(async () => response(state))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
 
     expect(await screen.findByRole('heading', { name: 'emptyTitle' })).toBeTruthy()
     expect(request).toHaveBeenCalledTimes(1)
@@ -151,10 +171,7 @@ describe('community market overlay', () => {
       String(input).includes('/state') ? response(stateWithSource) : response(catalogWithItem)
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
 
     expect(await screen.findByText('Better Sidebar')).toBeTruthy()
     expect(screen.getByText('Adds a configurable sidebar panel.')).toBeTruthy()
@@ -168,10 +185,7 @@ describe('community market overlay', () => {
       String(input).includes('/state') ? response(stateWithSource) : response(catalogWithItem)
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
 
     fireEvent.change(screen.getByPlaceholderText('search'), { target: { value: '  sidebar  ' } })
@@ -188,18 +202,17 @@ describe('community market overlay', () => {
       String(input).includes('/state') ? response(stateWithSource) : response(catalogWithItem)
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
 
     fireEvent.change(screen.getByPlaceholderText('search'), { target: { value: 'sidebar' } })
+    fireEvent.click(screen.getByRole('button', { name: 'searchAction' }))
+    await waitFor(() => { expect(request).toHaveBeenCalledTimes(3) })
     fireEvent.click(screen.getByRole('button', { name: 'refresh' }))
 
-    await waitFor(() => { expect(request).toHaveBeenCalledTimes(4) })
-    expect(String(request.mock.calls[2]?.[0])).toContain('/api/community-market/state')
-    const catalogUrl = new URL(String(request.mock.calls[3]?.[0]))
+    await waitFor(() => { expect(request).toHaveBeenCalledTimes(5) })
+    expect(String(request.mock.calls[3]?.[0])).toContain('/api/community-market/state')
+    const catalogUrl = new URL(String(request.mock.calls[4]?.[0]))
     expect(catalogUrl.searchParams.get('q')).toBe('sidebar')
     expect(catalogUrl.searchParams.get('locale')).toBe('en')
   })
@@ -214,13 +227,10 @@ describe('community market overlay', () => {
         : response(catalogWithItem)
     })
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
 
     expect(await screen.findByRole('heading', { name: 'catalogError' })).toBeTruthy()
-    expect(screen.getByText('market offline')).toBeTruthy()
+    expect(screen.getAllByText('catalogError')).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: 'retry' }))
 
     expect(await screen.findByText('Better Sidebar')).toBeTruthy()
@@ -230,19 +240,13 @@ describe('community market overlay', () => {
   it('keeps successful cards visible when one catalog source fails', async () => {
     const partialCatalog: MarketCatalogResponse = {
       ...catalogWithItem,
-      results: [
-        ...catalogWithItem.results,
-        { source, stale: false, error: 'source unavailable' },
-      ],
+      results: catalogWithItem.results.map(result => ({ ...result, error: 'source unavailable' })),
     }
     const request = vi.fn<typeof fetch>(async (input) => (
       String(input).includes('/state') ? response(stateWithSource) : response(partialCatalog)
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
 
     expect(await screen.findByText('Better Sidebar')).toBeTruthy()
     expect(screen.getByText('partialFailure')).toBeTruthy()
@@ -258,10 +262,7 @@ describe('community market overlay', () => {
       String(input).includes('/state') ? response(stateWithSource) : response(staleCatalog)
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
 
     expect(await screen.findByText('Better Sidebar')).toBeTruthy()
     expect(screen.getByText('stale')).toBeTruthy()
@@ -274,37 +275,60 @@ describe('community market overlay', () => {
       String(input).includes('/state') ? response(stateWithSource) : pendingCatalog
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
 
     expect(await screen.findByText('loading')).toBeTruthy()
     resolveCatalog(response(catalogWithItem))
     expect(await screen.findByText('Better Sidebar')).toBeTruthy()
   })
 
-  it('toggles a source and stops catalog requests when it becomes disabled', async () => {
-    const disabledSource = { ...source, enabled: false }
+  it('selects another source and reloads the catalog for the new selection', async () => {
+    const secondSource: MarketSourceView = {
+      ...source,
+      sourceRecordId: '028f1f77-a5c4-7b73-a9ae-0242ac120003',
+      providerId: 'com.example.second-catalog',
+      builtInProviderKey: 'second-catalog',
+      enabled: false,
+      order: 1,
+      name: 'Second catalog',
+      endpoint: 'https://plugins.example.org/catalog.json',
+      partnership: false,
+    }
+    const stateWithTwoSources: MarketStateResponse = {
+      ...stateWithSource,
+      sources: [source, secondSource],
+    }
+    const selectedSecondSource = { ...secondSource, enabled: true }
+    const deselectedFirstSource = { ...source, enabled: false }
+    const secondCatalog: MarketCatalogResponse = {
+      ...catalogWithItem,
+      results: catalogWithItem.results.map(result => ({ ...result, source: selectedSecondSource })),
+    }
+    let catalogCalls = 0
     const request = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input)
-      if (url.includes('/state')) return response(stateWithSource)
-      if (url.includes('/catalog')) return response(catalogWithItem)
+      if (url.includes('/state')) return response(stateWithTwoSources)
+      if (url.includes('/catalog')) {
+        catalogCalls += 1
+        return response(catalogCalls === 1 ? catalogWithItem : secondCatalog)
+      }
       expect(init?.method).toBe('POST')
-      return response({ sources: [disabledSource] })
+      return response({ sources: [deselectedFirstSource, selectedSecondSource] })
     })
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByRole('button', { name: 'sources' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'disable' }))
-    expect(await screen.findByText('disabled')).toBeTruthy()
-    expect(request).toHaveBeenCalledTimes(3)
+    fireEvent.click(screen.getByRole('radio', { name: 'selectSource' }))
+    expect(await screen.findByText('currentSource: Second catalog')).toBeTruthy()
+    expect(request).toHaveBeenCalledTimes(4)
     expect(request.mock.calls[2]?.[1]).toMatchObject({ method: 'POST' })
+    expect(request.mock.calls[2]?.[1]?.body).toBe(JSON.stringify({
+      action: 'select',
+      sourceRecordId: secondSource.sourceRecordId,
+    }))
+    expect(String(request.mock.calls[3]?.[0])).toContain('/api/community-market/catalog')
   })
 
   it('removes a source from the source list', async () => {
@@ -316,10 +340,7 @@ describe('community market overlay', () => {
       return response({ sources: [] })
     })
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByRole('button', { name: 'sources' }))
     fireEvent.click(screen.getByRole('button', { name: 'remove' }))
@@ -348,17 +369,14 @@ describe('community market overlay', () => {
       return response({ sources: [source, addedSource] })
     })
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByRole('button', { name: 'sources' }))
     fireEvent.click(screen.getByRole('button', { name: 'addStandard' }))
     fireEvent.change(screen.getByLabelText('standardSource'), { target: { value: '  https://plugins.example.org/catalog-source.json  ' } })
     fireEvent.click(screen.getByRole('button', { name: 'confirmAdd' }))
 
-    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: 'addStandard' })).toBeNull() })
     expect(request.mock.calls[2]?.[1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({ action: 'add-standard', manifestUrl: 'https://plugins.example.org/catalog-source.json' }),
@@ -374,10 +392,7 @@ describe('community market overlay', () => {
       return response({ error: 'source offline' }, 400)
     })
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByRole('button', { name: 'sources' }))
     fireEvent.click(screen.getByRole('button', { name: 'addStandard' }))
@@ -385,8 +400,8 @@ describe('community market overlay', () => {
     fireEvent.change(input, { target: { value: 'https://plugins.example.org/broken.json' } })
     fireEvent.click(screen.getByRole('button', { name: 'confirmAdd' }))
 
-    expect((await screen.findAllByText('source offline')).length).toBe(2)
-    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect((await screen.findAllByText('sourceError')).length).toBe(2)
+    expect(screen.getByRole('dialog', { name: 'addStandard' })).toBeTruthy()
     expect(input).toHaveProperty('value', 'https://plugins.example.org/broken.json')
   })
 
@@ -396,20 +411,16 @@ describe('community market overlay', () => {
     ))
     vi.stubGlobal('fetch', request)
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    renderOpenOverlay()
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByText('Better Sidebar').closest('button')!)
 
-    expect(screen.getByRole('complementary', { name: 'details' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'repository' }))
+    const details = screen.getByRole('dialog', { name: 'Better Sidebar' })
+    fireEvent.click(within(details).getByRole('button', { name: 'repository' }))
     expect(open).toHaveBeenCalledWith('https://github.com/example/better-sidebar', '_blank', 'noopener,noreferrer')
 
-    const closeButtons = screen.getAllByRole('button', { name: 'close' })
-    fireEvent.click(closeButtons[1]!)
-    expect(screen.queryByRole('complementary', { name: 'details' })).toBeNull()
+    fireEvent.click(within(details).getByRole('button', { name: 'close' }))
+    expect(screen.queryByRole('dialog', { name: 'Better Sidebar' })).toBeNull()
     open.mockRestore()
   })
 
@@ -418,18 +429,16 @@ describe('community market overlay', () => {
       String(input).includes('/state') ? response(stateWithSource) : response(catalogWithItem)
     ))
     vi.stubGlobal('fetch', request)
-    const controller = new MarketController()
-
-    render(<MarketOverlay {...props(controller)} />)
-    controller.open()
+    const view = renderOpenOverlay()
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByText('Better Sidebar').closest('button')!)
 
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.getByRole('complementary', { name: 'details' })).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: 'close' })[1]!)
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    const details = screen.getByRole('dialog', { name: 'Better Sidebar' })
+    fireEvent.click(within(details).getByRole('button', { name: 'close' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: 'Better Sidebar' })).toBeNull() })
+    fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('region', { name: 'title' })).toBeNull()
-    expect(controller.getSnapshot()).toBe(false)
+    expect(view.instance.getSnapshot().open).toBe(false)
   })
 })

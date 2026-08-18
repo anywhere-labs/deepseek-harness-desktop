@@ -1,27 +1,31 @@
-import { useSyncExternalStore } from 'react'
-import { IconCordisPluginOutline14, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MarketController } from './controller.js'
+import {
+  Button,
+  IconCordisPluginOutline14,
+  Tooltip,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+import type { createMarketViewStore } from './market-view-store.js'
 
 export type MarketLauncherProps = PropsRuntime<'sidebar.footer.action'>
+  & PropsStore<ReturnType<typeof createMarketViewStore>>
   & PropsLocale<'community-market'>
-  & { controller: MarketController }
 
-export function MarketLauncher({ wide, controller, t }: MarketLauncherProps) {
-  const opened = useSyncExternalStore(controller.subscribe, controller.getSnapshot)
+export function MarketLauncher({ wide, useStore, actions, t }: MarketLauncherProps) {
+  const open = useStore(state => state.open)
   return (
-    <Tooltip label={t('launcher')} delayMs={500} disabled={wide}>
-      <button
-        type="button"
+    <Tooltip label={t('tab')} delayMs={500} disabled={wide}>
+      <Button
+        variant="ghost"
         className="dshMarketLauncher"
         data-wide={wide}
-        data-active={opened}
-        aria-label={t('launcher')}
-        onClick={() => controller.open()}
+        aria-label={t('tab')}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        icon={<IconCordisPluginOutline14 size={wide ? 16 : 18} />}
+        onClick={() => actions.open()}
       >
-        <IconCordisPluginOutline14 size={wide ? 16 : 18} />
-        {wide && <span>{t('launcher')}</span>}
-      </button>
+        {wide ? t('tab') : null}
+      </Button>
     </Tooltip>
   )
 }

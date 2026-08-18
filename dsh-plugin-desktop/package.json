@@ -52,6 +52,10 @@
       "types": "./lib/types/profile-service.d.ts",
       "default": "./lib/profile-service.js"
     },
+    "./desktop-plugins": {
+      "types": "./lib/types/desktop-plugins.d.ts",
+      "default": "./lib/desktop-plugins.js"
+    },
     "./profiles": {
       "types": "./lib/types/profiles.d.ts",
       "default": "./lib/profiles.js"
@@ -107,7 +111,7 @@
     "verify:licenses": "node scripts/verify-licenses.mjs",
     "verify:notices": "node scripts/verify-licenses.mjs --notices THIRD_PARTY_NOTICES.md",
     "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile && yarn run verify:licenses",
-    "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-agent-presets.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
+    "check:win-package": "yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-win-portable.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-agent-presets.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
     "check:mac-package": "yarn run -T check",
     "check:linux-package": "yarn run -T check",
     "start": "node lib/bin.js",
@@ -117,6 +121,7 @@
     "dist:mac-smoke": "node scripts/package-mac.ts",
     "dist:win": "node scripts/package-win.ts",
     "dist:linux": "node scripts/package-linux.ts",
+    "dist:win-portable": "node scripts/package-win-portable.ts",
     "prepack": "yarn run check"
   },
   "dependencies": {
@@ -297,6 +302,7 @@
           ]
         }
       ],
+      "artifactName": "DSH-Desktop-${version}-${arch}-Portable.${ext}",
       "icon": "build/app-icon.png",
       "files": [
         "!node_modules/node-pty/build/**"

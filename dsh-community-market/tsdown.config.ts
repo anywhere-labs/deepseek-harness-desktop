@@ -24,6 +24,7 @@ export default defineConfig({
       '@deepseek-ai/dsh-client-locale/client',
       '@deepseek-ai/dsh-client-ui-layout/client',
       '@deepseek-ai/dsh-client-ui-primitives',
+      '@deepseek-ai/dsh-client-ui-settings/client',
       '@deepseek-ai/dsh-client-ui-sidebar/client',
       '@deepseek-ai/dsh-client-ui-slots',
     ],

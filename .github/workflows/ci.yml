@@ -40,7 +40,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn check
 
-  # Windows-only logic and an unsigned NSIS build on a real Windows runner:
+  # Windows-only logic and unsigned NSIS/portable builds on a real Windows runner:
   # updates, window options, pwsh sandbox, volume diagnostics, and packaging.
   desktop-windows:
     runs-on: windows-latest
@@ -63,6 +63,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn check
       - run: yarn dist:win
+      - run: yarn dist:win-portable
 
   # macOS-only universal packaging smoke on a real macOS runner: the signed
   # release is built manually on a credentialed machine, so an unsigned DMG

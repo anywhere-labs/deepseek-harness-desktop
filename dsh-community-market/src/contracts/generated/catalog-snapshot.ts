@@ -26,6 +26,7 @@ export type Item = Item1 & {
   repository?: Repository
   package?: Package
   publisher?: Publisher
+  media?: Media
   capabilities?: Capabilities
   compatibility?: Compatibility
   updatedAt?: string
@@ -43,6 +44,11 @@ export type Item1 =
 export type Identifier = string
 export type PlainText = string
 export type CategoryId = string
+/**
+ * An opaque Host-managed media reference. It is neither a remote URL nor a filesystem path and is the only media locator exposed to the Renderer.
+ */
+export type AssetRef = string
+export type MediaAlt = PlainText
 /**
  * @maxItems 64
  */
@@ -81,6 +87,20 @@ export interface Package {
 export interface Publisher {
   name: PlainText
   url?: HttpsUri
+}
+/**
+ * Optional Host-resolved plugin media. Draft v1 standardizes only the icon slot.
+ */
+export interface Media {
+  icon: ResolvedIcon
+}
+/**
+ * A Host-resolved icon safe for Renderer consumption. The role distinguishes a plugin-owned icon from a publisher-avatar fallback.
+ */
+export interface ResolvedIcon {
+  assetRef: AssetRef
+  role: 'plugin-icon' | 'publisher-avatar'
+  alt?: MediaAlt
 }
 export interface Capabilities {
   required?: CapabilityList

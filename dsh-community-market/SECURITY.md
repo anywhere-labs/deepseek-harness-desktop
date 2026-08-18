@@ -4,19 +4,23 @@
 
 ## Current status
 
-`dsh-community-market` remains private. Its read-only Host/Client runtime validates and normalizes catalog data, persists user-owned source choices, and performs constrained HTTPS requests only after a source is explicitly enabled. It has no installer or package-manager access.
+`dsh-community-market` remains private and is being exercised through Desktop integration tests. Its Host/Client runtime validates and normalizes catalog data, persists user-owned source choices, and performs constrained HTTPS requests only after a source is explicitly enabled. On DSH Desktop it also implements a limited exact-version npm install path and receipt-backed uninstall through the managed package capability; the renderer has no package-manager access.
 
 ## Trust model
 
-Future catalog responses are untrusted remote input. A catalog listing is not a security review, compatibility promise, maintainer verification, or endorsement. Plugin repository links and display metadata must be validated and rendered as inert data.
+Catalog responses are untrusted remote input. A catalog listing or **Installable** card is not a security review, compatibility promise, maintainer verification, or endorsement. Plugin repository links and display metadata are validated and rendered as inert data.
 
-Installing a plugin is a higher-risk action than browsing. A plugin runs locally with the user's permissions, and its package installation may execute lifecycle scripts. The future installer must therefore preserve all of these rules:
+Installing a plugin is a higher-risk action than browsing because the installed plugin and its dependency tree become local third-party code running with the user's permissions. The current installer rejects a target package that declares `preinstall`, `install`, `postinstall`, or `prepare`; this policy does not inspect or prove the safety of all dependency code. Package operations preserve all of these rules:
 
 - installation starts only after an explicit user gesture and confirmation;
-- the exact canonical source, derived install target, and active profile are visible before execution;
-- no command string, script, or HTML from a catalog response is executed;
+- the exact Host-verified npm package/version and active profile are visible before execution;
+- no command string, script, or HTML from a catalog response is executed; provider commands are discarded, while any Host-reconstructed manual command is bounded, display-only, and never sent to a Desktop action;
 - Desktop installation goes through the managed `desktopPnpm.runPlugin()` capability;
-- operations are cancellable, serialized, and joined during service teardown;
+- only an exact stable npm target that passes independent registry, repository, integrity, bundle, deprecation, lifecycle-script, DSH rc.7, and bundled Node.js checks may proceed;
+- previews and reads are cancellable; after confirmation is accepted, the serialized mutation is Host-owned and a UI disconnect only drops the response; a changed active profile or one-shot preview is rejected;
+- uninstall owns only a valid Market receipt whose exact package and bundle still match in the active profile; it does not depend on the catalog source remaining available;
+- opening DSH Terminal is an exact empty-body action that carries no command, path, or profile; it never pastes or executes the displayed manual hint;
+- a successful mutation may issue a short-lived, one-shot restart grant; restarting remains a separate explicit user choice and is never silent;
 - credentials, environment variables, raw response bodies, and local paths are not exposed to the UI or logs;
 - a catalog failure never blocks DSH or Desktop startup.
 
@@ -28,7 +32,7 @@ Adding a source is a separate, explicit user action; a remote manifest cannot en
 
 Source requests use no ambient cookies or credentials. They have bounded redirects, timeouts, concurrency, decoded response size, item count, nesting, and string lengths. The response must be JSON and pass the published schema before normalization. Remote adapter code, scripts, HTML, install commands, headers, and secrets are never accepted from a source manifest. A development-only loopback exception must be visibly enabled and must never change production defaults.
 
-Each selected source fails independently. Failure of one source may be shown beside its source name, but must not hide successful results from other sources, trigger a fallback source, modify the user's selection, or block DSH/Desktop startup.
+Only one source is selected for browsing at a time. Its failure may be shown beside its source name, but must not trigger a fallback source, modify the user's selection, erase local install receipts, or block DSH/Desktop startup.
 
 ## Reporting a vulnerability
 
