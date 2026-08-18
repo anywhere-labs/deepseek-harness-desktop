@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "skipLibCheck": true
+  },
+  "exclude": [],
+  "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "src/api-types.ts"]
+}

@@ -1,0 +1,12 @@
+{
+  "q": "sidebar",
+  "category": [
+    "interface"
+  ],
+  "capability": [
+    "ui.panel"
+  ],
+  "limit": 20,
+  "sort": "relevance",
+  "locale": "zh-CN"
+}

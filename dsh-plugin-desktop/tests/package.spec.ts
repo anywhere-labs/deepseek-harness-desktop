@@ -22,7 +22,14 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
     afterPack?: unknown
     electronFuses?: unknown
     files?: unknown
-    mac?: { hardenedRuntime?: unknown; icon?: unknown; notarize?: unknown; target?: unknown }
+    mac?: {
+      hardenedRuntime?: unknown
+      icon?: unknown
+      mergeASARs?: unknown
+      notarize?: unknown
+      target?: unknown
+      x64ArchFiles?: unknown
+    }
     win?: { icon?: unknown; target?: unknown }
     nsis?: Record<string, unknown>
     linux?: { icon?: unknown }
@@ -37,6 +44,7 @@ const workspaceManifest = JSON.parse(readFileSync(new URL('package.json', worksp
   resolutions?: Record<string, unknown>
   scripts?: Record<string, unknown>
 }
+const ciWorkflow = readFileSync(new URL('.github/workflows/ci.yml', workspaceRoot), 'utf8')
 
 describe('published package surface', () => {
   it('registers both npm launcher names', () => {
@@ -53,6 +61,10 @@ describe('published package surface', () => {
       types: './lib/types/windows-pwsh-sandbox.d.ts',
       default: './lib/windows-pwsh-sandbox.js',
     })
+    expect(manifest.exports).toHaveProperty('./windows-agent-presets', {
+      types: './lib/types/windows-agent-presets.d.ts',
+      default: './lib/windows-agent-presets.js',
+    })
     expect(manifest.exports).toHaveProperty('./terminal', {
       types: './lib/types/terminal.d.ts',
       default: './lib/terminal.js',
@@ -68,6 +80,10 @@ describe('published package surface', () => {
     expect(manifest.exports).toHaveProperty('./profiles', {
       types: './lib/types/profiles.d.ts',
       default: './lib/profiles.js',
+    })
+    expect(manifest.exports).toHaveProperty('./diagnostics', {
+      types: './lib/types/diagnostics.d.ts',
+      default: './lib/diagnostics.js',
     })
     expect(manifest.exports).toHaveProperty('./updates', {
       types: './lib/types/updates.d.ts',
@@ -89,9 +105,11 @@ describe('published package surface', () => {
       ],
     })
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-community-market')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/terminal')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/pnpm')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/profiles')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
   })
 
@@ -104,6 +122,7 @@ describe('published package surface', () => {
     const config = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
 
     expect(config).toContain("'windows-pwsh-sandbox': 'src/windows-pwsh-sandbox.ts'")
+    expect(config).toContain("'windows-agent-presets': 'src/windows-agent-presets.ts'")
     expect(config).toContain("'windows-acl-runner': 'src/windows-acl-runner.ts'")
     expect(config).toContain("'desktop-cli': 'src/desktop-cli.ts'")
     expect(config).toContain("'desktop-runtime-environment': 'src/desktop-runtime-environment.ts'")
@@ -112,6 +131,8 @@ describe('published package surface', () => {
     expect(config).toContain("'profile-service': 'src/profile-service.ts'")
     expect(config).toContain("pnpm: 'src/pnpm.ts'")
     expect(config).toContain("profiles: 'src/profiles.ts'")
+    expect(config).toContain("diagnostics: 'src/diagnostics.ts'")
+    expect(config).toContain("'diagnostic-export-worker': 'src/diagnostic-export-worker.ts'")
     expect(config).toContain("terminal: 'src/terminal.ts'")
     expect(config).toContain("'update-download': 'src/update-download.ts'")
     expect(config).toContain("updates: 'src/updates.ts'")
@@ -119,13 +140,17 @@ describe('published package surface', () => {
 
   it('installs Host command PATHs after the launch snapshot and before profile boot', () => {
     const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const recover = main.indexOf('await resolveDesktopShellEnvironment')
+    const applyRecovered = main.indexOf('Object.entries(shellEnvironmentResolution.updates)')
     const snapshot = main.indexOf('const environment = loadLayeredEnv')
     const install = main.indexOf('const pnpmRuntime = installDesktopPnpmRuntime')
     const prepare = main.indexOf('const prepared = prepareDesktopProfile')
     const installDsh = main.indexOf('const dshRuntime = process.platform === \'win32\'')
     const boot = main.indexOf('const ctx = await boot')
 
-    expect(snapshot).toBeGreaterThanOrEqual(0)
+    expect(recover).toBeGreaterThanOrEqual(0)
+    expect(applyRecovered).toBeGreaterThan(recover)
+    expect(snapshot).toBeGreaterThan(applyRecovered)
     expect(install).toBeGreaterThan(snapshot)
     expect(prepare).toBeGreaterThan(install)
     expect(installDsh).toBeGreaterThan(prepare)
@@ -135,6 +160,34 @@ describe('published package surface', () => {
     expect(main).toContain("'dsh-plugin-desktop: packaged dsh runtime PATH'")
     expect(main).toContain('disposePnpmRuntime?.()')
     expect(main).toContain('disposeDshRuntime?.()')
+  })
+
+  it('wires local crash evidence before Electron becomes ready', () => {
+    const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const startCrashReporter = main.indexOf('startDesktopCrashReporting(crashReporter')
+    const beginRun = main.indexOf('beginDesktopRun(')
+    const childLogging = main.indexOf('installDesktopChildProcessLogging(app')
+    const exitCoordinator = main.indexOf('createDesktopExitCoordinator(')
+    const ready = main.indexOf('await app.whenReady()')
+    const markClean = main.indexOf('desktopRun?.markClean()')
+    const nativeExit = main.indexOf('app.exit(code)')
+
+    expect(startCrashReporter).toBeGreaterThanOrEqual(0)
+    expect(beginRun).toBeGreaterThan(startCrashReporter)
+    expect(childLogging).toBeGreaterThan(beginRun)
+    expect(exitCoordinator).toBeGreaterThan(childLogging)
+    expect(nativeExit).toBeGreaterThan(exitCoordinator)
+    expect(markClean).toBeGreaterThan(nativeExit)
+    expect(ready).toBeGreaterThan(markClean)
+  })
+
+  it('uses the upstream child-environment scrub around login-shell recovery', () => {
+    const shellEnvironment = readFileSync(new URL('src/shell-environment.ts', packageRoot), 'utf8')
+
+    expect(shellEnvironment).toContain('scrubbedParentEnv')
+    expect(shellEnvironment).toContain('SENSITIVE_ENV_PATTERN')
+    expect(shellEnvironment).toContain('DSH_ENV_PREFIX')
+    expect(shellEnvironment).toContain('DESKTOP_SHELL_ENVIRONMENT_KEYS')
   })
 
   it('fixes the installed application identity', () => {
@@ -164,8 +217,10 @@ describe('published package surface', () => {
       'cordis.patch.yml',
       'lib/**',
       'package.json',
+      '!node_modules/node-pty/build/**',
     ])
     expect(manifest.build?.mac?.icon).toBe('build/app-icon-mac.png')
+    expect(manifest.build?.mac?.mergeASARs).toBe(false)
     expect(manifest.build?.win?.icon).toBe('build/app-icon.png')
     expect(manifest.build?.win?.target).toEqual([{
       target: 'nsis',
@@ -194,6 +249,7 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['package:dir']).toBe('yarn run build && node scripts/package-dir.mjs')
     expect(packageDir).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
     expect(manifest.scripts?.['dist:mac']).toBe('node scripts/release-mac.ts')
+    expect(manifest.scripts?.['dist:mac-smoke']).toBe('node scripts/package-mac.ts')
     expect(manifest.scripts?.['dist:win']).toBe('node scripts/package-win.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run typecheck')
@@ -202,18 +258,43 @@ describe('published package surface', () => {
     expect(manifest.scripts?.['check:win-package']).toContain('tests/update-download.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/windows-volume-diagnostics.spec.ts')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run verify:closure')
+    expect(manifest.scripts?.['check:mac-package']).toBe('yarn run -T check')
     expect(manifest.scripts?.['verify:cli']).toBe('node scripts/verify-cli-runtime.mjs')
     expect(manifest.scripts?.check).toContain('yarn run verify:cli')
-    expect(workspaceManifest.scripts?.['dist:mac']).toBe('yarn workspace dsh-plugin-desktop dist:mac')
+    expect(workspaceManifest.scripts?.['dist:mac'])
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac')
+    expect(workspaceManifest.scripts?.['dist:mac-smoke'])
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac-smoke')
     expect(workspaceManifest.scripts?.['dist:win'])
-      .toBe('yarn workspace dsh-plugin-desktop dist:win')
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win')
     expect(manifest.build?.afterPack).toBe('./scripts/verify-packaged-runtime.ts')
     expect(manifest.build?.mac).toEqual(expect.objectContaining({
       hardenedRuntime: true,
+      mergeASARs: false,
       notarize: true,
       target: ['dir'],
+      x64ArchFiles: expect.stringContaining('node-pty/prebuilds/darwin-*'),
     }))
+    expect(manifest.build?.files).toContain('!node_modules/node-pty/build/**')
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
+  })
+
+  it('runs the full gate on Windows and packages through root scripts on native runners', () => {
+    const windowsJob = ciWorkflow.slice(
+      ciWorkflow.indexOf('  desktop-windows:'),
+      ciWorkflow.indexOf('  desktop-macos:'),
+    )
+    const macosJob = ciWorkflow.slice(
+      ciWorkflow.indexOf('  desktop-macos:'),
+      ciWorkflow.indexOf('  upstream-command-windows:'),
+    )
+
+    expect(windowsJob).toContain('- run: yarn check')
+    expect(windowsJob).toContain('- run: yarn dist:win')
+    expect(windowsJob).not.toContain('yarn workspace dsh-plugin-desktop dist:win')
+    expect(macosJob).toContain('- run: yarn workspace dsh-community-market check')
+    expect(macosJob).toContain('- run: yarn dist:mac-smoke')
+    expect(macosJob).not.toContain('yarn workspace dsh-plugin-desktop dist:mac-smoke')
   })
 
   it('keeps one fixed brand-blue tray source for generated native assets', () => {
@@ -289,18 +370,18 @@ describe('published package surface', () => {
   })
 
   it('patches the native directory picker to avoid Electron external buffers', () => {
-    const patchResolution = 'patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.6#./patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch'
+    const patchResolution = 'patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.7#./patches/dsh-host-directory-picker-native@0.1.0-rc.7.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
-    const patch = readFileSync(new URL('patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch', workspaceRoot), 'utf8')
+    const patch = readFileSync(new URL('patches/dsh-host-directory-picker-native@0.1.0-rc.7.patch', workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const workerPath = workspaceRequire.resolve('@deepseek-ai/dsh-host-directory-picker-native/worker')
     const installedWorker = readFileSync(workerPath, 'utf8')
 
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-host-directory-picker-native@npm:0.1.0-rc.6': patchResolution,
-      '@deepseek-ai/dsh-host-directory-picker-native@npm:^0.1.0-rc.6': patchResolution,
+      '@deepseek-ai/dsh-host-directory-picker-native@npm:0.1.0-rc.7': patchResolution,
+      '@deepseek-ai/dsh-host-directory-picker-native@npm:^0.1.0-rc.7': patchResolution,
     })
-    expect(lockfile).toContain('@deepseek-ai/dsh-host-directory-picker-native@patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.6#./patches/dsh-host-directory-picker-native@0.1.0-rc.6.patch')
+    expect(lockfile).toContain('@deepseek-ai/dsh-host-directory-picker-native@patch:@deepseek-ai/dsh-host-directory-picker-native@npm%3A0.1.0-rc.7#./patches/dsh-host-directory-picker-native@0.1.0-rc.7.patch')
     expect(patch).toContain('return koffi.decode.string16(address)')
     expect(installedWorker).toContain('return koffi.decode.string16(address)')
     expect(installedWorker).not.toContain('Buffer.from(koffi.view(address')
@@ -327,9 +408,9 @@ describe('published package surface', () => {
   })
 
   it('starts restricted Windows shells with a hidden console show state', () => {
-    const patchResolution = 'patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.6#./patches/dsh-sandbox-windows-acl@0.1.0-rc.6.patch'
+    const patchResolution = 'patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.7#./patches/dsh-sandbox-windows-acl@0.1.0-rc.7.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
-    const patch = readFileSync(new URL('patches/dsh-sandbox-windows-acl@0.1.0-rc.6.patch', workspaceRoot), 'utf8')
+    const patch = readFileSync(new URL('patches/dsh-sandbox-windows-acl@0.1.0-rc.7.patch', workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const sandboxManifest = workspaceRequire.resolve('@deepseek-ai/dsh-sandbox-windows-acl/package.json')
     const sandboxLocalManifest = workspaceRequire.resolve('@deepseek-ai/dsh-sandbox-local/package.json')
@@ -338,12 +419,12 @@ describe('published package surface', () => {
     const runtimeChunks = readdirSync(sandboxLib).filter(name => /^types-.*\.js$/u.test(name))
 
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-sandbox-windows-acl@npm:0.1.0-rc.6': patchResolution,
-      '@deepseek-ai/dsh-sandbox-windows-acl@npm:^0.1.0-rc.6': patchResolution,
+      '@deepseek-ai/dsh-sandbox-windows-acl@npm:0.1.0-rc.7': patchResolution,
+      '@deepseek-ai/dsh-sandbox-windows-acl@npm:^0.1.0-rc.7': patchResolution,
     })
     expect(sandboxLocalRequire.resolve('@deepseek-ai/dsh-sandbox-windows-acl/package.json'))
       .toBe(sandboxManifest)
-    expect(lockfile).toContain('@deepseek-ai/dsh-sandbox-windows-acl@patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.6#./patches/dsh-sandbox-windows-acl@0.1.0-rc.6.patch')
+    expect(lockfile).toContain('@deepseek-ai/dsh-sandbox-windows-acl@patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.7#./patches/dsh-sandbox-windows-acl@0.1.0-rc.7.patch')
     expect(patch.match(/^\+\s*dwFlags: 257,\r?$/gmu)).toHaveLength(2)
     expect(patch.match(/^\+\s*wShowWindow: 0,\r?$/gmu)).toHaveLength(2)
     expect(runtimeChunks).toHaveLength(1)

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.0.0",
+  "source": {
+    "sourceRecordId": "018f1f77-a5c4-7b73-a9ae-0242ac120002",
+    "providerId": "org.example.catalog",
+    "adapterId": "market.standard-v1",
+    "registrationKind": "user-added",
+    "fetchedAt": "2026-08-17T08:00:01Z",
+    "finalUrl": "https://plugins.example.org/v1/plugins"
+  },
+  "items": [
+    {
+      "id": "plugin-one",
+      "name": "plugin-one",
+      "displayName": "Plugin One",
+      "summary": "Example plugin.",
+      "repository": {
+        "url": "https://github.com/example/plugin-one"
+      },
+      "provenance": {
+        "sourceRecordId": "018f1f77-a5c4-7b73-a9ae-0242ac120002",
+        "providerId": "org.example.catalog",
+        "itemId": "another-plugin"
+      }
+    }
+  ],
+  "page": {}
+}

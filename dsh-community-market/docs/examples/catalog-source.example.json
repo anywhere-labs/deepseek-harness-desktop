@@ -1,0 +1,36 @@
+{
+  "manifestVersion": "1.0.0",
+  "providerId": "org.example.community-catalog",
+  "name": "Example Community Catalog",
+  "description": "A sample user-selectable catalog source for implementation tests.",
+  "homepage": "https://plugins.example.org/",
+  "attribution": {
+    "name": "Example Plugin Community",
+    "url": "https://plugins.example.org/",
+    "notice": "Catalog metadata is maintained by the example community."
+  },
+  "transport": {
+    "kind": "https-json",
+    "endpoint": "https://plugins.example.org/v1/plugins",
+    "method": "GET"
+  },
+  "query": {
+    "supported": [
+      "q",
+      "category",
+      "capability",
+      "cursor",
+      "limit",
+      "sort",
+      "locale"
+    ],
+    "defaultLimit": 20,
+    "maxLimit": 100,
+    "sorts": [
+      "relevance",
+      "updated",
+      "name",
+      "downloads"
+    ]
+  }
+}

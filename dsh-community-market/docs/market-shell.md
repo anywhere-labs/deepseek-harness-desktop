@@ -2,7 +2,7 @@
 
 [中文](market-shell.zh.md)
 
-Status: proposed; documentation scaffold only
+Status: proposed; read-only Host/Client market MVP implemented for integration testing, installer not implemented
 
 This document defines the first implementation boundary for `dsh-community-market`. It is deliberately narrower than a complete marketplace. The package owns an in-product shell and adapters; it does not own the community catalog, package registry, or DSH profile format.
 
@@ -12,7 +12,7 @@ This document defines the first implementation boundary for `dsh-community-marke
 - Keep catalog browsing read-only until a user explicitly chooses an action.
 - Install only into the active profile, with the plugin source and profile visible before confirmation.
 - Reuse existing DSH plugin and Desktop profile behavior instead of creating parallel state.
-- Make the catalog provider replaceable, so the interface is not permanently coupled to one service.
+- Let people explicitly choose, order, and add catalog sources without coupling the interface to one service.
 - Keep the package useful without Electron-specific access. Desktop integrations are optional capabilities, not renderer globals.
 
 ## Non-goals for the first release
@@ -28,7 +28,10 @@ This document defines the first implementation boundary for `dsh-community-marke
 
 ```mermaid
 flowchart LR
-    Catalog["Remote catalog provider"] --> Host["Market Host plugin<br/>fetch, limit, validate, normalize"]
+    Selection["User source selection<br/>none, one, or many"] --> Registry["Source registry"]
+    Partner["Reviewed partner adapters"] --> Registry
+    Standard["User-added standard sources"] --> Registry
+    Registry --> Host["Market Host plugin<br/>fetch, isolate, validate, normalize"]
     Host --> Route["Ordinary DSH route or RPC"]
     Route --> Client["Market client plugin<br/>search, details, confirmation"]
     Profiles["desktopProfiles<br/>active profile"] --> Host
@@ -38,32 +41,29 @@ flowchart LR
 
 The renderer receives normalized plain data through an ordinary DSH route or RPC. It does not receive Electron, filesystem, process, `desktopRuntime`, or package-manager access. The Host owns catalog I/O, validation, installation orchestration, cancellation, and operation serialization.
 
-## Catalog provider
+## Catalog sources and adapters
 
-The first adapter is planned for the public registry endpoint documented by [DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins):
+There is no default catalog. A first-run source chooser lets the user enable no source, one source, or several sources and choose their presentation order. Having no selected source produces an explicit empty state; it never silently falls back to a partner.
 
-```text
-GET https://deepseek1024.com/api/v1/registry
-```
+The Host supports two source paths:
 
-The endpoint and its schema belong to that independent project. They must stay behind a provider interface rather than becoming UI assumptions. A normalized snapshot needs only:
+1. A user-added source implements the published HTTPS JSON contract and is handled by the standard adapter.
+2. A partner with a different API is integrated through a reviewed adapter shipped with the Market code.
 
-- source identity and source page;
-- catalog update time;
-- ordered categories with localized labels;
-- plugin identity, name, owner, repository URL, category, and localized description;
-- optional display metadata such as stars.
+A remote manifest can describe data, but cannot supply adapter code, credentials, commands, enablement, or priority. Every adapter converts its private response into the same normalized page before the renderer receives it. Source-specific fields must never become UI assumptions.
 
-Remote fields are display data, not executable instructions. The provider must enforce an HTTPS endpoint, timeout, response-size limit, JSON content, a strict schema, unique identifiers, bounded strings, and canonical repository URLs. Unknown fields are ignored. Text is rendered as text, never as raw HTML.
+[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) is one of the providers currently cooperating with the project, and the market includes a reviewed built-in adapter for its public API. It is not a default, preferred source, or fallback, and the cooperation does not mean that its listings were reviewed or endorsed. Its endpoint and schema remain owned by that independent project.
 
-The compact registry does not prove package ownership, security review, compatibility, or maintainer identity. The UI must always show the catalog source and a visible statement that listing is not endorsement.
+The normative draft for the implementation team is the [catalog provider contract](catalog-provider-contract.md), with machine-readable schemas for the source manifest, query, untrusted provider page, and Host-normalized response. Remote fields are display data, not executable instructions. Text is rendered as text, never as raw HTML.
 
 ## Read-only browsing
 
 Phase 1 provides:
 
+- a source chooser, source ordering, and addition of a conforming source;
+- isolated multi-source queries where one failed source does not hide successful results from others;
 - loading, empty, offline, invalid-response, and retry states;
-- local search over normalized names and descriptions;
+- search over normalized names and descriptions;
 - category filtering;
 - a details view with the source repository and catalog attribution;
 - an unavailable state when installation capability is absent.
@@ -75,15 +75,15 @@ Loading the catalog never invokes a package manager, resolves a local executable
 Installation belongs to Phase 2 and starts only from a user gesture. Before execution, the confirmation must show:
 
 - plugin name;
-- canonical source repository;
-- exact derived install target;
+- canonical package or source repository identity;
+- exact pinned package version or immutable repository commit;
 - active profile name;
 - a warning that plugins run locally with the user's permissions;
 - a warning that package lifecycle scripts may run during installation.
 
-The catalog's `install` field, documentation snippets, or arbitrary command strings are never executed. For the initial GitHub catalog, the Host derives the target from a validated `owner/repository[/sub/directory]` identity and produces the one supported GitHub dependency form. The derivation and quoting rules must be covered by tests before installation is enabled.
+Catalog `install` fields, documentation snippets, and arbitrary command strings are never executed. The Host independently resolves a validated package identity to an exact SemVer version, or a canonical repository identity to an immutable commit. Mutable, unresolved, or changed targets keep installation disabled. Resolution, revalidation, and quoting rules must be covered by tests before installation is enabled.
 
-On Desktop, the initial adapter will use the public services already owned by `dsh-plugin-desktop`:
+On Desktop, the Market Host will use the public services already owned by `dsh-plugin-desktop`:
 
 1. Read the active identity from `desktopProfiles.current`.
 2. Invoke `desktopPnpm.runPlugin()` with an `add` operation, an explicit absolute invoking directory, and an `AbortSignal`.
@@ -129,7 +129,8 @@ Raw response bodies, filesystem paths, tokens, environment variables, and comman
 ### Phase 1: read-only market shell
 
 - Host and Client plugin entries.
-- Replaceable catalog provider and strict normalization.
+- User-owned source selection, standard sources, reviewed partner adapters, and strict normalization.
+- Isolated multi-source queries with provenance and partial-failure handling.
 - Search, categories, details, and resilient state handling.
 - Headless unit tests and Loader smoke; no installer.
 
@@ -142,11 +143,10 @@ Raw response bodies, filesystem paths, tokens, environment variables, and comman
 ### Later work
 
 - Installed-state detail, uninstall, update, and recovery.
-- Multiple catalog providers and source selection.
 - Stronger verification signals based on independently specified evidence.
 
 ## Attribution and independence
 
-The design is informed by [imsai-sh/awesome-deepseek-harness-plugins](https://github.com/imsai-sh/awesome-deepseek-harness-plugins), also presented as DSH 1024Store. That project also publishes the separate `dsh-1024store` plugin. DSH Community Market is not a fork, repackaging, or official client of that plugin. Its application code is MIT licensed and its catalog metadata is CC0-1.0. This scaffold copies neither its code nor its artwork and bundles no catalog snapshot.
+The design is informed by community catalog projects including [imsai-sh/awesome-deepseek-harness-plugins](https://github.com/imsai-sh/awesome-deepseek-harness-plugins), also presented as DSH 1024Store. DSH 1024Store is a current cooperating provider, and it also publishes the separate `dsh-1024store` plugin. DSH Community Market is not a fork, repackaging, or official client of that plugin. Its application code is MIT licensed and its catalog metadata is CC0-1.0. This scaffold copies neither its code nor its artwork and bundles no catalog snapshot.
 
 DSH Community Market is an independent Anywhere Labs project. Catalog inclusion does not imply endorsement by Anywhere Labs, DSH 1024Store, DeepSeek, or a plugin author.

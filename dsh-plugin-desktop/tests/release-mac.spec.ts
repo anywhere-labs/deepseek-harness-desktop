@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { releaseMac, type MacReleaseOptions } from '../scripts/release-mac.ts'
 
 const DEVELOPER_ID_OUTPUT = `
@@ -24,6 +24,8 @@ function baseOptions(
     env,
     platform: 'darwin',
     desktopRoot: '/repo/dsh-plugin-desktop',
+    outputDir: '/repo/dsh-plugin-desktop/dist/mac-release',
+    resetOutput: () => undefined,
     listCodeSigningIdentities: identityEnv => {
       identityEnvironments.push({ ...identityEnv })
       return DEVELOPER_ID_OUTPUT
@@ -32,6 +34,7 @@ function baseOptions(
       calls.push({ command, args: [...args], cwd, env: { ...commandEnv } })
     },
     log: message => logs.push(message),
+    prepareRuntime: () => undefined,
   }
 }
 
@@ -40,16 +43,21 @@ describe('macOS release command boundary', () => {
     const calls: CommandCall[] = []
     const identityEnvironments: NodeJS.ProcessEnv[] = []
     const logs: string[] = []
+    const resetOutput = vi.fn()
     const appPassword = 'notary-password-that-must-not-be-logged'
 
-    releaseMac(baseOptions({
-      PATH: '/usr/bin',
-      SAFE_BUILD_VALUE: 'kept',
-      APPLE_ID: 'developer@example.test',
-      APPLE_APP_SPECIFIC_PASSWORD: appPassword,
-      APPLE_TEAM_ID: 'TEAM123456',
-    }, calls, identityEnvironments, logs))
+    releaseMac({
+      ...baseOptions({
+        PATH: '/usr/bin',
+        SAFE_BUILD_VALUE: 'kept',
+        APPLE_ID: 'developer@example.test',
+        APPLE_APP_SPECIFIC_PASSWORD: appPassword,
+        APPLE_TEAM_ID: 'TEAM123456',
+      }, calls, identityEnvironments, logs),
+      resetOutput,
+    })
 
+    expect(resetOutput).toHaveBeenCalledOnce()
     expect(identityEnvironments).toEqual([{ PATH: '/usr/bin', SAFE_BUILD_VALUE: 'kept' }])
     expect(calls).toHaveLength(3)
     expect(calls[0]).toEqual({
@@ -61,8 +69,10 @@ describe('macOS release command boundary', () => {
     expect(calls[1]).toEqual({
       command: 'yarn',
       args: [
-        'exec', 'electron-builder', '--mac', 'dmg',
+        'exec', 'electron-builder', '--mac', 'dmg', '--universal',
         '--config.forceCodeSigning=true', '--config.mac.notarize=true',
+        '--config.npmRebuild=false',
+        '--config.directories.output=/repo/dsh-plugin-desktop/dist/mac-release',
       ],
       cwd: '/repo/dsh-plugin-desktop',
       env: {
@@ -75,7 +85,10 @@ describe('macOS release command boundary', () => {
     })
     expect(calls[2]).toEqual({
       command: process.execPath,
-      args: ['scripts/verify-mac-release.ts'],
+      args: [
+        'scripts/verify-mac-release.ts',
+        '/repo/dsh-plugin-desktop/dist/mac-release',
+      ],
       cwd: '/repo/dsh-plugin-desktop',
       env: { PATH: '/usr/bin', SAFE_BUILD_VALUE: 'kept' },
     })
@@ -128,10 +141,12 @@ describe('macOS release command boundary', () => {
 
   it('does not invoke electron-builder after a failed credential-free check', () => {
     const calls: CommandCall[] = []
+    const resetOutput = vi.fn()
     const options: MacReleaseOptions = {
       ...baseOptions({
         APPLE_KEYCHAIN_PROFILE: 'dsh-notary',
       }, calls),
+      resetOutput,
       run: (command, args, cwd, commandEnv) => {
         calls.push({ command, args: [...args], cwd, env: { ...commandEnv } })
         throw new Error('headless check failed')
@@ -142,5 +157,6 @@ describe('macOS release command boundary', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]?.args).toEqual(['run', 'check'])
     expect(calls[0]?.cwd).toBe(resolve('/repo/dsh-plugin-desktop', '..'))
+    expect(resetOutput).not.toHaveBeenCalled()
   })
 })

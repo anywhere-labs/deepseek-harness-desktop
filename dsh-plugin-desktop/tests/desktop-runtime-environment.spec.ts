@@ -107,6 +107,23 @@ describe('desktop Host pnpm runtime', () => {
     expect(environment).toEqual(original)
   })
 
+  it('keeps recovered login-shell PATH beneath the Desktop runtime PATH', () => {
+    const stateDir = join(temporaryDirectory(), 'runtime')
+    const recoveredPath = '/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin'
+    const environment: NodeJS.ProcessEnv = {
+      PATH: recoveredPath,
+      KEEP: 'value',
+    }
+    const original = { ...environment }
+
+    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', environment))
+
+    expect(environment.PATH).toBe(`${installation.pathDir}:${recoveredPath}`)
+    installation.dispose()
+    installation.dispose()
+    expect(environment).toEqual(original)
+  })
+
   it('clears every RunAsNode casing before the requested Node entry executes', () => {
     const stateDir = join(temporaryDirectory(), 'runtime')
     const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', { PATH: '/usr/bin' }))
