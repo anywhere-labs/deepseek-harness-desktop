@@ -145,6 +145,7 @@ export type PackageResolver = (specifier: string) => string
 export interface PackagedDiagnosticWorkerData {
   readonly logsDir: string
   readonly userDataDir: string
+  readonly appVersion: string
   readonly maxEvidenceBytes: number
   readonly crashDumpsDir: string
 }
@@ -222,7 +223,7 @@ export async function smokePackagedDiagnosticWorker(
   try {
     const output = await launch(
       join(unpackedRoot, 'lib', 'diagnostic-export-worker.js'),
-      { logsDir, userDataDir, maxEvidenceBytes: 1024, crashDumpsDir },
+      { logsDir, userDataDir, appVersion: 'packaged-smoke', maxEvidenceBytes: 1024, crashDumpsDir },
     )
     if (!existsSync(output)) {
       throw new Error(`dsh-plugin-desktop: packaged diagnostic worker produced no archive at ${output}`)

@@ -18,7 +18,7 @@ The final compatibility composition keeps the official `ui-layout`, `ui-sidebar`
 
 The persistent `desktop` profile still contains `dsh-base`, `dsh-web-app`, and user-installed bundles in their preserved order. Third-party client plugins use ordinary `dsh.client` metadata and are discovered by the official Web client module graph. Electron does not maintain a second plugin roster.
 
-The launcher adds one platform safety overlay after user patches. On Windows it disables the adaptive directory-picker row and inserts the existing browse Host backend with the matching browse client surface. The native directory-picker package never activates in the Electron main process. macOS and Linux keep the upstream adaptive row.
+The launcher adds one platform safety overlay after user patches. On Windows it pins the browse directory-picker row so the complete in-app panel remains available. The desktop workspace patches that panel with one icon-only native chooser action backed by a same-origin desktop route and Electron `dialog.showOpenDialog`; it does not load the upstream koffi worker in the Electron process. macOS and Linux keep the upstream adaptive row.
 
 The `desktop-shell` row registers a native shell specification while the profile is activating. It does not await global Loader settlement from inside its own Loader entry. The launcher mounts that registration only after `app-boot` returns, which preserves the activation audit and complete official, desktop, and third-party client manifest before the first renderer request.
 
@@ -38,7 +38,7 @@ The application keeps the unmodified iOS Default icon on Windows and Linux. macO
 
 ## Verification
 
-Package tests require the `./client` export and ordinary `dsh.client` dependency edges. Profile tests verify that compatibility keeps the official layout, sidebar, and conversation rows enabled and that Windows composition contains the browse picker without native picker rows. Client tests validate the mode and platform markers, scoped advanced layout behavior, and presentation isolation.
+Package tests require the `./client` export and ordinary `dsh.client` dependency edges. Profile tests verify that compatibility keeps the official layout, sidebar, and conversation rows enabled and composes the Windows browse picker. Route, runtime, and client-bridge tests cover same-origin validation, native-dialog selection and cancellation, and the panel bridge lifecycle. Client tests also validate the mode and platform markers, scoped advanced layout behavior, and presentation isolation.
 
 Host tests verify standard namespace registration, the narrow tray `settings.update({ mode })` path, restart only after a changed value, and Linux validation before persistence. Runtime tests verify that registration does not re-enter Loader settlement and that `BrowserWindow` construction starts only after the launcher mounts the registered generation. Window-option tests reject advanced-native options from the compatibility constructor.
 

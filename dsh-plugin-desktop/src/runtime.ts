@@ -181,6 +181,9 @@ export interface DesktopRuntime {
   /** Export a diagnostics zip and reveal it in the system file manager. */
   exportDiagnostics(): Promise<void>
 
+  /** Open the desktop operating system's native workspace-folder chooser. */
+  pickDirectory(): Promise<string | null>
+
   /** Accept the terminal client Loader outcome for the mounted generation. */
   reportRendererBoot(report: RendererBootReport): void
 
