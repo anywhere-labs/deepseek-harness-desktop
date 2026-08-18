@@ -2,13 +2,15 @@ import dns from 'node:dns'
 import { BlockList, isIP } from 'node:net'
 import https from 'node:https'
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http'
-import type { CatalogHttpClient, CatalogHttpResponse } from '../contracts/types.js'
+import type { CatalogHttpClient, CatalogHttpRequestPolicy, CatalogHttpResponse } from '../contracts/types.js'
 
 const MAX_REDIRECTS = 3
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 const CONNECT_TIMEOUT_MS = 8_000
 const FIRST_BYTE_TIMEOUT_MS = 12_000
 const TOTAL_TIMEOUT_MS = 30_000
+const SYNTHETIC_PROXY_NETWORK = '198.18.0.0'
+const SYNTHETIC_PROXY_PREFIX = 15
 
 export class CatalogNetworkError extends Error {
   constructor(readonly code: 'invalid-url' | 'blocked-address' | 'redirect' | 'timeout' | 'http' | 'response') {
@@ -42,7 +44,7 @@ for (const [network, prefix] of [
   blockedAddresses.addSubnet(network, prefix, 'ipv6')
 }
 
-interface PinnedAddress {
+export interface PinnedAddress {
   readonly address: string
   readonly family: 4 | 6
 }
@@ -54,6 +56,12 @@ interface RestrictedHttpResponse {
 }
 
 export interface RestrictedHttpClientOptions {
+  /**
+   * Exact, reviewed hostnames that may resolve through a local proxy's
+   * RFC 2544 fake-IP range. User-provided catalog hosts must never be added.
+   */
+  readonly syntheticProxyHostnames?: readonly string[]
+  readonly lookupAddresses?: (hostname: string) => Promise<readonly PinnedAddress[]>
   readonly resolveAddress?: (hostname: string) => Promise<PinnedAddress>
   readonly request?: (
     url: URL,
@@ -61,12 +69,20 @@ export interface RestrictedHttpClientOptions {
     pinned: PinnedAddress,
   ) => Promise<RestrictedHttpResponse>
   readonly totalTimeoutMs?: number
+  readonly maxBodyBytes?: number
 }
 
-function assertSafeAddress(address: string): 4 | 6 {
+const syntheticProxyAddresses = new BlockList()
+syntheticProxyAddresses.addSubnet(SYNTHETIC_PROXY_NETWORK, SYNTHETIC_PROXY_PREFIX, 'ipv4')
+
+function assertSafeAddress(address: string, allowSyntheticProxyAddress = false): 4 | 6 {
   const normalized = address.replace(/^\[|\]$/gu, '').split('%', 1)[0]!
   const family = isIP(normalized)
-  if (family === 0 || blockedAddresses.check(normalized, family === 4 ? 'ipv4' : 'ipv6')) {
+  const addressFamily = family === 4 ? 'ipv4' : 'ipv6'
+  const allowedSyntheticAddress = allowSyntheticProxyAddress
+    && family === 4
+    && syntheticProxyAddresses.check(normalized, 'ipv4')
+  if (family === 0 || blockedAddresses.check(normalized, addressFamily) && !allowedSyntheticAddress) {
     throw new CatalogNetworkError('blocked-address')
   }
   return family as 4 | 6
@@ -89,14 +105,14 @@ function validateUrl(value: string): URL {
   return url
 }
 
-function readBody(response: IncomingMessage): Promise<Buffer> {
+function readBody(response: IncomingMessage, maxBodyBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let size = 0
     response.on('data', (chunk: Buffer | string) => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       size += buffer.length
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBodyBytes) {
         response.destroy(new CatalogNetworkError('response'))
         return
       }
@@ -107,17 +123,39 @@ function readBody(response: IncomingMessage): Promise<Buffer> {
   })
 }
 
-async function resolvePinnedAddress(hostname: string): Promise<PinnedAddress> {
-  const literal = hostname.replace(/^\[|\]$/gu, '')
-  if (isIP(literal)) return { address: literal, family: assertSafeAddress(literal) }
-  const addresses = await dns.promises.lookup(hostname, { all: true, verbatim: true })
-  if (addresses.length === 0) throw new CatalogNetworkError('blocked-address')
-  for (const entry of addresses) assertSafeAddress(entry.address)
-  const first = addresses[0]!
-  return { address: first.address, family: assertSafeAddress(first.address) }
+async function defaultLookupAddresses(hostname: string): Promise<readonly PinnedAddress[]> {
+  const entries = await dns.promises.lookup(hostname, { all: true, verbatim: true })
+  return entries.map(entry => ({
+    address: entry.address,
+    family: entry.family === 6 ? 6 : 4,
+  }))
 }
 
-function requestOnce(url: URL, signal: AbortSignal, pinned: PinnedAddress): Promise<RestrictedHttpResponse> {
+async function resolvePinnedAddress(
+  hostname: string,
+  lookupAddresses: (hostname: string) => Promise<readonly PinnedAddress[]>,
+  syntheticProxyHostnames: ReadonlySet<string>,
+): Promise<PinnedAddress> {
+  const literal = hostname.replace(/^\[|\]$/gu, '')
+  if (isIP(literal)) return { address: literal, family: assertSafeAddress(literal) }
+  const addresses = await lookupAddresses(hostname)
+  if (addresses.length === 0) throw new CatalogNetworkError('blocked-address')
+  const allowSyntheticProxyAddress = syntheticProxyHostnames.has(hostname.toLowerCase())
+  for (const entry of addresses) {
+    if (entry.family !== assertSafeAddress(entry.address, allowSyntheticProxyAddress)) {
+      throw new CatalogNetworkError('blocked-address')
+    }
+  }
+  const first = addresses[0]!
+  return { address: first.address, family: assertSafeAddress(first.address, allowSyntheticProxyAddress) }
+}
+
+function requestOnce(
+  url: URL,
+  signal: AbortSignal,
+  pinned: PinnedAddress,
+  maxBodyBytes: number,
+): Promise<RestrictedHttpResponse> {
   return new Promise((resolve, reject) => {
     let settled = false
     let firstByteTimer: NodeJS.Timeout | undefined
@@ -143,10 +181,11 @@ function requestOnce(url: URL, signal: AbortSignal, pinned: PinnedAddress): Prom
       signal,
       timeout: CONNECT_TIMEOUT_MS,
     }, response => {
-      firstByteTimer = setTimeout(() => {
-        request.destroy(new CatalogNetworkError('timeout'))
-      }, FIRST_BYTE_TIMEOUT_MS)
-      void readBody(response).then(
+      if (firstByteTimer !== undefined) {
+        clearTimeout(firstByteTimer)
+        firstByteTimer = undefined
+      }
+      void readBody(response, maxBodyBytes).then(
         body => finish(() => resolve({
           statusCode: response.statusCode ?? 0,
           headers: response.headers,
@@ -155,6 +194,9 @@ function requestOnce(url: URL, signal: AbortSignal, pinned: PinnedAddress): Prom
         cause => finish(() => reject(cause)),
       )
     })
+    firstByteTimer = setTimeout(() => {
+      request.destroy(new CatalogNetworkError('timeout'))
+    }, FIRST_BYTE_TIMEOUT_MS)
     request.once('error', cause => finish(() => reject(cause)))
     request.once('timeout', () => request.destroy(new CatalogNetworkError('timeout')))
     request.end()
@@ -166,12 +208,15 @@ async function fetchJson(
   signal: AbortSignal,
   resolveAddress: (hostname: string) => Promise<PinnedAddress>,
   request: (url: URL, signal: AbortSignal, pinned: PinnedAddress) => Promise<RestrictedHttpResponse>,
+  allowedOrigin: string | undefined,
   redirectCount = 0,
 ): Promise<CatalogHttpResponse> {
   if (signal.aborted) throw new CatalogNetworkError('timeout')
   const url = validateUrl(start)
+  if (allowedOrigin !== undefined && url.origin !== allowedOrigin) throw new CatalogNetworkError('redirect')
   if (redirectCount > MAX_REDIRECTS) throw new CatalogNetworkError('redirect')
   const pinned = await resolveAddress(url.hostname)
+  if (signal.aborted) throw new CatalogNetworkError('timeout')
   const response = await request(url, signal, pinned)
   const status = response.statusCode
   if (status >= 300 && status < 400) {
@@ -182,6 +227,7 @@ async function fetchJson(
       signal,
       resolveAddress,
       request,
+      allowedOrigin,
       redirectCount + 1,
     )
   }
@@ -204,30 +250,145 @@ async function fetchJson(
 export function createRestrictedHttpClient(
   options: RestrictedHttpClientOptions = {},
 ): CatalogHttpClient {
-  const resolveAddress = options.resolveAddress ?? resolvePinnedAddress
-  const request = options.request ?? requestOnce
+  const syntheticProxyHostnames = new Set(
+    (options.syntheticProxyHostnames ?? []).map(hostname => hostname.toLowerCase()),
+  )
+  const lookupAddresses = options.lookupAddresses ?? defaultLookupAddresses
+  const resolveAddress = options.resolveAddress
+    ?? (async hostname => await resolvePinnedAddress(hostname, lookupAddresses, syntheticProxyHostnames))
+  const maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES
+  const request = options.request
+    ?? (async (url, signal, pinned) => await requestOnce(url, signal, pinned, maxBodyBytes))
   const totalTimeoutMs = options.totalTimeoutMs ?? TOTAL_TIMEOUT_MS
 
   return {
-    async getJson(start, signal) {
+    async getJson(start, signal, policy: CatalogHttpRequestPolicy = {}) {
       if (signal.aborted) throw new CatalogNetworkError('timeout')
       const totalController = new AbortController()
-      let timedOut = false
-      const onAbort = () => totalController.abort(signal.reason)
+      let rejectAbort!: (cause: unknown) => void
+      const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject })
+      const onAbort = () => {
+        const cause = signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+        totalController.abort(cause)
+        rejectAbort(cause)
+      }
       signal.addEventListener('abort', onAbort, { once: true })
-      const totalTimer = setTimeout(() => {
-        timedOut = true
-        totalController.abort()
-      }, totalTimeoutMs)
+      let totalTimer!: NodeJS.Timeout
+      const timedOut = new Promise<never>((_resolve, reject) => {
+        totalTimer = setTimeout(() => {
+          const cause = new CatalogNetworkError('timeout')
+          totalController.abort(cause)
+          reject(cause)
+        }, totalTimeoutMs)
+      })
+      const operation = fetchJson(start, totalController.signal, resolveAddress, request, policy.allowedOrigin)
       try {
-        return await fetchJson(start, totalController.signal, resolveAddress, request)
-      } catch (cause) {
-        if (timedOut) throw new CatalogNetworkError('timeout')
-        throw cause
+        return await Promise.race([operation, aborted, timedOut])
       } finally {
         clearTimeout(totalTimer)
         signal.removeEventListener('abort', onAbort)
       }
+    },
+  }
+}
+
+export interface CachedCatalogHttpClientOptions {
+  readonly ttlMs?: number
+  readonly now?: () => number
+}
+
+interface CachedCatalogResponse {
+  response?: CatalogHttpResponse
+  savedAt?: number
+  inFlight?: Promise<CatalogHttpResponse>
+  inFlightController?: AbortController
+  waiters: number
+}
+
+function awaitCachedResponse(
+  promise: Promise<CatalogHttpResponse>,
+  signal: AbortSignal,
+  release: () => void,
+): Promise<CatalogHttpResponse> {
+  const abortReason = () => signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+  if (signal.aborted) {
+    release()
+    return Promise.reject(abortReason())
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      release()
+      callback()
+    }
+    const onAbort = () => finish(() => reject(abortReason()))
+    signal.addEventListener('abort', onAbort, { once: true })
+    void promise.then(
+      response => finish(() => resolve(response)),
+      cause => finish(() => reject(cause)),
+    )
+  })
+}
+
+/** Cache completed catalog responses and collapse concurrent reads by URL. */
+export function createCachedCatalogHttpClient(
+  delegate: CatalogHttpClient,
+  options: CachedCatalogHttpClientOptions = {},
+): CatalogHttpClient {
+  const ttlMs = options.ttlMs ?? 5 * 60 * 1000
+  const now = options.now ?? Date.now
+  const cache = new Map<string, CachedCatalogResponse>()
+  return {
+    async getJson(url, signal, policy: CatalogHttpRequestPolicy = {}) {
+      if (signal.aborted) {
+        throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+      }
+      const key = `${policy.allowedOrigin ?? ''}\0${url}`
+      let entry = cache.get(key)
+      if (entry === undefined || policy.cacheMode === 'reload') {
+        entry = { waiters: 0 }
+        cache.set(key, entry)
+      }
+      if (entry.response !== undefined && entry.savedAt !== undefined && now() - entry.savedAt < ttlMs) {
+        return entry.response
+      }
+      if (entry.inFlight === undefined) {
+        const inFlightController = new AbortController()
+        entry.inFlightController = inFlightController
+        const request = delegate.getJson(url, inFlightController.signal, policy)
+        entry.inFlight = request
+        void request.then(
+          response => {
+            if (entry.inFlight !== request || inFlightController.signal.aborted) return
+            entry.response = response
+            entry.savedAt = now()
+          },
+          () => {},
+        ).finally(() => {
+          if (entry.inFlight === request) {
+            delete entry.inFlight
+            delete entry.inFlightController
+          }
+        })
+      }
+      entry.waiters += 1
+      let released = false
+      return await awaitCachedResponse(entry.inFlight, signal, () => {
+        if (released) return
+        released = true
+        entry.waiters -= 1
+        if (entry.waiters === 0 && entry.inFlightController !== undefined) {
+          const abandoned = entry.inFlight
+          entry.inFlightController.abort()
+          if (entry.inFlight === abandoned) {
+            delete entry.inFlight
+            delete entry.inFlightController
+          }
+        }
+      })
     },
   }
 }

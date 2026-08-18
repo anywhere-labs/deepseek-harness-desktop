@@ -21,6 +21,17 @@ Switching profiles does not silently copy plugins from the old profile into the 
 
 Changing mode restarts the application; it does not hot-swap root slots or native materials in a live renderer. Linux provides compatibility mode only.
 
+## Local Web port
+
+Desktop lets the operating system choose a random local Web port by default (`dsh-desktop.port: 0`), which avoids collisions with other services. Browser `localStorage` is isolated by origin, so UI plugins that store settings there need a fixed port to read the same settings after Desktop restarts:
+
+```yaml
+dsh-desktop:
+  port: 43189
+```
+
+The port must be an integer from `0` through `65535`. Changing it performs an orderly restart, and the service remains bound only to `127.0.0.1`. If another program already uses a fixed port, Desktop cannot start; release that port or change the setting back to `0` or another available port.
+
 ## Plugin management
 
 Plugins are extensions that add capabilities to DSH, such as models, tools, interfaces, and workflows. DSH Desktop uses the same plugin system as official Harness, so official plugins install and work directly; multiple plugins follow the same conventions and can be installed and used together.
@@ -59,6 +70,15 @@ After confirmation, the app requests the fixed platform download URL. macOS open
 
 ## Troubleshooting
 
+- **The application reaches the tray**: right-click the tray icon and choose **Export Diagnostics…**. After the privacy confirmation, Desktop creates a `diagnostics-*.zip` archive and reveals it in the file manager.
+- **The application crashes repeatedly before the tray appears**: run the installed executable directly with the recovery option. The default Windows installation command is below; replace the path if you selected another installation directory.
+
+  ```powershell
+  & "$env:LOCALAPPDATA\Programs\DSH Desktop\DSH Desktop.exe" --export-diagnostics
+  ```
+
+  If the npm desktop launcher is installed, `dsh-desktop --export-diagnostics` provides the same archive. This command does not start Host, profiles, plugins, or a window. It prints the absolute diagnostics ZIP path when complete.
+- **Diagnostic archive contents**: recent application logs, local Crashpad `.dmp` files, the active-run marker, and `system-info.txt`. System information records Desktop, Electron, Node, platform, and architecture versions. Recognized credentials are masked in logs, but local paths, workspace IDs, session IDs, and crash-time memory fragments may remain. Review the archive before public upload and send sensitive dumps only through a trusted channel.
 - **The window disappeared**: check the system tray; closing the window is not quitting.
 - **A plugin is missing**: confirm the command targeted the intended profile and restart the application.
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.

@@ -1,0 +1,202 @@
+diff --git a/lib/client.js b/lib/client.js
+index 88da094ba773c260d687e428f8888c4433d31d9f..c6836c58e465ce8f2c1cbb47550c8c81b88f5522 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -24,7 +24,7 @@ window.__ModuleLoader__.load({
+ 		}
+ 		//#endregion
+ 		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-directory-picker-browse/src/client/DirectoryBrowser.module.css.mjs
+-		const css = ".ZuhsRW_dialog.ZuhsRW_dialog{--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);gap:0;width:min(680px,100%);height:min(500px,100dvh - 32px);padding:0}.ZuhsRW_editorScope{display:contents}.ZuhsRW_header{border-bottom:1px solid var(--dsw-alias-border-l3);flex-direction:column;flex:none;gap:8px;padding:16px 14px 8px 24px;display:flex}.ZuhsRW_title{min-height:28px;color:var(--dsw-alias-label-primary);align-items:flex-end;margin:0;font-size:16px;font-weight:510;line-height:24px;display:flex}.ZuhsRW_crumbBar{box-sizing:border-box;border:1px solid #0000;border-radius:8px;align-items:center;gap:4px;min-height:24px;margin-left:-9px;padding:0 8px;display:flex}.ZuhsRW_crumbBar:has(.ZuhsRW_crumbEditZone:enabled:hover),.ZuhsRW_crumbBar:has(.ZuhsRW_crumbEditZone:focus-visible),.ZuhsRW_crumbBar:has(.ZuhsRW_pathInput){border-color:var(--dsw-alias-border-l2)}.ZuhsRW_millerRow{scrollbar-width:none;flex:1 1 0;align-items:stretch;gap:12px;min-height:0;display:flex;overflow-x:auto}.ZuhsRW_crumbTrail{scrollbar-width:none;flex:0 auto;align-items:center;gap:4px;min-width:0;display:flex;overflow-x:auto}.ZuhsRW_crumbSeat{flex:none;align-items:center;gap:4px;min-width:0;display:inline-flex}.ZuhsRW_crumb{text-overflow:ellipsis;white-space:nowrap;max-width:160px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}.ZuhsRW_crumb:hover{color:var(--dsw-alias-label-primary)}.ZuhsRW_crumbChevron{color:var(--dsw-alias-label-tertiary);flex:none}.ZuhsRW_crumbEditZone{cursor:text;background:0 0;border:none;outline:none;flex:1 0 34px;justify-content:flex-end;align-items:center;min-width:34px;height:22px;padding:0;display:flex}.ZuhsRW_crumbEditGlyph{color:var(--dsw-alias-label-tertiary);flex:none}.ZuhsRW_crumbEditZone:enabled:hover .ZuhsRW_crumbEditGlyph,.ZuhsRW_crumbEditZone:focus-visible .ZuhsRW_crumbEditGlyph{color:var(--dsw-alias-label-primary)}.ZuhsRW_crumbEditZone:disabled{cursor:default}.ZuhsRW_crumbEditZone:disabled .ZuhsRW_crumbEditGlyph{color:var(--dsw-alias-label-caption)}.ZuhsRW_pathInput{box-sizing:border-box;min-width:0;height:22px;color:var(--dsw-alias-label-primary);background:0 0;border:none;outline:none;flex:1 1 0;padding:0;font-size:13px;line-height:20px}.ZuhsRW_content{flex-direction:column;flex:1 1 0;min-height:0;padding:16px 16px 16px 24px;display:flex;position:relative}.ZuhsRW_column{flex-direction:column;flex:1 1 0;gap:2px;min-width:256px;padding-right:8px;display:flex;overflow-y:auto}.ZuhsRW_divider{background:var(--dsw-alias-border-l3);flex:none;width:1px}.ZuhsRW_rowSeat{flex:none;display:flex}.ZuhsRW_row{text-align:left;cursor:pointer;background:0 0;border:none;border-radius:6px;flex:none;align-items:center;gap:4px;width:100%;height:28px;padding:4px;display:flex}.ZuhsRW_row:hover{background:var(--dsw-alias-interactive-bg-hover)}.ZuhsRW_rowSelected,.ZuhsRW_rowSelected:hover{background:var(--dsw-alias-interactive-bg-active,var(--dsw-alias-interactive-bg-hover))}.ZuhsRW_rowIcon{color:var(--dsw-alias-label-secondary);flex:none}.ZuhsRW_rowIconSelected{color:var(--dsw-alias-button-info-fill);flex:none}.ZuhsRW_rowName{text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--dsw-alias-label-primary);flex:1 1 0;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}.ZuhsRW_rowChevron{color:var(--dsw-alias-label-tertiary);flex:none}.ZuhsRW_status,.ZuhsRW_error{padding:4px 120px 4px 4px;font-size:12px;line-height:18px}.ZuhsRW_status{color:var(--dsw-alias-label-secondary)}.ZuhsRW_error{color:var(--dsw-alias-state-error-primary)}.ZuhsRW_loadingFloat{background:var(--dsw-alias-bg-layer-2);padding:2px 8px;position:absolute;bottom:8px;right:16px}.ZuhsRW_footerBar{border-top:1px solid var(--dsw-alias-border-l3);flex-wrap:wrap;flex:none;align-items:center;gap:8px;padding:16px 24px;display:flex}.ZuhsRW_showHiddenToggle{color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap;background:0 0;border:none;align-items:center;gap:4px;padding:0;font-size:13px;font-weight:500;line-height:20px;display:inline-flex}.ZuhsRW_showHiddenToggle:hover{color:var(--dsw-alias-label-primary)}.ZuhsRW_showHiddenToggle:disabled{color:var(--dsw-alias-label-caption);cursor:default}.ZuhsRW_showHiddenToggleActive{color:var(--dsw-alias-label-primary)}.ZuhsRW_footerGap{flex:1 1 0}.ZuhsRW_footerAction{min-width:72px}.ZuhsRW_createDialog.ZuhsRW_createDialog{gap:0;width:min(380px,100%);padding:0}.ZuhsRW_createBody{flex-direction:column;gap:12px;padding:22px 24px 20px;display:flex}.ZuhsRW_createTitle{color:var(--dsw-alias-label-primary);margin:0;font-size:16px;font-weight:510;line-height:24px}.ZuhsRW_createIn{color:var(--dsw-alias-label-primary);margin:0;font-size:14px;line-height:22px}.ZuhsRW_createInput{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);width:100%;height:44px;color:var(--dsw-alias-label-primary);background:0 0;border-radius:22px;outline:none;padding:7px 14px;font-size:14px;line-height:22px}.ZuhsRW_createInput::placeholder{color:var(--dsw-alias-label-caption)}.ZuhsRW_createActions{justify-content:flex-end;align-items:center;gap:8px;margin-top:8px;display:flex}";
++		const css = ".ZuhsRW_dialog.ZuhsRW_dialog{--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);gap:0;width:min(680px,100%);height:min(500px,100dvh - 32px);padding:0}.ZuhsRW_editorScope{display:contents}.ZuhsRW_header{border-bottom:1px solid var(--dsw-alias-border-l3);flex-direction:column;flex:none;gap:8px;padding:16px 14px 8px 24px;display:flex}.ZuhsRW_title{min-height:28px;color:var(--dsw-alias-label-primary);align-items:flex-end;margin:0;font-size:16px;font-weight:510;line-height:24px;display:flex}.ZuhsRW_crumbBar{box-sizing:border-box;border:1px solid #0000;border-radius:8px;align-items:center;gap:4px;min-height:24px;margin-left:-9px;padding:0 8px;display:flex}.ZuhsRW_crumbBar:has(.ZuhsRW_crumbEditZone:enabled:hover),.ZuhsRW_crumbBar:has(.ZuhsRW_crumbEditZone:focus-visible),.ZuhsRW_crumbBar:has(.ZuhsRW_pathInput){border-color:var(--dsw-alias-border-l2)}.ZuhsRW_millerRow{scrollbar-width:none;flex:1 1 0;align-items:stretch;gap:12px;min-height:0;display:flex;overflow-x:auto}.ZuhsRW_crumbTrail{scrollbar-width:none;flex:0 auto;align-items:center;gap:4px;min-width:0;display:flex;overflow-x:auto}.ZuhsRW_crumbSeat{flex:none;align-items:center;gap:4px;min-width:0;display:inline-flex}.ZuhsRW_crumb{text-overflow:ellipsis;white-space:nowrap;max-width:160px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;padding:0;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}.ZuhsRW_crumb:hover{color:var(--dsw-alias-label-primary)}.ZuhsRW_crumbChevron{color:var(--dsw-alias-label-tertiary);flex:none}.ZuhsRW_crumbEditZone{cursor:text;background:0 0;border:none;outline:none;flex:1 0 34px;justify-content:flex-end;align-items:center;min-width:34px;height:22px;padding:0;display:flex}.ZuhsRW_crumbEditGlyph{color:var(--dsw-alias-label-tertiary);flex:none}.ZuhsRW_crumbEditZone:enabled:hover .ZuhsRW_crumbEditGlyph,.ZuhsRW_crumbEditZone:focus-visible .ZuhsRW_crumbEditGlyph{color:var(--dsw-alias-label-primary)}.ZuhsRW_crumbEditZone:disabled{cursor:default}.ZuhsRW_crumbEditZone:disabled .ZuhsRW_crumbEditGlyph{color:var(--dsw-alias-label-caption)}.ZuhsRW_pathInput{box-sizing:border-box;min-width:0;height:22px;color:var(--dsw-alias-label-primary);background:0 0;border:none;outline:none;flex:1 1 0;padding:0;font-size:13px;line-height:20px}.ZuhsRW_content{flex-direction:column;flex:1 1 0;min-height:0;padding:16px 16px 16px 24px;display:flex;position:relative}.ZuhsRW_column{flex-direction:column;flex:1 1 0;gap:2px;min-width:256px;padding-right:8px;display:flex;overflow-y:auto}.ZuhsRW_divider{background:var(--dsw-alias-border-l3);flex:none;width:1px}.ZuhsRW_rowSeat{flex:none;display:flex}.ZuhsRW_row{text-align:left;cursor:pointer;background:0 0;border:none;border-radius:6px;flex:none;align-items:center;gap:4px;width:100%;height:28px;padding:4px;display:flex}.ZuhsRW_row:hover{background:var(--dsw-alias-interactive-bg-hover)}.ZuhsRW_rowSelected,.ZuhsRW_rowSelected:hover{background:var(--dsw-alias-interactive-bg-active,var(--dsw-alias-interactive-bg-hover))}.ZuhsRW_rowIcon{color:var(--dsw-alias-label-secondary);flex:none}.ZuhsRW_rowIconSelected{color:var(--dsw-alias-button-info-fill);flex:none}.ZuhsRW_rowName{text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--dsw-alias-label-primary);flex:1 1 0;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}.ZuhsRW_rowChevron{color:var(--dsw-alias-label-tertiary);flex:none}.ZuhsRW_status,.ZuhsRW_error{padding:4px 120px 4px 4px;font-size:12px;line-height:18px}.ZuhsRW_status{color:var(--dsw-alias-label-secondary)}.ZuhsRW_error{color:var(--dsw-alias-state-error-primary)}.ZuhsRW_loadingFloat{background:var(--dsw-alias-bg-layer-2);padding:2px 8px;position:absolute;bottom:8px;right:16px}.ZuhsRW_footerBar{border-top:1px solid var(--dsw-alias-border-l3);flex-wrap:wrap;flex:none;align-items:center;gap:8px;padding:16px 24px;display:flex}.ZuhsRW_nativePickerButton{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:none;border-radius:6px;flex:none;align-items:center;justify-content:center;width:28px;height:28px;padding:0;display:inline-flex}.ZuhsRW_nativePickerButton:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-interactive-bg-hover)}.ZuhsRW_nativePickerButton:disabled{color:var(--dsw-alias-label-caption);cursor:default;background:transparent}.ZuhsRW_showHiddenToggle{color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap;background:0 0;border:none;align-items:center;gap:4px;padding:0;font-size:13px;font-weight:500;line-height:20px;display:inline-flex}.ZuhsRW_showHiddenToggle:hover{color:var(--dsw-alias-label-primary)}.ZuhsRW_showHiddenToggle:disabled{color:var(--dsw-alias-label-caption);cursor:default}.ZuhsRW_showHiddenToggleActive{color:var(--dsw-alias-label-primary)}.ZuhsRW_footerGap{flex:1 1 0}.ZuhsRW_footerAction{min-width:72px}.ZuhsRW_createDialog.ZuhsRW_createDialog{gap:0;width:min(380px,100%);padding:0}.ZuhsRW_createBody{flex-direction:column;gap:12px;padding:22px 24px 20px;display:flex}.ZuhsRW_createTitle{color:var(--dsw-alias-label-primary);margin:0;font-size:16px;font-weight:510;line-height:24px}.ZuhsRW_createIn{color:var(--dsw-alias-label-primary);margin:0;font-size:14px;line-height:22px}.ZuhsRW_createInput{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);width:100%;height:44px;color:var(--dsw-alias-label-primary);background:0 0;border-radius:22px;outline:none;padding:7px 14px;font-size:14px;line-height:22px}.ZuhsRW_createInput::placeholder{color:var(--dsw-alias-label-caption)}.ZuhsRW_createActions{justify-content:flex-end;align-items:center;gap:8px;margin-top:8px;display:flex}";
+ 		const tagId = "@deepseek-ai/dsh-client-ui-directory-picker-browse/DirectoryBrowser.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+ 			const tag = document.createElement("style");
+@@ -31,5 +31,5 @@ window.__ModuleLoader__.load({
+ 			tag.dataset.plugin = "@deepseek-ai/dsh-client-ui-directory-picker-browse";
+ 			tag.dataset.pluginCss = tagId;
+-			tag.textContent = css;
++			tag.textContent = css + ".ZuhsRW_nativePickerButton{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2)}";
+ 			document.head.appendChild(tag);
+ 		}
+@@ -36,6 +36,7 @@ window.__ModuleLoader__.load({
+ 		var DirectoryBrowser_module_css_default = {
+ 			"createActions": "ZuhsRW_createActions",
+ 			"footerBar": "ZuhsRW_footerBar",
++			"nativePickerButton": "ZuhsRW_nativePickerButton",
+ 			"crumbBar": "ZuhsRW_crumbBar",
+ 			"pathInput": "ZuhsRW_pathInput",
+ 			"title": "ZuhsRW_title",
+@@ -279,7 +280,7 @@ window.__ModuleLoader__.load({
+ 		* @param props - owner-controlled browser props.
+ 		* @returns the dialog element (null while closed, via Modal).
+ 		*/
+-		function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }) {
++		function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, validateDirectory, onOpen, onClose, busy, t }) {
+ 			const [parent, setParent] = (0, react.useState)(null);
+ 			const [selected, setSelected] = (0, react.useState)(null);
+ 			const [child, setChild] = (0, react.useState)(null);
+@@ -292,6 +293,8 @@ window.__ModuleLoader__.load({
+ 			const [folderDraft, setFolderDraft] = (0, react.useState)(null);
+ 			const [creatingFolder, setCreatingFolder] = (0, react.useState)(false);
+ 			const [createError, setCreateError] = (0, react.useState)(null);
++			const [nativePicking, setNativePicking] = (0, react.useState)(false);
++			const [validatingDirectory, setValidatingDirectory] = (0, react.useState)(false);
+ 			const requestSeq = (0, react.useRef)(0);
+ 			const scanController = (0, react.useRef)(null);
+ 			const openGeneration = (0, react.useRef)(0);
+@@ -669,12 +672,39 @@ window.__ModuleLoader__.load({
+ 			});
+ 			if (!open) return null;
+ 			const twoPane = selected !== null;
+-			const parentInert = busy || folderDraft !== null;
++			const parentInert = busy || folderDraft !== null || nativePicking || validatingDirectory;
++			const openDirectory = (path) => {
++				if (validateDirectory === void 0) {
++					onOpen(path);
++					return;
++				}
++				setError(null);
++				setValidatingDirectory(true);
++				validateDirectory(path).then((allowed) => {
++					setValidatingDirectory(false);
++					if (allowed) onOpen(path);
++				}, (reason) => {
++					setValidatingDirectory(false);
++					setError(failureText(reason));
++				});
++			};
++			const pickFromSystem = () => {
++				if (pickNativeDirectory === void 0) return;
++				setError(null);
++				setNativePicking(true);
++				pickNativeDirectory().then((path) => {
++					setNativePicking(false);
++					if (path !== null) openDirectory(path);
++				}, (reason) => {
++					setNativePicking(false);
++					setError(failureText(reason));
++				});
++			};
+ 			const draftPending = pathDraft !== null;
+ 			return (0, react_jsx_runtime.jsxs)(_deepseek_ai_dsh_client_ui_primitives.Modal, {
+ 				open,
+ 				onClose: () => {
+-					if (folderDraft === null && !busy) onClose();
++					if (!parentInert) onClose();
+ 				},
+ 				title: t("browser.title"),
+ 				className: clsx(DirectoryBrowser_module_css_default.dialog),
+@@ -832,6 +862,19 @@ window.__ModuleLoader__.load({
+ 									},
+ 									children: t("browser.newFolder")
+ 								}),
++								pickNativeDirectory !== void 0 && (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
++									label: t("browser.nativePicker"),
++									side: "top",
++									children: (0, react_jsx_runtime.jsx)("button", {
++										type: "button",
++										className: DirectoryBrowser_module_css_default.nativePickerButton,
++										"aria-label": t("browser.nativePicker"),
++										"aria-busy": nativePicking || void 0,
++										disabled: parentInert,
++										onClick: pickFromSystem,
++										children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconFolderOpen16, { size: 16 })
++									})
++								}),
+ 								(0, react_jsx_runtime.jsxs)("button", {
+ 									type: "button",
+ 									className: clsx(DirectoryBrowser_module_css_default.showHiddenToggle, showHidden && DirectoryBrowser_module_css_default.showHiddenToggleActive),
+@@ -857,9 +900,9 @@ window.__ModuleLoader__.load({
+ 									variant: "primary",
+ 									className: clsx(DirectoryBrowser_module_css_default.footerAction),
+ 									disabled: targetPath === null || loading || parentInert || draftPending,
+ 									/* v8 ignore next -- narrowing guard: Open disables while no target exists. */
+ 									onClick: () => {
+-										if (targetPath !== null) onOpen(targetPath);
++										if (targetPath !== null) openDirectory(targetPath);
+ 									},
+ 									children: t("browser.open")
+ 								})
+@@ -955,6 +998,8 @@ window.__ModuleLoader__.load({
+ 				busy: props.busy,
+ 				listDirectory: props.listDirectory,
+ 				createDirectory: props.createDirectory,
++				pickNativeDirectory: props.pickNativeDirectory,
++				validateDirectory: props.validateDirectory,
+ 				t: props.t,
+ 				onOpen: props.onPicked,
+ 				onClose: props.onCancel
+@@ -992,7 +1037,8 @@ window.__ModuleLoader__.load({
+ 					"browser.editPath": "编辑路径",
+ 					"browser.loading": "加载中…",
+ 					"browser.truncated": "文件夹过多，仅显示开头部分。",
+-					"browser.showHidden": "显示隐藏文件"
++					"browser.showHidden": "显示隐藏文件",
++					"browser.nativePicker": "使用 Windows 选择文件夹"
+ 				}], ["en", {
+ 					"browser.title": "Select Workspace Directory",
+ 					"browser.home": "Home",
+@@ -1006,7 +1052,8 @@ window.__ModuleLoader__.load({
+ 					"browser.editPath": "Edit path",
+ 					"browser.loading": "Loading…",
+ 					"browser.truncated": "Too many folders to list; only the beginning is shown.",
+-					"browser.showHidden": "Show hidden files"
++					"browser.showHidden": "Show hidden files",
++					"browser.nativePicker": "Choose with Windows"
+ 				}]];
+ 				try {
+ 					for (const [locale, dict] of dictionaries) disposers.push(ctx.locale.register(LOCALE_NS, locale, dict));
+@@ -1021,6 +1068,16 @@ window.__ModuleLoader__.load({
+ 			const injected = () => ({
+ 				listDirectory: (path, signal) => ctx.workspaces.listDirectory(path, signal),
+ 				createDirectory: (path, name) => ctx.workspaces.createDirectory(path, name),
++				pickNativeDirectory: new URLSearchParams(window.location.search).get("dsh-desktop-platform") === "win32" ? () => {
++					const pick = window.__DSH_DESKTOP_PICK_DIRECTORY__;
++					if (typeof pick !== "function") throw new Error("DSH Desktop native directory picker is unavailable");
++					return pick();
++				} : void 0,
++				validateDirectory: new URLSearchParams(window.location.search).get("dsh-desktop-platform") === "win32" ? (path) => {
++					const validate = window.__DSH_DESKTOP_VALIDATE_DIRECTORY__;
++					if (typeof validate !== "function") throw new Error("DSH Desktop directory validation is unavailable");
++					return validate(path);
++				} : void 0,
+ 				t: ctx.locale.bind(LOCALE_NS)
+ 			});
+ 			ctx.slots.inject("conversation.hero.workspace.directoryFlow", () => ctx.slots.inject("sidebar.workspaces.directoryFlow", function* () {
+diff --git a/lib/types/client/DirectoryBrowser.d.ts b/lib/types/client/DirectoryBrowser.d.ts
+index 51fcc428ab687d2703c8befdcf312469b047ccc4..cb0f64dd32ea45231f841da4abdffb15e8b049e2 100644
+--- a/lib/types/client/DirectoryBrowser.d.ts
++++ b/lib/types/client/DirectoryBrowser.d.ts
+@@ -8,6 +8,10 @@ export interface DirectoryBrowserProps {
+     listDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>;
+     /** Create one child directory under an existing parent. */
+     createDirectory: (path: string, name: string) => Promise<string>;
++    /** Optional native folder chooser contributed by a local desktop shell. */
++    pickNativeDirectory?: () => Promise<string | null>;
++    /** Optional owner validation before a selected path is opened. */
++    validateDirectory?: (path: string) => Promise<boolean>;
+     /** The operator confirmed a directory (the selection, else the listed level). */
+     onOpen: (path: string) => void;
+     /** Close without picking (mask, Escape, Cancel). */
+@@ -22,5 +26,5 @@ export interface DirectoryBrowserProps {
+  * @param props - owner-controlled browser props.
+  * @returns the dialog element (null while closed, via Modal).
+  */
+-export declare function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
++export declare function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, validateDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
+ //# sourceMappingURL=DirectoryBrowser.d.ts.map
+diff --git a/lib/types/client/flow.d.ts b/lib/types/client/flow.d.ts
+index 689bb216f133826c2d4d4454645d643c81b48847..501956872a051724097baba7f75b565303fc102f 100644
+--- a/lib/types/client/flow.d.ts
++++ b/lib/types/client/flow.d.ts
+@@ -8,6 +8,10 @@ export interface BrowseFlowInjected {
+     listDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>;
+     /** Create one child directory under an existing parent. */
+     createDirectory: (path: string, name: string) => Promise<string>;
++    /** Optional native folder chooser contributed by a local desktop shell. */
++    pickNativeDirectory?: () => Promise<string | null>;
++    /** Optional owner validation before a selected path is opened. */
++    validateDirectory?: (path: string) => Promise<boolean>;
+     /** Localized dialog copy (this package's namespace). */
+     t: Translate;
+ }

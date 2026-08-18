@@ -1,0 +1,82 @@
+name: Feature request / 功能建议
+description: Suggest an improvement to DSH Desktop / 提议改进 DSH Desktop
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. Clear use cases and expected outcomes help maintainers understand and prioritize a request.
+
+        感谢你的建议。请重点说明使用场景、当前困难和期望结果；信息越具体，越容易被理解和评估。不要求提供实现方案或代码。
+
+  - type: checkboxes
+    id: duplicate_check
+    attributes:
+      label: Existing requests / 提交前查重
+      description: Search open and closed issues and Discussions first / 请先搜索已打开、已关闭的 Issue 和 Discussions
+      options:
+        - label: I searched existing requests and did not find the same proposal / 我已搜索现有内容，没有发现相同建议
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area / 涉及区域
+      options:
+        - Startup or installation / 启动或安装
+        - Updates / 更新
+        - Profiles or plugins / Profile 或插件
+        - Conversations, models, or tools / 会话、模型或工具
+        - Terminal / 终端
+        - Window, tray, or interface / 窗口、托盘或界面
+        - Documentation or community / 文档或社区
+        - Other or unknown / 其他或不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case / 问题或使用场景
+      description: Explain what is difficult today and who is affected / 说明当前哪里不方便、哪些用户会遇到
+      placeholder: When I try to ..., I have to ... / 当我想……时，目前必须……
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired_outcome
+    attributes:
+      label: Desired outcome / 期望结果
+      description: Describe the user-visible result, not necessarily the implementation / 描述用户最终能做到什么，不必设计技术实现
+      placeholder: I would like DSH Desktop to ... / 希望 DSH Desktop 能够……
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current alternatives / 当前替代方案
+      description: Workarounds or other tools you currently use / 当前使用的临时办法或其他工具
+
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Relevant operating systems / 相关操作系统
+      options:
+        - All supported platforms / 所有已支持平台
+        - Windows only / 仅 Windows
+        - macOS only / 仅 macOS
+        - Unknown or not platform-specific / 不确定或与平台无关
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or references / 示例或参考
+      description: Screenshots, recordings, links, or examples from other products are optional / 可选填截图、录屏、链接或其他产品中的例子
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context / 补充信息

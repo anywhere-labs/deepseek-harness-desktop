@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   diagnoseWindowsVolumes,
+  evaluateWindowsWorkspaceVolume,
   formatWindowsVolumeConcern,
   windowsVolumeQuery,
   type WindowsVolumeInfo,
@@ -62,6 +63,53 @@ describe('Windows volume diagnostics', () => {
       driveType: 2,
       reason: expect.stringContaining('removable drives'),
     })])
+  })
+
+  it('allows fixed ACL-capable workspace volumes', () => {
+    expect(evaluateWindowsWorkspaceVolume('win32', 'D:\\repo', query({
+      root: 'D:\\',
+      fileSystem: 'NTFS',
+      driveType: 3,
+    }))).toEqual({ action: 'allow' })
+  })
+
+  it('requires confirmation for removable NTFS workspaces', () => {
+    expect(evaluateWindowsWorkspaceVolume('win32', 'E:\\repo', query({
+      root: 'E:\\',
+      fileSystem: 'NTFS',
+      driveType: 2,
+    }))).toEqual({
+      action: 'confirm',
+      concern: expect.objectContaining({ fileSystem: 'NTFS', driveType: 2 }),
+    })
+  })
+
+  it.each([
+    ['EXFAT', 2],
+    ['FAT32', 2],
+    ['NTFS', 4],
+    ['NTFS', 0],
+    ['NTFS', 1],
+    ['NTFS', 5],
+    ['NTFS', 6],
+  ])('blocks unsupported workspace storage (%s, drive type %s)', (fileSystem, driveType) => {
+    expect(evaluateWindowsWorkspaceVolume('win32', 'E:\\repo', query({
+      root: 'E:\\',
+      fileSystem,
+      driveType,
+    }))).toEqual({
+      action: 'block',
+      concern: expect.objectContaining({ fileSystem, driveType }),
+    })
+  })
+
+  it('blocks a workspace when its volume cannot be inspected', () => {
+    expect(evaluateWindowsWorkspaceVolume('win32', 'E:\\repo', () => {
+      throw new Error('drive disconnected')
+    })).toEqual({
+      action: 'block',
+      concern: expect.objectContaining({ reason: expect.stringContaining('drive disconnected') }),
+    })
   })
 
   it('formats the concern for stderr diagnostics', () => {

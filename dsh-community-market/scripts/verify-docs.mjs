@@ -18,7 +18,9 @@ const readJson = path => {
 const manifest = JSON.parse(read('package.json'))
 
 if (manifest.name !== 'dsh-community-market') fail('package name must remain dsh-community-market')
-if (manifest.private !== true) fail('the market must stay private until the release gate is approved')
+if (manifest.private !== true) {
+  fail('the built-in Market workspace package must stay private to prevent unsupported standalone publication')
+}
 if (manifest.main !== 'lib/index.js' || manifest.types !== 'lib/index.d.ts') {
   fail('runtime package must expose the reviewed Host entry and declarations')
 }
@@ -40,11 +42,18 @@ const publicFiles = [
   'SECURITY.i18n.yaml',
   'SECURITY.md',
   'SECURITY.zh.md',
+  'docs/catalog-adapter-guide.i18n.yaml',
+  'docs/catalog-adapter-guide.md',
+  'docs/catalog-adapter-guide.zh.md',
   'docs/catalog-provider-contract.i18n.yaml',
   'docs/catalog-provider-contract.md',
   'docs/catalog-provider-contract.zh.md',
+  'docs/install-and-uninstall.i18n.yaml',
+  'docs/install-and-uninstall.md',
+  'docs/install-and-uninstall.zh.md',
   'docs/examples/catalog-query.example.json',
   'docs/examples/catalog-provider-page.example.json',
+  'docs/examples/catalog-provider-page.minimal.example.json',
   'docs/examples/catalog-snapshot.example.json',
   'docs/examples/catalog-source.example.json',
   'docs/market-shell.i18n.yaml',
@@ -77,7 +86,9 @@ if (JSON.stringify(manifest.files) !== JSON.stringify(expectedFiles)) {
 const pairs = [
   ['README.i18n.yaml', ['README.md', 'README.zh.md']],
   ['SECURITY.i18n.yaml', ['SECURITY.md', 'SECURITY.zh.md']],
+  ['docs/catalog-adapter-guide.i18n.yaml', ['docs/catalog-adapter-guide.md', 'docs/catalog-adapter-guide.zh.md']],
   ['docs/catalog-provider-contract.i18n.yaml', ['docs/catalog-provider-contract.md', 'docs/catalog-provider-contract.zh.md']],
+  ['docs/install-and-uninstall.i18n.yaml', ['docs/install-and-uninstall.md', 'docs/install-and-uninstall.zh.md']],
   ['docs/market-shell.i18n.yaml', ['docs/market-shell.md', 'docs/market-shell.zh.md']],
 ]
 for (const [recordPath, paths] of pairs) {
@@ -158,6 +169,45 @@ const itemSchema = snapshotSchema.$defs?.item
 if (itemSchema?.additionalProperties !== false || !itemSchema.required?.includes('provenance')) {
   fail('catalog snapshot items must be closed objects with required provenance')
 }
+const providerMediaSchema = providerPageSchema.$defs?.media
+const providerIconSchema = providerPageSchema.$defs?.remoteIconCandidate
+if (
+  providerMediaSchema?.additionalProperties !== false
+  || JSON.stringify(providerMediaSchema.required) !== JSON.stringify(['icon'])
+  || providerIconSchema?.additionalProperties !== false
+  || JSON.stringify(providerIconSchema.required) !== JSON.stringify(['url'])
+) {
+  fail('provider media must be an optional closed icon container with a required remote HTTPS candidate URL')
+}
+const normalizedMediaSchema = snapshotSchema.$defs?.media
+const normalizedIconSchema = snapshotSchema.$defs?.resolvedIcon
+const normalizedAssetRefSchema = snapshotSchema.$defs?.assetRef
+if (
+  normalizedMediaSchema?.additionalProperties !== false
+  || JSON.stringify(normalizedMediaSchema.required) !== JSON.stringify(['icon'])
+  || normalizedIconSchema?.additionalProperties !== false
+  || JSON.stringify(normalizedIconSchema.required) !== JSON.stringify(['assetRef', 'role'])
+  || JSON.stringify(normalizedIconSchema.properties?.role?.enum) !== JSON.stringify(['plugin-icon', 'publisher-avatar'])
+  || Object.hasOwn(normalizedIconSchema.properties ?? {}, 'url')
+) {
+  fail('normalized media must expose only a Host asset reference with an explicit plugin-icon or publisher-avatar role')
+}
+if (sourceSchema.properties?.transport?.properties?.endpoint?.maxLength !== 2048) {
+  fail('standard source endpoints must keep the 2048-character transport limit')
+}
+if (
+  normalizedAssetRefSchema?.pattern !== '^mktimg_[A-Za-z0-9_-]{32}$'
+  || normalizedAssetRefSchema?.minLength !== 39
+  || normalizedAssetRefSchema?.maxLength !== 39
+) {
+  fail('normalized media references must match the exact Host route token format')
+}
+if (
+  providerPageSchema.$defs?.httpsUri?.pattern !== snapshotSchema.$defs?.httpsUri?.pattern
+  || !providerIconSchema.properties?.url?.$ref?.endsWith('/httpsUri')
+) {
+  fail('provider icon candidates must use the shared strict HTTPS URI constraint')
+}
 if (Object.hasOwn(itemSchema.properties, 'install') || Object.hasOwn(itemSchema.properties, 'installCommand')) {
   fail('catalog snapshot items must not contain executable installation fields')
 }
@@ -198,11 +248,12 @@ if (
   endpoint.protocol !== 'https:'
   || endpoint.username
   || endpoint.password
+  || endpoint.port
   || endpoint.search
   || endpoint.hash
   || !endpoint.pathname.endsWith('/v1/plugins')
 ) {
-  fail('catalog source example endpoint must be credential-free HTTPS, have no query or fragment, and end in /v1/plugins')
+  fail('catalog source example endpoint must use standard HTTPS port 443, have no credentials, query, or fragment, and end in /v1/plugins')
 }
 const supportedQueryFields = sourceExample.query?.supported
 if (!Array.isArray(supportedQueryFields) || supportedQueryFields.some(field => !expectedQueryFields.includes(field))) {
@@ -223,7 +274,17 @@ const allowedSorts = querySchema.properties.sort.enum
 if (!Number.isInteger(queryExample.limit) || queryExample.limit < 1 || queryExample.limit > 100) {
   fail('catalog query example limit must be an integer from 1 through 100')
 }
-if (!allowedSorts.includes(queryExample.sort)) fail('catalog query example uses an unsupported sort')
+if (queryExample.sort !== undefined && !allowedSorts.includes(queryExample.sort)) {
+  fail('catalog query example uses an unsupported sort')
+}
+
+const minimalProviderPageExample = validateFixture(
+  'docs/schemas/catalog-provider-page.schema.json',
+  'docs/examples/catalog-provider-page.minimal.example.json',
+)
+if (minimalProviderPageExample.items.length > 50) {
+  fail('minimal catalog provider page example must stay within its recommended 50-item fixture limit')
+}
 
 const providerPageExample = validateFixture(
   'docs/schemas/catalog-provider-page.schema.json',
@@ -243,6 +304,9 @@ const hasDuplicateIdentity = (items, identityOf) => {
 }
 if (hasDuplicateIdentity(providerPageExample.items, item => item.id)) {
   fail('catalog provider page example contains duplicate item IDs')
+}
+if (!providerPageExample.items[0]?.media?.icon?.url?.startsWith('https://')) {
+  fail('catalog provider page example must demonstrate a direct HTTPS icon candidate')
 }
 
 const snapshotExample = validateFixture('docs/schemas/catalog-snapshot.schema.json', 'docs/examples/catalog-snapshot.example.json')
@@ -264,6 +328,17 @@ for (const item of snapshotExample.items) {
   for (const field of ['install', 'installCommand', 'script', 'command']) {
     if (Object.hasOwn(item, field)) fail(`catalog snapshot item ${item.id} must not contain executable field ${field}`)
   }
+  if (item.media?.icon) {
+    if (typeof item.media.icon.assetRef !== 'string' || !/^mktimg_[A-Za-z0-9_-]{32}$/u.test(item.media.icon.assetRef)) {
+      fail(`catalog snapshot item ${item.id} media must contain a Host asset reference`)
+    }
+    if (Object.hasOwn(item.media.icon, 'url')) {
+      fail(`catalog snapshot item ${item.id} must not expose a remote media URL`)
+    }
+  }
+}
+if (snapshotExample.items[0]?.media?.icon?.role !== 'plugin-icon') {
+  fail('catalog snapshot example must demonstrate a resolved direct provider plugin icon')
 }
 if (!hasDuplicateIdentity(
   [providerPageExample.items[0], { ...providerPageExample.items[0], displayName: 'Duplicate identity' }],
@@ -281,6 +356,16 @@ expectInvalid(
   'docs/schemas/catalog-source.schema.json',
   { ...sourceExample, transport: { ...sourceExample.transport, endpoint: 'http://catalog.example/v1/plugins' } },
   'an insecure source endpoint',
+)
+expectInvalid(
+  'docs/schemas/catalog-source.schema.json',
+  { ...sourceExample, transport: { ...sourceExample.transport, endpoint: 'https://catalog.example:8443/v1/plugins' } },
+  'a source endpoint on a nonstandard port',
+)
+expectInvalid(
+  'docs/schemas/catalog-source.schema.json',
+  { ...sourceExample, transport: { ...sourceExample.transport, endpoint: `https://catalog.example/${'a'.repeat(2_048)}/v1/plugins` } },
+  'an oversized source endpoint',
 )
 expectInvalid(
   'docs/schemas/catalog-source.schema.json',
@@ -324,6 +409,39 @@ expectInvalid(
   'a provider page with bidirectional spoofing controls',
 )
 expectInvalid(
+  'docs/schemas/catalog-provider-page.schema.json',
+  {
+    ...providerPageExample,
+    items: providerPageExample.items.map(item => ({
+      ...item,
+      media: { icon: { ...item.media.icon, url: 'http://plugins.example.org/unsafe.png' } },
+    })),
+  },
+  'a provider page with an insecure icon candidate',
+)
+expectInvalid(
+  'docs/schemas/catalog-provider-page.schema.json',
+  {
+    ...providerPageExample,
+    items: providerPageExample.items.map(item => ({
+      ...item,
+      media: { icon: { ...item.media.icon, url: 'https://user@plugins.example.org/unsafe.png' } },
+    })),
+  },
+  'a provider page with a credential-bearing icon candidate',
+)
+expectInvalid(
+  'docs/schemas/catalog-provider-page.schema.json',
+  {
+    ...providerPageExample,
+    items: providerPageExample.items.map(item => ({
+      ...item,
+      media: { icon: { ...item.media.icon, url: 'https://plugins.example.org:8443/icon.png' } },
+    })),
+  },
+  'a provider page with an icon candidate on a nonstandard port',
+)
+expectInvalid(
   'docs/schemas/catalog-snapshot.schema.json',
   {
     ...snapshotExample,
@@ -338,6 +456,50 @@ expectInvalid(
     items: snapshotExample.items.map(({ repository, package: packageIdentity, ...item }) => item),
   },
   'a normalized snapshot without a package or repository identity',
+)
+expectInvalid(
+  'docs/schemas/catalog-snapshot.schema.json',
+  {
+    ...snapshotExample,
+    items: snapshotExample.items.map(item => ({
+      ...item,
+      media: { icon: { url: 'https://plugins.example.org/unsafe.png', role: 'plugin-icon' } },
+    })),
+  },
+  'a normalized snapshot that exposes a remote icon URL to the Renderer',
+)
+expectInvalid(
+  'docs/schemas/catalog-snapshot.schema.json',
+  {
+    ...snapshotExample,
+    items: snapshotExample.items.map(item => ({
+      ...item,
+      media: { icon: { ...item.media.icon, assetRef: 'https://plugins.example.org/unsafe.png' } },
+    })),
+  },
+  'a normalized snapshot that disguises a remote URL as an asset reference',
+)
+expectInvalid(
+  'docs/schemas/catalog-snapshot.schema.json',
+  {
+    ...snapshotExample,
+    items: snapshotExample.items.map(item => ({
+      ...item,
+      media: { icon: { ...item.media.icon, assetRef: 'mktimg_too-short' } },
+    })),
+  },
+  'a normalized snapshot with a malformed Host asset reference',
+)
+expectInvalid(
+  'docs/schemas/catalog-snapshot.schema.json',
+  {
+    ...snapshotExample,
+    items: snapshotExample.items.map(item => ({
+      ...item,
+      media: { icon: { ...item.media.icon, role: 'provider-logo' } },
+    })),
+  },
+  'a normalized snapshot with an unknown media role',
 )
 
 const markdownFiles = publicFiles.filter(path => path.endsWith('.md'))

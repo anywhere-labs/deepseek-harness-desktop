@@ -24,11 +24,12 @@ export function parseCatalogSource(value: unknown): CatalogSourceManifest {
     endpoint.protocol !== 'https:'
     || endpoint.username
     || endpoint.password
+    || endpoint.port
     || endpoint.search
     || endpoint.hash
     || !endpoint.pathname.endsWith('/v1/plugins')
   ) {
-    issues.push(semanticIssue('/transport/endpoint', 'must be credential-free HTTPS with no query or fragment and end in /v1/plugins'))
+    issues.push(semanticIssue('/transport/endpoint', 'must use credential-free HTTPS on standard port 443 without query or fragment and end in /v1/plugins'))
   }
   if (source.query.defaultLimit > source.query.maxLimit) {
     issues.push(semanticIssue('/query/defaultLimit', 'must not exceed maxLimit'))
@@ -128,9 +129,19 @@ export function validateLocalSourceRecords(records: readonly LocalSourceRecord[]
         semanticIssue(`/${index}/manifestUrl`, 'is required for a user-added source'),
       ])
     }
+    if (record.registrationKind === 'user-added' && record.manifest === undefined) {
+      throw new CatalogContractError('local-source', [
+        semanticIssue(`/${index}/manifest`, 'is required for a user-added standard source'),
+      ])
+    }
     if (record.registrationKind === 'built-in' && !hasBuiltIn) {
       throw new CatalogContractError('local-source', [
         semanticIssue(`/${index}/builtInProviderKey`, 'is required for a built-in source'),
+      ])
+    }
+    if (record.registrationKind === 'built-in' && record.manifest !== undefined) {
+      throw new CatalogContractError('local-source', [
+        semanticIssue(`/${index}/manifest`, 'is reserved for user-added standard sources'),
       ])
     }
     if (!uuidPattern.test(record.sourceRecordId)) {
@@ -166,11 +177,23 @@ export function validateLocalSourceRecords(records: readonly LocalSourceRecord[]
         manifestUrl.protocol !== 'https:'
         || manifestUrl.username
         || manifestUrl.password
+        || manifestUrl.port
         || manifestUrl.search
         || manifestUrl.hash
       ) {
         throw new CatalogContractError('local-source', [
-          semanticIssue(`/${index}/manifestUrl`, 'must be credential-free HTTPS without query or fragment'),
+          semanticIssue(`/${index}/manifestUrl`, 'must use credential-free HTTPS on standard port 443 without query or fragment'),
+        ])
+      }
+      const manifest = parseCatalogSource(record.manifest)
+      if (manifest.providerId !== record.providerId) {
+        throw new CatalogContractError('local-source', [
+          semanticIssue(`/${index}/manifest/providerId`, 'must match the pinned provider claim'),
+        ])
+      }
+      if (new URL(manifest.transport.endpoint).origin !== manifestUrl.origin) {
+        throw new CatalogContractError('local-source', [
+          semanticIssue(`/${index}/manifest/transport/endpoint`, 'must match the registered manifest origin'),
         ])
       }
     }

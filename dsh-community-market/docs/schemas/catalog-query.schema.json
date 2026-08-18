@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dsh-community-market:schema:catalog-query:1.0.0",
   "title": "DSH Community Market normalized catalog query",
-  "description": "The normalized query accepted by a catalog adapter. category and capability values are encoded as repeated query parameters for the standard HTTPS endpoint.",
+  "description": "The normalized query accepted by the currently selected catalog adapter. The standard HTTPS endpoint encodes category and capability values as repeated parameters; repeated category values use OR semantics. The current UI defaults limit to 50, while the contract permits values through 100.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -14,6 +14,7 @@
     },
     "category": {
       "type": "array",
+      "description": "A multi-select OR filter: an item matches when it belongs to any requested category.",
       "maxItems": 20,
       "uniqueItems": true,
       "items": {
@@ -37,7 +38,7 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 100,
-      "default": 20
+      "default": 50
     },
     "sort": {
       "enum": [

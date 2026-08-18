@@ -15,6 +15,44 @@ export interface DesktopUncaughtExceptionProcess {
   off(event: 'uncaughtException', listener: (error: Error) => void): unknown
 }
 
+export interface DesktopChildProcessDetails {
+  readonly type: string
+  readonly reason: string
+  readonly exitCode: number
+  readonly serviceName?: string
+  readonly name?: string
+}
+
+/** Electron app events that expose native child process failures. */
+export interface DesktopChildProcessSource {
+  on(event: 'child-process-gone', listener: (event: unknown, details: DesktopChildProcessDetails) => void): unknown
+  off(event: 'child-process-gone', listener: (event: unknown, details: DesktopChildProcessDetails) => void): unknown
+}
+
+/** Render signed Electron exit codes with their Windows NTSTATUS bit pattern. */
+export function formatDesktopExitCode(exitCode: number): string {
+  return `${String(exitCode)} / 0x${(exitCode >>> 0).toString(16).padStart(8, '0')}`
+}
+
+/** Persist unexpected utility, GPU, and other Electron child process exits. */
+export function installDesktopChildProcessLogging(
+  app: DesktopChildProcessSource,
+  logger: DesktopLogger,
+): () => void {
+  const handler = (_event: unknown, details: DesktopChildProcessDetails): void => {
+    const identity = [
+      `type: ${details.type}`,
+      ...(details.name === undefined ? [] : [`name: ${details.name}`]),
+      ...(details.serviceName === undefined ? [] : [`service: ${details.serviceName}`]),
+    ]
+    logger.error(
+      `dsh-plugin-desktop: child process gone (${identity.join(', ')}, reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`,
+    )
+  }
+  app.on('child-process-gone', handler)
+  return () => { app.off('child-process-gone', handler) }
+}
+
 /** Persist the first uncaught exception before requesting a fatal exit. */
 export function installDesktopUncaughtExceptionLogging(
   proc: DesktopUncaughtExceptionProcess,

@@ -51,11 +51,66 @@
       "type": "string",
       "format": "uri",
       "maxLength": 2048,
-      "pattern": "^https://(?![^/?#]*@)[^#]+$"
+      "pattern": "^https://(?![^/?#]*@)(?![^/?#]*:)[^#]+$"
     },
     "plainText": {
       "type": "string",
       "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "mediaAlt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/plainText"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      ]
+    },
+    "assetRef": {
+      "type": "string",
+      "description": "An opaque Host-managed media reference. It is neither a remote URL nor a filesystem path and is the only media locator exposed to the Renderer.",
+      "minLength": 39,
+      "maxLength": 39,
+      "pattern": "^mktimg_[A-Za-z0-9_-]{32}$"
+    },
+    "resolvedIcon": {
+      "type": "object",
+      "description": "A Host-resolved icon safe for Renderer consumption. The role distinguishes a plugin-owned icon from a publisher-avatar fallback.",
+      "additionalProperties": false,
+      "required": [
+        "assetRef",
+        "role"
+      ],
+      "properties": {
+        "assetRef": {
+          "$ref": "#/$defs/assetRef"
+        },
+        "role": {
+          "enum": [
+            "plugin-icon",
+            "publisher-avatar"
+          ]
+        },
+        "alt": {
+          "$ref": "#/$defs/mediaAlt"
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "description": "Optional Host-resolved plugin media. Version 1 standardizes only the icon slot.",
+      "additionalProperties": false,
+      "required": [
+        "icon"
+      ],
+      "properties": {
+        "icon": {
+          "$ref": "#/$defs/resolvedIcon"
+        }
+      }
     },
     "source": {
       "type": "object",
@@ -351,6 +406,9 @@
         },
         "publisher": {
           "$ref": "#/$defs/publisher"
+        },
+        "media": {
+          "$ref": "#/$defs/media"
         },
         "capabilities": {
           "$ref": "#/$defs/capabilities"

@@ -51,11 +51,13 @@ Linux supports compatibility mode only. Its tray mode command is disabled, and a
 
 `dsh-desktop.mode` defaults to `compatibility`. This mode creates a normal operating-system window with its native frame and loads the official Web surface from the active DSH profile. macOS suppresses the visible page title. Windows retains the native caption icon and displays `DeepSeek Harness Desktop`, but removes the window menu bar. The operating system owns native title-bar color and appearance.
 
-The desktop Client module validates the mode and platform markers, then has no compatibility-mode effects. It does not provide or replace the `layout` service, register a `root` or `sidebar` occupant, install styles, or change the conversation surface. Compatibility mode preserves the selected profile's own layout, sidebar, and conversation composition; the ordinary `desktop` and `web` profiles therefore keep the official rows unchanged.
+The desktop Client module validates the mode and platform markers, then performs no presentation replacement in compatibility mode. It does not provide or replace the `layout` service, register a `root` or `sidebar` occupant, or change the conversation surface. Desktop-owned boot-health reporting and local folder drop are capability effects; compatibility mode still preserves the selected profile's own layout, sidebar, and conversation composition, so the ordinary `desktop` and `web` profiles keep the official rows unchanged.
 
 The Cordis row registers native window values during profile activation. The launcher creates the window only after `app-boot` settles and audits the complete profile, so the first renderer manifest includes the active official, desktop, and third-party client plugins without a Loader-wide wait inside the plugin itself.
 
-On Windows, the launcher pins the existing browse directory-picker backend and client surface instead of the adaptive native chooser. Workspace selection therefore remains inside the Web UI and never loads the native N-API dialog worker in the Electron main process. macOS and Linux retain the upstream adaptive chooser.
+On Windows, the launcher pins the browse directory-picker backend and keeps the full in-app directory panel. The desktop build patches that panel with a small system-folder icon whose same-origin route calls Electron's `dialog.showOpenDialog`; a selected path returns to the panel's existing workspace-adoption flow, while cancellation leaves the panel open. Ordinary browser and remote launches do not receive the desktop bridge. macOS and Linux retain the upstream adaptive chooser.
+
+On every desktop platform and in both presentation modes, one local folder can be dragged onto the left Workspace region. The isolated preload uses Electron `webUtils` only to resolve that operator-dropped `File`, after which the Client reuses the official `workspaces.create` and `startSession` flow. Ordinary files, multi-item drops, and internal Workspace or Session reordering do not trigger directory adoption; the Host remains responsible for path canonicalization, directory validation, and idempotent reuse of an existing Workspace.
 
 Windows PowerShell keeps the upstream `pwsh-sandbox` behavior and Windows ACL confinement in both presentation modes. The launcher generation replaces only that Host provider with the `dsh-plugin-desktop/windows-pwsh-sandbox` subpath from this same package. For the exact upstream ACL-runner argv, the adapter launches the packaged Electron executable in Node mode through a private trampoline, removes the Node-mode variable before the restricted PowerShell process is created, and delegates all policy and failure handling back to the upstream runner. The desktop deploy root also pins a Yarn patch that combines `STARTF_USESHOWWINDOW` with the existing `STARTF_USESTDHANDLES` and `SW_HIDE` on both native restricted-process paths. This preserves captured stdio without suppressing console allocation and requests a hidden initial show state when Windows creates the GUI-hosted PowerShell process's first console window. It does not use the upstream-incompatible `CREATE_NO_WINDOW` or `CREATE_NEW_CONSOLE` flags. Direct `danger-full-access` PowerShell, macOS, and Linux execution are unchanged; there is no automatic unrestricted fallback when Windows confinement fails.
 
@@ -172,6 +174,21 @@ Closing the window hides it while the Host Cordis tree continues running. The tr
 
 `yarn package:dir` creates an unpacked directory for the current host platform. The packaged-runtime gate rejects an application archive that omits the desktop update and terminal modules, the DSH CLI bootstrap, the bundled pnpm entry, or the physical deployment package. Electron Builder emits the root manifest, desktop runtime, and complete dependency tree under `app.asar.unpacked`; both Host profile boot and the CLI bootstrap use this physical tree so DSH profile-fallback symlinks never target a virtual ASAR directory. `build/app-icon.png` remains the unmodified iOS Default source and the Windows/Linux application icon. The build runs `scripts/generate-mac-app-icon.mjs` to center that artwork at 824 by 824 pixels on a transparent 1024 by 1024 canvas; macOS packaging and the live Dock both use the generated `build/app-icon-mac.png`. `build/tray-icon.svg` is the brand-blue tray source: the build derives a macOS template image that the system colors automatically and fixed brand-blue Windows and Linux tray images.
 
+### WSL Linux headless checks
+
+WSL2 is suitable for Linux headless build, typecheck, and unit-test coverage from a Windows workstation. Use a Linux Node.js installation inside WSL, not the Windows Node.js or Corepack shims that WSL can inherit through the mounted Windows `PATH`. When using `nvm`, start each shell with `source ~/.nvm/nvm.sh` before running Corepack commands:
+
+```bash
+source ~/.nvm/nvm.sh
+git submodule update --init --recursive
+corepack yarn install --immutable
+corepack yarn workspace dsh-plugin-desktop typecheck
+corepack yarn workspace dsh-plugin-desktop test
+corepack yarn build
+```
+
+Commands run from `/mnt/<drive>` are valid but slower than a checkout stored on WSL's native ext4 filesystem. WSL does not replace a real Linux desktop session for tray, window-manager, `.desktop` integration, or installed-package smoke tests.
+
 ### Local Windows x64 installer
 
 Use a native Windows x64 machine with Git and x64 Node `22.23.2` (the same release used by CI). The packaging command accepts Node `22.19+` and Node `24.x`, whose official distributions include the required Corepack command. From PowerShell in a fresh `v2` checkout, run:
@@ -187,6 +204,16 @@ Python and Visual Studio C++ Build Tools are not required. The Windows command u
 `dist:win` refuses non-Windows and non-x64 hosts, runs a Windows-safe gate containing the build, all TypeScript compiler faces, packaging and native-shell focused tests, and the runtime-closure verifier, then builds an assisted NSIS installer and verifies both generated PE files. The full cross-platform suite remains CI-owned because some POSIX execution tests are not Windows programs. The installer allows a per-user or elevated all-users installation, permits changing the installation directory, creates Start Menu and desktop shortcuts, and preserves DSH user data when the application is uninstalled. Version `2.0.1` is written to `dsh-plugin-desktop\dist\DSH-Desktop-2.0.1-x64-Setup.exe`; the unpacked application remains at `dsh-plugin-desktop\dist\win-unpacked\DSH Desktop.exe` for smoke testing.
 
 This local command deliberately strips Windows certificate variables and sets `signExecutable=false`. Its output is installable for testing but has no Authenticode publisher, so Windows can display an Unknown publisher or SmartScreen warning. A signed Windows release, certificate verification, installer upgrade/uninstall testing, and native UI/sandbox smoke remain separate release gates.
+
+### Windows x64 portable ZIP
+
+Use `yarn dist:win-portable` on a native Windows x64 machine to create an unsigned portable ZIP:
+
+```powershell
+corepack.cmd yarn dist:win-portable
+```
+
+The output is `dsh-plugin-desktop\\dist\\DSH-Desktop-2.0.1-x64-Portable.zip`. Extract it to any writable directory and launch `DSH Desktop.exe` without an installer, administrator access, Start Menu registration, or uninstall step. The application still keeps its profiles, logs, and caches in the normal Windows user-data directory, so this is portable distribution rather than a self-contained data sandbox. Portable archives are not handed to the NSIS updater and must be replaced manually when a new version is released. Local builds are unsigned and may trigger an Unknown publisher or SmartScreen warning; signed portable artifacts remain a release gate.
 
 ### macOS DMG smoke
 

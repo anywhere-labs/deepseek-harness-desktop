@@ -27,6 +27,26 @@ const queryFixture = () => readJson('../docs/examples/catalog-query.example.json
 const providerFixture = () => readJson('../docs/examples/catalog-provider-page.example.json')
 const snapshotFixture = () => readJson('../docs/examples/catalog-snapshot.example.json')
 
+describe('package integration contract', () => {
+  it('loads the Client through the official settings, sidebar, and shell features', () => {
+    const manifest = readJson('../package.json') as {
+      dsh?: { client?: { inject?: string[] } }
+      peerDependencies?: Record<string, string>
+    }
+
+    expect(manifest.dsh?.client?.inject).toEqual([
+      '@deepseek-ai/dsh-client-runtime',
+      '@deepseek-ai/dsh-client-locale',
+      '@deepseek-ai/dsh-client-ui-layout',
+      '@deepseek-ai/dsh-client-ui-settings',
+      '@deepseek-ai/dsh-client-ui-sidebar',
+    ])
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-layout', '0.1.0-rc.7')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-settings', '0.1.0-rc.7')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-sidebar', '0.1.0-rc.7')
+  })
+})
+
 describe('catalog schemas and semantics', () => {
   it('accepts all four reviewed positive fixtures', () => {
     for (const [fixture, parsed] of [
@@ -71,6 +91,28 @@ describe('catalog schemas and semantics', () => {
     }, 1)).toThrow(/effective query limit/u)
   })
 
+  it('rejects provider and normalized pages above the 100-item safety cap', () => {
+    const provider = providerFixture() as CatalogProviderPage
+    const providerItems = Array.from({ length: 101 }, (_, index) => ({
+      ...provider.items[0]!,
+      id: `provider-plugin-${index}`,
+    }))
+    expect(() => parseCatalogProviderPage({ ...provider, items: providerItems }))
+      .toThrow(CatalogContractError)
+
+    const snapshot = snapshotFixture() as ReturnType<typeof parseCatalogSnapshot>
+    const snapshotItems = Array.from({ length: 101 }, (_, index) => ({
+      ...snapshot.items[0]!,
+      id: `snapshot-plugin-${index}`,
+      provenance: {
+        ...snapshot.items[0]!.provenance,
+        itemId: `snapshot-plugin-${index}`,
+      },
+    }))
+    expect(() => parseCatalogSnapshot({ ...snapshot, items: snapshotItems }))
+      .toThrow(CatalogContractError)
+  })
+
   it('enforces source limit and sort relationships beyond JSON Schema', () => {
     const source = sourceFixture() as CatalogSourceManifest
     expect(() => parseCatalogSource({
@@ -89,11 +131,11 @@ describe('catalog query boundary', () => {
     const input = { q: '  sidebar  ', category: ['interface'] }
     const normalized = normalizeCatalogQuery(input)
 
-    expect(normalized).toEqual({ q: 'sidebar', category: ['interface'], limit: 20 })
+    expect(normalized).toEqual({ q: 'sidebar', category: ['interface'], limit: 50 })
     expect(input.q).toBe('  sidebar  ')
   })
 
-  it('serializes only declared fields and repeats multi-value parameters', () => {
+  it('serializes the minimal declared fields and omits undeclared extensions', () => {
     const source = parseCatalogSource(sourceFixture())
     const url = serializeCatalogQuery(source, normalizeCatalogQuery({
       q: 'side bar',
@@ -107,9 +149,10 @@ describe('catalog query boundary', () => {
     expect(url.origin + url.pathname).toBe('https://plugins.example.org/v1/plugins')
     expect(url.searchParams.get('q')).toBe('side bar')
     expect(url.searchParams.getAll('category')).toEqual(['interface', 'tools'])
-    expect(url.searchParams.getAll('capability')).toEqual(['ui.panel', 'storage.local'])
-    expect(url.searchParams.get('limit')).toBe('100')
-    expect(url.searchParams.get('sort')).toBe('updated')
+    expect(url.searchParams.get('limit')).toBe('50')
+    expect(url.searchParams.has('capability')).toBe(false)
+    expect(url.searchParams.has('sort')).toBe(false)
+    expect(url.searchParams.has('locale')).toBe(false)
   })
 
   it('omits unsupported fields and narrows a supported limit', () => {
@@ -170,11 +213,25 @@ describe('catalog identity and local source records', () => {
       adapterId: 'market.standard-v1',
       providerId: 'org.example.catalog',
       manifestUrl: 'https://plugins.example.org/catalog-source.json',
+      manifest: {
+        ...(sourceFixture() as CatalogSourceManifest),
+        providerId: 'org.example.catalog',
+      },
       enabled: false,
       order: 0,
     }
 
     expect(() => validateLocalSourceRecords([record])).not.toThrow()
+    const withoutManifest = { ...record }
+    delete withoutManifest.manifest
+    expect(() => validateLocalSourceRecords([withoutManifest])).toThrow(/manifest is required/u)
+    expect(() => validateLocalSourceRecords([{
+      ...record,
+      manifest: {
+        ...record.manifest!,
+        transport: { kind: 'https-json', endpoint: 'https://other.example/v1/plugins', method: 'GET' },
+      },
+    }])).toThrow(/registered manifest origin/u)
     expect(() => validateLocalSourceRecords([record, { ...record }])).toThrow(/duplicates/u)
     expect(() => validateLocalSourceRecords([{
       ...record,

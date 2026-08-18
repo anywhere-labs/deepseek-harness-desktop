@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   ElectronStderrLogger,
+  installDesktopChildProcessLogging,
   installDesktopUncaughtExceptionLogging,
 } from '../src/desktop-logger.ts'
 import { LogFileSink } from '../src/log-files.ts'
@@ -23,6 +24,26 @@ function sink(): { s: LogFileSink; dir: string } {
 }
 
 describe('ElectronStderrLogger', () => {
+  it('logs Electron child process crashes with the Windows exception code', () => {
+    const app = new EventEmitter()
+    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const remove = installDesktopChildProcessLogging(app, logger)
+
+    app.emit('child-process-gone', {}, {
+      type: 'Utility',
+      reason: 'crashed',
+      exitCode: -1073741819,
+      serviceName: 'network.mojom.NetworkService',
+      name: 'Network Service',
+    })
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'dsh-plugin-desktop: child process gone (type: Utility, name: Network Service, service: network.mojom.NetworkService, reason: crashed, exitCode: -1073741819 / 0xc0000005)',
+    )
+    remove()
+    expect(app.listenerCount('child-process-gone')).toBe(0)
+  })
+
   it('writes to the sink and to stderr', () => {
     const { s, dir } = sink()
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)

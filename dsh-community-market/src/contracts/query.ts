@@ -35,7 +35,7 @@ export function normalizeCatalogQuery(value: unknown): CatalogQuery {
     if (q) normalized.q = q
     else delete normalized.q
   }
-  if (normalized.limit === undefined) normalized.limit = 20
+  if (normalized.limit === undefined) normalized.limit = 50
   if (Array.isArray(normalized.category)) normalized.category = [...normalized.category]
   if (Array.isArray(normalized.capability)) normalized.capability = [...normalized.capability]
   return parseCatalogQuery(normalized)
@@ -62,7 +62,7 @@ export function serializeCatalogQuery(
   }
   if (supports(source, 'cursor') && query.cursor !== undefined) url.searchParams.set('cursor', query.cursor)
   if (supports(source, 'limit')) {
-    url.searchParams.set('limit', String(Math.min(query.limit ?? 20, source.query.maxLimit)))
+    url.searchParams.set('limit', String(Math.min(query.limit ?? 50, source.query.maxLimit)))
   }
   if (supports(source, 'sort') && query.sort !== undefined) {
     const supportedSorts = source.query.sorts as readonly NonNullable<CatalogQuery['sort']>[]

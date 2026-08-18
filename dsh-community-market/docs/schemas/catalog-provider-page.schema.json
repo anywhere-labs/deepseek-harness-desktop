@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:dsh-community-market:schema:catalog-provider-page:1.0.0",
   "title": "DSH Community Market standard provider page",
-  "description": "The untrusted wire response returned by a standard HTTPS catalog source. Host-observed provenance is intentionally absent and is injected only after validation.",
+  "description": "The untrusted page JSON returned by one standard HTTPS catalog endpoint. Only schemaVersion, items, and page are required. A page may contain at most 100 items and must also respect the effective requested or declared default limit. Host-observed provenance is intentionally absent and is injected only after validation.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -45,14 +45,56 @@
       "type": "string",
       "format": "uri",
       "maxLength": 2048,
-      "pattern": "^https://(?![^/?#]*@)[^#]+$"
+      "pattern": "^https://(?![^/?#]*@)(?![^/?#]*:)[^#]+$"
     },
     "plainText": {
       "type": "string",
       "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
     },
+    "mediaAlt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/plainText"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      ]
+    },
+    "remoteIconCandidate": {
+      "type": "object",
+      "description": "A provider-declared remote plugin-icon candidate. The URL must share the final provider-page response origin. The Host resolves and validates it before it can enter a normalized snapshot; the Renderer never receives this URL.",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "$ref": "#/$defs/httpsUri"
+        },
+        "alt": {
+          "$ref": "#/$defs/mediaAlt"
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "description": "Optional provider-declared plugin media. In v1, only a direct plugin icon is standardized.",
+      "additionalProperties": false,
+      "required": [
+        "icon"
+      ],
+      "properties": {
+        "icon": {
+          "$ref": "#/$defs/remoteIconCandidate"
+        }
+      }
+    },
     "page": {
       "type": "object",
+      "description": "Use an empty object when there is no next page. nextCursor is opaque and belongs only to this source and effective query.",
       "additionalProperties": false,
       "properties": {
         "nextCursor": {
@@ -276,6 +318,9 @@
         },
         "publisher": {
           "$ref": "#/$defs/publisher"
+        },
+        "media": {
+          "$ref": "#/$defs/media"
         },
         "capabilities": {
           "$ref": "#/$defs/capabilities"

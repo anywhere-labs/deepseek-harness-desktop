@@ -34,10 +34,12 @@ Status: implemented
 
 每天日志以一条启动 header（app 版本、平台、Node 版本、运行时间戳）开头，并在启动时清理 7 天前的文件，配合 200MB 目录上限。写入过程中会持续执行容量上限，大小按 UTF-8 字节计算，过大的单条记录会在 Unicode code point 边界截断。清理只管理 `dsh-*.log` 命名，并容忍文件消失或被 Windows 临时锁定。日志目录如果是链接会被拒绝，链接或非文件占位项会被跳过；日志初始化失败时退化到脱敏后的 stderr，不阻断应用启动。
 
-绕过 Cordis `ctx.logger` 的 Electron 主进程级错误通过 `DesktopLogger` 接口记录：`ElectronStderrLogger` 写入 sink 并镜像到 `process.stderr`（开发时可终端可见）。它被注入 `ElectronDesktopRuntime`，后者把原先的 `process.stderr.write` 调用、`launchWindowsUpdateInstaller` 的子进程错误、以及 `render-process-gone` / `did-fail-load` 渲染器事件都路由过去。`main.ts` 安装共享的 fail-loud rejection 路径和一个专用 `uncaughtException` 处理器；后者记录第一个致命错误后请求受控退出。sink 失败会退化到 stderr，不会覆盖原始错误。
+绕过 Cordis `ctx.logger` 的 Electron 主进程级错误通过 `DesktopLogger` 接口记录：`ElectronStderrLogger` 写入 sink 并镜像到 `process.stderr`（开发时可终端可见）。它被注入 `ElectronDesktopRuntime`，后者把原先的 `process.stderr.write` 调用、`launchWindowsUpdateInstaller` 的子进程错误、以及 `render-process-gone` / `did-fail-load` 渲染器事件都路由过去。`main.ts` 安装共享的 fail-loud rejection 路径和一个专用 `uncaughtException` 处理器；后者记录第一个致命错误后请求受控退出。Electron 的 `child-process-gone` 事件也会被记录，子进程与渲染器退出码同时保留有符号数值和十六进制位模式，使 `0xc0000005` 等 Windows NTSTATUS 保持可识别。sink 失败会退化到 stderr，不会覆盖原始错误。
+
+JavaScript handler 无法在主进程原生崩溃后继续执行。因此 bootstrap 以 `uploadToServer: false` 启动 Electron Crashpad，只在本地保留 minidump，并在 `userData/crash-evidence/` 写 active-run 标记。受控退出会删除标记；下一次启动若发现残留或不可读标记，就记录为上一次进程未正常退出的证据。Crashpad 或标记初始化失败只写日志，不阻断启动。
 
 所有进入文件边界的日志行都经过脱敏层，覆盖 `sk-` 风格 key、长 hex/base64 token、bearer/basic authorization、cookie header、带引号或不带引号的具名敏感字段（包括渲染后的 JSON），以及 HTTP URL 中的凭据或敏感 query 值。
 
-默认 profile 加载 `dsh-plugin-desktop/diagnostics`，在 macOS 与 Windows 的原生托盘中提供 **Export Diagnostics…** 命令。创建归档前，`desktopRuntime.exportDiagnostics()` 会显示本地化隐私确认，说明日志可能包含本地路径与工作区/会话标识。确认后的导出在短生命周期 Node worker 中运行，避免文件读取与压缩阻塞 Electron 主线程。Worker 最多纳入最近 50MB 的自有普通日志与系统信息摘要，记录被省略的文件数量，把 zip 原子发布到 `userData/diagnostics/`，拒绝链接形式的输入/输出目录，容忍文件消失或被锁，并只保留最新三份归档。Runtime 会合并并发请求，成功后在系统文件管理器中定位文件，失败时显示原生错误对话框。
+默认 profile 加载 `dsh-plugin-desktop/diagnostics`，在 macOS 与 Windows 的原生托盘中提供 **Export Diagnostics…** 命令。创建归档前，`desktopRuntime.exportDiagnostics()` 会显示本地化隐私确认，说明日志可能包含本地路径与工作区/会话标识，崩溃转储可能包含进程内存片段。确认后的导出在短生命周期 Node worker 中运行，避免文件读取与压缩阻塞 Electron 主线程。Worker 优先纳入本地普通 `.dmp` 文件，再纳入最近的自有日志，两者共享 50MB 证据上限；同时加入系统信息摘要与被省略文件数量，把 zip 原子发布到 `userData/diagnostics/`，拒绝链接形式的输入、输出和崩溃转储目录，容忍文件消失或被锁，并只保留最新三份归档。Runtime 会合并并发请求，成功后在系统文件管理器中定位文件，失败时显示原生错误对话框。
 
 带手动清空的设置页日志查看器尚未构建，作为后续项。
