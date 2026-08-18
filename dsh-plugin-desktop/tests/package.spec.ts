@@ -52,6 +52,11 @@ describe('published package surface', () => {
       .toBe('yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-community-market typecheck')
   })
 
+  it('runs desktop and community market tests from the root command', () => {
+    expect(workspaceManifest.scripts?.test)
+      .toBe('yarn workspace dsh-plugin-desktop test && yarn workspace dsh-community-market test')
+  })
+
   it('registers both npm launcher names', () => {
     expect(manifest.name).toBe('dsh-plugin-desktop')
     expect(manifest.bin).toEqual({

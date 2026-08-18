@@ -51,7 +51,7 @@
   "scripts": {
     "build": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop build",
     "typecheck": "yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-community-market typecheck",
-    "test": "yarn workspace dsh-plugin-desktop test",
+    "test": "yarn workspace dsh-plugin-desktop test && yarn workspace dsh-community-market test",
     "check:layout": "node scripts/verify-layout.mjs",
     "check": "yarn check:layout && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-plugin-desktop check",
     "dev": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dev",
