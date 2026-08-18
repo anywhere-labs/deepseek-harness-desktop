@@ -4,11 +4,11 @@
 
 Download the macOS or Windows installer from the product download page. DSH Desktop includes Electron, Node, and its pinned DSH dependencies, so normal users do not need to install Node.js or pnpm separately.
 
-On first launch, the application prepares the default profile and starts the official DSH Web surface locally. Closing the window normally hides it; use **Quit** from the tray when you want to stop the application and Host process.
+On first launch, the application prepares the default profile and starts the official DSH Web surface locally. On macOS and Windows, closing the window normally hides it; use **Quit** from the tray when you want to stop the application and Host process. Linux has no system tray (known limitation); closing the window quits the application and Host process.
 
 ## Profiles
 
-A profile is a composition of DSH bundles, dependencies, and patches. The tray **Profile** menu lists existing profiles and the lazy `desktop` and `web` defaults.
+A profile is a composition of DSH bundles, dependencies, and patches. On macOS and Windows, the tray **Profile** menu lists existing profiles and the lazy `desktop` and `web` defaults. Linux has no tray; switch profiles from the terminal or by editing desktop profile state.
 
 Selecting a profile performs an orderly restart. The new profile becomes the last-known-good choice only after the Host, window, and browser client all start successfully; a failed startup returns to the previous working choice. Official profiles normally use the same DSH home, so sessions, settings, and storage do not need to be migrated. A custom configuration (patch) can deliberately redirect a persistence root, in which case that profile's configuration wins.
 
@@ -79,7 +79,7 @@ After confirmation, the app requests the fixed platform download URL. macOS open
 
   If the npm desktop launcher is installed, `dsh-desktop --export-diagnostics` provides the same archive. This command does not start Host, profiles, plugins, or a window. It prints the absolute diagnostics ZIP path when complete.
 - **Diagnostic archive contents**: recent application logs, local Crashpad `.dmp` files, the active-run marker, and `system-info.txt`. System information records Desktop, Electron, Node, platform, and architecture versions. Recognized credentials are masked in logs, but local paths, workspace IDs, session IDs, and crash-time memory fragments may remain. Review the archive before public upload and send sensitive dumps only through a trusted channel.
-- **The window disappeared**: check the system tray; closing the window is not quitting.
+- **The window disappeared**: on macOS and Windows, check the system tray; closing the window is not quitting. On Linux there is no tray (known limitation), and closing the window stops the application.
 - **A plugin is missing**: confirm the command targeted the intended profile and restart the application.
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.
 - **No update notification appeared**: background failures are silent; use the manual tray check to see the result.

@@ -64,4 +64,35 @@ describe('desktop profiles Host plugin', () => {
     disposeEffect?.()
     expect(disposeRegistration).toHaveBeenCalledOnce()
   })
+
+  it('keeps service selection available when tray registration is a Linux no-op', async () => {
+    let registered = 0
+    const events: string[] = []
+    const runtime = {
+      registerTrayItem: () => {
+        registered += 1
+        return { refresh: () => {}, dispose: () => {} }
+      },
+      requestRestart: vi.fn(async () => { events.push('unexpected restart') }),
+    } as unknown as DesktopRuntime
+    const profiles: DesktopProfiles = {
+      current: { name: 'desktop', dir: '/profiles/desktop' },
+      list: () => [
+        { name: 'desktop', dir: '/profiles/desktop', exists: true, bundles: [], webCapable: true },
+        { name: 'work', dir: '/profiles/work', exists: true, bundles: [], webCapable: true },
+      ],
+      select: async selected => { events.push(`select:${selected}`) },
+    }
+    const ctx = {
+      desktopRuntime: runtime,
+      desktopProfiles: profiles,
+      effect: (register: () => (() => void)) => register(),
+    } as unknown as Context
+
+    expect(() => { apply(ctx) }).not.toThrow()
+    expect(registered).toBe(1)
+    await profiles.select('work')
+    expect(events).toEqual(['select:work'])
+    expect(runtime.requestRestart).not.toHaveBeenCalled()
+  })
 })

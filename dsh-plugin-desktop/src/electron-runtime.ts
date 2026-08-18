@@ -57,6 +57,22 @@ export function modeToggleLabel(mode: DesktopShellSpec['mode'], locale: DesktopL
 }
 
 /**
+ * Decide whether this platform mounts a StatusNotifier/system tray.
+ * Linux tray hosts are optional and Electron 43.3+ GNOME SNI is unreliable, so Desktop stays window-owned.
+ */
+export function mountsNativeTray(platform: DesktopPlatform): boolean {
+  return platform !== 'linux'
+}
+
+/**
+ * Decide whether the window close path may hide instead of quitting.
+ * Linux has no tray recovery surface, so close must request an orderly process exit.
+ */
+export function hidesWindowOnClose(platform: DesktopPlatform): boolean {
+  return mountsNativeTray(platform)
+}
+
+/**
  * Read the desktop package version instead of Electron's development-app version.
  * @param moduleUrl - module below the package's `src` or `lib` directory.
  * @returns validated desktop product version.
@@ -211,6 +227,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** @inheritdoc */
   registerTrayItem(item: DesktopTrayItem): DesktopTrayItemRegistration {
+    if (!mountsNativeTray(this.platform)) {
+      return { refresh: () => {}, dispose: () => {} }
+    }
     const key = Symbol()
     this.trayItems.set(key, item)
     this.rebuildTrayMenu()
@@ -616,7 +635,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const close = (event: Electron.Event): void => {
       if (this.quitting) return
       event.preventDefault()
-      window.hide()
+      if (hidesWindowOnClose(this.platform)) {
+        window.hide()
+        return
+      }
+      spec.requestQuit(0)
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
@@ -670,11 +693,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     let tray: Tray | undefined
     try {
       await window.loadURL(spec.url)
-      tray = new Tray(prepareTrayIcon(spec.trayIcons, this.platform))
-      this.tray = tray
-      tray.setToolTip(spec.productName)
-      this.rebuildTrayMenu()
-      tray.on('click', show)
+      if (mountsNativeTray(this.platform)) {
+        tray = new Tray(prepareTrayIcon(spec.trayIcons, this.platform))
+        this.tray = tray
+        tray.setToolTip(spec.productName)
+        this.rebuildTrayMenu()
+        tray.on('click', show)
+      }
       beforeInteractive?.()
     } catch (cause) {
       app.off('activate', show)
@@ -688,7 +713,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       throw cause
     }
 
-    if (tray === undefined) {
+    if (mountsNativeTray(this.platform) && tray === undefined) {
       throw new Error('dsh-plugin-desktop: native tray did not mount')
     }
     const mountedTray = tray
@@ -703,10 +728,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       window.webContents.off('before-input-event', handleZoomShortcut)
       window.webContents.off('will-frame-navigate', navigate)
       window.webContents.off('will-redirect', navigate)
-      mountedTray.off('click', show)
-      mountedTray.destroy()
+      mountedTray?.off('click', show)
+      mountedTray?.destroy()
       if (!window.isDestroyed()) window.destroy()
-      if (this.tray === mountedTray) this.tray = undefined
+      if (mountedTray !== undefined && this.tray === mountedTray) this.tray = undefined
       if (this.window === window) this.window = undefined
     }
   }

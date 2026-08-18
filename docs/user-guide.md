@@ -4,11 +4,11 @@
 
 从产品下载入口获取 macOS 或 Windows 安装包。安装后的 DSH Desktop 自带运行所需的 Electron、Node 和 DSH 依赖，普通用户不需要另行安装 Node.js 或 pnpm。
 
-首次启动时，应用会准备默认 profile，并在本机启动官方 DSH Web surface。关闭窗口通常只会隐藏窗口；可以从托盘重新打开，选择 **退出** 才会结束应用和 Host 进程。
+首次启动时，应用会准备默认 profile，并在本机启动官方 DSH Web surface。在 macOS 与 Windows 上，关闭窗口通常只会隐藏窗口；可以从托盘重新打开，选择 **退出** 才会结束应用和 Host 进程。Linux 没有系统托盘（已知限制）；关闭窗口会结束应用和 Host 进程。
 
 ## Profile
 
-Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profile** 菜单会列出现有 profile，以及可按需创建的 `desktop` 和 `web` 默认 profile。
+Profile 是一组 DSH bundle、依赖和 patch 的组合。在 macOS 与 Windows 上，托盘中的 **Profile** 菜单会列出现有 profile，以及可按需创建的 `desktop` 和 `web` 默认 profile。Linux 没有托盘；切换 profile 请使用终端，或编辑 desktop 的 profile 状态。
 
 选择 profile 后应用会有序重启。新 profile 在 Host、窗口和浏览器客户端都成功启动后才会被记录为最近一次可用 profile；启动失败会回到上一次可用选择。官方 profile 默认使用同一个 DSH home，所以 sessions、settings 和 storage 通常不需要迁移。自定义配置（patch）如果主动改写持久化路径，则以该 profile 自己的设置为准。
 
@@ -79,7 +79,7 @@ dsh plugin update
 
   通过 npm 安装过桌面启动器时，也可以运行 `dsh-desktop --export-diagnostics`。这个命令不会启动 Host、profile、插件或窗口；完成后会在终端输出诊断 ZIP 的绝对路径。
 - **诊断包内容**：包含最近的应用日志、本地 Crashpad `.dmp`、当前运行标记和 `system-info.txt`。系统信息会记录 Desktop、Electron、Node、平台和架构版本。日志会对可识别的认证凭据脱敏，但本地路径、工作区 ID、会话 ID 和崩溃时的内存片段仍可能存在。公开上传前必须检查；不适合公开的 dump 应通过可信渠道提供。
-- **窗口消失了**：先检查系统托盘，关闭窗口不是退出。
+- **窗口消失了**：在 macOS 与 Windows 上先检查系统托盘，关闭窗口不是退出。Linux 没有托盘（已知限制），关闭窗口会结束应用。
 - **插件没有出现**：确认命令作用于目标 profile，并重启应用。
 - **终端命令找不到**：从托盘重新打开 Desktop 终端；系统 shell 的全局 PATH 不会被 Desktop 修改。
 - **更新没有提示**：后台错误会静默；使用托盘手动检查查看结果。

@@ -96,6 +96,7 @@ const electron = vi.hoisted(() => {
     readonly isMinimized = vi.fn(() => false)
     readonly restore = vi.fn()
     readonly show = vi.fn()
+    readonly hide = vi.fn()
     readonly focus = vi.fn()
     readonly on = browserWindowOn
     readonly off = browserWindowOff
@@ -325,6 +326,137 @@ describe('Electron compatibility runtime', () => {
     expect(electron.trays[0]?.off).toHaveBeenCalledWith('click', expect.any(Function))
   })
 
+  it.each(['darwin', 'win32'] as const)('hides the %s window on close instead of quitting', async (platform) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+    const requestQuit = vi.fn()
+    const { ElectronDesktopRuntime, hidesWindowOnClose } = await import('../src/electron-runtime.ts')
+    expect(hidesWindowOnClose(platform)).toBe(true)
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule({ ...spec, requestQuit })
+
+    await runtime.mountScheduled()
+    const close = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1] as
+      | ((event: { preventDefault: () => void }) => void)
+      | undefined
+    expect(close).toEqual(expect.any(Function))
+    const event = { preventDefault: vi.fn() }
+    close?.(event)
+
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.hide).toHaveBeenCalledOnce()
+    expect(requestQuit).not.toHaveBeenCalled()
+
+    await release()
+  })
+
+  it('does not mount a tray and quits when the Linux window closes', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const requestQuit = vi.fn()
+    const { ElectronDesktopRuntime, hidesWindowOnClose, mountsNativeTray } = await import('../src/electron-runtime.ts')
+    expect(mountsNativeTray('linux')).toBe(false)
+    expect(hidesWindowOnClose('linux')).toBe(false)
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const beforeInteractive = vi.fn()
+    const release = runtime.schedule({ ...spec, requestQuit })
+
+    await runtime.mountScheduled(beforeInteractive)
+    expect(beforeInteractive).toHaveBeenCalledOnce()
+    expect(electron.trays).toHaveLength(0)
+    expect(electron.menuTemplates).toHaveLength(0)
+
+    const contributed = runtime.registerTrayItem({
+      group: 'tools',
+      order: 10,
+      label: () => 'Ignored Tool',
+      invoke: vi.fn(),
+    })
+    contributed.refresh()
+    expect(electron.trays).toHaveLength(0)
+    expect(electron.menuTemplates).toHaveLength(0)
+    contributed.dispose()
+
+    const close = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1] as
+      | ((event: { preventDefault: () => void }) => void)
+      | undefined
+    expect(close).toEqual(expect.any(Function))
+    const event = { preventDefault: vi.fn() }
+    close?.(event)
+
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.hide).not.toHaveBeenCalled()
+    expect(requestQuit).toHaveBeenCalledWith(0)
+
+    runtime.prepareToQuit()
+    const finalClose = { preventDefault: vi.fn() }
+    close?.(finalClose)
+    expect(finalClose.preventDefault).not.toHaveBeenCalled()
+    expect(requestQuit).toHaveBeenCalledOnce()
+
+    await release()
+    expect(electron.trays).toHaveLength(0)
+  })
+
+  it('disposes the Linux Host and exits the process when the window closes', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const { createDesktopExitCoordinator, createDesktopShutdown } = await import('../src/shutdown.ts')
+    let runtime!: InstanceType<typeof ElectronDesktopRuntime>
+    const native = {
+      prepareToQuit: () => { runtime.prepareToQuit() },
+      relaunch: vi.fn(),
+      exit: vi.fn(),
+    }
+    const disposeHost = vi.fn(async () => {})
+    const coordinator = createDesktopExitCoordinator(native, () => {})
+    const shutdown = createDesktopShutdown(disposeHost, code => { coordinator.finish(code) })
+    runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule({
+      ...spec,
+      requestQuit: code => { void shutdown.request(code) },
+    })
+
+    await runtime.mountScheduled()
+    expect(electron.nativeImage.createFromPath.mock.calls.map(([path]) => path)).toEqual([
+      '/tmp/app-icon.png',
+    ])
+    const close = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1] as
+      | ((event: { preventDefault: () => void }) => void)
+      | undefined
+    close?.({ preventDefault: vi.fn() })
+    await vi.waitFor(() => { expect(native.exit).toHaveBeenCalledWith(0) })
+
+    expect(disposeHost).toHaveBeenCalledOnce()
+    expect(native.relaunch).not.toHaveBeenCalled()
+    expect(electron.trays).toHaveLength(0)
+    expect(electron.browserWindows[0]?.hide).not.toHaveBeenCalled()
+
+    const again = { preventDefault: vi.fn() }
+    close?.(again)
+    expect(again.preventDefault).not.toHaveBeenCalled()
+    expect(disposeHost).toHaveBeenCalledOnce()
+    expect(native.exit).toHaveBeenCalledOnce()
+
+    await release()
+  })
+
+  it('reveals the Linux window without a tray click handler', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+    electron.browserWindows[0]?.show.mockClear()
+    electron.browserWindows[0]?.focus.mockClear()
+    runtime.show()
+
+    expect(electron.trays).toHaveLength(0)
+    expect(electron.browserWindows[0]?.show).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.focus).toHaveBeenCalledOnce()
+
+    await release()
+  })
+
   it('opens one parented Windows folder chooser and returns its selected path', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\Work'] })
@@ -401,6 +533,19 @@ describe('Electron compatibility runtime', () => {
       ]))
 
     await release()
+  })
+
+  it('does not leave a Linux tray after the renderer fails to load', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    electron.loadURL.mockRejectedValueOnce(new Error('renderer unavailable'))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await expect(runtime.mountScheduled()).rejects.toThrow('renderer unavailable')
+    expect(electron.trays).toHaveLength(0)
+    await expect(release()).rejects.toThrow('renderer unavailable')
+    expect(electron.trays).toHaveLength(0)
   })
 
   it('handles desktop zoom shortcuts without relying on the native menu', async () => {

@@ -20,7 +20,7 @@ The DSH home `settings.yaml` document is the single source of truth. The launche
 
 The `desktop-shell` Host plugin registers `settingsNamespace('dsh-desktop')` with a schema containing `mode: compatibility | advanced` and `applies: restart`. The tray calls that registered scope's narrow `settings.update({ mode })` path. A user may instead edit the same `settings.yaml` document directly; the file provider and registered namespace observe that one durable value.
 
-Linux supports compatibility only. The tray disables its mode command there, and an advanced value is rejected rather than being mapped to a different presentation.
+Linux supports compatibility only. It does not mount a system tray, and an advanced value is rejected rather than being mapped to a different presentation.
 
 ### Restart is the composition boundary
 
