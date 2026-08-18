@@ -274,16 +274,21 @@ describe('desktop Host plugin', () => {
     expect(JSON.parse(body)).toEqual({ path: 'C:\\Work' })
   })
 
-  it.each(['win32', 'linux'] as const)(
-    'keeps the full-size application icon on %s',
-    (platform) => {
-      const harness = createHarness(platform)
+  it('keeps the full-size application icon on win32', () => {
+    const harness = createHarness('win32')
 
-      apply(harness.ctx, config)
+    apply(harness.ctx, config)
 
-      expect(harness.shell()?.iconPath.endsWith(join('build', 'app-icon.png'))).toBe(true)
-    },
-  )
+    expect(harness.shell()?.iconPath.endsWith(join('build', 'app-icon.png'))).toBe(true)
+  })
+
+  it('uses the generated 8-bit hicolor icon on linux', () => {
+    const harness = createHarness('linux')
+
+    apply(harness.ctx, config)
+
+    expect(harness.shell()?.iconPath.endsWith(join('build', 'icons', '512x512.png'))).toBe(true)
+  })
 
   it('requests one orderly restart after the settings scope commits another mode', async () => {
     vi.useFakeTimers()

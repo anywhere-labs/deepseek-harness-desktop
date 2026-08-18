@@ -115,7 +115,9 @@ export function apply(ctx: Context, config: Config): void {
   }
   const iconFilename = runtime.platform === 'darwin'
     ? 'app-icon-mac.png'
-    : 'app-icon.png'
+    : runtime.platform === 'linux'
+      ? 'icons/512x512.png'
+      : 'app-icon.png'
   const iconPath = fileURLToPath(new URL(`../build/${iconFilename}`, import.meta.url))
   const trayIcons = {
     templatePath: fileURLToPath(new URL('../build/tray-iconTemplate.png', import.meta.url)),
