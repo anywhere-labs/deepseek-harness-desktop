@@ -8,6 +8,14 @@ import {
 import { SIDEBAR_COLLAPSED } from './layout-state.ts'
 
 /** Advanced-shell stylesheet kept as a plain string so the package client bundle stays self-contained. */
+const ATTACHMENT_STYLES = `
+.dshDesktopAttachmentButton { width: 28px; height: 28px; border: 0; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: var(--dsw-alias-label-secondary); background: transparent; cursor: pointer; }
+.dshDesktopAttachmentButton:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.dshDesktopAttachmentButton:disabled { opacity: .4; cursor: not-allowed; }
+.dshDesktopAttachmentInput { display: none; }
+.dshDesktopAttachmentError { max-width: 220px; overflow: hidden; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+`
+
 const ADVANCED_STYLES = `
 html, body, #root { width: 100%; height: 100%; }
 body[data-dsh-desktop-mode="advanced"] { margin: 0; background: transparent !important; }
@@ -45,11 +53,26 @@ html:has([aria-modal="true"]) .dshDesktopSidebarSurface::before { -webkit-app-re
 `
 
 /** Install and remove the advanced shell's global native-window styles. @returns the style disposer. */
+function installStyles(cssText: string, name: string): () => void {
+  const style = document.createElement('style')
+  style.dataset.plugin = 'dsh-plugin-desktop'
+  style.dataset.pluginCss = name
+  style.textContent = cssText
+  document.head.appendChild(style)
+  return () => { style.remove() }
+}
+
+/** Install the desktop attachment picker styles in compatibility mode. */
+export function installAttachmentStyles(): () => void {
+  return installStyles(ATTACHMENT_STYLES, 'dsh-plugin-desktop/attachments')
+}
+
+/** Install and remove the advanced shell's global native-window styles. @returns the style disposer. */
 export function installAdvancedStyles(): () => void {
   const style = document.createElement('style')
   style.dataset.plugin = 'dsh-plugin-desktop'
   style.dataset.pluginCss = 'dsh-plugin-desktop/advanced-shell'
-  style.textContent = ADVANCED_STYLES
+  style.textContent = `${ATTACHMENT_STYLES}\n${ADVANCED_STYLES}`
   document.head.appendChild(style)
   return () => { style.remove() }
 }

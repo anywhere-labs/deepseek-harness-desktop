@@ -8,6 +8,7 @@
   "include": [
     "src/client/**/*.ts",
     "src/client/**/*.tsx",
+    "tests/attachment-picker.client.spec.ts",
     "tests/client-boot-health.spec.ts",
     "tests/client-environment.spec.ts"
   ]
