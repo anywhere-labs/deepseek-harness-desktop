@@ -149,6 +149,9 @@ if (noticesArg !== -1) {
     ...manifests
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(entry => `| ${entry.name} | ${entry.version ?? ''} | ${entry.license} |`),
+    ...(existsSync(join(packageRoot, 'vendor', 'node', 'node.exe'))
+      ? ['| Node.js (vendored runtime for the Windows ACL runner) | 22.23.2 | MIT (see resources/node-license/LICENSE) |']
+      : []),
     '',
     noticeOnly.length === 0
       ? ''
