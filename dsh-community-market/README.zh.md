@@ -4,7 +4,7 @@
 
 DSH Community Market 是 [DSH Desktop](../README.md) 的插件市场壳，用于发现社区插件；在 Desktop 中，还可以安装或移除少量通过 Market Host 检查的 npm package。
 
-> **当前状态：private 集成测试 MVP。** Package 已有可加载的 Host/Client 入口、用户拥有的来源持久化、受限 HTTPS client、标准与 DSH 1024Store adapter，并在**设置 > 插件**中提供官方的**插件市场**标签页和侧边栏入口；同时已有 Host 受管安装、基于 receipt 的卸载，以及对外部 direct bundle 的 fail-closed 禁用功能。这不表示被收录或显示为可安装的插件代码是安全的。
+> **当前状态：private 集成测试 MVP。** Package 已有可加载的 Host/Client 入口、用户拥有的来源持久化、受限 HTTPS client、标准与 DSH 1024Store adapter，并在**设置 > 插件**中提供官方的**插件市场**标签页和侧边栏入口；同时已有 Host 受管安装、基于 receipt 的卸载，以及对可变 direct bundle 的 fail-closed 启用/禁用功能。这不表示被收录或显示为可安装的插件代码是安全的。
 
 ## 我们要做什么
 
@@ -12,10 +12,10 @@ DSH Community Market 是 [DSH Desktop](../README.md) 的插件市场壳，用于
 
 1. **发现**展示当前来源已经加载并标准化的全部条目。点击任一卡片都会立即打开同一个操作弹窗：Desktop 先检查能否受管安装，不能时再显示详情或安全的只展示手动提示。
 2. **可安装**是从完整索引中以 fail-closed 方式生成的本地结构候选列表。条目必须具有经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 版本和规范仓库，同时排除被阻止的 package，以及当前 profile 或 Market receipt 中已经存在的 package。生成列表时不会逐包请求 npm；这里的卡片与发现页共用同一个操作弹窗。
-3. **已安装**会把有效 Market receipt 与 Desktop 当前 profile 的 direct bundle 清单进行核对。Receipt 持有的 bundle 可以卸载；其他可变 bundle 只允许禁用。
+3. **已安装**会把有效 Market receipt 与 Desktop 当前 profile 的 direct bundle 清单进行核对。Receipt 持有的 bundle 可以卸载；可变 bundle 可以禁用并重新启用。已禁用且由 receipt 持有的 bundle 会同时保留“启用”和“卸载”。
 4. **来源**用于选择和管理目录来源；同一时间只浏览一个来源。
 
-点击插件卡片会同步打开弹窗，并由 Host 判断这个精确的来源/条目能否使用受管安装。Preview 成功时，Host 才会针对它访问官方 npm registry，完整复核身份、仓库、integrity、runtime、lifecycle script、DSH bundle 证据和当前 profile，然后把同一个弹窗切换成精确确认；真正执行前还会再次检查可变状态。如果受管 preview 不可用，弹窗会保留为详情页，并可能展示 Host 根据规范化身份重建的精确 npm 命令。它不是 provider 命令，不会发送给 Desktop action，也不会自动执行；“打开 DSH 终端”只负责打开终端，由用户自行检查、复制和执行命令。受管 profile 修改成功后，用户可以使用一次性 Desktop action 立即重启，也可以选择稍后重启。市场只是现有 DSH 能力之上的产品壳，不会再发明一套插件格式、包管理器、profile 存储或高权限安装器。
+点击插件卡片会同步打开弹窗，并由 Host 判断这个精确的来源/条目能否使用受管安装。Preview 成功时，Host 才会针对它访问官方 npm registry，完整复核身份、仓库、integrity、runtime、lifecycle script、DSH bundle 证据和当前 profile，然后把同一个弹窗切换成精确确认；真正执行前还会再次检查可变状态。如果受管 preview 不可用，弹窗会保留为详情页，并可能展示 Host 根据规范化身份重建的精确 npm 命令。它不是 provider 命令，不会发送给 Desktop action，也不会自动执行；“打开 DSH 终端”只负责打开 Desktop 内置终端，由用户自行检查、复制和执行命令。通过这个内置终端运行的 `dsh plugin add` 会进入 Desktop 的受保护安装恢复边界；在其中直接执行 `pnpm`、`npm`，或在外部系统终端运行命令，都不受该边界保护。受管 profile 修改成功后，用户可以使用一次性 Desktop action 立即重启，也可以选择稍后重启。市场只是现有 DSH 能力之上的产品壳，不会再发明一套插件格式、包管理器、profile 存储或高权限安装器。
 
 ## 目录来源
 
@@ -40,7 +40,9 @@ Host 会在 cache 过期前复用已经完成的索引（当前默认五分钟�
 - 目录提供方返回的命令字符串、安装片段和仓库安装指令都会被丢弃，绝不会执行。可用时，Host 会根据规范化身份单独重建一条精确 npm 手动提示；它会明确标为未完成全部验证，只供用户自行决定是否执行。
 - 受管操作中，renderer 只提交来源/条目或 receipt 标识。“打开 DSH 终端”提交的是空请求，不会接收、复制或执行界面展示的手动命令。
 - 确认框会展示精确 npm package 与版本，以及当前 profile。插件变更使用 Desktop 已有的受管 DSH 插件服务，并且一次只执行一个操作；成功后可以选择**稍后重启**或**立即重启**。
-- 只有合法 Market receipt 仍与当前 profile 的 direct bundle 匹配时才能卸载。其他可变 direct bundle 视为外部所有，只能禁用其 bundle 配置层；这不会移除 package，也不会把插件代码放入安全沙箱。
+- Market 安装或内置终端中的 `dsh plugin add` 开始前，Desktop 只会为当前 profile 的 `package.json`、`pnpm-lock.yaml` 和 `pnpm-workspace.yaml` 创建私有恢复快照。它不会备份或主动回滚 `node_modules`，也不会读取环境变量或另行收集凭据存储；这三个白名单文件会按原内容复制，因此其中不应写入凭据。
+- 受保护安装成功后，要等下一次 Desktop generation 成功启动 Host，并在 30 秒期限内收到 Renderer 的健康报告，才算验证完成；此前会拒绝下一次受保护的插件添加。如果启动失败，Desktop 会先在本地保存诊断证据，再仅对已识别的前后配置状态执行恢复，并且最多自动重启一次。出现未知文件漂移时不会覆盖用户数据，而会要求手动修复。
+- 只有合法 Market receipt 仍与当前 profile 的 direct bundle 匹配时才能卸载。可变 direct bundle 可以禁用或重新启用 Desktop 的加载选择；这不会改变 package 所有权，也不会移除 package 或把插件代码放入安全沙箱。
 - 第一版不包含账号、遥测、静默安装、插件自动更新或自建目录后台。
 
 这些检查只建立 package 身份和有限的兼容边界，**不代表** Market 审查过插件或依赖树中是否存在恶意或不安全行为。安装后的插件会以用户权限作为本地代码运行。测试或审核 package 操作前，请先阅读[安装与卸载](docs/install-and-uninstall.zh.md)和[安全说明](SECURITY.zh.md)。
@@ -59,8 +61,8 @@ Host 会在 cache 过期前复用已经完成的索引（当前默认五分钟�
 
 - **Phase 0 — 已完成：** 确认 package 归属，写清产品与信任边界，建立 headless 检查。
 - **Phase 1 — 已实现并进入集成测试：** 来源选择、用户添加符合规范的来源、一次一个来源的浏览、搜索、插件详情，以及加载、空白和错误状态。
-- **Phase 2 — 已实现并进入集成测试：** 通过 Desktop 受管服务，把精确稳定 npm package 安装到当前 profile，并支持基于 receipt 的卸载。
-- **后续：** 更新、更丰富的失败恢复与兼容证据，以及发布评审。
+- **Phase 2 — 已实现并进入集成测试：** 通过 Desktop 受管服务，把精确稳定 npm package 安装到当前 profile，提供配置级安装恢复，并支持基于 receipt 的卸载。
+- **后续：** 更新、更广泛的兼容证据，以及发布评审。
 
 目录采集、投稿审核、账号、排行榜和托管仍由目录 provider 负责，不属于这个 package。
 

@@ -130,6 +130,8 @@ try {
         nodeShimPath: pnpmRuntime.nodeShimPath,
         clearEnvironmentPath: pnpmRuntime.clearEnvironmentPath,
         dshBootstrapPath: fileURLToPath(new URL('../lib/desktop-cli.js', import.meta.url)),
+        installRecoveryStatePath: join(home, 'plugin-install-recovery', 'state.json'),
+        generationId: 'profile-smoke-generation',
       })
       await host.plugin(DesktopProfileService, {
         current: {

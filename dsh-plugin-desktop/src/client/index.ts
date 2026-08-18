@@ -9,6 +9,7 @@ import { applyAdvancedShell } from './advanced-shell.ts'
 import { startRendererBootReporter } from './boot-health.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
+import { installWorkspaceFolderDrop } from './workspace-folder-drop.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
 export {
@@ -26,6 +27,7 @@ export const inject = [
   'slots',
   'sessions',
   'theme',
+  'workspaces',
 ]
 
 /** Register desktop-owned client surfaces for the current BrowserWindow mode. @param ctx - browser Cordis context. */
@@ -35,6 +37,13 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),
     'dsh-plugin-desktop: renderer boot health report',
+  )
+  ctx.effect(
+    () => installWorkspaceFolderDrop({
+      create: input => ctx.workspaces.create(input),
+      startSession: workspaceId => { ctx.workspaces.startSession(workspaceId) },
+    }),
+    'dsh-plugin-desktop: workspace folder drop',
   )
   if (environment.platform === 'win32') {
     ctx.effect(

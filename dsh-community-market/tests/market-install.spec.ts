@@ -213,7 +213,7 @@ function runner(
   calls: Array<{ args: readonly string[]; dir: string; signal?: AbortSignal }>,
   outcome: { exitCode: number | null; signal: NodeJS.Signals | null } = { exitCode: 0, signal: null },
 ): MarketDesktopPnpm {
-  return {
+  return recoverableRunner(profileDir, {
     runPlugin(args, dir, signal) {
       calls.push({ args: [...args], dir, ...(signal === undefined ? {} : { signal }) })
       const done = (async () => {
@@ -229,6 +229,31 @@ function runner(
         done,
         cancel: vi.fn(),
       }
+    },
+  })
+}
+
+function recoverableRunner(
+  profileDir: string,
+  implementation: Pick<MarketDesktopPnpm, 'runPlugin'>,
+): MarketDesktopPnpm {
+  let pendingPackageName: string | undefined
+  return {
+    ...implementation,
+    async runPluginInstall(args, dir, recovery, signal) {
+      pendingPackageName = recovery.packageName
+      return implementation.runPlugin(args, dir, signal)
+    },
+    async recoveredInstallReceiptIds() { return [] },
+    async acknowledgeRecoveredInstall() {},
+    async rollbackPluginInstall() {
+      if (pendingPackageName === undefined) return false
+      const handle = implementation.runPlugin(['remove', pendingPackageName], profileDir)
+      handle.stdout.resume()
+      handle.stderr.resume()
+      const outcome = await handle.done
+      pendingPackageName = undefined
+      return outcome.exitCode === 0 && outcome.signal === null
     },
   }
 }
@@ -312,6 +337,60 @@ describe('manual install display instructions', () => {
 })
 
 describe('market install service', () => {
+  it('removes an exact startup-rolled-back receipt before acknowledging recovery', async () => {
+    const profileDir = await createProfile()
+    const recovered: MarketInstallReceipt = {
+      receiptId: 'receipt:startup-rollback-0001',
+      profileName: 'web',
+      packageName,
+      version,
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: 'example/dsh-plugin-safe',
+      displayName: 'Safe Plugin',
+      installedAt: '2026-08-18T00:00:00.000Z',
+    }
+    const retained = { ...recovered, receiptId: 'receipt:retained-install-0001', packageName: 'retained-plugin' }
+    let document: MarketSettingsDocument = { sources: [], installReceipts: [recovered, retained] }
+    let failSave = true
+    const events: string[] = []
+    const scope: SettingsScope<MarketSettingsDocument> = {
+      get: () => document,
+      watch: () => () => {},
+      update: vi.fn(async patch => {
+        events.push('save')
+        if (failSave) throw new Error('fixture settings failure')
+        document = { ...document, ...patch } as MarketSettingsDocument
+      }),
+      replace: vi.fn(),
+    }
+    const base = runner(profileDir, [])
+    const acknowledgeRecoveredInstall = vi.fn(async (receiptId: string) => {
+      events.push(`ack:${receiptId}`)
+    })
+    const service = new MarketInstallService(
+      scope,
+      () => ({ name: 'web', dir: profileDir }),
+      {
+        ...base,
+        recoveredInstallReceiptIds: vi.fn(async () => [recovered.receiptId]),
+        acknowledgeRecoveredInstall,
+      },
+      { verify: vi.fn(async () => verification) },
+    )
+
+    await expect(service.listReceipts()).rejects.toThrow('fixture settings failure')
+    expect(acknowledgeRecoveredInstall).not.toHaveBeenCalled()
+    expect(document.installReceipts).toEqual([recovered, retained])
+
+    failSave = false
+    await expect(service.listReceipts()).resolves.toEqual([retained])
+    expect(events.slice(-2)).toEqual(['save', `ack:${recovered.receiptId}`])
+    expect(acknowledgeRecoveredInstall).toHaveBeenCalledOnce()
+  })
+
   it('uses one-shot opaque intents, fixed argv, verified bundle state, and profile receipts', async () => {
     const profileDir = await createProfile()
     const calls: Array<{ args: readonly string[]; dir: string; signal?: AbortSignal }> = []
@@ -547,7 +626,7 @@ describe('market install service', () => {
     const profileDir = await createProfile()
     const calls: string[] = []
     const settings = memoryScope()
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args) {
         calls.push(args[0]!)
         const done = (async () => {
@@ -560,7 +639,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     const service = new MarketInstallService(
       settings.scope,
       () => ({ name: 'web', dir: profileDir }),
@@ -582,7 +661,7 @@ describe('market install service', () => {
     const profileDir = await createProfile()
     const calls: string[] = []
     const settings = memoryScope()
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args) {
         calls.push(args[0]!)
         const done = (async () => {
@@ -595,7 +674,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     const service = new MarketInstallService(
       settings.scope,
       () => ({ name: 'web', dir: profileDir }),
@@ -616,7 +695,7 @@ describe('market install service', () => {
     const controller = new AbortController()
     const calls: Array<{ readonly verb: string; readonly aborted: boolean }> = []
     const settings = memoryScope()
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args, _dir, signal) {
         calls.push({ verb: args[0]!, aborted: signal?.aborted ?? false })
         const done = (async () => {
@@ -630,7 +709,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     const service = new MarketInstallService(
       settings.scope,
       () => ({ name: 'web', dir: profileDir }),
@@ -655,7 +734,7 @@ describe('market install service', () => {
     const calls: Array<{ readonly verb: string; readonly aborted: boolean }> = []
     const settings = memoryScope()
     let service!: MarketInstallService
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args, _dir, signal) {
         calls.push({ verb: args[0]!, aborted: signal?.aborted ?? false })
         const done = (async () => {
@@ -669,7 +748,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     service = new MarketInstallService(
       settings.scope,
       () => ({ name: 'web', dir: profileDir }),
@@ -732,7 +811,7 @@ describe('market install service', () => {
   it('rolls back an install whose resulting bundle does not match the verified artifact', async () => {
     const profileDir = await createProfile()
     const calls: readonly string[][] = []
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args) {
         ;(calls as string[][]).push([...args])
         const done = (async () => {
@@ -748,7 +827,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     const settings = memoryScope()
     const service = new MarketInstallService(
       settings.scope,
@@ -770,7 +849,7 @@ describe('market install service', () => {
     const profileDir = await createProfile()
     const settings = memoryScope()
     const calls: string[] = []
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args) {
         calls.push(args[0]!)
         const done = (async () => {
@@ -788,7 +867,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     const service = new MarketInstallService(
       settings.scope,
       () => ({ name: 'web', dir: profileDir }),
@@ -817,7 +896,7 @@ describe('market install service', () => {
       const profileDir = await createProfile()
       const settings = memoryScope()
       const calls: string[] = []
-      const pnpm: MarketDesktopPnpm = {
+      const pnpm = recoverableRunner(profileDir, {
         runPlugin(args) {
           calls.push(args[0]!)
           const done = (async () => {
@@ -827,7 +906,7 @@ describe('market install service', () => {
           })()
           return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
         },
-      }
+      })
       const service = new MarketInstallService(
         settings.scope,
         () => ({ name: 'web', dir: profileDir }),
@@ -854,7 +933,7 @@ describe('market install service', () => {
       replace: vi.fn(async section => { document = section as MarketSettingsDocument }),
     } as SettingsScope<MarketSettingsDocument>
     const calls: Array<{ readonly verb: string; readonly aborted: boolean }> = []
-    const pnpm: MarketDesktopPnpm = {
+    const pnpm = recoverableRunner(profileDir, {
       runPlugin(args, _dir, signal) {
         const done = (async () => {
           calls.push({ verb: args[0]!, aborted: signal?.aborted ?? false })
@@ -867,7 +946,7 @@ describe('market install service', () => {
         })()
         return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
       },
-    }
+    })
     const service = new MarketInstallService(
       scope,
       () => ({ name: 'web', dir: profileDir }),
@@ -927,23 +1006,36 @@ describe('market install Host routes', () => {
       openTerminal: vi.fn(),
       requestRestart: vi.fn(async () => { desktopEvents.push('restart') }),
     }
+    let bundleStatus: 'active' | 'disabled' = 'active'
     const bundle = {
       bundleId: 'bundle_opaque_external',
       packageName: 'dsh-plugin-external',
-      status: 'active' as const,
       mutable: true,
     }
     const desktopPlugins = {
-      list: vi.fn(() => [bundle]),
-      isDisabled: vi.fn(() => false),
-      disabledPackageNames: vi.fn(() => []),
+      list: vi.fn(() => [{ ...bundle, status: bundleStatus }]),
+      isDisabled: vi.fn(() => bundleStatus === 'disabled'),
+      disabledPackageNames: vi.fn(() => bundleStatus === 'disabled' ? [bundle.packageName] : []),
       previewDisable: vi.fn(() => ({
         previewId: 'disable_opaque_preview',
         profileName: 'web',
         packageName: bundle.packageName,
         expiresAt: '2099-08-18T00:05:00.000Z',
       })),
-      executeDisable: vi.fn(async () => ({ packageName: bundle.packageName })),
+      executeDisable: vi.fn(async () => {
+        bundleStatus = 'disabled'
+        return { packageName: bundle.packageName }
+      }),
+      previewEnable: vi.fn(() => ({
+        previewId: 'enable_opaque_preview',
+        profileName: 'web',
+        packageName: bundle.packageName,
+        expiresAt: '2099-08-18T00:05:00.000Z',
+      })),
+      executeEnable: vi.fn(async () => {
+        bundleStatus = 'active'
+        return { packageName: bundle.packageName }
+      }),
     }
     const dispose = registerMarketRoutes(
       ctx as never,
@@ -1102,6 +1194,49 @@ describe('market install Host routes', () => {
       body: {
         installations: [{
           kind: 'external',
+          status: 'disabled',
+          action: 'enable',
+          bundleId: bundle.bundleId,
+          packageName: bundle.packageName,
+        }],
+      },
+    })
+
+    const enablePreview = await request(marketRoutes.operationPreview, 'POST', {
+      action: 'enable',
+      bundleId: bundle.bundleId,
+    })
+    expect(enablePreview).toMatchObject({
+      status: 200,
+      body: {
+        action: 'enable',
+        packageName: bundle.packageName,
+        previewId: 'enable_opaque_preview',
+      },
+    })
+    expect(desktopPlugins.previewEnable).toHaveBeenCalledWith(bundle.bundleId)
+    await expect(request(marketRoutes.operationPreview, 'POST', {
+      action: 'enable',
+      bundleId: bundle.bundleId,
+      packageName: bundle.packageName,
+    })).resolves.toMatchObject({ status: 400, body: { code: 'invalid-request' } })
+
+    const enabled = await request(marketRoutes.operationExecute, 'POST', { previewId: 'enable_opaque_preview' })
+    expect(enabled).toMatchObject({
+      status: 200,
+      body: { action: 'enable', packageName: bundle.packageName },
+    })
+    expect(desktopPlugins.executeEnable).toHaveBeenCalledWith('enable_opaque_preview')
+    const enableRestartToken = enabled.body.restartToken as string
+    await expect(request(marketRoutes.requestRestart, 'POST', { restartToken: enableRestartToken }))
+      .resolves.toEqual({ status: 200, body: { ok: true } })
+    expect(install.consumeRestartToken).toHaveBeenCalledTimes(1)
+
+    await expect(request(marketRoutes.installations, 'GET')).resolves.toMatchObject({
+      status: 200,
+      body: {
+        installations: [{
+          kind: 'external',
           status: 'active',
           action: 'disable',
           bundleId: bundle.bundleId,
@@ -1109,6 +1244,36 @@ describe('market install Host routes', () => {
         }],
       },
     })
+
+    bundleStatus = 'disabled'
+    listVerifiedReceipts.mockResolvedValue([receiptRace])
+    await expect(request(marketRoutes.installations, 'GET')).resolves.toMatchObject({
+      status: 200,
+      body: {
+        installations: [{
+          kind: 'managed',
+          status: 'disabled',
+          action: 'uninstall',
+          enableBundleId: bundle.bundleId,
+          receipt: { receiptId: receiptRace.receiptId },
+        }],
+      },
+    })
+    await expect(request(marketRoutes.operationPreview, 'POST', {
+      action: 'enable',
+      bundleId: bundle.bundleId,
+    })).resolves.toMatchObject({ status: 200, body: { action: 'enable' } })
+    listVerifiedReceipts.mockResolvedValue([])
+    await expect(request(marketRoutes.operationExecute, 'POST', { previewId: 'enable_opaque_preview' }))
+      .resolves.toMatchObject({ status: 409, body: { code: 'conflict' } })
+
+    listVerifiedReceipts.mockResolvedValue([receiptRace])
+    await expect(request(marketRoutes.operationPreview, 'POST', {
+      action: 'enable',
+      bundleId: bundle.bundleId,
+    })).resolves.toMatchObject({ status: 200, body: { action: 'enable' } })
+    await expect(request(marketRoutes.operationExecute, 'POST', { previewId: 'enable_opaque_preview' }))
+      .resolves.toMatchObject({ status: 200, body: { action: 'enable' } })
     expect(install.listInstallable).not.toHaveBeenCalled()
     dispose()
   })
@@ -1142,6 +1307,8 @@ describe('market install Host routes', () => {
       disabledPackageNames: vi.fn(() => []),
       previewDisable: vi.fn(),
       executeDisable: vi.fn(),
+      previewEnable: vi.fn(),
+      executeEnable: vi.fn(),
     }
     const dispose = registerMarketRoutes(
       ctx as never,

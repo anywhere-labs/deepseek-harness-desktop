@@ -286,6 +286,7 @@ type MarketOperationPreviewRequest =
   | { readonly action: 'install'; readonly sourceRecordId: string; readonly itemId: string }
   | { readonly action: 'uninstall'; readonly receiptId: string }
   | { readonly action: 'disable'; readonly bundleId: string }
+  | { readonly action: 'enable'; readonly bundleId: string }
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort()
@@ -313,10 +314,10 @@ function asOperationPreview(value: unknown): MarketOperationPreviewRequest {
     && boundedIdentifier(request.receiptId)
   ) return { action: 'uninstall', receiptId: request.receiptId }
   if (
-    request.action === 'disable'
+    (request.action === 'disable' || request.action === 'enable')
     && exactKeys(request, ['action', 'bundleId'])
     && boundedIdentifier(request.bundleId)
-  ) return { action: 'disable', bundleId: request.bundleId }
+  ) return { action: request.action, bundleId: request.bundleId }
   throw new MarketInstallError('invalid-request', 'Invalid package operation preview request.')
 }
 
@@ -384,10 +385,19 @@ export interface MarketDesktopPluginDisablePreview {
   readonly expiresAt: string
 }
 
+export interface MarketDesktopPluginEnablePreview {
+  readonly previewId: string
+  readonly profileName: string
+  readonly packageName: string
+  readonly expiresAt: string
+}
+
 export interface MarketDesktopPlugins {
   list(): readonly MarketDesktopPluginBundle[]
   previewDisable(bundleId: string): MarketDesktopPluginDisablePreview
   executeDisable(previewId: string): Promise<{ readonly packageName: string }>
+  previewEnable(bundleId: string): MarketDesktopPluginEnablePreview
+  executeEnable(previewId: string): Promise<{ readonly packageName: string }>
   isDisabled(packageName: string): boolean
   disabledPackageNames(): readonly string[]
 }
@@ -425,7 +435,15 @@ function reconcileInstallations(
       ? receiptsByPackage.get(bundle.packageName)
       : undefined
     if (receipt !== undefined) {
-      return [{ kind: 'managed', status: bundle.status, action: 'uninstall', receipt }]
+      return bundle.status === 'disabled' && bundle.mutable
+        ? [{
+            kind: 'managed',
+            status: 'disabled',
+            action: 'uninstall',
+            enableBundleId: bundle.bundleId,
+            receipt,
+          }]
+        : [{ kind: 'managed', status: bundle.status, action: 'uninstall', receipt }]
     }
     if (!bundle.mutable) return []
     return bundle.status === 'active'
@@ -436,7 +454,13 @@ function reconcileInstallations(
           bundleId: bundle.bundleId,
           packageName: bundle.packageName,
         }]
-      : [{ kind: 'external', status: 'disabled', action: 'none', packageName: bundle.packageName }]
+      : [{
+          kind: 'external',
+          status: 'disabled',
+          action: 'enable',
+          bundleId: bundle.bundleId,
+          packageName: bundle.packageName,
+        }]
   })
 }
 
@@ -561,15 +585,25 @@ export function registerMarketRoutes(
 ): () => void {
   const expectedPort = ctx.webServer.port
   const generationController = new AbortController()
-  const disablePreviews = new Map<string, { readonly expiresAt: number; readonly packageName: string }>()
-  const disableRestartTokens = new Map<string, number>()
+  type DesktopPluginPreviewBinding = {
+    readonly expiresAt: number
+    readonly bundleId: string
+    readonly packageName: string
+    readonly receiptId?: string
+  }
+  const disablePreviews = new Map<string, DesktopPluginPreviewBinding>()
+  const enablePreviews = new Map<string, DesktopPluginPreviewBinding>()
+  const desktopPluginRestartTokens = new Map<string, number>()
   const purgeDesktopTokens = () => {
     const now = Date.now()
     for (const [token, preview] of disablePreviews) {
       if (now >= preview.expiresAt) disablePreviews.delete(token)
     }
-    for (const [token, expiresAt] of disableRestartTokens) {
-      if (now >= expiresAt) disableRestartTokens.delete(token)
+    for (const [token, preview] of enablePreviews) {
+      if (now >= preview.expiresAt) enablePreviews.delete(token)
+    }
+    for (const [token, expiresAt] of desktopPluginRestartTokens) {
+      if (now >= expiresAt) desktopPluginRestartTokens.delete(token)
     }
   }
   const rememberDesktopToken = (tokens: Map<string, number>, token: string, expiresAt: number) => {
@@ -581,13 +615,38 @@ export function registerMarketRoutes(
       tokens.delete(oldest)
     }
   }
-  const rememberDisablePreview = (previewId: string, expiresAt: number, packageName: string) => {
+  const rememberDisablePreview = (
+    previewId: string,
+    expiresAt: number,
+    bundleId: string,
+    packageName: string,
+  ) => {
     purgeDesktopTokens()
-    disablePreviews.set(previewId, { expiresAt, packageName })
+    disablePreviews.set(previewId, { expiresAt, bundleId, packageName })
     while (disablePreviews.size > 256) {
       const oldest = disablePreviews.keys().next().value as string | undefined
       if (oldest === undefined) break
       disablePreviews.delete(oldest)
+    }
+  }
+  const rememberEnablePreview = (
+    previewId: string,
+    expiresAt: number,
+    bundleId: string,
+    packageName: string,
+    receiptId?: string,
+  ) => {
+    purgeDesktopTokens()
+    enablePreviews.set(previewId, {
+      expiresAt,
+      bundleId,
+      packageName,
+      ...(receiptId === undefined ? {} : { receiptId }),
+    })
+    while (enablePreviews.size > 256) {
+      const oldest = enablePreviews.keys().next().value as string | undefined
+      if (oldest === undefined) break
+      enablePreviews.delete(oldest)
     }
   }
   const store = new SettingsCatalogSourceStore(scope)
@@ -865,22 +924,54 @@ export function registerMarketRoutes(
         const stopWatching = abortOnDisconnect(req, res, controller)
         try {
           const request = asOperationPreview(await readOperationJson(req, signal))
-          if (request.action === 'disable') {
+          if (request.action === 'disable' || request.action === 'enable') {
             const desktopPlugins = desktopPluginsProvider?.get()
             const install = installProvider.get()
             if (desktopPlugins === undefined || install === undefined) {
               throw new MarketInstallError('not-available', 'Desktop plugin management is unavailable.')
             }
-            const target = desktopPlugins.list().find(bundle => bundle.bundleId === request.bundleId)
+            const inventory = desktopPlugins.list()
+            const target = inventory.find(bundle => bundle.bundleId === request.bundleId)
             if (target === undefined) {
               throw new MarketInstallError('not-available', 'The selected plugin bundle is no longer available.')
             }
-            if ((await install.listVerifiedReceipts(signal)).some(receipt => receipt.packageName === target.packageName)) {
-              throw new MarketInstallError('conflict', 'Market-managed plugins must be uninstalled rather than disabled.')
+            const expectedStatus = request.action === 'disable' ? 'active' : 'disabled'
+            if (!target.mutable || target.status !== expectedStatus) {
+              throw new MarketInstallError(
+                'conflict',
+                request.action === 'disable'
+                  ? 'The selected plugin bundle can no longer be disabled.'
+                  : 'The selected plugin bundle can no longer be enabled.',
+              )
             }
-            let preview: MarketDesktopPluginDisablePreview
-            try { preview = desktopPlugins.previewDisable(request.bundleId) }
-            catch { throw new MarketInstallError('conflict', 'The selected plugin bundle can no longer be disabled.') }
+            const matchingReceipts = (await install.listVerifiedReceipts(signal))
+              .filter(receipt => receipt.packageName === target.packageName)
+            const packageBundleCount = inventory.filter(bundle => bundle.packageName === target.packageName).length
+            const managedReceipt = matchingReceipts.length === 1 && packageBundleCount === 1
+              ? matchingReceipts[0]
+              : undefined
+            if (request.action === 'disable' && matchingReceipts.length > 0) {
+              throw new MarketInstallError(
+                'conflict',
+                'Market-managed plugins must be uninstalled rather than disabled.',
+              )
+            }
+            if (request.action === 'enable' && matchingReceipts.length > 0 && managedReceipt === undefined) {
+              throw new MarketInstallError('conflict', 'The selected plugin bundle ownership is ambiguous.')
+            }
+            let preview: MarketDesktopPluginDisablePreview | MarketDesktopPluginEnablePreview
+            try {
+              preview = request.action === 'disable'
+                ? desktopPlugins.previewDisable(request.bundleId)
+                : desktopPlugins.previewEnable(request.bundleId)
+            } catch {
+              throw new MarketInstallError(
+                'conflict',
+                request.action === 'disable'
+                  ? 'The selected plugin bundle can no longer be disabled.'
+                  : 'The selected plugin bundle can no longer be enabled.',
+              )
+            }
             const expiresAt = Date.parse(preview.expiresAt)
             if (
               !boundedIdentifier(preview.previewId)
@@ -888,14 +979,34 @@ export function registerMarketRoutes(
               || !boundedIdentifier(preview.packageName)
               || !Number.isFinite(expiresAt)
               || expiresAt <= Date.now()
-            ) throw new MarketInstallError('operation-failed', 'The desktop plugin disable preview was invalid.')
+            ) throw new MarketInstallError(
+              'operation-failed',
+              request.action === 'disable'
+                ? 'The desktop plugin disable preview was invalid.'
+                : 'The desktop plugin enable preview was invalid.',
+            )
             if (preview.packageName !== target.packageName) {
               throw new MarketInstallError('conflict', 'The selected plugin bundle changed during preview.')
             }
-            rememberDisablePreview(preview.previewId, expiresAt, preview.packageName)
+            if (request.action === 'disable') {
+              rememberDisablePreview(
+                preview.previewId,
+                expiresAt,
+                request.bundleId,
+                preview.packageName,
+              )
+            } else {
+              rememberEnablePreview(
+                preview.previewId,
+                expiresAt,
+                request.bundleId,
+                preview.packageName,
+                managedReceipt?.receiptId,
+              )
+            }
             if (!signal.aborted && !res.destroyed) {
               sendJson(res, 200, {
-                action: 'disable',
+                action: request.action,
                 profileName: preview.profileName,
                 packageName: preview.packageName,
                 displayName: preview.packageName,
@@ -936,26 +1047,70 @@ export function registerMarketRoutes(
           purgeDesktopTokens()
           let result: unknown
           const disablePreview = disablePreviews.get(previewId)
-          if (disablePreview !== undefined) {
+          const enablePreview = enablePreviews.get(previewId)
+          if (disablePreview !== undefined || enablePreview !== undefined) {
             disablePreviews.delete(previewId)
+            enablePreviews.delete(previewId)
+            const desktopPreview = disablePreview ?? enablePreview!
+            const action = disablePreview === undefined ? 'enable' : 'disable'
             const desktopPlugins = desktopPluginsProvider?.get()
             const install = installProvider.get()
             if (desktopPlugins === undefined || install === undefined) {
               throw new MarketInstallError('not-available', 'Desktop plugin management is unavailable.')
             }
-            if ((await install.listVerifiedReceipts(generationController.signal))
-              .some(receipt => receipt.packageName === disablePreview.packageName)) {
+            const currentTarget = desktopPlugins.list()
+              .find(bundle => bundle.bundleId === desktopPreview.bundleId)
+            const expectedStatus = action === 'disable' ? 'active' : 'disabled'
+            if (
+              currentTarget === undefined
+              || currentTarget.packageName !== desktopPreview.packageName
+              || !currentTarget.mutable
+              || currentTarget.status !== expectedStatus
+            ) {
+              throw new MarketInstallError(
+                'conflict',
+                action === 'disable'
+                  ? 'The selected plugin bundle changed before it could be disabled.'
+                  : 'The selected plugin bundle changed before it could be enabled.',
+              )
+            }
+            const matchingReceipts = (await install.listVerifiedReceipts(generationController.signal))
+              .filter(receipt => receipt.packageName === desktopPreview.packageName)
+            if (action === 'disable' && matchingReceipts.length > 0) {
               throw new MarketInstallError('conflict', 'Market-managed plugins must be uninstalled rather than disabled.')
             }
-            let disabled: { readonly packageName: string }
-            try { disabled = await desktopPlugins.executeDisable(previewId) }
-            catch { throw new MarketInstallError('conflict', 'The selected plugin bundle changed before it could be disabled.') }
-            if (!boundedIdentifier(disabled.packageName) || disabled.packageName !== disablePreview.packageName) {
-              throw new MarketInstallError('operation-failed', 'The desktop plugin disable result was invalid.')
+            if (action === 'enable') {
+              const receiptUnchanged = desktopPreview.receiptId === undefined
+                ? matchingReceipts.length === 0
+                : matchingReceipts.length === 1 && matchingReceipts[0]?.receiptId === desktopPreview.receiptId
+              if (!receiptUnchanged) {
+                throw new MarketInstallError('conflict', 'The selected plugin ownership changed before it could be enabled.')
+              }
+            }
+            let changed: { readonly packageName: string }
+            try {
+              changed = action === 'disable'
+                ? await desktopPlugins.executeDisable(previewId)
+                : await desktopPlugins.executeEnable(previewId)
+            } catch {
+              throw new MarketInstallError(
+                'conflict',
+                action === 'disable'
+                  ? 'The selected plugin bundle changed before it could be disabled.'
+                  : 'The selected plugin bundle changed before it could be enabled.',
+              )
+            }
+            if (!boundedIdentifier(changed.packageName) || changed.packageName !== desktopPreview.packageName) {
+              throw new MarketInstallError(
+                'operation-failed',
+                action === 'disable'
+                  ? 'The desktop plugin disable result was invalid.'
+                  : 'The desktop plugin enable result was invalid.',
+              )
             }
             const restartToken = randomUUID()
-            rememberDesktopToken(disableRestartTokens, restartToken, Date.now() + 5 * 60 * 1000)
-            result = { action: 'disable', packageName: disabled.packageName, restartToken }
+            rememberDesktopToken(desktopPluginRestartTokens, restartToken, Date.now() + 5 * 60 * 1000)
+            result = { action, packageName: changed.packageName, restartToken }
           } else {
             const install = installProvider.get()
             if (install === undefined) {
@@ -990,7 +1145,7 @@ export function registerMarketRoutes(
         const restartToken = asRestartToken(await readOperationJson(req, signal))
         signal.throwIfAborted()
         purgeDesktopTokens()
-        if (!disableRestartTokens.delete(restartToken)) {
+        if (!desktopPluginRestartTokens.delete(restartToken)) {
           const install = installProvider?.get()
           if (install === undefined) {
             throw new MarketInstallError('intent-expired', 'The restart confirmation expired or was already used.')
@@ -1021,7 +1176,8 @@ export function registerMarketRoutes(
     disposed = true
     generationController.abort(new DOMException('Market plugin generation was disposed', 'AbortError'))
     disablePreviews.clear()
-    disableRestartTokens.clear()
+    enablePreviews.clear()
+    desktopPluginRestartTokens.clear()
     media.dispose()
     routes.forEach(dispose => dispose())
   }

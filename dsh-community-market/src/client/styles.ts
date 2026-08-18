@@ -402,6 +402,14 @@ const css = `
   min-width: 0;
 }
 
+.dshMarketReceiptActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .dshMarketReceiptTitle,
 .dshMarketReceiptMeta {
   display: flex;

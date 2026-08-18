@@ -2,7 +2,7 @@
 
 [中文](market-shell.zh.md)
 
-Status: Host/Client market plus limited npm install and receipt-backed uninstall implemented for private integration testing
+Status: Host/Client market plus limited npm install, receipt-backed uninstall, and direct-bundle enable/disable implemented for private integration testing
 
 This document defines the first implementation boundary for `dsh-community-market`. It is deliberately narrower than a complete marketplace. The package owns an in-product shell and adapters; it does not own the community catalog, package registry, or DSH profile format.
 
@@ -11,6 +11,7 @@ This document defines the first implementation boundary for `dsh-community-marke
 - Give users one calm place to discover, search, and understand community plugins.
 - Keep catalog browsing read-only until a user explicitly chooses an action.
 - Install only into the active profile, with the plugin source and profile visible before confirmation.
+- Protect each Market install, and each `dsh plugin add` launched through Desktop's built-in DSH Terminal, with a configuration-level snapshot that must pass next-start health verification.
 - Remove only installations owned by a valid Market receipt in the active profile, even when the original source is unavailable.
 - Reuse existing DSH plugin and Desktop profile behavior instead of creating parallel state.
 - Let people save and add catalog sources, then explicitly browse one selected source at a time without coupling the interface to one service.
@@ -25,6 +26,7 @@ This document defines the first implementation boundary for `dsh-community-marke
 - Executing install commands, HTML, scripts, or links supplied by a catalog response.
 - Installing from GitHub or another repository target, accepting mutable versions, or running a target package that declares install lifecycle scripts.
 - Editing inactive profiles or migrating plugins between profiles.
+- Backing up or actively rolling back `node_modules`, protecting raw `pnpm`/`npm` commands, or recovering commands run in an external system terminal.
 
 ## Proposed boundary
 
@@ -76,7 +78,7 @@ The Market surface has four views:
 
 - **Discover** pages over every normalized item in the selected source's complete local index. Clicking a card opens the shared action dialog immediately; the Host either advances an eligible item into managed preview or keeps the dialog as details.
 - **Installable** is derived locally and fail-closed. It requires reviewed provider verification with `repository_backlink`, an exact stable npm target, and a canonical repository, and excludes blocked packages plus packages already present in the active profile or its Market receipts. Its cards use the same dialog. Structural candidacy is not an npm verification, code review, or endorsement.
-- **Installed** reads valid Market receipts for the active profile. It never infers installed state from the catalog.
+- **Installed** reconciles the active profile's Host inventory with valid Market receipts. It never infers installed state from the catalog.
 - **Sources** manages saved sources and the one current selection.
 
 Catalog browsing provides:
@@ -111,19 +113,29 @@ Preview performs the full npm registry, canonical-repository, deprecation, lifec
 On Desktop, the Market Host uses the public services already owned by `dsh-plugin-desktop`:
 
 1. Read the active identity from `desktopProfiles.current`.
-2. Invoke `desktopPnpm.runPlugin()` with fixed `add --save-exact` arguments, the official npm registry, an explicit absolute profile directory, and an `AbortSignal`.
+2. Invoke the recoverable Desktop install capability with fixed `add --save-exact` arguments, the official npm registry, an explicit absolute profile directory, and an `AbortSignal`. Before the child starts, it snapshots only `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml`; the operation seals its successful or recognized partial result before reporting completion.
 3. Keep stdout, stderr, environment variables, local paths, and command internals out of the renderer; the only command text it may receive is the bounded display-only instruction described above.
 4. Permit one mutation at a time and reject a changed profile.
-5. Verify the installed profile dependency and contained DSH bundle before saving a receipt; roll back an invalid or unrecordable install when possible.
-6. After success, issue a short-lived one-shot restart grant so the user can choose **Restart now** or **Restart later**; never restart silently.
+5. Verify the installed profile dependency and contained DSH bundle before saving a receipt; restore the allowlisted configuration snapshot when an invalid or unrecordable install has a recognized file image.
+6. After success, issue a short-lived one-shot restart grant so the user can choose **Restart now** or **Restart later**; never restart silently. Keep the recovery record pending and refuse another protected plugin add until the next Desktop generation verifies startup health or reconciles a rollback.
 
-When Desktop services are unavailable, browsing stays available while package operations explain that they require DSH Desktop. Managed installation never falls back to ambient `pnpm`, a shell command, a guessed `dsh` executable, or an inactive profile. **Open DSH Terminal** is a separate user-controlled escape hatch: its request contains no command, path, or profile and only opens the terminal; the user decides whether to copy and run displayed text.
+When Desktop services are unavailable, browsing stays available while package operations explain that they require DSH Desktop. Managed installation never falls back to ambient `pnpm`, a shell command, a guessed `dsh` executable, or an inactive profile. **Open DSH Terminal** is a separate user-controlled escape hatch: its request contains no command, path, or profile and only opens Desktop's built-in terminal; the user decides whether to copy and run displayed text. A later `dsh plugin add` through that built-in terminal receives the same configuration-recovery handoff. Direct `pnpm` or `npm` commands in that terminal and commands run in an external system terminal do not.
+
+## Install recovery boundary
+
+The recovery record is a Desktop-private write-ahead log for one protected `plugin add`, not a full profile or plugin backup. It contains metadata plus private preimages for the active profile's `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml`. It does not back up or actively remove `node_modules`, does not collect environment variables or separate credential stores, and does not apply to uninstall or direct-bundle enable/disable. Because the three allowlisted files are copied as-is, they must not contain embedded credentials.
+
+After a successful add, the resulting allowlisted file hashes and a Market receipt identifier are sealed before a restart grant is exposed. The next Desktop generation claims this pending record before preparing the profile. Successful Host startup followed by a healthy Renderer report within its 30-second deadline commits the install and clears the recovery material. A Host failure, main-frame load failure, Renderer failure, timeout, or interrupted verification first saves a local diagnostics archive and then restores only files whose current hashes match a recorded before/after image. Unknown third-party drift fails closed to manual recovery instead of being overwritten. A successful automatic restore may relaunch Desktop once, never in a loop.
+
+The diagnostics archive remains local and may contain logs, system information, and crash evidence; the product must not describe every artifact as completely redacted. If startup recovery rolled back an install after its Market receipt was saved, the Market removes only that exact receipt before acknowledging the recovery record. A failed receipt-store update leaves the record pending for retry. While any record remains, the write-ahead-log boundary rejects the next protected plugin add; this is not a global gate for external tools or other filesystem changes.
 
 ## Uninstall boundary
 
-The **Installed** view is built only from valid local receipts scoped to the active profile. It does not depend on the selected source, so a Market-installed plugin remains removable after its source is disabled, deleted, or offline.
+The **Installed** view is built from the active profile's direct-bundle inventory and valid local receipts. It does not depend on the selected source, so a Market-installed plugin remains removable after its source is disabled, deleted, or offline.
 
 Uninstall preview accepts only a `receiptId`. The Host confirms that the receipt still exists and the active profile still contains the exact package version and DSH bundle recorded by that receipt. Execution accepts only the resulting one-shot opaque preview, invokes the managed `remove` operation, verifies removal, and then deletes the receipt. A package installed elsewhere, a receipt in another profile, or a package changed after installation is not removed by this MVP. After success the same **Restart now** / **Restart later** choice is shown.
+
+Mutable direct bundles also expose generation-scoped opaque capabilities for enable/disable. A disabled Market-managed bundle keeps its receipt-backed Uninstall action and may be enabled separately. The Host and Desktop revalidate exact bundle status, mutability, profile generation, and receipt ownership at preview and execution; the renderer never submits a package name or filesystem target.
 
 ## Profile behavior
 
@@ -133,6 +145,7 @@ Uninstall preview accepts only a `receiptId`. The Host confirms that the receipt
 - Switching profiles remains owned by `desktopProfiles.select()` and takes effect through the existing controlled restart.
 - The market never modifies an inactive profile in the background.
 - A profile switch or service disposal cancels or joins any owned operation before the plugin generation ends.
+- A protected plugin add leaves one pending recovery record until the next Desktop generation verifies Host and Renderer health; a second protected add is refused while it remains.
 
 Install receipts are stored locally and include their owning profile; only receipts for the active profile are listed. They record that the Market completed and verified one managed install, not that the provider remains available or that the plugin code is safe. Sessions remain outside the market's responsibility. The market does not promise that arbitrary custom profiles share storage; it only reports and mutates receipt-owned plugin membership for the selected profile.
 
@@ -145,8 +158,11 @@ Install receipts are stored locally and include their owning profile; only recei
 | Registry, candidate, or active profile changes after a successful preview | Host refuses the confirmed execution | None |
 | Desktop package capability missing | Browsing works; Install and Uninstall are unavailable | None |
 | User cancels confirmation | Return to details | None |
-| Installation is cancelled or fails | Bounded error summary and Retry | No second automatic attempt |
-| Installation succeeds | Restart-required message | Active profile and local receipt were reconciled by the managed service |
+| Installation is cancelled or fails after a recognized partial change | Bounded error summary and Retry | The three allowlisted configuration files are restored after sealing the partial image; `node_modules` is not actively rolled back |
+| Installation succeeds | Restart-required message | Active profile and local receipt are updated; the recovery record remains pending until next-start health verification |
+| Host startup fails, or the Renderer fails or does not report healthy within 30 seconds on the next start | Recovery notification after relaunch | Local diagnostics are saved, recognized configuration images are restored, and Desktop relaunches at most once |
+| An allowlisted file has unknown third-party drift | Manual recovery is required | No partial automatic overwrite |
+| A rolled-back install already has a Market receipt | The installation disappears after reconciliation | The exact receipt is removed before the recovery record is acknowledged |
 | Receipt or installed bundle no longer matches | Uninstall is refused | None |
 | Uninstall succeeds | Restart-required message | Package and receipt were removed from the active profile |
 
@@ -173,12 +189,13 @@ Raw response bodies, filesystem paths, tokens, environment variables, and comman
 - Desktop capability detection and unavailable state.
 - Exact stable npm target verification and two-step user intent.
 - Managed, serialized install with a verified receipt; reads and previews are cancellable, while an accepted mutation is Host-owned.
-- Receipt-backed uninstall independent of the catalog source.
+- Configuration-level write-ahead recovery for Market installs and built-in-terminal `dsh plugin add`, followed by next-start Host/Renderer health verification.
+- Receipt-backed uninstall independent of the catalog source, plus opaque enable/disable for mutable direct bundles.
 - Restart guidance after a successful profile change.
 
 ### Later work
 
-- Updates, richer recovery, and release hardening.
+- Updates and release hardening.
 - Stronger verification signals based on independently specified evidence.
 
 ## Attribution and independence

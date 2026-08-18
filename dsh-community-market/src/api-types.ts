@@ -107,6 +107,8 @@ export type MarketInstallationView =
       readonly kind: 'managed'
       readonly status: 'active' | 'disabled'
       readonly action: 'uninstall'
+      /** A disabled mutable bundle can be enabled without surrendering uninstall ownership. */
+      readonly enableBundleId?: string
       readonly receipt: MarketInstallReceipt
     }
   | {
@@ -120,7 +122,9 @@ export type MarketInstallationView =
   | {
       readonly kind: 'external'
       readonly status: 'disabled'
-      readonly action: 'none'
+      readonly action: 'enable'
+      /** Generation-scoped Host capability; never a path or package argument. */
+      readonly bundleId: string
       readonly packageName: string
     }
   | {
@@ -159,10 +163,15 @@ export type MarketOperationPreviewRequest =
       /** Opaque exact target obtained from the current Host inventory. */
       readonly bundleId: string
     }
+  | {
+      readonly action: 'enable'
+      /** Opaque exact target obtained from the current Host inventory. */
+      readonly bundleId: string
+    }
 
 /** Host-verified facts shown before the user confirms a package mutation. */
 export interface MarketOperationPreviewResponse {
-  readonly action: 'install' | 'uninstall' | 'disable'
+  readonly action: 'install' | 'uninstall' | 'disable' | 'enable'
   readonly profileName: string
   readonly packageName: string
   readonly version?: string
@@ -185,6 +194,11 @@ export type MarketOperationExecuteResponse =
     }
   | {
       readonly action: 'disable'
+      readonly packageName: string
+      readonly restartToken: string
+    }
+  | {
+      readonly action: 'enable'
       readonly packageName: string
       readonly restartToken: string
     }

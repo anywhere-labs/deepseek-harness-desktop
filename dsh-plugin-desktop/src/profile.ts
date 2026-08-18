@@ -16,6 +16,7 @@ import {
   PROFILE_PATCH_FILENAME,
   PROFILE_TEMPLATES,
   readProfileManifest,
+  resolveBundleDir,
   resolveProfileDir,
   writeProfileManifest,
   type Profile,
@@ -31,6 +32,7 @@ import { unpackedAsarPath } from './packaged-runtime-path.ts'
 import type { DesktopShellMode } from './runtime.ts'
 import {
   activeDesktopProfileLayers,
+  desktopPluginBundleMutable,
   readDesktopDisabledBundles,
 } from './desktop-plugins.ts'
 
@@ -240,6 +242,61 @@ export function ensureDesktopProfile(home: string = resolveDshHome()): string {
   return dir
 }
 
+/**
+ * Load a profile while resolving disabled third-party bundles only after they have been filtered.
+ * The ordinary upstream loader remains the no-state path; this recovery path intentionally avoids
+ * reading a disabled package's manifest or patch so a malformed plugin can be disabled pre-Host.
+ */
+function loadRecoveryFilteredProfile(
+  profileName: string,
+  profileDir: string,
+  home: string,
+  disabledBundles: ReadonlySet<string>,
+): Profile {
+  if (disabledBundles.size === 0) return loadProfile(BIN_NAME, profileName, INSTALL_ANCHOR, home)
+  if (!existsSync(join(profileDir, 'package.json'))) {
+    const template = PROFILE_TEMPLATES[profileName]
+    if (template === undefined) {
+      throw new Error(`${BIN_NAME}: profile ${JSON.stringify(profileName)} does not exist`)
+    }
+    initProfile(profileDir, template)
+  }
+  const manifest = readProfileManifest(BIN_NAME, profileDir)
+  const rawBundles = (manifest.dsh?.profile as { bundles?: unknown } | undefined)?.bundles
+  if (rawBundles !== undefined
+    && (!Array.isArray(rawBundles) || rawBundles.some(value => typeof value !== 'string'))) {
+    throw new Error(`${BIN_NAME}: dsh.profile.bundles must be an array of package names`)
+  }
+  const bundles = (rawBundles ?? []) as string[]
+  const layers: Profile['layers'] = []
+  for (const packageName of bundles) {
+    if (desktopPluginBundleMutable(packageName) && disabledBundles.has(packageName)) continue
+    const packageDir = resolveBundleDir(BIN_NAME, packageName, INSTALL_ANCHOR, profileDir)
+    const bundleManifest: unknown = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
+    const declared = bundleManifest !== null && typeof bundleManifest === 'object'
+      ? (bundleManifest as { dsh?: { bundle?: { patch?: unknown } } }).dsh?.bundle?.patch
+      : undefined
+    if (typeof declared !== 'string' || declared.length === 0) {
+      throw new Error(`${BIN_NAME}: profile bundle ${JSON.stringify(packageName)} declares no dsh.bundle in its package.json`)
+    }
+    const patchPath = join(packageDir, declared)
+    layers.push({
+      packageName,
+      packageDir,
+      patchPath,
+      patches: loadOverlayPatches(BIN_NAME, patchPath),
+    })
+  }
+  const patchPath = join(profileDir, PROFILE_PATCH_FILENAME)
+  return {
+    name: profileName,
+    dir: profileDir,
+    layers,
+    patchPath,
+    patches: existsSync(patchPath) ? loadOverlayPatches(BIN_NAME, patchPath) : [],
+  }
+}
+
 /** Resolve the agent presets shipped by the matching dsh CLI dependency. */
 export function shippedPresetRoot(moduleUrl: string = import.meta.url): string {
   const require = createRequire(moduleUrl)
@@ -364,10 +421,15 @@ export function prepareDesktopProfile(
     ? ensureDesktopProfile(home)
     : resolveProfileDir(profileName, home)
   healProfilesModuleFallback(INSTALL_ANCHOR, home)
-  const profile = loadProfile(BIN_NAME, profileName, INSTALL_ANCHOR, home)
   const disabledBundles = pluginStatePath === undefined
     ? new Set<string>()
     : readDesktopDisabledBundles(pluginStatePath, profileName)
+  const profile = loadRecoveryFilteredProfile(
+    profileName,
+    profileDir,
+    home,
+    disabledBundles,
+  )
   const rootConfig = join(profileDir, DESKTOP_PROFILE_ROOT)
   const bareModuleBaseUrl = pathToFileURL(join(profile.dir, 'package.json')).href
   writeFileSync(rootConfig, '[]\n')

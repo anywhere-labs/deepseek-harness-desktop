@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-terminal.ts'
+import { desktopInstallRecoveryStatePath } from './install-recovery.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import type {
   DesktopNotification,
@@ -69,9 +70,20 @@ export function desktopProductVersion(moduleUrl: string = import.meta.url): stri
   return (value as { version: string }).version
 }
 
+/** Resolve the CommonJS preload emitted beside the Electron runtime bundle. */
+export function desktopPreloadPath(moduleUrl: string = import.meta.url): string {
+  return fileURLToPath(new URL('./preload.cjs', moduleUrl))
+}
+
 const PRODUCT_VERSION = desktopProductVersion()
 const MIN_ZOOM_LEVEL = -4
 const MAX_ZOOM_LEVEL = 4
+
+/** Main-process deadline for one Renderer generation to settle its client Loader. */
+export const RENDERER_BOOT_TIMEOUT_MS = 30_000
+
+/** Failure class used by startup recovery to distinguish a hung Renderer. */
+export type RendererBootFailureReason = 'renderer-failed' | 'renderer-timeout'
 
 function clampedZoomLevel(level: number): number {
   return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level))
@@ -112,10 +124,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private diagnosticExport: Promise<void> | undefined
   private directoryPickTask: Promise<string | null> | undefined
   private rendererBootReported = false
+  private rendererBootMonitoring = false
+  private rendererBootTimer: NodeJS.Timeout | undefined
+  private bootFailureReason: RendererBootFailureReason | undefined
 
   constructor(
     private readonly restart: () => Promise<void>,
-    private readonly onRendererBoot: (report: RendererBootReport) => void = () => {},
+    private readonly onRendererBoot: (report: RendererBootReport) => boolean | void = () => {},
     private readonly logger: DesktopLogger | undefined = undefined,
   ) {
     if (process.platform !== 'darwin' && process.platform !== 'win32' && process.platform !== 'linux') {
@@ -133,6 +148,36 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   /** @inheritdoc */
   get locale(): DesktopLocale {
     return this.currentLocale
+  }
+
+  /** Terminal failure class for the first Renderer boot report, when it failed. */
+  get rendererBootFailureReason(): RendererBootFailureReason | undefined {
+    return this.bootFailureReason
+  }
+
+  /** Arm one main-process deadline immediately before the native shell starts loading. */
+  beginRendererBootMonitoring(timeoutMs: number = RENDERER_BOOT_TIMEOUT_MS): void {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('dsh-plugin-desktop: renderer boot timeout must be a positive integer')
+    }
+    if (this.rendererBootReported || this.rendererBootMonitoring) {
+      throw new Error('dsh-plugin-desktop: renderer boot monitoring already started')
+    }
+    this.rendererBootMonitoring = true
+    this.rendererBootTimer = setTimeout(() => {
+      this.failRendererBoot(
+        'renderer-timeout',
+        `The Renderer did not report boot health within ${String(timeoutMs)}ms.`,
+      )
+    }, timeoutMs)
+    this.rendererBootTimer.unref()
+  }
+
+  /** Stop a pending deadline while startup is being torn down for another failure. */
+  stopRendererBootMonitoring(): void {
+    this.rendererBootMonitoring = false
+    if (this.rendererBootTimer !== undefined) clearTimeout(this.rendererBootTimer)
+    this.rendererBootTimer = undefined
   }
 
   /** @inheritdoc */
@@ -260,6 +305,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         productVersion: PRODUCT_VERSION,
         profileDir: spec.profileDir,
         homeDir: spec.homeDir,
+        installRecoveryStatePath: desktopInstallRecoveryStatePath(app.getPath('userData')),
         stateDir: desktopTerminalStateDirectory(app.getPath('userData'), spec.profileName),
         spawn,
         onLaunchError: cause => { this.reportTerminalLaunchError(cause) },
@@ -307,12 +353,15 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   reportRendererBoot(report: RendererBootReport): void {
     if (this.rendererBootReported) return
     this.rendererBootReported = true
+    this.stopRendererBootMonitoring()
+    if (report.status === 'failed') this.bootFailureReason ??= 'renderer-failed'
+    let handled = false
     try {
-      this.onRendererBoot(report)
+      handled = this.onRendererBoot(report) === true
     } catch (cause) {
       this.logError(`dsh-plugin-desktop: failed to persist renderer boot health: ${cause instanceof Error ? cause.message : String(cause)}`)
     }
-    if (report.status === 'failed') {
+    if (report.status === 'failed' && !handled) {
       void this.showRendererBootRecovery(report).catch((cause: unknown) => {
         this.logError(`dsh-plugin-desktop: failed to show plugin recovery: ${cause instanceof Error ? cause.message : String(cause)}`)
       })
@@ -331,6 +380,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   setThemeSource(source: DesktopThemeSource): void {
     if (this.scheduled?.mode === 'advanced' && this.window !== undefined) {
       nativeTheme.themeSource = source
+      // Windows can retain the preceding DWM Mica palette until the window is
+      // recomposed (for example after minimize/restore). Reapplying the active
+      // material invalidates the backdrop immediately after a live theme change.
+      if (this.platform === 'win32') this.window.setBackgroundMaterial('mica')
     }
   }
 
@@ -342,6 +395,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   /** @inheritdoc */
   prepareToQuit(): void {
     this.quitting = true
+    this.stopRendererBootMonitoring()
+  }
+
+  private failRendererBoot(reason: RendererBootFailureReason, error: string): void {
+    if (!this.rendererBootMonitoring || this.rendererBootReported) return
+    this.bootFailureReason = reason
+    this.reportRendererBoot({ status: 'failed', plugins: [], error })
   }
 
   private async showRendererBootRecovery(report: Extract<RendererBootReport, { status: 'failed' }>): Promise<void> {
@@ -607,7 +667,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     if (this.platform === 'darwin') app.dock?.setIcon(icon)
     const origin = new URL(spec.url).origin
     if (spec.mode === 'advanced') nativeTheme.themeSource = spec.readThemeSource()
-    const window = new BrowserWindow(desktopWindowOptions(spec, icon, this.platform))
+    const window = new BrowserWindow(desktopWindowOptions(spec, icon, this.platform, desktopPreloadPath()))
     window.accessibleTitle = spec.windowTitle
     if (this.platform === 'win32') window.removeMenu()
     this.window = window
@@ -647,10 +707,18 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     window.webContents.on('will-frame-navigate', navigate)
     window.webContents.on('will-redirect', navigate)
     window.webContents.on('render-process-gone', (_event, details) => {
-      this.logError(`dsh-plugin-desktop: renderer process gone (reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`)
+      const detail = `renderer process gone (reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`
+      this.logError(`dsh-plugin-desktop: ${detail}`)
+      this.failRendererBoot('renderer-failed', detail)
     })
-    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
       this.logError(`dsh-plugin-desktop: renderer failed to load (${errorCode}: ${errorDescription})`)
+      if (isMainFrame === true && errorCode !== -3) {
+        this.failRendererBoot(
+          'renderer-failed',
+          `renderer main frame failed to load (${String(errorCode)}: ${errorDescription})`,
+        )
+      }
     })
     window.webContents.setWindowOpenHandler(({ url }) => {
       try {
@@ -677,6 +745,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       tray.on('click', show)
       beforeInteractive?.()
     } catch (cause) {
+      this.stopRendererBootMonitoring()
       app.off('activate', show)
       window.off('page-title-updated', preserveBlankTitle)
       window.webContents.off('before-input-event', handleZoomShortcut)
@@ -697,6 +766,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     return async () => {
       if (released) return
       released = true
+      this.stopRendererBootMonitoring()
       app.off('activate', show)
       window.off('close', close)
       window.off('page-title-updated', preserveBlankTitle)

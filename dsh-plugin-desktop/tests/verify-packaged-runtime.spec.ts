@@ -14,6 +14,7 @@ import {
   resolvePackagedAsarPath,
   resolvePackagedUnpackedRoot,
   smokePackagedDiagnosticWorker,
+  verifyUnpackedArchiveMirror,
   verifyPackagedRuntime,
   type ArchiveLister,
   type FileProbe,
@@ -143,7 +144,8 @@ describe('packaged desktop runtime verification', () => {
     expect(exists).toHaveBeenCalledTimes(
       REQUIRED_UNPACKED_RUNTIME_ENTRIES.length
         + (platform === 'win32' ? REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES.length : 0)
-        + (platform === 'linux' ? REQUIRED_LINUX_X64_NODE_PTY_ENTRIES.length : 0),
+        + (platform === 'linux' ? REQUIRED_LINUX_X64_NODE_PTY_ENTRIES.length : 0)
+        + completeArchiveEntries().length,
     )
     expect(resolvePackage.mock.calls.map(([specifier]) => specifier))
       .toEqual(REQUIRED_UNPACKED_PACKAGE_SPECIFIERS)
@@ -177,8 +179,20 @@ describe('packaged desktop runtime verification', () => {
     expect(exists).toHaveBeenCalledTimes(
       REQUIRED_UNPACKED_RUNTIME_ENTRIES.length
         + REQUIRED_MACOS_UNIVERSAL_ENTRIES.length
-        + FORBIDDEN_MACOS_UNIVERSAL_ENTRIES.length,
+        + FORBIDDEN_MACOS_UNIVERSAL_ENTRIES.length
+        + completeArchiveEntries().length,
     )
+  })
+
+  it('rejects any ASAR-declared unpacked dependency missing from the physical tree', () => {
+    const unpackedRoot = join('/build', 'resources', 'app.asar.unpacked')
+    const missing = 'node_modules/yaml/dist/index.js'
+
+    expect(() => verifyUnpackedArchiveMirror(
+      new Set(['lib/main.js', missing, 'node_modules/zod/index.js']),
+      unpackedRoot,
+      filename => filename !== join(unpackedRoot, missing),
+    )).toThrow(`missing ASAR-declared physical entries: ${missing}`)
   })
 
   it('rejects a host-architecture node-pty build from a universal app', () => {

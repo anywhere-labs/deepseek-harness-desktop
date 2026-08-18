@@ -184,6 +184,148 @@ describe('desktop direct bundle management', () => {
     await harness.dispose()
   })
 
+  it('re-enables only a disabled direct bundle with a one-shot preview and never edits the manifest', async () => {
+    const root = temporaryRoot()
+    const options = bootstrap(root)
+    installBundle(options.homeDir, 'third-party-plugin')
+    addBundle(options.homeDir, 'third-party-plugin')
+    const manifest = profileManifest(options.homeDir)
+    const before = readFileSync(manifest.path, 'utf8')
+    const harness = await createHarness(options)
+    const active = harness.service.list().find(item => item.packageName === 'third-party-plugin')
+    if (active === undefined) throw new Error('missing target')
+    await harness.service.executeDisable(harness.service.previewDisable(active.bundleId).previewId)
+    const disabled = harness.service.list().find(item => item.packageName === 'third-party-plugin')
+    if (disabled === undefined) throw new Error('missing disabled target')
+
+    expect(disabled).toEqual(expect.objectContaining({
+      bundleId: active.bundleId,
+      status: 'disabled',
+      mutable: true,
+    }))
+    expect(() => harness.service.previewEnable('third-party-plugin')).toThrowError(
+      expect.objectContaining({ code: 'invalid-target' }),
+    )
+    const preview = harness.service.previewEnable(disabled.bundleId)
+    expect(preview).toEqual(expect.objectContaining({
+      profileName: 'desktop',
+      packageName: 'third-party-plugin',
+      previewId: expect.stringMatching(/^enable_[A-Za-z0-9_-]{43}$/u),
+    }))
+    await expect(harness.service.executeEnable(preview.previewId)).resolves.toEqual({
+      packageName: 'third-party-plugin',
+    })
+    await expect(harness.service.executeEnable(preview.previewId)).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'preview-expired',
+    )
+
+    expect(harness.service.isDisabled('third-party-plugin')).toBe(false)
+    expect(harness.service.list().find(item => item.packageName === 'third-party-plugin')).toEqual(
+      expect.objectContaining({ bundleId: active.bundleId, status: 'active', mutable: true }),
+    )
+    expect(readFileSync(manifest.path, 'utf8')).toBe(before)
+    expect(JSON.parse(readFileSync(options.statePath, 'utf8'))).toEqual({
+      version: 1,
+      profiles: [],
+    })
+    await harness.dispose()
+  })
+
+  it('rejects active, immutable, unknown, expired, and disposed enable targets', async () => {
+    const root = temporaryRoot()
+    let now = 1_800_000_000_000
+    const options = bootstrap(root, () => now)
+    installBundle(options.homeDir, 'third-party-plugin')
+    addBundle(options.homeDir, 'third-party-plugin')
+    const harness = await createHarness(options)
+    const active = harness.service.list().find(item => item.packageName === 'third-party-plugin')
+    const core = harness.service.list().find(item => item.packageName === '@deepseek-ai/dsh-base')
+    if (active === undefined || core === undefined) throw new Error('missing targets')
+
+    expect(() => harness.service.previewEnable(active.bundleId)).toThrowError(
+      expect.objectContaining({ code: 'already-active' }),
+    )
+    expect(() => harness.service.previewEnable(core.bundleId)).toThrowError(
+      expect.objectContaining({ code: 'immutable-target' }),
+    )
+    expect(() => harness.service.previewEnable(`bundle_${'a'.repeat(32)}`)).toThrowError(
+      expect.objectContaining({ code: 'invalid-target' }),
+    )
+
+    await harness.service.executeDisable(harness.service.previewDisable(active.bundleId).previewId)
+    const preview = harness.service.previewEnable(active.bundleId)
+    now += 5 * 60 * 1000
+    await expect(harness.service.executeEnable(preview.previewId)).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'preview-expired',
+    )
+    now -= 1
+    const disposedPreview = harness.service.previewEnable(active.bundleId)
+    await harness.dispose()
+    await expect(harness.service.executeEnable(disposedPreview.previewId)).rejects.toThrow('service disposed')
+    expect(() => harness.service.previewEnable(active.bundleId)).toThrow('service disposed')
+  })
+
+  it('revalidates the manifest and disabled state under the lock before enabling', async () => {
+    const root = temporaryRoot()
+    const options = bootstrap(root)
+    installBundle(options.homeDir, 'third-party-plugin')
+    addBundle(options.homeDir, 'third-party-plugin')
+    const harness = await createHarness(options)
+    const target = harness.service.list().find(item => item.packageName === 'third-party-plugin')
+    if (target === undefined) throw new Error('missing target')
+    await harness.service.executeDisable(harness.service.previewDisable(target.bundleId).previewId)
+
+    const missingManifestPreview = harness.service.previewEnable(target.bundleId)
+    const manifest = profileManifest(options.homeDir)
+    manifest.value.dsh.profile.bundles = manifest.value.dsh.profile.bundles
+      .filter(name => name !== 'third-party-plugin')
+    writeProfileManifest(manifest.path, manifest.value)
+    await expect(harness.service.executeEnable(missingManifestPreview.previewId)).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'invalid-target',
+    )
+    expect(readDesktopDisabledBundles(options.statePath, 'desktop').has('third-party-plugin')).toBe(true)
+
+    manifest.value.dsh.profile.bundles.push('third-party-plugin')
+    writeProfileManifest(manifest.path, manifest.value)
+    const changedStatePreview = harness.service.previewEnable(target.bundleId)
+    writeFileSync(options.statePath, `${JSON.stringify({ version: 1, profiles: [] }, undefined, 2)}\n`)
+    await expect(harness.service.executeEnable(changedStatePreview.previewId)).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'already-active',
+    )
+    await expect(harness.service.executeEnable(changedStatePreview.previewId)).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'preview-expired',
+    )
+    await harness.dispose()
+  })
+
+  it('preserves other disabled and stale bundle names when enabling one target', async () => {
+    const root = temporaryRoot()
+    const options = bootstrap(root)
+    installBundle(options.homeDir, 'third-party-plugin')
+    addBundle(options.homeDir, 'third-party-plugin')
+    mkdirSync(dirname(options.statePath), { recursive: true })
+    writeFileSync(options.statePath, JSON.stringify({
+      version: 1,
+      profiles: [{
+        profileName: 'desktop',
+        disabledBundles: ['third-party-plugin', 'z-stale-plugin', 'a-stale-plugin'],
+      }],
+    }))
+    const harness = await createHarness(options)
+    const target = harness.service.list().find(item => item.packageName === 'third-party-plugin')
+    if (target === undefined) throw new Error('missing target')
+
+    await harness.service.executeEnable(harness.service.previewEnable(target.bundleId).previewId)
+    expect(JSON.parse(readFileSync(options.statePath, 'utf8'))).toEqual({
+      version: 1,
+      profiles: [{
+        profileName: 'desktop',
+        disabledBundles: ['a-stale-plugin', 'z-stale-plugin'],
+      }],
+    })
+    await harness.dispose()
+  })
+
   it('filters every duplicate layer at composition time while preserving stale disabled names', async () => {
     const root = temporaryRoot()
     const options = bootstrap(root)
@@ -355,7 +497,7 @@ describe('desktop direct bundle management', () => {
     await harness.dispose()
   })
 
-  it('cannot use disabled state to bypass a malformed bundle patch during profile loading', async () => {
+  it('filters a disabled bundle before reading its malformed patch during profile loading', async () => {
     const root = temporaryRoot()
     const options = bootstrap(root)
     const packageDir = installBundle(options.homeDir, 'third-party-plugin')
@@ -372,7 +514,7 @@ describe('desktop direct bundle management', () => {
       'darwin',
       'desktop',
       options.statePath,
-    )).toThrow('must be a top-level YAML array')
+    )).not.toThrow()
     await harness.dispose()
   })
 })

@@ -9,6 +9,10 @@ import type {
   SubprocessOutcome,
   SubprocessSpawnSpec,
 } from '@deepseek-ai/dsh-subprocess'
+import {
+  DesktopInstallRecoveryStore,
+  type BeginDesktopInstallRecoveryInput,
+} from './install-recovery.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
@@ -37,6 +41,10 @@ export interface DesktopPnpmBootstrap {
   readonly clearEnvironmentPath: string
   /** Desktop bootstrap that clears RunAsNode before importing the packaged DSH CLI. */
   readonly dshBootstrapPath: string
+  /** Desktop-private install recovery WAL shared with the launcher and built-in terminal. */
+  readonly installRecoveryStatePath: string
+  /** Opaque identity shared by every install surface in this Electron generation. */
+  readonly generationId: string
 }
 
 /** Exit facts for one desktop-owned package-manager operation. */
@@ -71,6 +79,7 @@ declare module '@deepseek-ai/cordis' {
 interface ActiveOperation {
   child: SubprocessHandle
   done: Promise<DesktopPnpmOutcome>
+  recoveryTransactionId?: string
 }
 
 /** Read PATH with Windows-compatible environment-name matching. */
@@ -111,16 +120,22 @@ function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
     ['Node command', bootstrap.nodeShimPath],
     ['environment preloader', bootstrap.clearEnvironmentPath],
     ['DSH bootstrap', bootstrap.dshBootstrapPath],
+    ['install recovery state', bootstrap.installRecoveryStatePath],
   ] as const) assertAbsolutePath(label, value)
   if (bootstrap.electronVersion.length === 0 || bootstrap.electronVersion.includes('\0')) {
     throw new Error(`${BIN_NAME}: desktop pnpm Electron version must not be empty or contain NUL`)
+  }
+  if (bootstrap.generationId.length < 8 || bootstrap.generationId.includes('\0')) {
+    throw new Error(`${BIN_NAME}: desktop pnpm generation id is invalid`)
   }
 }
 
 /** Host service providing one managed pnpm operation at a time. */
 export class DesktopPnpm extends Service {
   private active: ActiveOperation | undefined
+  private installPreparationActive = false
   private closed = false
+  private readonly installRecovery: DesktopInstallRecoveryStore
 
   /**
    * Register the service for one immutable desktop profile generation.
@@ -130,6 +145,12 @@ export class DesktopPnpm extends Service {
   constructor(ctx: Context, private readonly bootstrap: DesktopPnpmBootstrap) {
     validateBootstrap(bootstrap)
     super(ctx, 'desktopPnpm')
+    this.installRecovery = new DesktopInstallRecoveryStore({
+      statePath: bootstrap.installRecoveryStatePath,
+      profileName: bootstrap.activeProfileName,
+      profileDir: bootstrap.activeProfileDir,
+      generationId: bootstrap.generationId,
+    })
     ctx.effect(
       () => async () => {
         this.closed = true
@@ -176,6 +197,9 @@ export class DesktopPnpm extends Service {
     signal?: AbortSignal,
   ): DesktopPnpmHandle {
     const resolvedArgs = validatedArgs(args)
+    if (resolvedArgs[0] === 'add') {
+      throw new Error(`${BIN_NAME}: plugin add must use the recoverable install boundary`)
+    }
     assertAbsolutePath('plugin invoking directory', invokingDir)
     return this.start({
       argv: [
@@ -192,16 +216,104 @@ export class DesktopPnpm extends Service {
     })
   }
 
+  /**
+   * Snapshot the active profile before running one `dsh plugin add` operation.
+   * The returned handle seals the post-install image before `done` resolves.
+   */
+  async runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: BeginDesktopInstallRecoveryInput,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle> {
+    const resolvedArgs = validatedArgs(args)
+    if (resolvedArgs[0] !== 'add') {
+      throw new Error(`${BIN_NAME}: recoverable plugin install requires the add command`)
+    }
+    assertAbsolutePath('plugin invoking directory', invokingDir)
+    if (this.closed) throw new Error(`${BIN_NAME}: desktop pnpm generation is closed`)
+    if (this.active !== undefined || this.installPreparationActive) {
+      throw new Error(`${BIN_NAME}: another desktop pnpm operation is already running`)
+    }
+    signal?.throwIfAborted()
+    this.installPreparationActive = true
+    let transaction: Awaited<ReturnType<DesktopInstallRecoveryStore['begin']>> | undefined
+    try {
+      transaction = await this.installRecovery.begin(recovery)
+      const handle = this.start({
+        argv: [
+          this.bootstrap.appExecutable,
+          '--expose-internals',
+          this.bootstrap.dshBootstrapPath,
+          'plugin',
+          '--profile',
+          this.bootstrap.activeProfileName,
+          ...resolvedArgs,
+        ],
+        cwd: invokingDir,
+        recoveryTransactionId: transaction.transactionId,
+        allowInstallPreparation: true,
+        ...(signal === undefined ? {} : { signal }),
+      })
+      this.installPreparationActive = false
+      return handle
+    } catch (cause) {
+      try {
+        if (transaction !== undefined) await this.rollbackUnstartedInstall(transaction.transactionId)
+      } finally {
+        this.installPreparationActive = false
+      }
+      throw cause
+    }
+  }
+
+  /** Return the exact rolled-back receipt id, if startup recovery still awaits Market cleanup. */
+  async recoveredInstallReceiptIds(): Promise<readonly string[]> {
+    const state = await this.installRecovery.read()
+    return state?.phase === 'rolled-back' ? [state.receiptId] : []
+  }
+
+  /** Clear a rolled-back transaction only after its exact Market receipt has been removed. */
+  async acknowledgeRecoveredInstall(receiptId: string): Promise<void> {
+    const state = await this.installRecovery.read()
+    if (state?.phase !== 'rolled-back' || state.receiptId !== receiptId) return
+    await this.installRecovery.clear(state.transactionId)
+  }
+
+  /** Restore and clear the exact current-generation install when later Host validation fails. */
+  async rollbackPluginInstall(receiptId: string): Promise<boolean> {
+    const state = await this.installRecovery.read()
+    if (state === undefined || state.receiptId !== receiptId) return false
+    if (state.createdByGeneration !== this.bootstrap.generationId) {
+      throw new Error(`${BIN_NAME}: plugin install recovery belongs to another generation`)
+    }
+    if (state.phase === 'rolled-back') {
+      await this.installRecovery.clear(state.transactionId)
+      return true
+    }
+    if (state.phase !== 'prepared' && state.phase !== 'awaiting-restart') {
+      throw new Error(`${BIN_NAME}: plugin install recovery cannot roll back phase ${state.phase}`)
+    }
+    const result = await this.installRecovery.restoreCurrentInstall(state.transactionId, 'install-failed')
+    if (result.status === 'manual-recovery-required') {
+      throw new Error(`${BIN_NAME}: plugin install recovery requires manual repair`)
+    }
+    await this.installRecovery.clear(state.transactionId)
+    return true
+  }
+
   /** Start one managed child after applying the generation-wide gate. */
   private start(command: {
     argv: readonly string[]
     cwd: string
     signal?: AbortSignal
+    recoveryTransactionId?: string
+    allowInstallPreparation?: boolean
   }): DesktopPnpmHandle {
     if (this.closed) {
       throw new Error(`${BIN_NAME}: desktop pnpm generation is closed`)
     }
-    if (this.active !== undefined) {
+    if (this.active !== undefined || (this.installPreparationActive && command.allowInstallPreparation !== true)) {
       throw new Error(`${BIN_NAME}: another desktop pnpm operation is already running`)
     }
     command.signal?.throwIfAborted()
@@ -237,6 +349,9 @@ export class DesktopPnpm extends Service {
     const active: ActiveOperation = {
       child,
       done: Promise.resolve({ exitCode: null, signal: null }),
+      ...(command.recoveryTransactionId === undefined
+        ? {}
+        : { recoveryTransactionId: command.recoveryTransactionId }),
     }
     active.done = this.settle(active)
     this.active = active
@@ -250,15 +365,30 @@ export class DesktopPnpm extends Service {
 
   /** Keep the operation gate held until the complete process tree is gone. */
   private async settle(active: ActiveOperation): Promise<DesktopPnpmOutcome> {
+    let outcome: SubprocessOutcome | undefined
     try {
-      const outcome: SubprocessOutcome = await active.child.done
+      outcome = await active.child.done
       return { exitCode: outcome.exitCode, signal: outcome.signal }
     } finally {
       try {
         await active.child.waitForExit()
+        if (active.recoveryTransactionId !== undefined) {
+          if (outcome?.exitCode === 0 && outcome.signal === null) {
+            await this.installRecovery.seal(active.recoveryTransactionId)
+          } else {
+            await this.rollbackUnstartedInstall(active.recoveryTransactionId)
+          }
+        }
       } finally {
         if (this.active === active) this.active = undefined
       }
+    }
+  }
+
+  private async rollbackUnstartedInstall(transactionId: string): Promise<void> {
+    const result = await this.installRecovery.restoreCurrentInstall(transactionId, 'install-failed')
+    if (result.status !== 'manual-recovery-required') {
+      await this.installRecovery.clear(transactionId)
     }
   }
 }
