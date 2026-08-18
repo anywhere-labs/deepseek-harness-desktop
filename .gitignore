@@ -12,3 +12,6 @@ node_modules/
 dsh-plugin-desktop/dist/
 dsh-plugin-desktop/lib/
 dsh-community-market/lib/
+
+# Vendored Windows Node runtime (fetched by vendor:node:win at build time)
+/dsh-plugin-desktop/vendor/node/

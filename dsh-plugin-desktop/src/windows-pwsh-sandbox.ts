@@ -2,14 +2,29 @@
 
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { win32 } from 'node:path'
 import type { ShellExecSpec, ShellProcess, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
+import { unpackedAsarPath } from './packaged-runtime-path.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const UPSTREAM_RUNNER = fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner'))
 const DESKTOP_TRAMPOLINE = fileURLToPath(new URL('./windows-acl-runner.js', import.meta.url))
+
+/**
+ * Relative extraResource name for the vendored Node executable shipped beside
+ * the packaged app (`resources/node.exe`). Running the ACL runner inside the
+ * ELECTRON_RUN_AS_NODE process produces restricted tokens whose children all
+ * die with 0xC0000142 during DLL init (issue #203); a standalone Node keeps
+ * the runner outside that process and the sandbox behaves identically to the
+ * CLI. The trampoline remains only for unpackaged development, where no
+ * vendored Node exists and the known-broken path is logged.
+ */
+const VENDORED_NODE_RESOURCE = 'node.exe'
+const VENDORED_NODE_PROBE_TIMEOUT_MS = 5_000
+const TRAMPOLINE_FALLBACK_WARNED = new Set<string>()
 
 /** Inputs controlling one exact ACL-runner argv rewrite. */
 export interface WindowsAclAdaptation {
@@ -19,17 +34,21 @@ export interface WindowsAclAdaptation {
   electron: boolean
   /** Current Electron executable path. */
   execPath: string
-  /** Resolved upstream ACL runner path. */
+  /** Resolved upstream ACL runner path (logical ASAR path). */
   upstreamRunner: string
   /** Desktop-owned Node-mode trampoline path. */
   trampoline: string
+  /** Absolute vendored Node executable; undefined keeps the trampoline fallback. */
+  nodeExecutable?: string
+  /** Probe the vendored Node once (`-v`); injectable for tests. */
+  probe?: (path: string) => boolean
 }
 
 /** Adapted execution inputs passed to the ordinary local executor. */
 export interface AdaptedWindowsAclExecution {
-  /** Spec carrying the runner-only Electron environment. */
+  /** Spec carrying the runner-only environment. */
   spec: ShellExecSpec
-  /** Exact argv, with the desktop trampoline inserted when required. */
+  /** Exact argv, with the runner host selected (vendored Node or trampoline). */
   argv: readonly string[]
 }
 
@@ -62,11 +81,52 @@ export function desktopWindowsPwshConfig(
 }
 
 /**
- * Insert the desktop Node-mode trampoline for the exact upstream ACL runner.
- * @param spec - resolved PowerShell execution spec.
- * @param argv - argv after the upstream sandbox provider has confined it.
- * @param adaptation - executable and runner identities for this Host.
- * @returns unchanged inputs for every non-runner call, otherwise the isolated runner launch.
+ * Resolve the vendored Node executable shipped beside the packaged app.
+ * @param execPath - current Electron executable path.
+ * @param exists - injectable existence check.
+ * @returns the physical node.exe, or undefined when unpackaged or absent.
+ */
+export function resolveVendoredNodeExecutable(
+  execPath: string,
+  exists: (path: string) => boolean = existsSync,
+): string | undefined {
+  // Windows path semantics on every host, matching desktopWindowsPwshPath,
+  // so the resolution is deterministic in cross-platform test runs.
+  const candidate = win32.join(win32.dirname(execPath), 'resources', VENDORED_NODE_RESOURCE)
+  return exists(candidate) ? candidate : undefined
+}
+
+/** Per-path memo of successful `node -v` probes; the executable never changes for a given install. */
+const probedVendoredNodes = new Set<string>()
+
+/**
+ * Probe that the vendored Node actually launches, not merely exists. AV/EDR
+ * products can quarantine unsigned bundled executables (issue #203 branch B);
+ * a file that exists but cannot run must not silently masquerade as a sandbox
+ * failure.
+ * @param path - absolute node.exe path.
+ * @param spawn - injectable spawn for tests.
+ * @returns true when `node -v` exits 0 with a version string.
+ */
+export function probeVendoredNodeExecutable(
+  path: string,
+  spawn: typeof spawnSync = spawnSync,
+): boolean {
+  if (probedVendoredNodes.has(path)) return true
+  const result = spawn(path, ['-v'], {
+    timeout: VENDORED_NODE_PROBE_TIMEOUT_MS,
+    windowsHide: true,
+  })
+  const ok = result.status === 0 && /^v\d+\./u.test(String(result.stdout).trim())
+  if (ok) probedVendoredNodes.add(path)
+  return ok
+}
+
+/**
+ * Insert the desktop runner host for the exact upstream ACL runner argv.
+ * Prefers the vendored standalone Node (verified against issue #203); the
+ * Electron trampoline is only a development fallback and logs a one-time
+ * warning because it is the known-broken shape for Windows sandboxed pwsh.
  */
 export function adaptWindowsAclExecution(
   spec: ShellExecSpec,
@@ -85,6 +145,34 @@ export function adaptWindowsAclExecution(
   for (const key of Object.keys(env)) {
     if (key.toUpperCase() === RUN_AS_NODE) delete env[key]
   }
+
+  const nodeExecutable = adaptation.nodeExecutable
+  if (nodeExecutable !== undefined) {
+    // Preferred path: standalone vendored Node. The upstream runner receives
+    // the physical unpacked path — stock Node cannot read app.asar.
+    const probe = adaptation.probe ?? probeVendoredNodeExecutable
+    if (!probe(nodeExecutable)) {
+      throw new Error(
+        `[dsh-plugin-desktop] vendored Node at ${nodeExecutable} exists but does not launch. ` +
+        'It may be quarantined or blocked by security software (issue #203). ' +
+        'Reinstall DSH Desktop or whitelist the bundled node.exe.',
+      )
+    }
+    return {
+      spec: { ...spec, env },
+      argv: [nodeExecutable, unpackedAsarPath(adaptation.upstreamRunner), ...args],
+    }
+  }
+
+  // Development fallback: the RunAsNode trampoline is known-broken for the
+  // Windows workspace-write sandbox (issue #203); warn once per trampoline.
+  if (!TRAMPOLINE_FALLBACK_WARNED.has(adaptation.trampoline)) {
+    TRAMPOLINE_FALLBACK_WARNED.add(adaptation.trampoline)
+    console.warn(
+      '[dsh-plugin-desktop] no vendored Node found; falling back to the RunAsNode trampoline. ' +
+      'On Windows, workspace-write sandboxed pwsh fails with 0xC0000142 in this mode (issue #203).',
+    )
+  }
   env[RUN_AS_NODE] = '1'
   return {
     spec: { ...spec, env },
@@ -99,12 +187,14 @@ export class DesktopWindowsPwshSandbox extends SandboxPwshExecutor {
   }
 
   private adapt(spec: ShellExecSpec, argv: readonly string[]): AdaptedWindowsAclExecution {
+    const nodeExecutable = resolveVendoredNodeExecutable(process.execPath)
     return adaptWindowsAclExecution(spec, argv, {
       platform: process.platform,
       electron: process.versions.electron !== undefined,
       execPath: process.execPath,
       upstreamRunner: UPSTREAM_RUNNER,
       trampoline: DESKTOP_TRAMPOLINE,
+      ...(nodeExecutable === undefined ? {} : { nodeExecutable }),
     })
   }
 

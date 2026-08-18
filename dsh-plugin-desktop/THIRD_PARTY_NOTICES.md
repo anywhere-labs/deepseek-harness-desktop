@@ -530,4 +530,5 @@ the package names, versions, and licenses for transparency.
 | zod-to-json-schema | 3.25.2 | ISC |
 | zustand | 4.4.7 | MIT |
 | zwitch | 2.0.4 | MIT |
+| Node.js (vendored runtime for the Windows ACL runner) | 22.23.2 | MIT (see resources/node-license/LICENSE) |
 > Notice-required licenses in use: LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
