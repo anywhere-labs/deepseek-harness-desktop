@@ -506,8 +506,7 @@ export class DesktopStartupRecoveryWindow {
       this.finish('quit')
     })
     await this.render()
-    this.diagnosticTask = this.saveDiagnostics()
-    void this.diagnosticTask.catch(() => {})
+    void this.startDiagnosticExport().catch(() => {})
     return await result
   }
 
@@ -575,8 +574,7 @@ export class DesktopStartupRecoveryWindow {
           })
         }
       } else if (action.action === 'export-diagnostics') {
-        this.diagnosticTask = this.saveDiagnostics()
-        await this.diagnosticTask.catch(() => {})
+        await this.startDiagnosticExport().catch(() => {})
       } else if (action.action === 'show-diagnostics' && this.diagnosticPath !== undefined) {
         shell.showItemInFolder(this.diagnosticPath)
       } else if (action.action === 'open-profile-patch') {
@@ -619,14 +617,26 @@ export class DesktopStartupRecoveryWindow {
   }
 
   private async ensureDiagnostics(): Promise<boolean> {
-    if (this.diagnostics.status === 'saved') return true
-    this.diagnosticTask ??= this.saveDiagnostics()
     try {
-      await this.diagnosticTask
+      await this.startDiagnosticExport()
       return true
     } catch {
       return false
     }
+  }
+
+  private startDiagnosticExport(): Promise<string> {
+    if (this.diagnostics.status === 'saved' && this.diagnosticPath !== undefined) {
+      return Promise.resolve(this.diagnosticPath)
+    }
+    if (this.diagnosticTask !== undefined) return this.diagnosticTask
+
+    const task = this.saveDiagnostics()
+    this.diagnosticTask = task
+    void task.catch(() => {
+      if (this.diagnosticTask === task) this.diagnosticTask = undefined
+    })
+    return task
   }
 
   private async saveDiagnostics(): Promise<string> {

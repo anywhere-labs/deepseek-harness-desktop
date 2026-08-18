@@ -6,6 +6,7 @@ import {
   desktopStartupRecoveryWindowBounds,
   parseDesktopStartupRecoveryAction,
   renderDesktopStartupRecoveryHtml,
+  DesktopStartupRecoveryWindow,
   type DesktopStartupRecoveryScreenApi,
   type DesktopStartupRecoveryViewModel,
 } from '../src/startup-recovery-window.ts'
@@ -161,6 +162,76 @@ describe('Desktop startup recovery document', () => {
     expect(html).toContain('example-plugin')
     expect(html).toContain('安装前配置已恢复。请重新启动 Desktop。')
     expect(html).toContain('class="button primary" href="dsh-recovery://restart"')
+  })
+})
+
+describe('Desktop startup recovery diagnostics export', () => {
+  function recoveryWindow(exportDiagnostics: () => Promise<string>): DesktopStartupRecoveryWindow {
+    return new DesktopStartupRecoveryWindow({
+      locale: 'zh',
+      failureStage: 'profile-composition',
+      failureDetail: 'diagnostic export test',
+      exportDiagnostics,
+    })
+  }
+
+  function handleAction(window: DesktopStartupRecoveryWindow): (action: { readonly action: string }) => Promise<void> {
+    return (window as unknown as {
+      handleAction: (action: { readonly action: string }) => Promise<void>
+    }).handleAction.bind(window)
+  }
+
+  function deferred<T>(): {
+    readonly promise: Promise<T>
+    readonly resolve: (value: T) => void
+    readonly reject: (cause: unknown) => void
+  } {
+    let resolve!: (value: T) => void
+    let reject!: (cause: unknown) => void
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise
+      reject = rejectPromise
+    })
+    return { promise, resolve, reject }
+  }
+
+  it('shares an in-flight export and reuses the saved result', async () => {
+    const task = deferred<string>()
+    const exportDiagnostics = vi.fn(() => task.promise)
+    const window = recoveryWindow(exportDiagnostics)
+    const runAction = handleAction(window)
+
+    const first = runAction({ action: 'export-diagnostics' })
+    await vi.waitFor(() => expect(exportDiagnostics).toHaveBeenCalledOnce())
+    const second = runAction({ action: 'export-diagnostics' })
+
+    await Promise.resolve()
+    expect(exportDiagnostics).toHaveBeenCalledOnce()
+    task.resolve('C:\\Temp\\diagnostics.zip')
+    await Promise.all([first, second])
+
+    await runAction({ action: 'export-diagnostics' })
+    expect(exportDiagnostics).toHaveBeenCalledOnce()
+  })
+
+  it('clears a failed export task so the next attempt can retry', async () => {
+    const firstTask = deferred<string>()
+    const secondTask = deferred<string>()
+    const exportDiagnostics = vi.fn()
+      .mockImplementationOnce(() => firstTask.promise)
+      .mockImplementationOnce(() => secondTask.promise)
+    const window = recoveryWindow(exportDiagnostics)
+    const runAction = handleAction(window)
+
+    const first = runAction({ action: 'export-diagnostics' })
+    await vi.waitFor(() => expect(exportDiagnostics).toHaveBeenCalledOnce())
+    firstTask.reject(new Error('archive unavailable'))
+    await first
+
+    const retry = runAction({ action: 'export-diagnostics' })
+    await vi.waitFor(() => expect(exportDiagnostics).toHaveBeenCalledTimes(2))
+    secondTask.resolve('C:\\Temp\\diagnostics-retry.zip')
+    await retry
   })
 })
 
