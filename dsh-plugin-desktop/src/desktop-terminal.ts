@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
-import { basename, dirname, join, win32 } from 'node:path'
+import { basename, dirname, join, posix, win32 } from 'node:path'
 import { assertDesktopProfileName } from './profile-manager.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
@@ -47,9 +47,28 @@ const PRIVATE_FILE_MODE = 0o600
 const WINDOWS_SHELL_COMMANDS = ['pwsh.exe', 'powershell.exe', 'cmd.exe'] as const
 const WINDOWS_TERMINAL_COMMAND = 'wt.exe'
 const ELECTRON_HEADERS_URL = 'https://electronjs.org/headers'
+/**
+ * Linux terminal emulators probed in order, with the flag each one uses to take a
+ * program to run. There is no `open -a Terminal` equivalent on Linux and no single
+ * emulator is guaranteed present, so discovery walks PATH. `x-terminal-emulator`
+ * comes first because it is the Debian alternatives symlink pointing at whatever the
+ * user actually chose.
+ */
+const LINUX_TERMINAL_COMMANDS = [
+  { command: 'x-terminal-emulator', argument: '-e' },
+  { command: 'gnome-terminal', argument: '--' },
+  { command: 'konsole', argument: '-e' },
+  { command: 'xfce4-terminal', argument: '-x' },
+  { command: 'tilix', argument: '-e' },
+  { command: 'alacritty', argument: '-e' },
+  { command: 'kitty', argument: undefined },
+  { command: 'xterm', argument: '-e' },
+] as const
+/** Environment variables naming a preferred terminal, checked before PATH discovery. */
+const LINUX_TERMINAL_ENVIRONMENT_KEYS = ['DSH_TERMINAL', 'TERMINAL'] as const
 
 /** Platforms with a native terminal launch contract owned by DSH Desktop. */
-export type DesktopTerminalPlatform = 'darwin' | 'win32'
+export type DesktopTerminalPlatform = 'darwin' | 'linux' | 'win32'
 
 /** Process launcher injected by the Electron adapter. */
 export type DesktopTerminalSpawn = (
@@ -108,6 +127,10 @@ export interface DesktopTerminalOptions {
   windowsExecutableExists?: DesktopTerminalExecutableExists
   /** Windows executable resolver; defaults to a trusted PATH/SystemRoot lookup. */
   windowsExecutableResolver?: DesktopTerminalExecutableResolver
+  /** Linux executable existence probe; defaults to `existsSync`. */
+  linuxExecutableExists?: DesktopTerminalExecutableExists
+  /** Linux executable resolver; defaults to a PATH lookup. */
+  linuxExecutableResolver?: DesktopTerminalExecutableResolver
   /** Reporter attached before the platform launcher can emit an asynchronous failure. */
   onLaunchError?: (cause: Error) => void
 }
@@ -427,7 +450,7 @@ function windowsCmdWelcome(): string {
 
 /** Create command shims and the interactive welcome script. */
 function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTerminalFiles {
-  if (options.platform !== 'darwin' && options.platform !== 'win32') {
+  if (options.platform !== 'darwin' && options.platform !== 'linux' && options.platform !== 'win32') {
     throw new Error(`dsh-plugin-desktop: terminal is unsupported on ${options.platform}`)
   }
   assertDesktopProfileName(options.profileName)
@@ -445,13 +468,19 @@ function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTe
   prepareStateDirectory(options.stateDir)
   const shimDir = join(options.stateDir, 'bin')
   prepareStateDirectory(shimDir)
-  if (options.platform === 'darwin') {
+  // The generated shims and rc files are plain POSIX sh, so macOS and Linux share them
+  // verbatim; only the welcome script's extension differs, because `.command` is a
+  // macOS double-click convention that means nothing on Linux.
+  if (options.platform === 'darwin' || options.platform === 'linux') {
     const files: DesktopTerminalFiles = {
       shimDir,
       dshShimPath: join(shimDir, 'dsh'),
       pnpmShimPath: join(shimDir, 'pnpm'),
       nodeShimPath: join(shimDir, 'node'),
-      welcomePath: join(options.stateDir, 'welcome.command'),
+      welcomePath: join(
+        options.stateDir,
+        options.platform === 'darwin' ? 'welcome.command' : 'welcome.sh',
+      ),
     }
     const bashRcPath = join(options.stateDir, 'bashrc')
     replacePrivateFile(files.dshShimPath, macDshShim(options), EXECUTABLE_FILE_MODE)
@@ -564,6 +593,65 @@ interface ResolvedWindowsShell {
 }
 
 /** Resolve the preferred Windows Terminal host, preserving an explicit adapter. */
+/**
+ * Resolve one executable by walking PATH. Linux has no equivalent of `open -a`, so the
+ * launcher must find a concrete emulator binary itself.
+ * @param command - bare command name, or an absolute path to probe directly.
+ * @param environment - environment supplying PATH.
+ * @param exists - filesystem probe; production passes `existsSync`.
+ * @returns the resolved path, or `undefined` when the command is not on PATH.
+ */
+function defaultLinuxExecutableResolver(
+  command: string,
+  environment: Readonly<NodeJS.ProcessEnv>,
+  exists: DesktopTerminalExecutableExists,
+): string | undefined {
+  if (command.includes('/')) return exists(command) ? command : undefined
+  const search = environment[PATH]
+  if (search === undefined) return undefined
+  for (const directory of search.split(':')) {
+    if (directory === '') continue
+    const candidate = posix.join(directory, command)
+    if (exists(candidate)) return candidate
+  }
+  return undefined
+}
+
+/**
+ * Pick the terminal emulator used to host one desktop terminal session.
+ *
+ * `DSH_TERMINAL` and `TERMINAL` win when set, because a user who names an emulator
+ * has already answered the question better than discovery can. Otherwise the known
+ * emulators are probed in order. Each entry carries its own "run this program" flag;
+ * they are not interchangeable.
+ * @param options - launch options carrying the injectable probes.
+ * @param environment - environment supplying PATH and the override keys.
+ * @returns the emulator and the flag preceding the program, or `undefined` when none is installed.
+ */
+function resolveLinuxTerminal(
+  options: DesktopTerminalOptions,
+  environment: Readonly<NodeJS.ProcessEnv>,
+): { executable: string, argument?: string | undefined } | undefined {
+  const exists = options.linuxExecutableExists ?? existsSync
+  const resolve = options.linuxExecutableResolver ?? defaultLinuxExecutableResolver
+  for (const key of LINUX_TERMINAL_ENVIRONMENT_KEYS) {
+    const preferred = environment[key]
+    if (preferred === undefined || preferred === '') continue
+    const executable = resolve(preferred, environment, exists)
+    if (executable === undefined) continue
+    assertScriptValue(`${key} executable`, executable)
+    const known = LINUX_TERMINAL_COMMANDS.find(entry => entry.command === basename(preferred))
+    return { executable, argument: known?.argument ?? '-e' }
+  }
+  for (const entry of LINUX_TERMINAL_COMMANDS) {
+    const executable = resolve(entry.command, environment, exists)
+    if (executable === undefined) continue
+    assertScriptValue(`${entry.command} executable`, executable)
+    return { executable, argument: entry.argument }
+  }
+  return undefined
+}
+
 function resolveWindowsTerminal(
   options: DesktopTerminalOptions,
   environment: Readonly<NodeJS.ProcessEnv>,
@@ -694,6 +782,20 @@ export function openDesktopTerminal(options: DesktopTerminalOptions): DesktopTer
   if (options.platform === 'darwin') {
     command = '/usr/bin/open'
     args = ['-a', 'Terminal', files.welcomePath]
+  } else if (options.platform === 'linux') {
+    const terminal = resolveLinuxTerminal(options, env)
+    if (terminal === undefined) {
+      throw new Error(
+        'dsh-plugin-desktop: no terminal emulator found on PATH; '
+        + 'install one of x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, '
+        + 'tilix, alacritty, kitty or xterm, or set DSH_TERMINAL to the one you use',
+      )
+    }
+    command = terminal.executable
+    // kitty and friends take the program directly; the rest need their own flag first.
+    args = terminal.argument === undefined
+      ? [files.welcomePath]
+      : [terminal.argument, files.welcomePath]
   } else {
     const shell = resolveWindowsShell(options, env)
     const shellArgs = windowsShellArgv(shell, files)

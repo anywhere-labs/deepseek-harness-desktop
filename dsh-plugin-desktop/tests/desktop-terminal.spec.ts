@@ -456,12 +456,57 @@ describe('desktop terminal environment', () => {
     }))
   })
 
+  it('discovers a Linux terminal emulator on PATH and hands it the welcome script', () => {
+    const harness = spawnHarness()
+    const options = macOptions(temporaryDirectory(), harness.spawn)
+    options.platform = 'linux'
+    // Only konsole exists here, so discovery must skip the higher-priority names
+    // rather than assuming the first candidate is installed.
+    options.linuxExecutableExists = (candidate: string) => candidate === '/usr/bin/konsole'
+
+    openDesktopTerminal(options)
+
+    expect(harness.calls).toHaveLength(1)
+    expect(harness.calls[0]?.command).toBe('/usr/bin/konsole')
+    expect(harness.calls[0]?.args).toEqual(['-e', join(options.stateDir, 'welcome.sh')])
+  })
+
+  it('prefers the emulator named by DSH_TERMINAL over PATH discovery', () => {
+    const harness = spawnHarness()
+    const options = macOptions(temporaryDirectory(), harness.spawn)
+    options.platform = 'linux'
+    options.environment = { ...options.environment, DSH_TERMINAL: 'alacritty' }
+    // xterm is present too; the explicit preference must still win.
+    options.linuxExecutableExists = (candidate: string) =>
+      candidate === '/usr/bin/alacritty' || candidate === '/usr/bin/xterm'
+
+    openDesktopTerminal(options)
+
+    expect(harness.calls[0]?.command).toBe('/usr/bin/alacritty')
+    expect(harness.calls[0]?.args[0]).toBe('-e')
+  })
+
+  it('names the installable emulators when Linux has none on PATH', () => {
+    const harness = spawnHarness()
+    const options = macOptions(temporaryDirectory(), harness.spawn)
+    options.platform = 'linux'
+    options.linuxExecutableExists = () => false
+
+    // A bare "launch failed" would leave the user guessing; the message has to say
+    // what to install or which variable to set.
+    expect(() => openDesktopTerminal(options)).toThrow(/no terminal emulator found on PATH/)
+    expect(() => openDesktopTerminal(options)).toThrow(/DSH_TERMINAL/)
+    expect(harness.calls).toHaveLength(0)
+  })
+
   it('accepts localized macOS profile names and rejects path escapes before writing state', () => {
     const root = temporaryDirectory()
     const harness = spawnHarness()
     const unsupported = macOptions(join(root, 'unsupported'), harness.spawn)
-    unsupported.platform = 'linux'
-    expect(() => openDesktopTerminal(unsupported)).toThrow('terminal is unsupported on linux')
+    // Linux is supported now, so the unsupported-platform guard is exercised with a
+    // platform the launcher genuinely has no contract for.
+    unsupported.platform = 'freebsd' as DesktopTerminalOptions['platform']
+    expect(() => openDesktopTerminal(unsupported)).toThrow('terminal is unsupported on freebsd')
     expect(() => lstatSync(unsupported.stateDir)).toThrow()
 
     const unsafe = macOptions(join(root, 'unsafe'), harness.spawn)

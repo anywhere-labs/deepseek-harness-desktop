@@ -42,11 +42,22 @@ describe('desktop terminal Host plugin', () => {
     expect(disposeRegistration).toHaveBeenCalledOnce()
   })
 
-  it('fails loud if a Linux profile activates the unsupported terminal row', () => {
+  it('registers the tray command on Linux like the other desktop platforms', () => {
+    let registered = false
     const ctx = {
-      desktopRuntime: { platform: 'linux' },
+      desktopRuntime: {
+        platform: 'linux',
+        locale: 'en',
+        registerTrayItem: () => {
+          registered = true
+          return { dispose: () => {} }
+        },
+        openTerminal: () => {},
+      },
+      effect: (factory: () => () => void) => { factory() },
     } as unknown as Context
 
-    expect(() => apply(ctx)).toThrow('supported on macOS and Windows')
+    expect(() => apply(ctx)).not.toThrow()
+    expect(registered).toBe(true)
   })
 })

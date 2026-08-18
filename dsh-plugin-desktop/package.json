@@ -114,6 +114,7 @@
     "dist:mac": "node scripts/release-mac.ts",
     "dist:mac-smoke": "node scripts/package-mac.ts",
     "dist:win": "node scripts/package-win.ts",
+    "dist:linux": "yarn run build && electron-builder --linux",
     "prepack": "yarn run check"
   },
   "dependencies": {
@@ -308,9 +309,22 @@
     },
     "linux": {
       "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
         "dir"
       ],
-      "icon": "build/app-icon.png"
+      "icon": "build/app-icon.png",
+      "category": "Development",
+      "synopsis": "Desktop shell for the DeepSeek Harness plugin ecosystem",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "DSH Desktop"
+        }
+      }
     }
   }
 }
