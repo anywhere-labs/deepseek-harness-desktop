@@ -29,6 +29,7 @@ import {
   startDesktopCrashReporting,
   type DesktopRun,
 } from './crash-evidence.ts'
+import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import { FileExporter } from './file-exporter.ts'
 import { DESKTOP_SETTINGS_NAMESPACE, type DesktopSettings } from './index.ts'
 import { LogFileSink } from './log-files.ts'
@@ -116,7 +117,6 @@ function notifyWindowsVolumeConcerns(
 
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
 async function start(): Promise<void> {
-  app.setName(PRODUCT_NAME)
   if (!app.requestSingleInstanceLock()) {
     app.quit()
     return
@@ -413,4 +413,32 @@ async function start(): Promise<void> {
   }
 }
 
-void start()
+async function run(): Promise<void> {
+  app.setName(PRODUCT_NAME)
+  if (process.argv.includes('--export-diagnostics')) {
+    try {
+      await app.whenReady()
+      const path = await exportDesktopDiagnostics(app.getPath('userData'), {
+        appVersion: desktopProductVersion(),
+        crashDumpsDir: app.getPath('crashDumps'),
+      })
+      await new Promise<void>((resolve, reject) => {
+        process.stdout.write(`${path}\n`, error => {
+          if (error === undefined || error === null) resolve()
+          else reject(error)
+        })
+      })
+      app.exit(0)
+    } catch (cause) {
+      const message = `dsh-plugin-desktop: failed to export diagnostics: ${cause instanceof Error ? cause.stack ?? cause.message : String(cause)}\n`
+      await new Promise<void>(resolve => {
+        process.stderr.write(message, () => { resolve() })
+      })
+      app.exit(1)
+    }
+    return
+  }
+  await start()
+}
+
+void run()

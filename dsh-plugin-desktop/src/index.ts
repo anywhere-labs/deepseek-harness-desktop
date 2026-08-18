@@ -18,6 +18,8 @@ import {
   handleRendererBootRequest,
   RENDERER_BOOT_REPORT_PATH,
 } from './renderer-boot.ts'
+import { DESKTOP_DIRECTORY_PICKER_PATH } from './directory-picker-contract.ts'
+import { handleDesktopDirectoryPickerRequest } from './directory-picker-route.ts'
 import type { DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 
@@ -145,6 +147,24 @@ export function apply(ctx: Context, config: Config): void {
     }),
     'dsh-plugin-desktop: renderer boot report route',
   )
+  if (runtime.platform === 'win32') {
+    ctx.effect(
+      () => ctx.webServer.register({
+        kind: 'exact',
+        path: DESKTOP_DIRECTORY_PICKER_PATH,
+        handler: (req, res) => handleDesktopDirectoryPickerRequest(
+          req,
+          res,
+          rendererOrigin,
+          () => runtime.pickDirectory(),
+          cause => {
+            ctx.logger.error(`dsh-plugin-desktop: native directory picker failed: ${cause instanceof Error ? cause.message : String(cause)}`)
+          },
+        ),
+      }),
+      'dsh-plugin-desktop: native directory picker route',
+    )
+  }
   ctx.effect(() => {
     let pending: ReturnType<typeof setImmediate> | undefined
     const stopWatching = settings.watch((next) => {

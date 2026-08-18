@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { applyAdvancedShell } from './advanced-shell.ts'
 import { startRendererBootReporter } from './boot-health.ts'
+import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
@@ -35,5 +36,11 @@ export function apply(ctx: ClientContext): void {
     () => startRendererBootReporter(ctx.loader),
     'dsh-plugin-desktop: renderer boot health report',
   )
+  if (environment.platform === 'win32') {
+    ctx.effect(
+      () => installDesktopDirectoryPickerBridge(),
+      'dsh-plugin-desktop: native directory picker bridge',
+    )
+  }
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
 }

@@ -1131,7 +1131,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:0.1.0-rc.7, @deepseek-ai/dsh-client-ui-directory-picker-browse@npm:^0.1.0-rc.7":
+"@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:0.1.0-rc.7":
   version: 0.1.0-rc.7
   resolution: "@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:0.1.0-rc.7"
   dependencies:
@@ -1146,6 +1146,24 @@ __metadata:
     "@deepseek-ai/dsh-invariants": ^0.1.0-rc.7
     react: ^18.2.0
   checksum: 10c0/331ab6d9646d6432c1df9c5bd8142aec5c67f7698b779443e0941f01747b5f77d726174724c91390b6965a7b32f20f5efbe531c76938f465fd42f33bae36fa75
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-client-ui-directory-picker-browse@patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.7.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.7
+  resolution: "@deepseek-ai/dsh-client-ui-directory-picker-browse@patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.7.patch::version=0.1.0-rc.7&hash=8f4c64&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    clsx: "npm:^2.0.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-client-locale": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-runtime": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-ui-primitives": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-ui-slots": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-ui-workspace": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.7
+    react: ^18.2.0
+  checksum: 10c0/cd5b06cee91d6b16210ca75a6d25a53fc8c60bbdfd0ec20176f02f444aeb3d9b9eab71f4dd16381363f52ae2d6f618a79cf831713fc91d2a4299846891318e13
   languageName: node
   linkType: hard
 
@@ -2170,7 +2188,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-llm-deepseek@npm:^0.1.0-rc.7":
+"@deepseek-ai/dsh-llm-deepseek@npm:0.1.0-rc.7":
   version: 0.1.0-rc.7
   resolution: "@deepseek-ai/dsh-llm-deepseek@npm:0.1.0-rc.7"
   dependencies:
@@ -2186,6 +2204,25 @@ __metadata:
     "@deepseek-ai/dsh-settings": ^0.1.0-rc.7
     "@deepseek-ai/dsh-timeout": ^0.1.0-rc.7
   checksum: 10c0/413775c94085048b4ba06f418292af525c33af0a5d069e1a638ebe49d3e57eba05edb33a6d7e314bd1a7b750eacf431daafcc4470fe2c7a13394fcac06567164
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@npm%3A0.1.0-rc.7#./patches/dsh-llm-deepseek@0.1.0-rc.7.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.7
+  resolution: "@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@npm%3A0.1.0-rc.7#./patches/dsh-llm-deepseek@0.1.0-rc.7.patch::version=0.1.0-rc.7&hash=da7817&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/schemastery": "npm:^3.18.1"
+    eventsource-parser: "npm:^3.1.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-anonymous-user-id": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-credentials": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-launch-environment": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-llm": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-settings": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-timeout": ^0.1.0-rc.7
+  checksum: 10c0/9047159ef40ac7453c1d3d44737e111c5a32a2bda9922b5071f8492b5266593ec57fc614381c76523f24ddf2d27d4e1aba581b13a77484d0e4074cf65d406c0e
   languageName: node
   linkType: hard
 

@@ -69,6 +69,7 @@ describe('packaged desktop runtime verification', () => {
         expect(workerPath).toBe(join(unpackedRoot, 'lib', 'diagnostic-export-worker.js'))
         expect(readFileSync(join(workerData.logsDir, 'dsh-2000-01-01.log'), 'utf8'))
           .toBe('packaged worker smoke\n')
+        expect(workerData.appVersion).toBe('packaged-smoke')
         expect(workerData.maxEvidenceBytes).toBe(1024)
         const crashDump = readFileSync(join(workerData.crashDumpsDir, 'pending', 'packaged-smoke.dmp'))
         expect(crashDump.toString('utf8')).toBe('packaged crash dump smoke\n')

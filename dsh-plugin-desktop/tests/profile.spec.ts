@@ -319,7 +319,7 @@ describe('desktop profile composition', {
     expect(() => readDesktopShellMode({ path })).toThrow('invalid settings document')
   })
 
-  it('pins the Windows browse picker and desktop pwsh provider without replacing process boundaries', () => {
+  it('keeps the Windows browse panel and desktop pwsh provider without replacing process boundaries', () => {
     const home = temporaryHome()
     writeFileSync(join(home, 'cordis.patch.yml'), [
       '- id: pwsh-sandbox',

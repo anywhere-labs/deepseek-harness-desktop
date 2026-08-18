@@ -18,7 +18,7 @@ DSH Desktop 需要原生应用生命周期，同时兼容模式必须保持未�
 
 持久化 `desktop` profile 仍按保留后的顺序包含 `dsh-base`、`dsh-web-app` 与用户安装的 bundle。第三方 client plugin 使用普通 `dsh.client` 元数据，由官方 Web 客户端模块图发现。Electron 不维护第二套插件 roster。
 
-Launcher 会在用户 patch 之后添加一层平台安全 overlay。在 Windows 上，它禁用自适应目录选择 row，并插入现有 browse Host backend 与匹配的 browse client surface。原生目录选择 package 不会在 Electron main 进程中激活。macOS 与 Linux 保留上游自适应 row。
+Launcher 会在用户 patch 之后添加一层平台安全 overlay。在 Windows 上，它会固定使用 browse 目录选择 row，从而保留完整的应用内面板。桌面 workspace 通过补丁为该面板加入一个纯图标原生选择动作，由同源桌面路由与 Electron `dialog.showOpenDialog` 提供能力；Electron 进程不会加载上游 koffi worker。macOS 与 Linux 保留上游自适应 row。
 
 `desktop-shell` row 会在 profile 激活期间登记原生 shell spec，但不会从自身 Loader entry 内等待全局 Loader settlement。Launcher 只在 `app-boot` 返回后挂载该登记项，从而在首个 renderer 请求前保留激活审计，以及完整的官方、desktop 与第三方 client manifest。
 
@@ -38,7 +38,7 @@ Windows 与 Linux 保持使用未经修改的 iOS Default 应用图标。macOS �
 
 ## Verification
 
-Package 测试要求 `./client` 导出与普通 `dsh.client` 依赖边。Profile 测试验证兼容模式保持官方 layout、sidebar 与 conversation row 启用，并验证 Windows 组合包含 browse picker 且不包含 native picker row。Client 测试验证模式与平台 marker、作用域化高级 layout 行为与呈现隔离。
+Package 测试要求 `./client` 导出与普通 `dsh.client` 依赖边。Profile 测试验证兼容模式保持官方 layout、sidebar 与 conversation row 启用，并组合 Windows browse picker。路由、runtime 与 client bridge 测试覆盖同源校验、原生对话框的选择与取消，以及面板桥接生命周期。Client 测试还会验证模式与平台 marker、作用域化高级 layout 行为与呈现隔离。
 
 Host 测试验证标准 namespace 注册、托盘范围受限的 `settings.update({ mode })` 路径、只在值变化后重启，以及持久化前的 Linux 校验。Runtime 测试验证登记过程不会重新进入 Loader settlement，并且只有 Launcher 挂载已登记 generation 后才会构造 `BrowserWindow`。窗口选项测试会拒绝兼容构造器中的高级原生选项。
 

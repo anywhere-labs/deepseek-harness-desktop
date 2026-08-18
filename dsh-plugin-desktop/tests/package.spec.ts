@@ -118,6 +118,30 @@ describe('published package surface', () => {
     expect(manifest.optionalDependencies ?? {}).not.toHaveProperty('dshmarket')
   })
 
+  it('patches the browse panel with the Windows native-picker icon bridge', () => {
+    const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.7.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:0.1.0-rc.7': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:^0.1.0-rc.7': expect.stringContaining(patchPath),
+    })
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedClient = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-client-ui-directory-picker-browse/lib/client.js',
+      packageRoot,
+    ), 'utf8')
+    for (const marker of [
+      '__DSH_DESKTOP_PICK_DIRECTORY__',
+      'IconFolderOpen16',
+      'nativePickerButton',
+      'browser.nativePicker',
+      'border:1px solid var(--dsw-alias-border-l2)',
+      'background:var(--dsw-alias-bg-layer-2)',
+    ]) {
+      expect(patch).toContain(marker)
+      expect(installedClient).toContain(marker)
+    }
+  })
+
   it('builds public Host plugins and their private native bootstraps', () => {
     const config = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
 
