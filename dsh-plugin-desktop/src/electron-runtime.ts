@@ -33,7 +33,7 @@ import type {
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { formatDesktopExitCode, type DesktopLogger } from './desktop-logger.ts'
-import { exportDiagnosticsZip } from './diagnostic-export.ts'
+import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import {
   desktopDiagnosticsPrivacyCopy,
@@ -265,11 +265,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         noLink: true,
       })
       if (confirmation.response !== 0) return
-      const path = await exportDiagnosticsZip(
-        join(app.getPath('userData'), 'logs'),
-        app.getPath('userData'),
-        { crashDumpsDir: app.getPath('crashDumps') },
-      )
+      const path = await exportDesktopDiagnostics(app.getPath('userData'), {
+        appVersion: PRODUCT_VERSION,
+        crashDumpsDir: app.getPath('crashDumps'),
+      })
       shell.showItemInFolder(path)
     } catch (cause) {
       this.reportDiagnosticExportError(cause)

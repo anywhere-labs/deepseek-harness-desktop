@@ -37,7 +37,7 @@ vi.mock('../src/desktop-terminal.ts', async (importOriginal) => ({
 }))
 
 vi.mock('../src/diagnostic-export.ts', () => ({
-  exportDiagnosticsZip: diagnostics.export,
+  exportDesktopDiagnostics: diagnostics.export,
 }))
 
 vi.mock('../src/update-download.ts', () => ({
@@ -623,9 +623,11 @@ describe('Electron compatibility runtime', () => {
 
     expect(diagnostics.export).toHaveBeenCalledOnce()
     expect(diagnostics.export).toHaveBeenCalledWith(
-      join('/tmp/dsh-desktop-user-data', 'logs'),
       '/tmp/dsh-desktop-user-data',
-      { crashDumpsDir: '/tmp/dsh-desktop-user-data/Crashpad' },
+      {
+        appVersion: '2.0.1',
+        crashDumpsDir: '/tmp/dsh-desktop-user-data/Crashpad',
+      },
     )
     expect(electron.shell.showItemInFolder).toHaveBeenCalledOnce()
     expect(electron.shell.showItemInFolder).toHaveBeenCalledWith('C:\\Users\\Example\\diagnostics.zip')
