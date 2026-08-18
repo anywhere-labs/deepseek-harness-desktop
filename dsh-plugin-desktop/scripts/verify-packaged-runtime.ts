@@ -98,8 +98,15 @@ export const REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES = [
 
 /** Node-API module staged for Linux packaging without an Electron source rebuild. */
 export const REQUIRED_LINUX_X64_NODE_PTY_ENTRIES = [
+  'node_modules/node-pty/package.json',
+  'node_modules/node-pty/lib/index.js',
+  'node_modules/node-pty/lib/unixTerminal.js',
+  'node_modules/node-pty/lib/utils.js',
   'node_modules/node-pty/prebuilds/linux-x64/pty.node',
 ] as const
+
+/** Linux keeps node-pty entirely outside ASAR so relative native-loader paths are physical. */
+export const FORBIDDEN_LINUX_NODE_PTY_ASAR_PREFIX = 'node_modules/node-pty'
 
 /** CPU-specific runtime assets that must coexist in a universal macOS application. */
 export const REQUIRED_MACOS_UNIVERSAL_ENTRIES = [
@@ -275,6 +282,7 @@ function normalizeArchiveEntry(entry: string): string {
 export function verifyPackagedAsar(
   archivePath: string,
   list: ArchiveLister = listPackage,
+  forbiddenPrefixes: readonly string[] = [],
 ): void {
   let entries: readonly string[]
   try {
@@ -291,6 +299,14 @@ export function verifyPackagedAsar(
   if (missing.length > 0) {
     throw new Error(
       `dsh-plugin-desktop: packaged runtime at ${archivePath} is missing required ASAR entries: ${missing.join(', ')}`,
+    )
+  }
+  const forbidden = [...present].filter(entry => forbiddenPrefixes.some(prefix => (
+    entry === prefix || entry.startsWith(`${prefix}/`)
+  )))
+  if (forbidden.length > 0) {
+    throw new Error(
+      `dsh-plugin-desktop: packaged runtime at ${archivePath} contains entries that must remain physical: ${forbidden.join(', ')}`,
     )
   }
 }
@@ -344,7 +360,13 @@ export function verifyPackagedRuntime(
   exists: FileProbe = existsSync,
   resolvePackage?: PackageResolver,
 ): void {
-  verifyPackagedAsar(resolvePackagedAsarPath(context), list)
+  verifyPackagedAsar(
+    resolvePackagedAsarPath(context),
+    list,
+    context.electronPlatformName === 'linux'
+      ? [FORBIDDEN_LINUX_NODE_PTY_ASAR_PREFIX]
+      : [],
+  )
   const unpackedRoot = resolvePackagedUnpackedRoot(context)
   const requiredPhysicalEntries = context.electronPlatformName === 'win32'
     ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES]

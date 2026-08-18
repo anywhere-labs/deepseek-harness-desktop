@@ -39,6 +39,8 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
       category?: unknown
       executableArgs?: unknown
       executableName?: unknown
+      files?: unknown
+      extraResources?: unknown
       icon?: unknown
       syncDesktopName?: unknown
       target?: unknown
@@ -291,6 +293,11 @@ describe('published package surface', () => {
     expect(manifest.build?.linux?.target).toEqual([{
       target: 'AppImage',
       arch: ['x64'],
+    }])
+    expect(manifest.build?.linux?.files).toEqual(['!node_modules/node-pty/**'])
+    expect(manifest.build?.linux?.extraResources).toEqual([{
+      from: 'node_modules/node-pty',
+      to: 'app.asar.unpacked/node_modules/node-pty',
     }])
     expect(manifest.build?.linux?.artifactName).toBe('DSH-Desktop-${version}-x86_64.${ext}')
     expect(manifest.build?.linux?.category).toBe('Development')

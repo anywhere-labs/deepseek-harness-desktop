@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   verifyLinuxAppImage,
   type LinuxAppImageVerificationOptions,
@@ -28,6 +28,7 @@ function fixture(version = '2.0.1'): {
   readonly appImage: string
   readonly application: string
   readonly options: LinuxAppImageVerificationOptions
+  readonly smoke: ReturnType<typeof vi.fn>
 } {
   const root = mkdtempSync(join(tmpdir(), 'dsh-linux-appimage-'))
   temporaryRoots.push(root)
@@ -54,6 +55,7 @@ function fixture(version = '2.0.1'): {
   writeExecutable(nativeAddon)
 
   let extractionRoot = ''
+  const smoke = vi.fn()
   const options: LinuxAppImageVerificationOptions = {
     distDir: dist,
     version: '2.0.1',
@@ -87,12 +89,13 @@ function fixture(version = '2.0.1'): {
       )
     },
     removeExtractionRoot: rootPath => rmSync(rootPath, { recursive: true, force: true }),
+    runNodePtySmoke: smoke,
     stat: path => {
       const result = statSync(path)
       return { size: result.size, isFile: result.isFile(), mode: result.mode | 0o111 }
     },
   }
-  return { root, appImage, application, options }
+  return { root, appImage, application, options, smoke }
 }
 
 afterEach(() => {
@@ -107,6 +110,16 @@ describe('Linux AppImage artifact verification', () => {
       appImagePath: value.appImage,
       applicationPath: value.application,
     })
+    expect(value.smoke).toHaveBeenCalledWith(value.appImage)
+  })
+
+  it('rejects a FUSE-less startup that cannot load node-pty', () => {
+    const value = fixture()
+    value.smoke.mockImplementation(() => {
+      throw new Error("Cannot find module './prebuilds/linux-x64/pty.node'")
+    })
+
+    expect(() => verifyLinuxAppImage(value.options)).toThrow('Cannot find module')
   })
 
   it('rejects a stale artifact from another version', () => {

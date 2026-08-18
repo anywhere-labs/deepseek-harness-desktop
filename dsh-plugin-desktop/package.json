@@ -316,6 +316,15 @@
       "artifactName": "DSH-Desktop-${version}-${arch}-Setup.${ext}"
     },
     "linux": {
+      "files": [
+        "!node_modules/node-pty/**"
+      ],
+      "extraResources": [
+        {
+          "from": "node_modules/node-pty",
+          "to": "app.asar.unpacked/node_modules/node-pty"
+        }
+      ],
       "target": [
         {
           "target": "AppImage",

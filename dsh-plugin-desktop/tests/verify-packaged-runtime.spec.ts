@@ -10,6 +10,7 @@ import {
   REQUIRED_UNPACKED_PACKAGE_SPECIFIERS,
   REQUIRED_UNPACKED_RUNTIME_ENTRIES,
   REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES,
+  FORBIDDEN_LINUX_NODE_PTY_ASAR_PREFIX,
   resolvePackagedAsarPath,
   resolvePackagedUnpackedRoot,
   smokePackagedDiagnosticWorker,
@@ -206,6 +207,23 @@ describe('packaged desktop runtime verification', () => {
       filename => filename !== join(unpackedRoot, missing),
       completePackageResolver(unpackedRoot),
     )).toThrow(`missing required physical entries: ${missing}`)
+  })
+
+  it('keeps the complete Linux node-pty loader tree outside ASAR', () => {
+    const runtimeContext = context('/build', 'linux')
+    const entries = [
+      ...completeArchiveEntries(),
+      `/node_modules/node-pty/lib/utils.js`,
+    ]
+
+    expect(() => verifyPackagedRuntime(
+      runtimeContext,
+      () => entries,
+      () => true,
+      completePackageResolver(resolvePackagedUnpackedRoot(runtimeContext)),
+    )).toThrow(
+      `contains entries that must remain physical: ${FORBIDDEN_LINUX_NODE_PTY_ASAR_PREFIX}/lib/utils.js`,
+    )
   })
 
   it.each([

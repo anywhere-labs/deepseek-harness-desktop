@@ -2,6 +2,7 @@
 
 import { spawnSync } from 'node:child_process'
 import {
+  chmodSync,
   closeSync,
   mkdtempSync,
   openSync,
@@ -9,9 +10,10 @@ import {
   readSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ELF_HEADER_BYTES = 20
@@ -47,6 +49,8 @@ export interface LinuxAppImageVerificationOptions {
     readonly isFile: boolean
     readonly mode: number
   }
+  /** Headless FUSE-less smoke that loads node-pty through the packaged Electron runtime. */
+  readonly runNodePtySmoke?: (appImagePath: string) => void
 }
 
 function readVersion(desktopRoot: string): string {
@@ -135,6 +139,46 @@ function extract(appImagePath: string, extractionRoot: string): void {
   if (result.error !== undefined) throw result.error
   if (result.status !== 0) {
     throw new Error(`${appImagePath} --appimage-extract exited with ${String(result.status)}`)
+  }
+}
+
+/**
+ * Load node-pty from the sealed AppImage without opening a window or requiring FUSE.
+ * AppRun adds --no-sandbox when user namespaces are unavailable; a private no-op
+ * unshare shim keeps Electron's Node mode free of GUI-only flags for this smoke.
+ */
+function runNodePtySmoke(appImagePath: string): void {
+  const shimRoot = mkdtempSync(join(tmpdir(), 'dsh-appimage-smoke-'))
+  const unshareShim = join(shimRoot, 'unshare')
+  writeFileSync(unshareShim, '#!/bin/sh\nexit 0\n')
+  chmodSync(unshareShim, 0o755)
+  const source = [
+    "const {createRequire}=require('node:module')",
+    "const {join}=require('node:path')",
+    "const requirePackaged=createRequire(join(process.resourcesPath,'app.asar.unpacked','package.json'))",
+    "const nodePty=requirePackaged('node-pty')",
+    "if(typeof nodePty.spawn!=='function') throw new Error('node-pty spawn export missing')",
+  ].join(';')
+  try {
+    const result = spawnSync(appImagePath, ['--appimage-extract-and-run', '-e', source], {
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        PATH: `${shimRoot}${delimiter}${process.env.PATH ?? ''}`,
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+      timeout: 120_000,
+      maxBuffer: 128 * 1024,
+    })
+    if (result.error !== undefined) throw result.error
+    if (result.status !== 0) {
+      const stderr = result.stderr?.toString().trim()
+      throw new Error(
+        `${appImagePath} --appimage-extract-and-run node-pty smoke exited with ${String(result.status)}${stderr === undefined || stderr.length === 0 ? '' : `: ${stderr}`}`,
+      )
+    }
+  } finally {
+    rmSync(shimRoot, { recursive: true, force: true })
   }
 }
 
@@ -227,6 +271,8 @@ export function verifyLinuxAppImage(
     assertLinuxX64Executable(packagedExecutable, 'AppImage application', options.stat)
     assertRegularFile(packagedAsar, 'AppImage application archive', options.stat)
     assertLinuxX64Executable(packagedNativeAddon, 'AppImage Linux node-pty addon', options.stat)
+    const smoke = options.runNodePtySmoke ?? runNodePtySmoke
+    smoke(appImagePath)
   } catch (cause) {
     failure = cause
   }
