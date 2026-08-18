@@ -22,7 +22,8 @@
     "@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:^0.1.0-rc.7": "patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.7.patch",
     "@deepseek-ai/dsh-client-ui-workspace@npm:0.1.0-rc.7": "patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-workspace@0.1.0-rc.7.patch",
     "@deepseek-ai/dsh-client-ui-workspace@npm:^0.1.0-rc.7": "patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-workspace@0.1.0-rc.7.patch",
-    "koffi@npm:^3.1.0": "3.1.5"
+    "koffi@npm:^3.1.0": "3.1.5",
+    "@electron/universal": "3.0.6"
   },
   "dependenciesMeta": {
     "@deepseek-ai/dsh-subprocess-local": {
