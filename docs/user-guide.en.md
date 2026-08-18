@@ -17,7 +17,7 @@ Switching profiles does not silently copy plugins from the old profile into the 
 ## Compatibility and advanced modes
 
 - **Compatibility mode** uses the upstream Web client and the selected profile's own layout/sidebar/conversation composition. It is the closest presentation to ordinary Harness.
-- **Advanced mode** keeps the same upstream Web carrier while adding Desktop-owned framing, layout, Mica/vibrancy, and native drag regions. It is intended for a fuller desktop presentation.
+- **Advanced mode** keeps the same upstream Web carrier while adding Desktop-owned framing, layout, native drag regions, and Windows Mica. On macOS it uses an opaque sidebar matching the official Web fill. It is intended for a fuller desktop presentation.
 
 Changing mode restarts the application; it does not hot-swap root slots or native materials in a live renderer. Linux provides compatibility mode only.
 

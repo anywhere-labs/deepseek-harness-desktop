@@ -17,7 +17,7 @@ Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profil
 ## 兼容模式与高级模式
 
 - **兼容模式**：使用上游默认 Web client 和 profile 自己的 layout/sidebar/conversation 组合。它适合希望尽量接近官方 Harness 的用户。
-- **高级模式**：在不改变上游 Web carrier 的前提下加入 Desktop 自有的 frame、布局、Mica/vibrancy 和原生拖动区域。它适合需要更完整桌面外观的用户。
+- **高级模式**：在不改变上游 Web carrier 的前提下加入 Desktop 自有的 frame、布局、原生拖动区域与 Windows Mica；macOS 则使用与官方 Web 填充色一致的不透明 sidebar。它适合需要更完整桌面外观的用户。
 
 切换模式会重启应用，不会在正在运行的 renderer 中热替换 root slot 或窗口材质。Linux 只提供兼容模式。
 

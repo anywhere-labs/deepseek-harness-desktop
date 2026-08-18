@@ -20,7 +20,7 @@ export type AdvancedFrameProps = PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
   & AdvancedFrameInjected
 
-/** Desktop-owned transparent frame around the unchanged product surfaces. */
+/** Desktop-owned native frame around the unchanged product surfaces. */
 export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: AdvancedFrameProps) {
   const subscribeLayout = useCallback((listener: () => void) => layout.subscribe(listener), [layout])
   const readLayout = useCallback(() => layout.getSnapshot(), [layout])

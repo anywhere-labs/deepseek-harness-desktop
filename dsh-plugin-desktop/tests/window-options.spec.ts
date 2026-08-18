@@ -79,18 +79,17 @@ describe('compatibility BrowserWindow options', () => {
     )).toThrow('unsupported compatibility window mode advanced')
   })
 
-  it('uses hidden-inset transparent vibrancy on macOS advanced windows', () => {
+  it('uses hidden-inset opaque chrome on macOS advanced windows', () => {
     const advanced = { ...spec, mode: 'advanced' as const }
     const options = advancedWindowOptions(advanced, {} as NativeImage, 'darwin')
 
     expect(options).toEqual(expect.objectContaining({
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 16 },
-      transparent: true,
-      backgroundColor: '#00000000',
-      vibrancy: 'sidebar',
-      visualEffectState: 'followWindow',
     }))
+    for (const option of ['transparent', 'backgroundColor', 'vibrancy', 'visualEffectState']) {
+      expect(options).not.toHaveProperty(option)
+    }
     expect(desktopWindowOptions(advanced, {} as NativeImage, 'darwin')).toEqual(options)
   })
 
