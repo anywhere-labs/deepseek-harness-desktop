@@ -37,7 +37,7 @@ Current release installers support Windows x64 and Apple Silicon macOS. Ordinary
 | --- | --- | --- |
 | Windows x64 | [Download installer](https://www.dshdesktop.cn/api/downloads/windows) | Run the NSIS installer and follow its prompts |
 | macOS Apple Silicon | [Download DMG](https://www.dshdesktop.cn/api/downloads/mac) | Open the DMG and drag DSH Desktop into Applications |
-| Linux amd64 | [Download deb](https://www.dshdesktop.cn/api/downloads/linux) | `sudo dpkg -i DSH-Desktop-*.deb`, then launch from the app menu |
+| Linux amd64 | [Download deb / rpm / AppImage](https://www.dshdesktop.cn/api/downloads/linux) | deb: `sudo dpkg -i DSH-Desktop-*.deb`; rpm: `sudo rpm -i DSH-Desktop-*.rpm`; AppImage: `chmod +x *.AppImage && ./DSH-Desktop-*.AppImage` |
 
 Installers and SHA-256 digests are also available from [GitHub Releases](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest). The first launch creates the default `desktop` profile and starts the official DSH Web interface locally. See the [user guide](docs/user-guide.en.md) and [FAQ](docs/faq.en.md) for plugin commands, platform details, and troubleshooting.
 
@@ -146,7 +146,7 @@ corepack yarn dev
 
 Use `corepack yarn check` for the headless gate. The [architecture](docs/architecture.en.md) and package [`README`](dsh-plugin-desktop/README.md) describe the full build, test, and release boundaries. See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for how to contribute.
 
-On Linux, `corepack yarn dist:linux` builds the amd64 deb installer (output in `dsh-plugin-desktop/dist/linux/`); `corepack yarn package:dir` produces an unpacked directory that can run directly via `dsh-plugin-desktop/dist/linux/linux-unpacked/dsh-desktop` without installation.
+On Linux, `corepack yarn dist:linux` builds the amd64 deb / rpm / AppImage installers (output in `dsh-plugin-desktop/dist/linux/`); `corepack yarn package:dir` produces an unpacked directory that can run directly via `dsh-plugin-desktop/dist/linux/linux-unpacked/dsh-desktop` without installation.
 
 ## Community
 

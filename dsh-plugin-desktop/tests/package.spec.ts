@@ -196,6 +196,7 @@ describe('published package surface', () => {
     expect(manifest.build?.files).toEqual([
       'build/app-icon.png',
       'build/app-icon-mac.png',
+      'build/app-icon-linux.png',
       'build/tray-icon.svg',
       'build/tray-icon*.png',
       'cordis.patch.yml',
@@ -224,8 +225,8 @@ describe('published package surface', () => {
       useZip: true,
       artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
     })
-    expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
-    expect(manifest.build?.linux?.target).toEqual(['deb'])
+    expect(manifest.build?.linux?.icon).toBe('build/app-icon-linux.png')
+    expect(manifest.build?.linux?.target).toEqual(['deb', 'rpm', 'AppImage'])
     expect(manifest.build?.linux?.executableName).toBe('dsh-desktop')
     expect(manifest.build?.linux?.artifactName).toBe('DSH-Desktop-${version}-${arch}.${ext}')
     expect(manifest.build?.linux?.syncDesktopName).toBe(true)

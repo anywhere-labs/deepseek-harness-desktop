@@ -1,22 +1,26 @@
-/** Verify the unsigned Linux x64 deb package and unpacked executable. */
+/** Verify the unsigned Linux x64 deb, rpm, AppImage, and unpacked executable. */
 
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** Paths returned after Linux deb verification succeeds. */
+/** Paths returned after Linux package verification succeeds. */
 export interface LinuxPackageArtifacts {
   /** deb archive path. */
   readonly debPath: string
+  /** rpm archive path. */
+  readonly rpmPath: string
+  /** AppImage path. */
+  readonly appImagePath: string
   /** Unpacked application executable path. */
   readonly applicationPath: string
 }
 
-/** Injectable Linux deb verification boundary. */
+/** Injectable Linux package verification boundary. */
 export interface LinuxPackageVerificationOptions {
   /** Desktop package root containing package.json. */
   readonly desktopRoot: string
-  /** Directory containing the completed deb package and unpacked application. */
+  /** Directory containing the completed packages and unpacked application. */
   readonly outputDir: string
   /** Product version embedded in the expected artifact name. */
   readonly version: string
@@ -32,37 +36,55 @@ function readVersion(desktopRoot: string): string {
   return manifest.version
 }
 
-function assertDebArchive(path: string, label: string): void {
+function assertMagic(path: string, label: string, magic: Buffer, minimumSize: number): void {
   const stat = statSync(path)
-  if (!stat.isFile() || stat.size < 8) {
+  if (!stat.isFile() || stat.size < minimumSize) {
     throw new Error(`${label} is not a non-empty regular file: ${path}`)
   }
   const descriptor = openSync(path, 'r')
-  const magic = Buffer.alloc(8)
+  const bytes = Buffer.alloc(magic.byteLength)
   try {
-    const bytesRead = readSync(descriptor, magic, 0, magic.byteLength, 0)
-    if (bytesRead !== magic.byteLength || !magic.equals(Buffer.from('!<arch>\n'))) {
-      throw new Error(`${label} does not have an ar archive header: ${path}`)
+    const bytesRead = readSync(descriptor, bytes, 0, bytes.byteLength, 0)
+    if (bytesRead !== bytes.byteLength || !bytes.equals(magic)) {
+      throw new Error(`${label} does not have the expected header: ${path}`)
     }
   } finally {
     closeSync(descriptor)
   }
 }
 
+function assertDebArchive(path: string, label: string): void {
+  assertMagic(path, label, Buffer.from('!<arch>\n'), 8)
+}
+
+function assertRpmArchive(path: string, label: string): void {
+  assertMagic(path, label, Buffer.from([0xed, 0xab, 0xee, 0xdb]), 4)
+}
+
 function assertElfExecutable(path: string, label: string): void {
+  assertMagic(path, label, Buffer.from('\x7fELF'), 4)
+}
+
+function assertAppImage(path: string, label: string): void {
   const stat = statSync(path)
-  if (!stat.isFile() || stat.size < 4) {
-    throw new Error(`${label} is not a non-empty regular file: ${path}`)
+  if (!stat.isFile() || (stat.mode & 0o111) === 0) {
+    throw new Error(`${label} is not an executable file: ${path}`)
   }
+  const header = Buffer.alloc(11)
   const descriptor = openSync(path, 'r')
-  const magic = Buffer.alloc(4)
   try {
-    const bytesRead = readSync(descriptor, magic, 0, magic.byteLength, 0)
-    if (bytesRead !== magic.byteLength || !magic.equals(Buffer.from('\x7fELF'))) {
-      throw new Error(`${label} does not have an ELF header: ${path}`)
+    const bytesRead = readSync(descriptor, header, 0, header.byteLength, 0)
+    if (bytesRead !== header.byteLength) {
+      throw new Error(`${label} is too short to be an AppImage: ${path}`)
     }
   } finally {
     closeSync(descriptor)
+  }
+  // AppImage type 2 embeds the ELF magic at offset 0 and the "AI\x02" marker at offset 8.
+  const isElf = header.subarray(0, 4).equals(Buffer.from('\x7fELF'))
+  const isAppImage = header.subarray(8, 11).equals(Buffer.from('AI\x02'))
+  if (!isElf || !isAppImage) {
+    throw new Error(`${label} does not have an AppImage header: ${path}`)
   }
 }
 
@@ -78,7 +100,7 @@ function defaultOptions(): LinuxPackageVerificationOptions {
 }
 
 /**
- * Verify the exact deb archive and unpacked application executable.
+ * Verify the exact deb, rpm, AppImage, and unpacked application executable.
  * @param options - Artifact root and expected product version.
  * @returns The verified artifact paths.
  */
@@ -86,18 +108,24 @@ export function verifyLinuxPackage(
   options: LinuxPackageVerificationOptions = defaultOptions(),
 ): LinuxPackageArtifacts {
   const debPath = join(options.outputDir, `DSH-Desktop-${options.version}-amd64.deb`)
+  const rpmPath = join(options.outputDir, `DSH-Desktop-${options.version}-x86_64.rpm`)
+  const appImagePath = join(options.outputDir, `DSH-Desktop-${options.version}-x86_64.AppImage`)
   const applicationPath = join(options.outputDir, 'linux-unpacked', 'dsh-desktop')
 
   assertDebArchive(debPath, 'Linux deb archive')
+  assertRpmArchive(rpmPath, 'Linux rpm archive')
+  assertAppImage(appImagePath, 'Linux AppImage')
   assertElfExecutable(applicationPath, 'unpacked Linux application')
-  return { debPath, applicationPath }
+  return { debPath, rpmPath, appImagePath, applicationPath }
 }
 
 const invokedPath = process.argv[1]
 if (invokedPath !== undefined && resolve(invokedPath) === fileURLToPath(import.meta.url)) {
   try {
     const verified = verifyLinuxPackage()
-    console.log(`Linux deb verification passed: ${verified.debPath}`)
+    console.log(
+      `Linux package verification passed: ${verified.debPath}, ${verified.rpmPath}, ${verified.appImagePath}`,
+    )
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1

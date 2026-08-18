@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  packageLinuxDeb,
+  packageLinux,
   type LinuxPackageOptions,
 } from '../scripts/package-linux.ts'
 
@@ -34,12 +34,12 @@ function options(calls: CommandCall[], logs: string[] = []): LinuxPackageOptions
   }
 }
 
-describe('Linux x64 deb packaging', () => {
-  it('checks the package gate, builds an unsigned deb target, then verifies it', () => {
+describe('Linux x64 artifact packaging', () => {
+  it('checks the package gate, builds unsigned deb/rpm/AppImage targets, then verifies them', () => {
     const calls: CommandCall[] = []
     const logs: string[] = []
 
-    packageLinuxDeb(options(calls, logs))
+    packageLinux(options(calls, logs))
 
     expect(calls).toHaveLength(3)
     expect(calls[0]).toEqual({
@@ -54,6 +54,8 @@ describe('Linux x64 deb packaging', () => {
         '/repo/node_modules/electron-builder/cli.js',
         '--linux',
         'deb',
+        'rpm',
+        'AppImage',
         '--x64',
         '--publish',
         'never',
@@ -77,7 +79,7 @@ describe('Linux x64 deb packaging', () => {
       env: { PATH: '/usr/bin:/bin', SAFE_VALUE: 'kept' },
     })
     expect(logs).toEqual([
-      'Building an unsigned Linux x64 deb package; signing is a separate release step.',
+      'Building unsigned Linux x64 deb, rpm, and AppImage artifacts; signing is a separate release step.',
     ])
   })
 
@@ -91,7 +93,7 @@ describe('Linux x64 deb packaging', () => {
       const calls: CommandCall[] = []
       const value = { ...options(calls), platform, arch, nodeVersion }
 
-      expect(() => packageLinuxDeb(value)).toThrow(message)
+      expect(() => packageLinux(value)).toThrow(message)
       expect(calls).toEqual([])
     },
   )
@@ -106,7 +108,7 @@ describe('Linux x64 deb packaging', () => {
       },
     }
 
-    expect(() => packageLinuxDeb(value)).toThrow('headless check failed')
+    expect(() => packageLinux(value)).toThrow('headless check failed')
     expect(calls).toHaveLength(1)
   })
 })

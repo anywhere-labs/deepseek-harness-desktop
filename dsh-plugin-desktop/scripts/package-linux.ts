@@ -77,26 +77,26 @@ function defaultOptions(): LinuxPackageOptions {
 }
 
 /**
- * Run the headless release gates and package one unsigned Linux x64 deb.
+ * Run the headless release gates and package unsigned Linux x64 artifacts.
  * @param options - Injectable process and command boundaries.
  */
-export function packageLinuxDeb(options: LinuxPackageOptions = defaultOptions()): void {
+export function packageLinux(options: LinuxPackageOptions = defaultOptions()): void {
   if (options.platform !== 'linux') {
-    throw new Error('Linux deb package must be built on a native Linux host')
+    throw new Error('Linux package must be built on a native Linux host')
   }
   if (options.arch !== 'x64') {
-    throw new Error(`Linux deb package requires x64 Node; received ${options.arch}`)
+    throw new Error(`Linux package requires x64 Node; received ${options.arch}`)
   }
   const versionMatch = /^(\d+)\.(\d+)\./u.exec(options.nodeVersion)
   const major = Number(versionMatch?.[1])
   const minor = Number(versionMatch?.[2])
   if (!((major === 22 && minor >= 19) || major === 24)) {
     throw new Error(
-      `Linux deb package requires Node 22.19+ or Node 24.x with bundled Corepack; received ${options.nodeVersion}`,
+      `Linux package requires Node 22.19+ or Node 24.x with bundled Corepack; received ${options.nodeVersion}`,
     )
   }
 
-  options.log('Building an unsigned Linux x64 deb package; signing is a separate release step.')
+  options.log('Building unsigned Linux x64 deb, rpm, and AppImage artifacts; signing is a separate release step.')
   options.run(
     'corepack',
     ['yarn', 'workspace', 'dsh-plugin-desktop', 'check:linux-package'],
@@ -110,6 +110,8 @@ export function packageLinuxDeb(options: LinuxPackageOptions = defaultOptions())
       options.builderCli,
       '--linux',
       'deb',
+      'rpm',
+      'AppImage',
       '--x64',
       '--publish',
       'never',
@@ -133,7 +135,7 @@ export function packageLinuxDeb(options: LinuxPackageOptions = defaultOptions())
 const invokedPath = process.argv[1]
 if (invokedPath !== undefined && resolve(invokedPath) === fileURLToPath(import.meta.url)) {
   try {
-    packageLinuxDeb()
+    packageLinux()
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1

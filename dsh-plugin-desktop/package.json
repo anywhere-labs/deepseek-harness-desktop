@@ -263,6 +263,7 @@
     "files": [
       "build/app-icon.png",
       "build/app-icon-mac.png",
+      "build/app-icon-linux.png",
       "build/tray-icon.svg",
       "build/tray-icon*.png",
       "cordis.patch.yml",
@@ -312,9 +313,11 @@
     },
     "linux": {
       "target": [
-        "deb"
+        "deb",
+        "rpm",
+        "AppImage"
       ],
-      "icon": "build/app-icon.png",
+      "icon": "build/app-icon-linux.png",
       "executableName": "dsh-desktop",
       "artifactName": "DSH-Desktop-${version}-${arch}.${ext}",
       "category": "Development",

@@ -14,7 +14,7 @@ DSH Desktop 是面向 Windows 和 macOS 的开源 DeepSeek Harness 桌面客户�
 
 ## 支持哪些操作系统？
 
-当前正式安装包支持 Windows x64、搭载 Apple 芯片的 macOS 和 Linux amd64（deb 安装包）。Intel Mac 不受支持；不要根据源码中存在跨平台兼容代码推断已经发布了对应安装包。
+当前正式安装包支持 Windows x64、搭载 Apple 芯片的 macOS 和 Linux amd64（deb / rpm / AppImage）。Intel Mac 不受支持；不要根据源码中存在跨平台兼容代码推断已经发布了对应安装包。
 
 ## 需要安装 Node.js、pnpm 或 DSH 吗？
 

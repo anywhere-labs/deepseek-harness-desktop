@@ -113,6 +113,9 @@ jobs:
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
       - run: yarn workspace dsh-community-market check
+      # The rpm target shells out to rpmbuild (the system "rpm" package).
+      - name: Install rpmbuild for the rpm target
+        run: sudo apt-get update && sudo apt-get install -y rpm
       - run: yarn dist:linux
 
   # Upstream toolchain smoke: the portable-shell scripts must resolve the
