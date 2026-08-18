@@ -195,6 +195,8 @@ export interface CatalogService {
 export interface CatalogScanOptions {
   readonly force?: boolean
   readonly locale?: string
+  /** Reject a stale or foreign cursor scope before any provider I/O. */
+  readonly expectedSourceRecordId?: string
 }
 
 /** Complete, Host-normalized active-source scan. Page snapshots remain schema-bounded. */
@@ -470,6 +472,12 @@ export class DefaultCatalogService implements CatalogService {
     if (options.force !== undefined && typeof options.force !== 'boolean') {
       throw new TypeError('invalid catalog scan options')
     }
+    if (
+      options.expectedSourceRecordId !== undefined
+      && (typeof options.expectedSourceRecordId !== 'string' || options.expectedSourceRecordId.length === 0)
+    ) {
+      throw new TypeError('invalid catalog scan options')
+    }
     const scanQuery = normalizeCatalogQuery({
       limit: 100,
       ...(options.locale === undefined ? {} : { locale: options.locale }),
@@ -480,6 +488,12 @@ export class DefaultCatalogService implements CatalogService {
     const records = [...await this.store.load()].sort((left, right) => left.order - right.order)
     signal.throwIfAborted()
     const source = records.find(record => record.enabled)
+    if (
+      options.expectedSourceRecordId !== undefined
+      && source?.sourceRecordId !== options.expectedSourceRecordId
+    ) {
+      throw new Error('catalog source is not active')
+    }
     if (source === undefined) return undefined
     const sourceGeneration = sourceGenerationsAtLoadStart.get(source.sourceRecordId) ?? 0
     if ((this.sourceGenerations.get(source.sourceRecordId) ?? 0) !== sourceGeneration) {
@@ -670,7 +684,10 @@ export class DefaultCatalogService implements CatalogService {
   ): Promise<readonly MarketCatalogSourceResult[]> {
     const query = normalizeCatalogQuery(value)
     if (query.cursor !== undefined) throw new Error('catalog cursor requires an explicit source scope')
-    const index = await this.scanCatalog(signal, query.locale === undefined ? {} : { locale: query.locale })
+    const index = await this.scanCatalog(signal, {
+      ...(query.locale === undefined ? {} : { locale: query.locale }),
+      ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
+    })
     signal.throwIfAborted()
     return index === undefined ? [] : this.queryCatalog(index, query, scope)
   }

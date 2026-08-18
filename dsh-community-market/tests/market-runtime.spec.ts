@@ -707,13 +707,20 @@ describe('catalog Host route pagination boundary', () => {
     ['unknown', [active], '038f1f77-a5c4-7b73-a9ae-0242ac120004'],
     ['inactive', [active, inactive], inactive.sourceRecordId],
   ] as const)('rejects a cursor scoped to an %s source before fetching', async (_label, records, sourceRecordId) => {
-    const response = await requestMarketCatalog(
-      records,
-      `${marketRoutes.catalog}?sourceRecordId=${sourceRecordId}&cursor=page-2`,
-    )
+    const scanCatalog = vi.spyOn(dsh1024StoreAdapter, 'scanCatalog')
+      .mockRejectedValue(new Error('invalid cursor scope reached the catalog adapter'))
+    try {
+      const response = await requestMarketCatalog(
+        records,
+        `${marketRoutes.catalog}?sourceRecordId=${sourceRecordId}&cursor=page-2`,
+      )
 
-    expect(response.statusCode).toBe(400)
-    expect(response.body).toEqual({ error: 'invalid catalog query' })
+      expect(response.statusCode).toBe(400)
+      expect(response.body).toEqual({ error: 'invalid catalog query' })
+      expect(scanCatalog).not.toHaveBeenCalled()
+    } finally {
+      scanCatalog.mockRestore()
+    }
   })
 })
 
