@@ -122,8 +122,8 @@ body:
     id: logs
     attributes:
       label: Logs or error details / 日志或错误信息
-      description: Paste the relevant lines or attach a log file. This is especially useful for startup failures / 可粘贴错误附近内容或上传日志文件，启动失败时尤其有帮助
-      placeholder: Optional, but complete evidence usually speeds up diagnosis / 选填；完整证据通常能加快定位
+      description: Attach the diagnostics ZIP from the tray. If the app cannot stay open, run the installed executable with `--export-diagnostics`. Review the archive before public upload / 请附上托盘导出的诊断 ZIP；如果应用持续闪退，请用 `--export-diagnostics` 运行安装后的程序。公开上传前请检查内容
+      placeholder: Paste relevant lines or attach diagnostics-*.zip; complete evidence usually speeds up diagnosis / 粘贴相关内容或附上 diagnostics-*.zip；完整证据通常能加快定位
 
   - type: textarea
     id: screenshots
