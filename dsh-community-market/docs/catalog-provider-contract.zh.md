@@ -239,6 +239,12 @@ Adapter 可以标准化有界纯文本身份、描述、标签/分类、更新�
 
 这一合作只会让 dshfind 作为可选合作来源显示；它**不会**成为默认、优先、官方、推荐、已审核或兜底来源，来源失败也不会触发对其他 provider 的隐藏切换。
 
+## 与 DSH Plugin Collection 的合作
+
+[DSH Plugin Collection](https://github.com/daha1216/dsh-plugin-collection) 是一个通过经审查内置 adapter 接入的可选合作来源。该 adapter 从固定的 `https://raw.githubusercontent.com` origin 请求公开的 `plugins.json` 目录，校验目录 revision、有界文本字段、重复 ID 和规范 GitHub 仓库身份，然后生成一份标准化快照。由于该来源没有提供经过 provider 验证的 npm 身份和 repository backlink 证据，目录中的 `version` 只作为普通描述元数据显示，不会映射为 `latestVersion`。目录中的 `install` 字段会在标准化前丢弃，绝不展示或执行。
+
+这一合作只会让 DSH Plugin Collection 作为可选来源显示；它**不会**成为默认、优先、官方、推荐、已审核或兜底来源。目录包含第三方项目，其收录不代表 Anywhere Labs、DeepSeek 或 DSH Plugin Collection 对项目作出安全审核或推荐。
+
 ## 安装边界
 
 目录浏览与插件安装是两个独立操作：

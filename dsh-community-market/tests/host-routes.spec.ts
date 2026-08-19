@@ -16,6 +16,11 @@ import {
   DSHFIND_KEY,
   DSHFIND_PROVIDER_ID,
 } from '../src/adapters/dshfind.js'
+import {
+  DAHA1216_ENDPOINT,
+  DAHA1216_KEY,
+  DAHA1216_PROVIDER_ID,
+} from '../src/adapters/daha1216.js'
 import type { MarketSettingsDocument } from '../src/catalog/source-store.js'
 import type { CatalogSourceManifest, LocalSourceRecord } from '../src/contracts/index.js'
 import { marketRoutes, registerMarketRoutes } from '../src/host/routes.js'
@@ -182,6 +187,12 @@ describe('community market Host routes', () => {
             key: DSHFIND_KEY,
             providerId: DSHFIND_PROVIDER_ID,
             endpoint: DSHFIND_ENDPOINT,
+            partnership: true,
+          },
+          {
+            key: DAHA1216_KEY,
+            providerId: DAHA1216_PROVIDER_ID,
+            endpoint: DAHA1216_ENDPOINT,
             partnership: true,
           },
         ],

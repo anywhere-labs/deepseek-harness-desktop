@@ -66,6 +66,8 @@ DSH Community Market 以开放方式与各种插件数据源合作。任何人�
 
 [dshfind](https://dshfind.com) 是另一个通过经审查内置 adapter 接入的可选合作来源。它不会被默认选择、优先排序、推荐或用作兜底。它的目录收录、分数、等级、`official`/精选标记、风险标记和安装探测仍是 provider claim，不是 Anywhere Labs 作出的信任判断。
 
+[DSH Plugin Collection](https://github.com/daha1216/dsh-plugin-collection) 是另一个通过经审查内置 adapter 接入的可选合作来源。该 adapter 通过固定的 HTTPS origin 读取其公开 GitHub 目录，校验规范 GitHub 仓库身份，并把目录中的版本作为普通 provider 元数据展示。目录中的 GitHub 安装字段会被丢弃，绝不会执行。由于该来源当前没有提供经过 provider 验证的 npm 身份和 repository backlink 证据，所有条目在这些声明发布并独立验证前都保持仅可浏览。
+
 已发布的规范合同是[目录提供方合同](catalog-provider-contract.zh.md)，其中包含来源 manifest、query、不可信 provider page 和 Host 标准化响应的机器可读 Schema。远程字段只是展示数据，不是可执行指令；文本只能按文本渲染，不能作为原始 HTML。
 
 ## 完整本地索引与 cache

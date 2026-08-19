@@ -33,6 +33,8 @@ The Host reuses a completed index until its cache expires (currently five minute
 
 dshfind currently supplies provider-maintained installation claims and command text, but not an exact stable npm version suitable for the Market's managed-install boundary. The adapter neither displays nor executes `install.cmd`, does not infer a version from it, and keeps every dshfind item browse-only and out of **Installable**. dshfind scores, grades, featured/official labels, risk labels, and installation probes remain provider claims; none is an Anywhere Labs security review or endorsement.
 
+[DSH Plugin Collection](https://github.com/daha1216/dsh-plugin-collection) is another optional cooperating catalog source. Its reviewed adapter reads the public catalog from a fixed GitHub Raw origin, validates canonical GitHub repository identities, retains each catalog version only as plain description metadata, and discards the provider's GitHub installation field. Because the source does not provide provider-verified npm identity and repository-backlink evidence, its entries remain browse-only and out of **Installable**.
+
 All catalog data is remote and untrusted. A listing means only that a provider supplied metadata; it does **not** mean that Anywhere Labs reviewed, recommends, or guarantees the plugin.
 
 ## Safety promise
