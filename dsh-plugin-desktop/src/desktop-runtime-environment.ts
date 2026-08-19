@@ -12,6 +12,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { DESKTOP_INSTALL_RECOVERY_STATE_ENV } from './install-recovery.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
@@ -63,6 +64,7 @@ export interface DesktopDshRuntimeOptions {
   dshBootstrapPath: string
   profileName: string
   homeDir: string
+  installRecoveryStatePath: string
   stateDir: string
   environment?: NodeJS.ProcessEnv
 }
@@ -260,6 +262,7 @@ function windowsDshShim(options: DesktopDshRuntimeOptions): string {
     `set "${RUN_AS_NODE}=1"`,
     `set "${DEFAULT_PROFILE}=${escapeBatchSetValue(options.profileName)}"`,
     `set "${DSH_HOME}=${escapeBatchSetValue(options.homeDir)}"`,
+    `set "${DESKTOP_INSTALL_RECOVERY_STATE_ENV}=${escapeBatchSetValue(options.installRecoveryStatePath)}"`,
     `${quoteBatchWord(options.appExecutable)} --expose-internals ${quoteBatchWord(options.dshBootstrapPath)} %*`,
     'exit /b %errorlevel%',
     '',
@@ -340,6 +343,7 @@ export function installDesktopDshRuntime(options: DesktopDshRuntimeOptions): Des
     ['application executable', options.appExecutable],
     ['DSH bootstrap', options.dshBootstrapPath],
     ['Harness home', options.homeDir],
+    ['install recovery state', options.installRecoveryStatePath],
     ['state directory', options.stateDir],
   ] as const) assertScriptValue(label, value)
 

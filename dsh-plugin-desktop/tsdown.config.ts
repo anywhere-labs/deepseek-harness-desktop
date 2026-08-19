@@ -85,4 +85,20 @@ export default defineConfig([
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },
   },
+  {
+    name: `${PACKAGE_NAME}/preload`,
+    entry: { preload: 'src/preload.ts' },
+    outDir: 'lib',
+    format: 'cjs',
+    platform: 'node',
+    target: 'es2022',
+    fixedExtension: false,
+    dts: false,
+    clean: false,
+    sourcemap: true,
+    external: ['electron'],
+    outputOptions: {
+      entryFileNames: 'preload.cjs',
+    },
+  },
 ])

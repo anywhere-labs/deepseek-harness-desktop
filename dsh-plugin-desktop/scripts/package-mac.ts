@@ -108,12 +108,16 @@ export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions
 
   const cleanEnvironment = withoutMacReleaseSecrets(options.env)
   options.log('Building an unsigned macOS DMG smoke; signing and notarization are release-only steps.')
-  options.run(
-    'corepack',
-    ['yarn', 'workspace', 'dsh-plugin-desktop', 'check:mac-package'],
-    options.workspaceRoot,
-    cleanEnvironment,
-  )
+  if (options.env.DSH_PACKAGE_CHECK_ALREADY_RAN !== '1') {
+    options.run(
+      'corepack',
+      ['yarn', 'workspace', 'dsh-plugin-desktop', 'check:mac-package'],
+      options.workspaceRoot,
+      cleanEnvironment,
+    )
+  } else {
+    options.log('Skipping the macOS package preflight; the CI shared gate already passed.')
+  }
   options.resetOutput()
   options.prepareRuntime()
   options.run(

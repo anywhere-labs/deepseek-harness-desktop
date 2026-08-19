@@ -10,6 +10,12 @@ import {
   DSH_1024STORE_KEY,
   DSH_1024STORE_PROVIDER_ID,
 } from '../src/adapters/dsh-1024store.js'
+import {
+  DSHFIND_ADAPTER_ID,
+  DSHFIND_ENDPOINT,
+  DSHFIND_KEY,
+  DSHFIND_PROVIDER_ID,
+} from '../src/adapters/dshfind.js'
 import type { MarketSettingsDocument } from '../src/catalog/source-store.js'
 import type { CatalogSourceManifest, LocalSourceRecord } from '../src/contracts/index.js'
 import { marketRoutes, registerMarketRoutes } from '../src/host/routes.js'
@@ -24,6 +30,10 @@ function fixture(path: string): unknown {
 interface MarketServer {
   readonly baseUrl: string
   readonly close: () => Promise<void>
+}
+
+interface SharedMarketSettings {
+  document: MarketSettingsDocument
 }
 
 function localHeaders(server: MarketServer, origin = server.baseUrl): Record<string, string> {
@@ -64,6 +74,17 @@ const builtInSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSourceR
   ...overrides,
 })
 
+const dshfindSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSourceRecord => ({
+  sourceRecordId: '038f1f77-a5c4-7b73-a9ae-0242ac120004',
+  registrationKind: 'built-in',
+  adapterId: DSHFIND_ADAPTER_ID,
+  providerId: DSHFIND_PROVIDER_ID,
+  builtInProviderKey: DSHFIND_KEY,
+  enabled: false,
+  order: 1,
+  ...overrides,
+})
+
 const standardSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSourceRecord => ({
   sourceRecordId: '028f1f77-a5c4-7b73-a9ae-0242ac120003',
   registrationKind: 'user-added',
@@ -76,13 +97,16 @@ const standardSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSource
   ...overrides,
 })
 
-async function startMarketServer(initialSources: readonly LocalSourceRecord[]): Promise<MarketServer> {
+async function startMarketServer(
+  initialSources: readonly LocalSourceRecord[],
+  sharedSettings?: SharedMarketSettings,
+): Promise<MarketServer> {
   const routes = new Map<string, RouteHandler>()
-  let document: MarketSettingsDocument = { sources: initialSources }
+  const settings = sharedSettings ?? { document: { sources: initialSources } }
   const scope = {
-    get: () => document,
+    get: () => settings.document,
     update: async (patch: object) => {
-      document = { ...document, ...patch as Partial<MarketSettingsDocument> }
+      settings.document = { ...settings.document, ...patch as Partial<MarketSettingsDocument> }
     },
   } as unknown as SettingsScope<MarketSettingsDocument>
   const server = createServer((req, res) => {
@@ -148,11 +172,19 @@ describe('community market Host routes', () => {
           partnership: true,
           enabled: false,
         }],
-        builtIns: [{
-          key: DSH_1024STORE_KEY,
-          providerId: DSH_1024STORE_PROVIDER_ID,
-          partnership: true,
-        }],
+        builtIns: [
+          {
+            key: DSH_1024STORE_KEY,
+            providerId: DSH_1024STORE_PROVIDER_ID,
+            partnership: true,
+          },
+          {
+            key: DSHFIND_KEY,
+            providerId: DSHFIND_PROVIDER_ID,
+            endpoint: DSHFIND_ENDPOINT,
+            partnership: true,
+          },
+        ],
       })
     } finally {
       await server.close()
@@ -228,26 +260,129 @@ describe('community market Host routes', () => {
     }
   })
 
-  it('adds the reviewed built-in provider as a disabled source', async () => {
+  it('serves the persisted first page before a restarted Host refresh completes', async () => {
+    const activeSource = standardSource({ enabled: true, order: 0 })
+    const providerPage = fixture('../docs/examples/catalog-provider-page.example.json') as {
+      readonly items: readonly unknown[]
+      readonly [key: string]: unknown
+    }
+    let requests = 0
+    const getJson = vi.spyOn(restrictedHttpClient, 'getJson').mockImplementation(async (_url, signal) => {
+      requests += 1
+      if (requests === 1) return { value: standardManifest, finalUrl: activeSource.manifestUrl! }
+      if (requests === 2) return {
+        value: { ...providerPage, page: { total: 1 } },
+        finalUrl: 'https://plugins.example.org/v1/plugins?limit=50',
+      }
+      return await new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const settings: SharedMarketSettings = { document: { sources: [activeSource] } }
+    const first = await startMarketServer([], settings)
+    try {
+      const firstResponse = await readRoute(
+        first,
+        `${marketRoutes.catalog}?sourceRecordId=${activeSource.sourceRecordId}&limit=50&locale=en`,
+      )
+      expect(firstResponse.status).toBe(200)
+      await vi.waitFor(() => expect(settings.document.catalogCache).toBeDefined())
+    } finally {
+      await first.close()
+    }
+
+    const second = await startMarketServer([], settings)
+    try {
+      const startedAt = Date.now()
+      const secondResponse = await readRoute(
+        second,
+        `${marketRoutes.catalog}?sourceRecordId=${activeSource.sourceRecordId}&limit=50&locale=en`,
+      )
+      expect(Date.now() - startedAt).toBeLessThan(500)
+      expect(secondResponse.status).toBe(200)
+      await expect(secondResponse.json()).resolves.toMatchObject({
+        results: [{ stale: true, snapshot: { items: [{ id: 'better-sidebar' }] } }],
+        metadata: { cacheStatus: 'cached' },
+      })
+      expect(requests).toBe(2)
+
+      const refreshController = new AbortController()
+      const refresh = readRoute(
+        second,
+        `${marketRoutes.catalog}?sourceRecordId=${activeSource.sourceRecordId}&limit=50&locale=en&refresh=1`,
+        refreshController.signal,
+      )
+      await vi.waitFor(() => expect(requests).toBe(3))
+      refreshController.abort()
+      await expect(refresh).rejects.toMatchObject({ name: 'AbortError' })
+    } finally {
+      await second.close()
+      getJson.mockRestore()
+    }
+  })
+
+  it.each([
+    [DSH_1024STORE_KEY, DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID, 'DSH 1024Store'],
+    [DSHFIND_KEY, DSHFIND_ADAPTER_ID, DSHFIND_PROVIDER_ID, 'dshfind'],
+  ] as const)('adds reviewed built-in provider %s as a disabled source', async (key, adapterId, providerId, name) => {
     const server = await startMarketServer([])
     try {
       const response = await mutateSource(server, {
         action: 'add-builtin',
-        key: DSH_1024STORE_KEY,
+        key,
       })
 
       expect(response.status).toBe(200)
       await expect(response.json()).resolves.toMatchObject({
         sources: [{
           registrationKind: 'built-in',
-          adapterId: DSH_1024STORE_ADAPTER_ID,
-          providerId: DSH_1024STORE_PROVIDER_ID,
-          builtInProviderKey: DSH_1024STORE_KEY,
+          adapterId,
+          providerId,
+          builtInProviderKey: key,
           enabled: false,
           order: 0,
-          name: 'DSH 1024Store',
+          name,
         }],
       })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('selects exactly one of two built-in sources', async () => {
+    const current = builtInSource({ enabled: true })
+    const replacement = dshfindSource()
+    const server = await startMarketServer([current, replacement])
+    try {
+      const response = await mutateSource(server, {
+        action: 'select',
+        sourceRecordId: replacement.sourceRecordId,
+      })
+
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({
+        sources: [
+          { builtInProviderKey: DSH_1024STORE_KEY, enabled: false },
+          { builtInProviderKey: DSHFIND_KEY, enabled: true },
+        ],
+      })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('rejects an unknown built-in provider key without changing settings', async () => {
+    const server = await startMarketServer([])
+    try {
+      const response = await mutateSource(server, {
+        action: 'add-builtin',
+        key: 'attacker-controlled-provider',
+      })
+
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toEqual({ error: 'built-in source unavailable' })
+      const state = await readRoute(server, marketRoutes.state)
+      await expect(state.json()).resolves.toMatchObject({ sources: [] })
     } finally {
       await server.close()
     }

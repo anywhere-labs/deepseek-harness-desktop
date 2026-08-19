@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import https from 'node:https'
 import { describe, expect, it, vi } from 'vitest'
 import { dsh1024StoreAdapter, DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_KEY, DSH_1024STORE_PROVIDER_ID } from '../src/adapters/dsh-1024store.js'
+import { DSHFIND_ADAPTER_ID, DSHFIND_KEY, DSHFIND_PROVIDER_ID } from '../src/adapters/dshfind.js'
 import { standardHttpAdapter } from '../src/adapters/standard-http.js'
 import { DefaultCatalogService, type CatalogFullIndex } from '../src/catalog/service.js'
 import { MemoryCatalogSourceStore, SettingsCatalogSourceStore } from '../src/catalog/source-store.js'
@@ -707,13 +708,20 @@ describe('catalog Host route pagination boundary', () => {
     ['unknown', [active], '038f1f77-a5c4-7b73-a9ae-0242ac120004'],
     ['inactive', [active, inactive], inactive.sourceRecordId],
   ] as const)('rejects a cursor scoped to an %s source before fetching', async (_label, records, sourceRecordId) => {
-    const response = await requestMarketCatalog(
-      records,
-      `${marketRoutes.catalog}?sourceRecordId=${sourceRecordId}&cursor=page-2`,
-    )
+    const scanCatalog = vi.spyOn(dsh1024StoreAdapter, 'scanCatalog')
+      .mockRejectedValue(new Error('invalid cursor scope reached the catalog adapter'))
+    try {
+      const response = await requestMarketCatalog(
+        records,
+        `${marketRoutes.catalog}?sourceRecordId=${sourceRecordId}&cursor=page-2`,
+      )
 
-    expect(response.statusCode).toBe(400)
-    expect(response.body).toEqual({ error: 'invalid catalog query' })
+      expect(response.statusCode).toBe(400)
+      expect(response.body).toEqual({ error: 'invalid catalog query' })
+      expect(scanCatalog).not.toHaveBeenCalled()
+    } finally {
+      scanCatalog.mockRestore()
+    }
   })
 })
 
@@ -1196,6 +1204,41 @@ describe('source mutation boundary', () => {
         partnership: false,
       }),
     ])
+  })
+
+  it('resolves each built-in mutation through the reviewed provider registry', async () => {
+    let document: MarketSettingsDocument = { sources: [] }
+    const scope = {
+      get: () => document,
+      update: async (patch: { sources: readonly LocalSourceRecord[] }) => { document = { sources: patch.sources } },
+    } as unknown as SettingsScope<MarketSettingsDocument>
+    const mutate = createMarketSourceMutator(scope)
+
+    await mutate({ action: 'add-builtin', key: DSH_1024STORE_KEY }, new AbortController().signal)
+    await mutate({ action: 'add-builtin', key: DSHFIND_KEY }, new AbortController().signal)
+
+    expect(document.sources).toEqual([
+      expect.objectContaining({
+        adapterId: DSH_1024STORE_ADAPTER_ID,
+        providerId: DSH_1024STORE_PROVIDER_ID,
+        builtInProviderKey: DSH_1024STORE_KEY,
+        enabled: false,
+        order: 0,
+      }),
+      expect.objectContaining({
+        adapterId: DSHFIND_ADAPTER_ID,
+        providerId: DSHFIND_PROVIDER_ID,
+        builtInProviderKey: DSHFIND_KEY,
+        enabled: false,
+        order: 1,
+      }),
+    ])
+
+    await expect(mutate(
+      { action: 'add-builtin', key: 'unknown-provider' },
+      new AbortController().signal,
+    )).rejects.toThrow(/built-in source unavailable/u)
+    expect(document.sources).toHaveLength(2)
   })
 
   it('serializes source writes so concurrent changes cannot overwrite each other', async () => {

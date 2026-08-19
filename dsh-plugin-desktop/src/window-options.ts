@@ -15,6 +15,7 @@ export function compatibilityWindowOptions(
   spec: DesktopShellSpec,
   icon: NativeImage,
   platform: DesktopPlatform,
+  preload: string,
 ): BrowserWindowConstructorOptions {
   if (spec.mode !== 'compatibility') {
     throw new Error(`dsh-plugin-desktop: unsupported compatibility window mode ${spec.mode}`)
@@ -28,6 +29,7 @@ export function compatibilityWindowOptions(
     show: false,
     icon,
     webPreferences: {
+      preload,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -49,6 +51,7 @@ export function advancedWindowOptions(
   spec: DesktopShellSpec,
   icon: NativeImage,
   platform: DesktopPlatform,
+  preload: string,
 ): BrowserWindowConstructorOptions {
   if (spec.mode !== 'advanced') {
     throw new Error(`dsh-plugin-desktop: unsupported advanced window mode ${spec.mode}`)
@@ -62,6 +65,7 @@ export function advancedWindowOptions(
     show: false,
     icon,
     webPreferences: {
+      preload,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -110,8 +114,9 @@ export function desktopWindowOptions(
   spec: DesktopShellSpec,
   icon: NativeImage,
   platform: DesktopPlatform,
+  preload: string,
 ): BrowserWindowConstructorOptions {
   return spec.mode === 'compatibility'
-    ? compatibilityWindowOptions(spec, icon, platform)
-    : advancedWindowOptions(spec, icon, platform)
+    ? compatibilityWindowOptions(spec, icon, platform, preload)
+    : advancedWindowOptions(spec, icon, platform, preload)
 }

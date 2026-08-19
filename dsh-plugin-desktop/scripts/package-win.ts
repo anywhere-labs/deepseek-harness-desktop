@@ -128,17 +128,21 @@ export function packageWindowsArtifact(
 
   const cleanEnvironment = withoutWindowsSigningSecrets(options.env)
   options.log(`Building an unsigned Windows x64 ${artifact}; Authenticode is a separate release step.`)
-  options.run(
-    options.commandShell,
-    [
-      '/d',
-      '/s',
-      '/c',
-      'corepack yarn workspace dsh-plugin-desktop check:win-package',
-    ],
-    options.workspaceRoot,
-    cleanEnvironment,
-  )
+  if (options.env.DSH_PACKAGE_CHECK_ALREADY_RAN !== '1') {
+    options.run(
+      options.commandShell,
+      [
+        '/d',
+        '/s',
+        '/c',
+        'corepack yarn workspace dsh-plugin-desktop check:win-package',
+      ],
+      options.workspaceRoot,
+      cleanEnvironment,
+    )
+  } else {
+    options.log('Skipping the Windows package preflight; the CI shared gate already passed.')
+  }
   options.run(
     options.nodeExecutable,
     [

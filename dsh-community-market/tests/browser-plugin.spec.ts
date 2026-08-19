@@ -110,6 +110,22 @@ afterEach(() => {
 })
 
 describe('community market browser plugin', () => {
+  it('installs the unified market surface and modal size contract', () => {
+    const b = bench()
+
+    b.apply()
+
+    const styles = document.querySelector<HTMLStyleElement>('style[data-plugin="dsh-community-market/styles"]')?.textContent ?? ''
+    expect(styles).toMatch(/\.dshMarketWideModal\s*\{[^}]*width: min\(800px, calc\(100vw - 48px\)\)/su)
+    expect(styles).toMatch(/\.dshMarketConfirmModal\s*\{[^}]*width: min\(600px, calc\(100vw - 48px\)\)/su)
+    expect(styles).toMatch(/\.dshMarketSourceModal\s*\{[^}]*width: min\(600px, calc\(100vw - 48px\)\)/su)
+    expect(styles).toMatch(/\.dshMarketStatusModal\s*\{[^}]*width: min\(480px, calc\(100vw - 48px\)\)/su)
+    expect(styles).toMatch(/\.dshMarketOverlayPanel\s*\{[^}]*width: min\(800px, 100%\);[^}]*height: min\(700px, 100%\)/su)
+    expect(styles).toMatch(/@media \(max-width: 680px\)[\s\S]*\.dshMarketOverlayPanel\s*\{[^}]*width: 100%;[^}]*height: 100%/u)
+
+    b.dispose()
+  })
+
   it('registers one shared Market surface in official settings and sidebar slots without fetching', () => {
     const b = bench()
     for (const name of ['settings.plugins.tab', 'sidebar.footer.action', 'shell.overlay']) b.declare(name)

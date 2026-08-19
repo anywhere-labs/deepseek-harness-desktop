@@ -89,7 +89,7 @@ export interface Publisher {
   url?: HttpsUri
 }
 /**
- * Optional Host-resolved plugin media. Draft v1 standardizes only the icon slot.
+ * Optional Host-resolved plugin media. Version 1 standardizes only the icon slot.
  */
 export interface Media {
   icon: ResolvedIcon

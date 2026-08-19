@@ -115,6 +115,36 @@ describe('Windows x64 installer packaging', () => {
     ])
   })
 
+  it('reuses a completed CI package gate when explicitly requested', () => {
+    const calls: CommandCall[] = []
+    const logs: string[] = []
+    const value = {
+      ...options(calls, logs),
+      env: {
+        ...options(calls).env,
+        DSH_PACKAGE_CHECK_ALREADY_RAN: '1',
+      },
+    }
+
+    packageWindowsInstaller(value)
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0]?.args).toEqual([
+      'C:\\repo\\node_modules\\electron-builder\\cli.js',
+      '--win',
+      'nsis',
+      '--x64',
+      '--publish',
+      'never',
+      '--config.win.signExecutable=false',
+      '--config.npmRebuild=false',
+    ])
+    expect(logs).toEqual([
+      'Building an unsigned Windows x64 installer; Authenticode is a separate release step.',
+      'Skipping the Windows package preflight; the CI shared gate already passed.',
+    ])
+  })
+
   it.each([
     ['darwin', 'x64', '22.23.2', 'native Windows host'],
     ['win32', 'arm64', '22.23.2', 'requires x64 Node'],

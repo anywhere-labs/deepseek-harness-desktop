@@ -101,7 +101,7 @@
     },
     "media": {
       "type": "object",
-      "description": "Optional Host-resolved plugin media. Draft v1 standardizes only the icon slot.",
+      "description": "Optional Host-resolved plugin media. Version 1 standardizes only the icon slot.",
       "additionalProperties": false,
       "required": [
         "icon"

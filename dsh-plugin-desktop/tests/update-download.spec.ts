@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, symlink } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -6,17 +6,25 @@ import {
   DESKTOP_DOWNLOAD_URLS,
   MAX_UPDATE_DOWNLOAD_BYTES,
   UpdateDownloadError,
+  desktopUpdateFilename,
   downloadDesktopUpdate,
+  pendingDesktopUpdateArtifact,
+  recordDesktopUpdateArtifact,
+  resolveDesktopUpdateArtifact,
   type DesktopDownloadPlatform,
   type UpdateArtifactRequest,
 } from '../src/update-download.ts'
 
 const temporaryRoots: string[] = []
 
-async function temporaryUserData(): Promise<string> {
+async function temporaryDirectory(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-update-download-'))
   temporaryRoots.push(root)
   return root
+}
+
+function destinationPath(root: string, platform: DesktopDownloadPlatform, version: string): string {
+  return join(root, desktopUpdateFilename(platform, version))
 }
 
 function dmgArtifact(): Uint8Array {
@@ -59,8 +67,8 @@ async function expectFailure(
   throw new Error('Expected update download to fail.')
 }
 
-async function expectNoPartialFiles(userDataPath: string, version: string): Promise<void> {
-  const entries = await readdir(join(userDataPath, 'updates', version))
+async function expectNoPartialFiles(directory: string): Promise<void> {
+  const entries = await readdir(directory)
   expect(entries.filter(entry => entry.endsWith('.partial'))).toEqual([])
 }
 
@@ -70,7 +78,7 @@ afterEach(async () => {
 
 describe('desktop update installer download', () => {
   it('streams a macOS DMG from only the fixed endpoint and atomically completes it', async () => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     const artifact = dmgArtifact()
     const calls: Array<{ url: string; init: RequestInit }> = []
     const request: UpdateArtifactRequest = async (url, init) => {
@@ -81,49 +89,47 @@ describe('desktop update installer download', () => {
     const result = await downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.1.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.1.0'),
       request,
     })
 
-    expect(result).toBe(join(userDataPath, 'updates', '2.1.0', 'DSH-Desktop-2.1.0-mac.dmg'))
+    expect(result).toBe(join(directory, 'DSH-Desktop-2.1.0-mac.dmg'))
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe(DESKTOP_DOWNLOAD_URLS.darwin)
     expect(calls[0]?.init).toMatchObject({ method: 'GET', cache: 'no-store', redirect: 'follow' })
-    await expectNoPartialFiles(userDataPath, '2.1.0')
+    await expectNoPartialFiles(directory)
   })
 
   it('accepts a Windows executable only when it has both MZ and PE signatures', async () => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     const artifact = windowsArtifact()
     const result = await downloadDesktopUpdate({
       platform: 'win32',
       version: '2.2.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'win32', '2.2.0'),
       request: async (url) => {
         expect(url).toBe(DESKTOP_DOWNLOAD_URLS.win32)
         return chunkedResponse([artifact])
       },
     })
 
-    expect(result).toBe(join(userDataPath, 'updates', '2.2.0', 'DSH-Desktop-2.2.0-windows.exe'))
+    expect(result).toBe(join(directory, 'DSH-Desktop-2.2.0-windows.exe'))
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
-    await expectNoPartialFiles(userDataPath, '2.2.0')
+    await expectNoPartialFiles(directory)
   })
 
   it('accepts canonical stable SemVer build metadata in the private artifact path', async () => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     const result = await downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.8.0+build',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.8.0+build'),
       request: async () => chunkedResponse([dmgArtifact()]),
     })
 
     expect(result).toBe(join(
-      userDataPath,
-      'updates',
-      '2.8.0+build',
+      directory,
       'DSH-Desktop-2.8.0+build-mac.dmg',
     ))
   })
@@ -133,15 +139,40 @@ describe('desktop update installer download', () => {
     ['win32', Object.assign(windowsArtifact(), { 0: 0 })],
     ['win32', Object.assign(windowsArtifact(), { 0x80: 0 })],
   ] as const)('rejects and removes an invalid %s artifact', async (platform, artifact) => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     await expectFailure(downloadDesktopUpdate({
       platform,
       version: '2.3.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, platform, '2.3.0'),
       request: async () => chunkedResponse([artifact]),
     }), 'invalid-artifact')
-    await expectNoPartialFiles(userDataPath, '2.3.0')
-    expect(await readdir(join(userDataPath, 'updates', '2.3.0'))).toEqual([])
+    await expectNoPartialFiles(directory)
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it('keeps an existing destination until its validated replacement is ready', async () => {
+    const directory = await temporaryDirectory()
+    const path = destinationPath(directory, 'win32', '2.3.1')
+    const existing = Buffer.from('existing installer')
+    await writeFile(path, existing)
+
+    await expectFailure(downloadDesktopUpdate({
+      platform: 'win32',
+      version: '2.3.1',
+      destinationPath: path,
+      request: async () => chunkedResponse([Buffer.alloc(128)]),
+    }), 'invalid-artifact')
+    expect(await readFile(path)).toEqual(existing)
+
+    const replacement = windowsArtifact()
+    await downloadDesktopUpdate({
+      platform: 'win32',
+      version: '2.3.1',
+      destinationPath: path,
+      request: async () => chunkedResponse([replacement]),
+    })
+    expect(await readFile(path)).toEqual(Buffer.from(replacement))
+    await expectNoPartialFiles(directory)
   })
 
   it.each([
@@ -149,32 +180,32 @@ describe('desktop update installer download', () => {
     ['a missing response body', async () => new Response(null, { status: 200 }), 'empty-body'],
     ['a zero-byte response body', async () => chunkedResponse([]), 'empty-body'],
   ] as const)('rejects %s without leaving a partial file', async (_label, request, code) => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.4.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.4.0'),
       request,
     }), code)
-    await expectNoPartialFiles(userDataPath, '2.4.0')
+    await expectNoPartialFiles(directory)
   })
 
   it('rejects a declared body above the fixed 1 GiB limit before writing it', async () => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.5.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.5.0'),
       request: async () => chunkedResponse(
         [dmgArtifact()],
         { 'content-length': String(MAX_UPDATE_DOWNLOAD_BYTES + 1) },
       ),
     }), 'response-too-large')
-    await expectNoPartialFiles(userDataPath, '2.5.0')
+    await expectNoPartialFiles(directory)
   })
 
   it('passes the caller signal and removes a partial file when aborted during streaming', async () => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     const controller = new AbortController()
     let requestSignal: AbortSignal | null | undefined
     const request: UpdateArtifactRequest = async (_url, init) => {
@@ -190,30 +221,29 @@ describe('desktop update installer download', () => {
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.6.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.6.0'),
       request,
       signal: controller.signal,
     }), 'aborted')
     expect(requestSignal).toBe(controller.signal)
-    await expectNoPartialFiles(userDataPath, '2.6.0')
+    await expectNoPartialFiles(directory)
   })
 
   it('normalizes request aborts and transport failures without creating an artifact', async () => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.7.0',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.7.0'),
       request: async () => { throw new DOMException('cancelled', 'AbortError') },
     }), 'aborted')
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.7.1',
-      userDataPath,
+      destinationPath: destinationPath(directory, 'darwin', '2.7.1'),
       request: async () => { throw new Error('offline') },
     }), 'network')
-    await expectNoPartialFiles(userDataPath, '2.7.0')
-    await expectNoPartialFiles(userDataPath, '2.7.1')
+    await expectNoPartialFiles(directory)
   })
 
   it.each([
@@ -222,12 +252,12 @@ describe('desktop update installer download', () => {
     ['win32', 'v2.8.0'],
     ['win32', '2.8.0-rc.1'],
   ])('rejects platform %s and version %s before requesting', async (platform, version) => {
-    const userDataPath = await temporaryUserData()
+    const directory = await temporaryDirectory()
     let requested = false
     await expectFailure(downloadDesktopUpdate({
       platform: platform as DesktopDownloadPlatform,
       version,
-      userDataPath,
+      destinationPath: join(directory, 'installer.dmg'),
       request: async () => {
         requested = true
         return chunkedResponse([dmgArtifact()])
@@ -236,7 +266,7 @@ describe('desktop update installer download', () => {
     expect(requested).toBe(false)
   })
 
-  it('rejects a relative user-data path before requesting', async () => {
+  it('rejects a relative destination path before requesting', async () => {
     let requested = false
     const request = async (): Promise<Response> => {
       requested = true
@@ -246,17 +276,17 @@ describe('desktop update installer download', () => {
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.9.0',
-      userDataPath: 'relative',
+      destinationPath: 'relative.dmg',
       request,
     }), 'invalid-options')
     expect(requested).toBe(false)
   })
 
-  it('rejects a linked user-data path before requesting', async () => {
-    const userDataPath = await temporaryUserData()
-    const linked = `${userDataPath}-link`
+  it('rejects a linked destination directory before requesting', async () => {
+    const directory = await temporaryDirectory()
+    const linked = `${directory}-link`
     temporaryRoots.push(linked)
-    await symlink(userDataPath, linked, process.platform === 'win32' ? 'junction' : 'dir')
+    await symlink(directory, linked, process.platform === 'win32' ? 'junction' : 'dir')
     let requested = false
     const request = async (): Promise<Response> => {
       requested = true
@@ -266,9 +296,61 @@ describe('desktop update installer download', () => {
     await expectFailure(downloadDesktopUpdate({
       platform: 'darwin',
       version: '2.9.0',
-      userDataPath: linked,
+      destinationPath: join(linked, 'installer.dmg'),
       request,
     }), 'invalid-options')
     expect(requested).toBe(false)
+  })
+})
+
+describe('desktop update artifact cleanup', () => {
+  it('rejects malformed cleanup state with a typed failure', async () => {
+    const userDataPath = await temporaryDirectory()
+    const updates = join(userDataPath, 'updates')
+    await mkdir(updates)
+    await writeFile(join(updates, 'pending-installer.json'), '{}')
+
+    await expectFailure(
+      pendingDesktopUpdateArtifact(userDataPath, '2.1.0', 'win32'),
+      'invalid-options',
+    )
+  })
+
+  it('offers a recorded artifact only after the installed version reaches the update', async () => {
+    const userDataPath = await temporaryDirectory()
+    const downloads = await temporaryDirectory()
+    const path = destinationPath(downloads, 'win32', '2.1.0')
+    await writeFile(path, windowsArtifact())
+
+    await recordDesktopUpdateArtifact(userDataPath, {
+      platform: 'win32',
+      version: '2.1.0',
+      path,
+    })
+
+    await expect(pendingDesktopUpdateArtifact(userDataPath, '2.0.1', 'win32')).resolves.toBeUndefined()
+    await expect(pendingDesktopUpdateArtifact(userDataPath, '2.1.0', 'win32')).resolves.toEqual({
+      platform: 'win32',
+      version: '2.1.0',
+      path,
+    })
+  })
+
+  it.each([false, true])('resolves one cleanup choice with remove=%s', async (remove) => {
+    const userDataPath = await temporaryDirectory()
+    const downloads = await temporaryDirectory()
+    const artifact = {
+      platform: 'darwin' as const,
+      version: '2.1.0',
+      path: destinationPath(downloads, 'darwin', '2.1.0'),
+    }
+    await writeFile(artifact.path, dmgArtifact())
+    await recordDesktopUpdateArtifact(userDataPath, artifact)
+
+    await resolveDesktopUpdateArtifact(userDataPath, artifact, remove)
+
+    await expect(pendingDesktopUpdateArtifact(userDataPath, '2.1.0', 'darwin')).resolves.toBeUndefined()
+    if (remove) await expect(access(artifact.path)).rejects.toMatchObject({ code: 'ENOENT' })
+    else await expect(access(artifact.path)).resolves.toBeUndefined()
   })
 })

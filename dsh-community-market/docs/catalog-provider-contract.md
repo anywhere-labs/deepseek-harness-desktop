@@ -2,14 +2,17 @@
 
 [中文](catalog-provider-contract.zh.md)
 
-Status: **Draft / implementation handoff**. Generated types, validation, source persistence, constrained network access, standard and DSH 1024Store adapters, and loadable Host/Client entries are implemented for integration testing. This remains a private draft without a compatibility guarantee.
+Status: **Implemented public v1 contract.** The versioned Schemas, generated types, strict validation, source persistence, constrained network and media boundaries, standard HTTP adapter, reviewed DSH 1024Store and browse-only dshfind adapters, complete local indexing, and loadable Host/Client entries are implemented and tested in DSH Desktop. This document and its fixtures are the public interoperability contract for `manifestVersion` and `schemaVersion` `1.x`.
 
 ## Decision summary
 
 - DSH Community Market has **no default, preferred, or fallback catalog source**.
 - Users may save several source registrations, but explicitly select exactly one source for the current browsing session.
 - A user may add any source that implements this contract. Adding a source does not install a plugin and does not grant that source execution access.
+- The catalog ecosystem is open: any person, community, or service may publish a conforming source and any user may register its manifest URL. No Market code change or partnership approval is required for the standard path.
+- Providers with an existing public API that cannot emit the standard page shape may propose a reviewed adapter integration. Cooperation adds local, tested Market code; it never allows a provider to send executable adapter code.
 - DSH 1024Store is one of the catalog providers currently cooperating with this project. A reviewed built-in adapter is included; it does not select or fall back to 1024Store automatically.
+- dshfind is another optional cooperating provider. Its reviewed adapter is browse-only and is neither selected by default nor used as a preferred, recommended, or fallback source.
 - A source being bundled as a choice or supported by an adapter does not mean that Anywhere Labs has recommended, audited, or endorsed the source or the plugins it lists.
 - Every provider is converted into one normalized model before data reaches the market UI or installation boundary.
 
@@ -25,7 +28,7 @@ This contract defines:
 - the normalized snapshot consumed by the market;
 - saved-source registration, single-source selection, provenance, pagination, and failure behavior;
 - the minimum network and data-safety boundary;
-- the handoff checklist and test matrix for the first implementation.
+- the implemented v1 capability checklist and verified acceptance matrix.
 
 It does not define catalog governance, plugin review, account systems, payments, arbitrary authenticated sources, or package installation commands. Installation remains a separate user-confirmed operation owned by the market Host and the active-profile services.
 
@@ -82,21 +85,21 @@ flowchart LR
 
 ### Layer 1: source manifest
 
-A standard source publishes a static manifest validated by [`catalog-source.schema.json`](schemas/catalog-source.schema.json). Its draft v1 shape identifies:
+A standard source publishes a static manifest validated by [`catalog-source.schema.json`](schemas/catalog-source.schema.json). Its public v1 shape identifies:
 
-- `manifestVersion`, fixed to `1.0.0` for this draft;
+- `manifestVersion`, fixed to `1.0.0` for v1;
 - a provider-claimed `providerId`, human-readable `name`, and optional description/homepage;
 - provider attribution with a name, URL, and optional notice;
 - a public `https-json` GET endpoint;
 - the supported query parameters, default and maximum page size, and supported sort values.
 
-The manifest describes provider capability; it does not control local policy. Draft v1 is public and anonymous: it has no bearer token, cookies, request headers, secret fields, executable mapping, or dynamic JavaScript.
+The manifest describes provider capability; it does not control local policy. Public v1 sources are anonymous: the contract has no bearer token, cookies, request headers, secret fields, executable mapping, or dynamic JavaScript.
 
 The source manifest URL and catalog endpoint are distinct. Adding the manifest URL is an explicit user action. The Host generates a fresh `sourceRecordId`, validates and stores a registration-time copy of the manifest with that local user-added record, exposes its disclosure fields in source management, and does not select it until the user chooses it.
 
 For direct standard integration, the user registers only the manifest URL. The smallest recommended manifest uses one public GET endpoint, advertises only `q`, `category`, `cursor`, and `limit`, sets both example page limits to 50, and leaves `sorts` empty. Fifty is a convenient starter value, not a standard-source ceiling: a manifest may declare limits through the Schema safety maximum of 100. Capability, sort, locale, icons, and richer display fields remain optional extensions. See the [minimal source manifest](examples/catalog-source.example.json) and [minimal provider page](examples/catalog-provider-page.minimal.example.json).
 
-Registration also pins the provider claim and network origin. On every fetch, the manifest `providerId` must still equal the value saved in the local source record. The user-approved manifest URL, the manifest request's final URL, `transport.endpoint`, and the provider-page request's final URL must all remain on the same credential-free HTTPS origin. Draft v1 network URLs and manifests use only standard HTTPS port 443; custom ports are not part of the standard-source contract. Same-origin redirects are allowed; crossing to another origin is rejected even when both origins use HTTPS. A deployment that requires a separate API origin or port must use a reviewed provider adapter until a future contract version defines that relationship explicitly.
+Registration also pins the provider claim and network origin. On every fetch, the manifest `providerId` must still equal the value saved in the local source record. The user-approved manifest URL, the manifest request's final URL, `transport.endpoint`, and the provider-page request's final URL must all remain on the same credential-free HTTPS origin. Public v1 network URLs and manifests use only standard HTTPS port 443; custom ports are not part of the standard-source contract. Same-origin redirects are allowed; crossing to another origin is rejected even when both origins use HTTPS. A deployment that requires a separate API origin or port uses the reviewed provider-adapter path unless a later contract revision defines that relationship explicitly.
 
 ### Layer 2: adapter
 
@@ -109,7 +112,7 @@ interface CatalogAdapter {
 }
 ```
 
-`CatalogFetchContext` should expose an `AbortSignal`, a constrained HTTP client, the validated source identity, configured limits, and a narrow Host media registrar that accepts reviewed candidates and returns opaque asset references. It must not expose Electron globals, arbitrary filesystem access, a shell, ambient credentials, or package-manager execution.
+`CatalogFetchContext` exposes an `AbortSignal`, a constrained HTTP client, the validated source identity, configured limits, and a narrow Host media registrar that accepts reviewed candidates and returns opaque asset references. It does not expose Electron globals, arbitrary filesystem access, a shell, ambient credentials, or package-manager execution.
 
 There are only two supported integration paths:
 
@@ -126,7 +129,7 @@ Provider input never supplies Host provenance. After a response succeeds, the ad
 
 Every successful result is validated against [`catalog-snapshot.schema.json`](schemas/catalog-snapshot.schema.json) before it can be cached, displayed, or considered for installation.
 
-A draft v1 normalized snapshot contains:
+A public v1 normalized snapshot contains:
 
 - `schemaVersion: "1.0.0"`;
 - Host-generated source record identity, provider claim, local adapter identity, registration kind, observed fetch time, and final URL;
@@ -170,7 +173,7 @@ Accept: application/json
 
 The Host first builds and validates a [`CatalogQuery`](schemas/catalog-query.schema.json), then serializes only parameters listed in the source manifest's `query.supported` array. Missing values are omitted rather than serialized as empty strings or `null`.
 
-| Parameter | Cardinality | Draft v1 meaning |
+| Parameter | Cardinality | Public v1 meaning |
 | --- | --- | --- |
 | `q` | zero or one | Trimmed search text, 1–200 characters. Matching and ranking are provider-defined. |
 | `category` | zero or more | Stable category IDs. Repeated values mean “match any requested category”. Duplicates are invalid. |
@@ -211,7 +214,7 @@ The canonical item identity is the pair `{ sourceRecordId, itemId }`. Two regist
 
 ## DSH 1024Store cooperation
 
-[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) is one of the providers currently cooperating with DSH Community Market. Its existing registry API does not need to change to this draft contract. The integration is a reviewed built-in provider adapter that:
+[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) is one of the providers currently cooperating with DSH Community Market. Its existing registry API does not need to adopt the standard wire shape. The integration uses the public reviewed-adapter path and ships as a built-in provider adapter that:
 
 - requests the provider's documented public API under the same Host network limits;
 - maps its categories and plugin metadata into the normalized snapshot;
@@ -224,16 +227,28 @@ The canonical item identity is the pair `{ sourceRecordId, itemId }`. Two regist
 
 This relationship makes 1024Store a supported source choice. It does **not** make it the default, preferred, official, recommended, audited, or fallback source. The adapter does not auto-select it, and an empty or failed selection never triggers a hidden request to it. Its catalog remains an independent project, and catalog inclusion is not a security review of any listed plugin.
 
+## dshfind cooperation
+
+[dshfind](https://dshfind.com) is an optional cooperating source with a reviewed built-in adapter for its public REST API. The adapter uses only the compiled-in `https://api.dshfind.com` origin and public anonymous requests. It requests page 1 with `per_page=100`, records the returned `data_version`, and sends that exact value on every later page. A `409 stale_data`, inconsistent version/total, invalid page, or incomplete traversal rejects the complete scan; no partial index is published. Search, category filtering, category enumeration, sorting, and 50-item UI pagination are then performed against the complete local index without sending those interactions back to dshfind.
+
+dshfind documents an anonymous quota of 30 requests per minute with a burst of 10, while its current catalog requires more than 30 pages at 100 items per page. The adapter therefore uses a fixed sequential delay below the published sustained rate and makes the slower first synchronization visible as source loading rather than parallelizing around the provider limit. A rate-limit response rejects the whole scan and the ordinary source Retry action may start it again. A completed local index remains subject to the ordinary bounded cache; explicit refresh starts a new consistent full scan.
+
+The dshfind response may contain `install.cmd`, `install.kind`, `install.pkg_name`, `install.npm_published`, and `install.probed_at`, but it does not currently provide an exact stable npm version or equivalent `repository_backlink` evidence. These are untrusted provider claims, not execution authority. The adapter discards `install.cmd` before normalization, never displays or executes it, never parses a package/version from it, and does not emit `package` or `latestVersion` for dshfind. Consequently every dshfind item is browse-only and excluded from **Installable** and Host-reconstructed manual hints.
+
+The adapter may normalize bounded plain-text identity, description, tags/category, update time, and a canonical credential-free `https://github.com/owner/repository` link. The current API exposes no plugin icon or README field. Any owner-avatar fallback must be labelled `publisher-avatar` and resolved through the Host media boundary; the adapter does not fetch or render remote README content. dshfind scores, grades, `official`/featured labels, risk labels, and installation conclusions remain provider-owned operational claims and never become an Anywhere Labs security review, recommendation, or verification signal.
+
+This cooperation makes dshfind visible as an optional partner choice only. It does **not** make it default, preferred, official, recommended, audited, or a fallback, and source failure never causes a hidden switch to another provider.
+
 ## Installation boundary
 
 Catalog browsing and plugin installation are separate operations:
 
 - Fetching a manifest or snapshot is read-only and never invokes pnpm, DSH, a shell, or a lifecycle script.
 - Remote data cannot supply an install command, custom package-manager arguments, environment variables, or a working directory.
-- A browse record is not yet an install target. The Host independently resolves npm identity to an exact SemVer version or repository identity to an immutable commit, using a semantic version parser rather than a regular expression.
-- When a record declares both an npm package and a repository, they are independent provider claims: neither silently takes precedence and their presence does not prove that they contain the same code. The user must explicitly choose the identity being installed. If the Host cannot independently verify the relationship or detects a conflict, installation stays disabled.
-- Installation stays disabled when an immutable version or commit cannot be resolved and revalidated.
-- The final confirmation shows the exact source record, pinned package version or repository commit, active profile, and local-code warning.
+- A browse record is not yet an install target. The current managed path accepts only a structurally eligible exact stable npm target with reviewed provider verification and a canonical repository backlink.
+- Preview independently verifies npm identity, repository, integrity, runtime, lifecycle scripts, DSH bundle evidence, and the active profile against authoritative local and registry state. A conflicting or unverifiable claim keeps installation disabled.
+- Execution repeats mutable checks and rejects changed package or profile evidence.
+- The final confirmation shows the exact source record, pinned npm package and version, active profile, and local-code warning.
 - Installation begins only after that explicit user gesture and uses the existing managed active-profile service.
 
 Supporting a source means its metadata can be browsed. It does not grant that source the ability to install, update, enable, or execute a plugin.
@@ -245,12 +260,12 @@ Supporting a source means its metadata can be browsed. It does not grant that so
 - Production manifest and catalog URLs must use HTTPS. Reject credentials in the URL, fragments, nonstandard schemes, and endpoints with an embedded query.
 - Validate every redirect hop, cap the redirect count, reject HTTPS downgrade, and apply all address checks again at every hop.
 - Block loopback, private, link-local, multicast, unspecified, carrier-grade NAT, and cloud metadata destinations after DNS resolution. Protect the connection against DNS rebinding. A local-development override must be explicit, visible, and unavailable in production builds.
-- Do not attach ambient cookies, authorization headers, client certificates, or provider-supplied custom headers. Draft v1 sources are public and anonymous.
+- Do not attach ambient cookies, authorization headers, client certificates, or provider-supplied custom headers. Public v1 standard sources are anonymous.
 - Apply connect, first-byte, and total deadlines plus `AbortSignal` cancellation.
 - Limit compressed and decoded response sizes, item count, pagination depth, string lengths, arrays, and URL lengths. Limits must be constants covered by tests; schema maxima remain authoritative for data fields.
 - Require a JSON media type for catalog responses, decode once, and validate before caching. The catalog loader never follows discovered URLs; only the explicit Host media resolver may process a validated provider-page `media.icon.url` under its separate image limits.
 
-The current draft v1 runtime budgets are part of the provider contract, not implementation hints:
+The public v1 runtime budgets are part of the provider contract, not implementation hints:
 
 | Boundary | Body and redirect budget | Deadlines | Additional rules |
 | --- | --- | --- | --- |
@@ -279,7 +294,7 @@ The Host performs catalog I/O only for the selected source. The icon asset servi
 
 ## Versioning and schema authority
 
-The draft schemas use JSON Schema Draft 2020-12:
+The public v1 schemas use JSON Schema Draft 2020-12:
 
 - [`catalog-source.schema.json`](schemas/catalog-source.schema.json) is authoritative for source manifests.
 - [`catalog-query.schema.json`](schemas/catalog-query.schema.json) is authoritative for the normalized query object and parameter bounds.
@@ -288,11 +303,11 @@ The draft schemas use JSON Schema Draft 2020-12:
 
 Implementations must compile these schemas with Draft 2020-12 format assertion enabled and complete URI, date-time, and UUID format validation. `format` is a validation requirement here, not documentation-only annotation. Semantic checks still apply where relationships span fields, including `defaultLimit <= maxLimit` and non-empty `sorts` when `sort` is advertised.
 
-### Copyable draft fixtures
+### Copyable v1 fixtures
 
-The implementation team can start contract tests with the matching [minimal source manifest](examples/catalog-source.example.json), [minimal query](examples/catalog-query.example.json), [minimal provider page](examples/catalog-provider-page.minimal.example.json), richer [provider page with optional media](examples/catalog-provider-page.example.json), and [normalized snapshot](examples/catalog-snapshot.example.json) fixtures. They are examples only: the source fixture is not a bundled or selected provider, and none of these files is runtime configuration.
+Provider and adapter authors can run compatibility tests from the matching [minimal source manifest](examples/catalog-source.example.json), [minimal query](examples/catalog-query.example.json), [minimal provider page](examples/catalog-provider-page.minimal.example.json), richer [provider page with optional media](examples/catalog-provider-page.example.json), and [normalized snapshot](examples/catalog-snapshot.example.json) fixtures. They are examples only: the source fixture is not a bundled or selected provider, and none of these files is runtime configuration.
 
-`manifestVersion` and response `schemaVersion` version this contract, not the DSH, Desktop, Market package, provider, or plugin version. Until this draft is reviewed and marked stable, all four schemas are provisional and must not be advertised as an implemented compatibility promise.
+`manifestVersion` and response `schemaVersion` version this contract, not the DSH, Desktop, Market package, provider, or plugin version. The published `1.x` Schemas are the implemented compatibility surface. Additive compatible evolution requires review, fixtures, generated types, and contract tests; incompatible changes require a new major version.
 
 An implementation must reject an unsupported major version. Any contract change follows review together with schema fixtures and compatibility tests; loosening validation ad hoc inside one provider adapter is not allowed.
 
@@ -307,50 +322,52 @@ An implementation must reject an unsupported major version. Any contract change 
 7. Reuse the completed index until its bounded expiry; an explicit refresh invalidates it and bypasses the catalog HTTP cache before rescanning.
 8. Cancel owned requests and reset the session when the selected source changes, the selection is cleared, the plugin generation is disposed, or DSH shuts down.
 
-## Implementation handoff checklist
+## Implemented v1 checklist
+
+The current package implements and tests every capability below.
 
 ### Contract and types
 
-- [ ] Review and freeze the four draft schemas together; generate or maintain matching TypeScript types.
-- [ ] Add positive and negative JSON fixtures for every schema.
-- [ ] Implement semantic checks that JSON Schema alone cannot express, including endpoint path, provider-page item-ID uniqueness, `provenance.itemId` equality, source-record/provenance equality, source-record uniqueness, query-limit relationships, package/repository conflict handling, repository canonicalization, and cursor ownership.
-- [ ] Keep provider adapter types internal until at least one standard source and one provider-specific adapter pass the same contract suite.
+- [x] Publish the four v1 Schemas together and generate matching TypeScript types.
+- [x] Maintain positive and negative JSON fixtures for every Schema.
+- [x] Enforce cross-field semantics that JSON Schema alone cannot express, including endpoint, identity, provenance, query-limit, repository, and cursor rules.
+- [x] Keep adapter types local while the standard, DSH 1024Store, and dshfind paths share the same normalized contract.
 
 ### Source registry and UI
 
-- [ ] Persist user-owned source records with a Host-generated UUID, adapter identity, manifest URL or built-in provider ID, and registration kind; persist one local selected-source marker without exposing it to providers.
-- [ ] Implement add, inspect, select, switch, retry, and remove actions.
-- [ ] Ship with no source selected and an explicit zero-source state.
-- [ ] Show attribution and endpoint host before selecting a source and on every result/detail/install surface.
-- [ ] Make the selected-source error explicit; do not replace a failed source or select another source automatically.
+- [x] Persist user-owned source records and one provider-inaccessible local selection marker.
+- [x] Provide add, inspect, select, switch, retry, reorder, and remove actions.
+- [x] Start with no source selected and show an explicit source-choice state.
+- [x] Show attribution, endpoint host, adapter type, and last result in source management and preserve source provenance in catalog and install surfaces.
+- [x] Keep failures attached to the selected source without automatic replacement or fallback.
 
 ### Fetch and selected-source session
 
-- [ ] Implement one constrained HTTP client shared by the standard and built-in provider adapters.
-- [ ] Implement the standard GET `/v1/plugins` adapter and exact query serialization.
-- [ ] Implement the reviewed DSH 1024Store adapter as one optional source choice.
-- [ ] Add selected-source abort/timeout/full-index caching and force refresh; enforce each standard source's effective requested or default network-page limit through the Schema maximum of 100, and serve visible results from local pages of at most 50.
-- [ ] Validate raw provider data before normalization where applicable, then validate every normalized snapshot again.
-- [ ] Preserve provenance through the complete scan, local search, grouping, pagination, cache, details, and installation confirmation.
+- [x] Share one constrained HTTP client across standard and reviewed provider adapters.
+- [x] Implement standard GET `/v1/plugins`, exact query serialization, full cursor scans, and complete local indexing.
+- [x] Ship reviewed optional DSH 1024Store and browse-only dshfind adapters.
+- [x] Enforce abort, deadlines, bounded caches, force refresh, Schema-bounded network pages, and local UI pages of at most 50.
+- [x] Validate untrusted wire data before normalization and validate every normalized snapshot again.
+- [x] Preserve provenance through scanning, local filtering, pagination, cache, details, and installation confirmation.
 
 ### Installation handoff
 
-- [ ] Derive candidates from normalized identity only; never consume remote commands.
-- [ ] Resolve and pin an exact npm SemVer version or immutable repository commit before enabling Install; never treat provider `latestVersion` text as the pin.
-- [ ] Derive the candidate only from the source record currently visible and selected by the user.
-- [ ] Revalidate the chosen record and active profile immediately before invoking the managed install service.
-- [ ] Keep browsing fully usable when installation capability is absent.
+- [x] Derive candidates only from normalized identity and reviewed provider verification; never consume remote commands.
+- [x] Admit only exact stable npm candidates, then independently revalidate registry identity, repository, integrity, runtime, lifecycle scripts, and DSH bundle evidence during preview and execution.
+- [x] Bind each candidate to the source record currently selected and visible to the user.
+- [x] Revalidate the chosen record, mutable package evidence, and active profile immediately before managed installation.
+- [x] Keep browsing fully usable when installation capability is absent or an item remains browse-only.
 
 ### Release gate
 
-- [ ] Keep `dsh-community-market` private and non-loadable until reviewed runtime entries and Loader smoke tests exist.
-- [ ] Document all configured network/data limits and show safe user-facing failures.
-- [ ] Complete security review for user-added URLs, redirects, DNS rebinding, renderer text handling, and install candidate derivation.
-- [ ] Mark this contract stable only after interoperability fixtures pass against at least two independently shaped providers.
+- [x] Provide reviewed Host/Client runtime entries, package-export checks, and Loader smoke tests.
+- [x] Document configured network/data limits and return bounded user-facing failures.
+- [x] Cover user-added URLs, redirects, DNS pinning, renderer text handling, media isolation, and install-candidate derivation with fail-closed boundaries.
+- [x] Exercise the normalized contract through the standard source and two independently shaped reviewed provider APIs.
 
-## Planned test matrix
+## Verified test matrix
 
-These are required acceptance tests for the later implementation, not claims about current test coverage.
+The current automated contract, adapter, Host, Client, media, and installation suites exercise the following acceptance behavior. Rows may group several assertions from those suites.
 
 | Area | Case | Expected result |
 | --- | --- | --- |
@@ -390,10 +407,10 @@ These are required acceptance tests for the later implementation, not claims abo
 | Security | Source attempts to use cookies, auth, custom headers, or remote adapter code | Capability unavailable and input rejected |
 | Lifecycle | Selection changes, is cleared, or Host is disposed during fetch | Fetch aborts, resources release, session state resets when applicable, and no late result mutates state |
 | Install | Snapshot contains a command-like string or URL query crafted as a command | It cannot reach the managed install operation |
-| Install | npm version or repository revision is absent, mutable, invalid, or changes during revalidation | Install remains disabled; no package operation starts |
-| Install | One record claims both npm package and repository, but their relationship is unverified or conflicting | Neither identity wins implicitly; install remains disabled |
+| Install | Exact stable npm version or reviewed provider verification is absent, invalid, or changes during revalidation | Install remains disabled; no package operation starts |
+| Install | Catalog repository and authoritative npm package repository are unverified or conflicting | Install remains disabled; no catalog claim wins over authoritative verification |
 | Install | User chooses an item from the selected source | Confirmation shows exact source, identity, and active profile before execution |
 
-## Open implementation details
+## Versioned extension points
 
-The implementation team may propose concrete cache TTLs, byte/item budgets, locale fallback behavior, and UI layout during review. Those choices must be documented and tested. They may not weaken the exactly-one-selected-source rule, explicit selection, no-default, no-fallback, strict validation, provenance, or non-executable-data rules without revising this contract.
+Compatible v1 revisions may refine documented cache TTLs, byte/item budgets, locale fallback behavior, and UI layout together with tests. They may not weaken the exactly-one-selected-source rule, explicit selection, no-default, no-fallback, strict validation, provenance, or non-executable-data rules; changing those boundaries requires a reviewed contract revision.

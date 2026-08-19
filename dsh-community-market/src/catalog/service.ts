@@ -5,6 +5,7 @@ import { parseCatalogSnapshot } from '../contracts/validate.js'
 import type { CatalogAdapter, CatalogHttpClient, CatalogMediaRegistry, LocalSourceRecord, ScopedCatalogCursor } from '../contracts/types.js'
 import type { MarketCatalogSourceResult, MarketSourceView } from '../api-types.js'
 import { DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_ENDPOINT, DSH_1024STORE_KEY, DSH_1024STORE_PROVIDER_ID, dsh1024StoreAdapter } from '../adapters/dsh-1024store.js'
+import { DSHFIND_ADAPTER_ID, DSHFIND_ENDPOINT, DSHFIND_KEY, DSHFIND_PROVIDER_ID, dshfindAdapter } from '../adapters/dshfind.js'
 import { standardHttpAdapter } from '../adapters/standard-http.js'
 
 export interface BuiltInProviderDefinition {
@@ -22,24 +23,41 @@ export interface BuiltInProviderDefinition {
   readonly partnership: boolean
 }
 
-export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [{
-  key: DSH_1024STORE_KEY,
-  name: 'DSH 1024Store',
-  description: '合作提供方目录。需要用户明确添加并启用。目录收录不代表插件经过审核或推荐。',
-  providerId: DSH_1024STORE_PROVIDER_ID,
-  adapterId: DSH_1024STORE_ADAPTER_ID,
-  endpoint: DSH_1024STORE_ENDPOINT,
-  attribution: {
+export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
+  {
+    key: DSH_1024STORE_KEY,
     name: 'DSH 1024Store',
-    url: 'https://deepseek1024.com',
-    notice: 'Community catalog data provided by a cooperating provider.',
+    description: '合作提供方目录。需要用户明确添加并启用。目录收录不代表插件经过审核或推荐。',
+    providerId: DSH_1024STORE_PROVIDER_ID,
+    adapterId: DSH_1024STORE_ADAPTER_ID,
+    endpoint: DSH_1024STORE_ENDPOINT,
+    attribution: {
+      name: 'DSH 1024Store',
+      url: 'https://deepseek1024.com',
+      notice: 'Community catalog data provided by a cooperating provider.',
+    },
+    partnership: true,
   },
-  partnership: true,
-}]
+  {
+    key: DSHFIND_KEY,
+    name: 'dshfind',
+    description: '合作提供方目录。需要用户明确添加并启用。目录收录不代表插件经过审核或推荐。',
+    providerId: DSHFIND_PROVIDER_ID,
+    adapterId: DSHFIND_ADAPTER_ID,
+    endpoint: DSHFIND_ENDPOINT,
+    attribution: {
+      name: 'dshfind',
+      url: 'https://dshfind.com',
+      notice: 'Community catalog data provided by a cooperating provider.',
+    },
+    partnership: true,
+  },
+]
 
 const adapters = new Map<string, CatalogAdapter>([
   [standardHttpAdapter.adapterId, standardHttpAdapter],
   [dsh1024StoreAdapter.adapterId, dsh1024StoreAdapter],
+  [dshfindAdapter.adapterId, dshfindAdapter],
 ])
 
 const MAX_CATALOG_ITEMS = 10_000
@@ -195,6 +213,8 @@ export interface CatalogService {
 export interface CatalogScanOptions {
   readonly force?: boolean
   readonly locale?: string
+  /** Reject a stale or foreign cursor scope before any provider I/O. */
+  readonly expectedSourceRecordId?: string
 }
 
 /** Complete, Host-normalized active-source scan. Page snapshots remain schema-bounded. */
@@ -470,6 +490,12 @@ export class DefaultCatalogService implements CatalogService {
     if (options.force !== undefined && typeof options.force !== 'boolean') {
       throw new TypeError('invalid catalog scan options')
     }
+    if (
+      options.expectedSourceRecordId !== undefined
+      && (typeof options.expectedSourceRecordId !== 'string' || options.expectedSourceRecordId.length === 0)
+    ) {
+      throw new TypeError('invalid catalog scan options')
+    }
     const scanQuery = normalizeCatalogQuery({
       limit: 100,
       ...(options.locale === undefined ? {} : { locale: options.locale }),
@@ -480,6 +506,12 @@ export class DefaultCatalogService implements CatalogService {
     const records = [...await this.store.load()].sort((left, right) => left.order - right.order)
     signal.throwIfAborted()
     const source = records.find(record => record.enabled)
+    if (
+      options.expectedSourceRecordId !== undefined
+      && source?.sourceRecordId !== options.expectedSourceRecordId
+    ) {
+      throw new Error('catalog source is not active')
+    }
     if (source === undefined) return undefined
     const sourceGeneration = sourceGenerationsAtLoadStart.get(source.sourceRecordId) ?? 0
     if ((this.sourceGenerations.get(source.sourceRecordId) ?? 0) !== sourceGeneration) {
@@ -670,7 +702,10 @@ export class DefaultCatalogService implements CatalogService {
   ): Promise<readonly MarketCatalogSourceResult[]> {
     const query = normalizeCatalogQuery(value)
     if (query.cursor !== undefined) throw new Error('catalog cursor requires an explicit source scope')
-    const index = await this.scanCatalog(signal, query.locale === undefined ? {} : { locale: query.locale })
+    const index = await this.scanCatalog(signal, {
+      ...(query.locale === undefined ? {} : { locale: query.locale }),
+      ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
+    })
     signal.throwIfAborted()
     return index === undefined ? [] : this.queryCatalog(index, query, scope)
   }

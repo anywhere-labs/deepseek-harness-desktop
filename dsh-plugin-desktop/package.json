@@ -244,7 +244,7 @@
     "@types/node": "^22.20.0",
     "@types/react": "^18",
     "electron": "43.4.0",
-    "electron-builder": "26.15.3",
+    "electron-builder": "26.15.7",
     "sharp": "0.35.3",
     "tsdown": "0.22.2",
     "typescript": "6.0.3",

@@ -58,6 +58,7 @@ function macOptions(stateDir: string, spawn: DesktopTerminalSpawn): DesktopTermi
     productVersion: '2.0.0',
     profileDir: "/Users/example/Library/Application Support/DSH O'Brien/profiles/desktop",
     homeDir: "/Users/example/Library/Application Support/DSH O'Brien",
+    installRecoveryStatePath: "/Users/example/Library/Application Support/DSH O'Brien Desktop/plugin-install-recovery/state.json",
     stateDir,
     spawn,
     environment: {
@@ -80,6 +81,7 @@ function windowsOptions(stateDir: string, spawn: DesktopTerminalSpawn): DesktopT
     productVersion: '2.0.0',
     profileDir: "C:\\Users\\Example\\DSH O'Brien\\profiles\\desktop",
     homeDir: "C:\\Users\\Example\\DSH O'Brien",
+    installRecoveryStatePath: "C:\\Users\\Example\\AppData\\Roaming\\DSH Desktop\\plugin-install-recovery\\state.json",
     stateDir,
     spawn,
     environment: {
@@ -201,6 +203,7 @@ describe('desktop terminal environment', () => {
           KEEP: 'value',
           PATH: `${launch.shimDir}:/usr/local/bin:/usr/bin:/bin`,
           DSH_HOME: options.homeDir,
+          DSH_DESKTOP_INSTALL_RECOVERY_STATE_PATH: options.installRecoveryStatePath,
         },
         shell: false,
         stdio: 'ignore',
@@ -271,6 +274,7 @@ describe('desktop terminal environment', () => {
           DSH_DESKTOP_DEFAULT_PROFILE: options.profileName,
           DSH_DESKTOP_APP_EXECUTABLE: options.appExecutable,
           DSH_DESKTOP_DSH_BOOTSTRAP: options.dshBootstrapPath,
+          DSH_DESKTOP_INSTALL_RECOVERY_STATE_PATH: options.installRecoveryStatePath,
           DSH_DESKTOP_ELECTRON_VERSION: options.electronVersion,
           DSH_DESKTOP_PNPM_ENTRY: options.pnpmBinPath,
           DSH_DESKTOP_PROFILE_DIRECTORY: options.profileDir,

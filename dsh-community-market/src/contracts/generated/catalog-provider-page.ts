@@ -70,7 +70,7 @@ export interface Publisher {
   url?: HttpsUri
 }
 /**
- * Optional provider-declared plugin media. In draft v1, only a direct plugin icon is standardized.
+ * Optional provider-declared plugin media. In v1, only a direct plugin icon is standardized.
  */
 export interface Media {
   icon: RemoteIconCandidate

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
@@ -137,6 +139,22 @@ describe('published package surface', () => {
     expect(manifest.optionalDependencies ?? {}).not.toHaveProperty('dshmarket')
   })
 
+  it('patches app boot to accept an empty patch layer', () => {
+    const patchPath = './patches/dsh-app-boot@0.1.0-rc.7.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-app-boot@npm:0.1.0-rc.7': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-app-boot@npm:^0.1.0-rc.7': expect.stringContaining(patchPath),
+    })
+    const marker = 'if (parsed === void 0 || parsed === null) return [];'
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedBoot = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-app-boot/lib/index.js',
+      packageRoot,
+    ), 'utf8')
+    expect(patch).toContain(marker)
+    expect(installedBoot).toContain(marker)
+  })
+
   it('patches the browse panel with the Windows native-picker icon bridge', () => {
     const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.7.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
@@ -150,6 +168,9 @@ describe('published package surface', () => {
     ), 'utf8')
     for (const marker of [
       '__DSH_DESKTOP_PICK_DIRECTORY__',
+      '__DSH_DESKTOP_VALIDATE_DIRECTORY__',
+      'openDirectory(path)',
+      'openDirectory(targetPath)',
       'IconFolderOpen16',
       'nativePickerButton',
       'browser.nativePicker',
@@ -159,6 +180,21 @@ describe('published package surface', () => {
       expect(patch).toContain(marker)
       expect(installedClient).toContain(marker)
     }
+  })
+
+  it('marks the upstream Workspace browser as the desktop folder-drop target', () => {
+    const patchPath = './patches/dsh-client-ui-workspace@0.1.0-rc.7.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-client-ui-workspace@npm:0.1.0-rc.7': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-workspace@npm:^0.1.0-rc.7': expect.stringContaining(patchPath),
+    })
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedClient = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-client-ui-workspace/lib/client.js',
+      packageRoot,
+    ), 'utf8')
+    expect(patch).toContain('data-dsh-workspace-drop-target')
+    expect(installedClient).toContain('data-dsh-workspace-drop-target')
   })
 
   it('builds public Host plugins and their private native bootstraps', () => {
@@ -176,6 +212,8 @@ describe('published package surface', () => {
     expect(config).toContain("profiles: 'src/profiles.ts'")
     expect(config).toContain("diagnostics: 'src/diagnostics.ts'")
     expect(config).toContain("'diagnostic-export-worker': 'src/diagnostic-export-worker.ts'")
+    expect(config).toContain("entry: { preload: 'src/preload.ts' }")
+    expect(config).toContain("entryFileNames: 'preload.cjs'")
     expect(config).toContain("terminal: 'src/terminal.ts'")
     expect(config).toContain("'update-download': 'src/update-download.ts'")
     expect(config).toContain("updates: 'src/updates.ts'")
@@ -224,6 +262,61 @@ describe('published package surface', () => {
     expect(nativeExit).toBeGreaterThan(exitCoordinator)
     expect(markClean).toBeGreaterThan(nativeExit)
     expect(ready).toBeGreaterThan(markClean)
+  })
+
+  it('claims plugin install recovery before profile composition and gates health in Electron main', () => {
+    const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const fixedStatePath = main.indexOf("desktopInstallRecoveryStatePath(app.getPath('userData'))")
+    const beginProfile = main.indexOf('profileStartup = beginDesktopProfileStartup(')
+    const claim = main.indexOf('const recoveryClaim = await installRecovery.claim()')
+    const prepare = main.indexOf('const prepared = prepareDesktopProfile(')
+    const monitor = main.indexOf('runtime.beginRendererBootMonitoring()')
+    const mount = main.indexOf('await runtime.mountScheduled()')
+    const awaitRenderer = main.indexOf('const rendererReport = await rendererBoot')
+    const verified = main.indexOf('await installRecovery.markHealthy(')
+    const profileHealthy = main.indexOf('markDesktopProfileHealthy(selectionStatePath')
+    const clearVerified = main.indexOf('await installRecovery.clear(verifiedInstallToClear.transactionId)')
+
+    expect(fixedStatePath).toBeGreaterThanOrEqual(0)
+    expect(main).not.toContain("desktopInstallRecoveryStatePath(app.getPath('userData'), process.env)")
+    expect(main).not.toContain('process.env[DESKTOP_INSTALL_RECOVERY_STATE_ENV]')
+    expect(beginProfile).toBeGreaterThan(fixedStatePath)
+    expect(claim).toBeGreaterThan(beginProfile)
+    expect(prepare).toBeGreaterThan(claim)
+    expect(main).toContain('installRecoveryStatePath,\n      generationId,')
+    expect(monitor).toBeGreaterThan(prepare)
+    expect(mount).toBeGreaterThan(monitor)
+    expect(awaitRenderer).toBeGreaterThan(mount)
+    expect(verified).toBeGreaterThan(awaitRenderer)
+    expect(profileHealthy).toBeGreaterThan(verified)
+    expect(clearVerified).toBeGreaterThan(profileHealthy)
+  })
+
+  it('routes protected and ordinary startup failures through the native recovery window', () => {
+    const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const windows = [...main.matchAll(/await openStartupRecoveryWindow\(/gu)]
+      .map(match => match.index)
+    const prompt = main.indexOf("if (recoveryClaim.action === 'prompt')")
+    const prepare = main.indexOf('const prepared = prepareDesktopProfile(')
+    const recordFailure = main.indexOf('await installRecovery.recordFailure(')
+    const quiesce = main.indexOf('const recoveryActionsSafe = await quiesceHostForRecovery()')
+
+    expect(windows).toHaveLength(2)
+    expect(windows[0]).toBeGreaterThan(prompt)
+    expect(windows[0]).toBeLessThan(prepare)
+    expect(quiesce).toBeGreaterThan(prepare)
+    expect(recordFailure).toBeGreaterThan(quiesce)
+    expect(windows[1]).toBeGreaterThan(recordFailure)
+    expect(main).not.toContain('await installRecovery.restore(')
+    expect(main).toContain('failureStage: startupStage')
+    expect(main).toContain("startupStage = 'profile-composition'")
+    expect(main).toContain("startupStage = 'host-boot'")
+    expect(main).toContain("startupStage = 'renderer-startup'")
+    expect(main).toContain("return report.status === 'failed'")
+    expect(main).not.toContain("return report.status === 'failed' && verifyingInstall !== undefined")
+    expect(main).toContain('void run().catch(async (cause: unknown) => { await handleFatalLauncherFailure(cause) })')
+    expect(main).toContain('await installRecovery.markRollbackNotified(')
+    expect(main).toContain("if (!installRecoveryRelaunch && failureRoute === 'last-known-good')")
   })
 
   it('uses the upstream child-environment scrub around login-shell recovery', () => {
@@ -338,7 +431,7 @@ describe('published package surface', () => {
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
   })
 
-  it('runs the full gate on Windows and packages through root scripts on native runners', () => {
+  it('runs the full gate once before reusing native packaging outputs on Windows', () => {
     const windowsJob = ciWorkflow.slice(
       ciWorkflow.indexOf('  desktop-windows:'),
       ciWorkflow.indexOf('  desktop-macos:'),
@@ -353,15 +446,42 @@ describe('published package surface', () => {
     )
 
     expect(windowsJob).toContain('- run: yarn check')
-    expect(windowsJob).toContain('- run: yarn dist:win')
-    expect(windowsJob).toContain('- run: yarn dist:win-portable')
-    expect(windowsJob).not.toContain('yarn workspace dsh-plugin-desktop dist:win')
-    expect(macosJob).toContain('- run: yarn workspace dsh-community-market check')
-    expect(macosJob).toContain('- run: yarn dist:mac-smoke')
-    expect(macosJob).not.toContain('yarn workspace dsh-plugin-desktop dist:mac-smoke')
+    expect(windowsJob).toContain('run: yarn workspace dsh-plugin-desktop dist:win')
+    expect(windowsJob).toContain('run: yarn workspace dsh-plugin-desktop dist:win-portable')
+    expect(windowsJob).toContain('DSH_PACKAGE_CHECK_ALREADY_RAN: \'1\'')
+    expect(macosJob).not.toContain('- run: yarn workspace dsh-community-market check')
+    expect(macosJob).toContain('- run: yarn check')
+    expect(macosJob).toContain('run: yarn workspace dsh-plugin-desktop dist:mac-smoke')
+    expect(macosJob).toContain('DSH_PACKAGE_CHECK_ALREADY_RAN: \'1\'')
+    expect(macosJob).not.toContain('- run: yarn dist:mac-smoke')
     expect(linuxJob).toContain('- run: yarn workspace dsh-community-market check')
     expect(linuxJob).toContain('- run: yarn dist:linux')
     expect(linuxJob).not.toContain('yarn workspace dsh-plugin-desktop dist:linux')
+  })
+
+  it('skips product packaging only for documentation-only changes', () => {
+    const classifier = fileURLToPath(new URL('../../scripts/classify-ci-changes.mjs', import.meta.url))
+    const classify = (paths: string[]): string => execFileSync(
+      process.execPath,
+      [classifier],
+      { input: Buffer.from(`${paths.join('\0')}\0`), encoding: 'utf8' },
+    ).trim()
+
+    expect(classify([
+      'docs/architecture.md',
+      '.agents/notes/implemented/architecture/decision.md',
+      '.agents/notes/implemented/architecture/decision.i18n.yaml',
+      'dsh-community-market/docs/schema.json',
+      '.github/ISSUE_TEMPLATE/feature_request.yml',
+    ])).toBe('false')
+    expect(classify(['README.md', 'dsh-plugin-desktop/src/index.ts'])).toBe('true')
+    expect(classify(['.github/workflows/ci.yml'])).toBe('true')
+    expect(classify(['THIRD_PARTY_NOTICES.md'])).toBe('true')
+    expect(classify([])).toBe('true')
+
+    expect(ciWorkflow).toContain('product="$(git diff --name-only -z')
+    expect(ciWorkflow).toContain("if: needs.changes.outputs.product == 'true'")
+    expect(ciWorkflow).toContain('Documentation-only change; product build and tests are not required.')
   })
 
   it('keeps one fixed brand-blue tray source for generated native assets', () => {
@@ -437,9 +557,9 @@ describe('published package surface', () => {
   })
 
   it('resolves electron-builder through the pinned app-builder-lib keychain patch', () => {
-    const patchResolution = 'patch:app-builder-lib@npm%3A26.15.3#./patches/app-builder-lib@26.15.3.patch'
+    const patchResolution = 'patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
-    const patch = readFileSync(new URL('patches/app-builder-lib@26.15.3.patch', workspaceRoot), 'utf8')
+    const patch = readFileSync(new URL('patches/app-builder-lib@26.15.7.patch', workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const electronBuilderManifest = workspaceRequire.resolve('electron-builder/package.json')
     const electronBuilderRequire = createRequire(electronBuilderManifest)
@@ -447,9 +567,10 @@ describe('published package surface', () => {
     const installedCodeSign = readFileSync(join(dirname(appBuilderManifest), 'out/codeSign/macCodeSign.js'), 'utf8')
 
     expect(workspaceManifest.resolutions).toMatchObject({
-      'app-builder-lib@npm:26.15.3': patchResolution,
+      'app-builder-lib@npm:26.15.7': patchResolution,
     })
-    expect(lockfile).toContain('app-builder-lib@patch:app-builder-lib@npm%3A26.15.3#./patches/app-builder-lib@26.15.3.patch')
+    expect(manifest.devDependencies?.['electron-builder']).toBe('26.15.7')
+    expect(lockfile).toContain('app-builder-lib@patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch')
     expect(patch).toContain('importCerts(keychainFile, certPaths, cscPasswords, keychainPassword)')
     expect(patch).toContain('"-k", keychainPassword, keychainFile')
     expect(installedCodeSign).toContain('importCerts(keychainFile, certPaths, cscPasswords, keychainPassword)')

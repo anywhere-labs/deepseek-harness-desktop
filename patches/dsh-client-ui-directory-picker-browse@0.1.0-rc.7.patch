@@ -1,5 +1,5 @@
 diff --git a/lib/client.js b/lib/client.js
-index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1d8941ed9 100644
+index 88da094ba773c260d687e428f8888c4433d31d9f..c6836c58e465ce8f2c1cbb47550c8c81b88f5522 100644
 --- a/lib/client.js
 +++ b/lib/client.js
 @@ -24,7 +24,7 @@ window.__ModuleLoader__.load({
@@ -31,31 +31,47 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1
  		* @returns the dialog element (null while closed, via Modal).
  		*/
 -		function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }) {
-+		function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, onOpen, onClose, busy, t }) {
++		function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, validateDirectory, onOpen, onClose, busy, t }) {
  			const [parent, setParent] = (0, react.useState)(null);
  			const [selected, setSelected] = (0, react.useState)(null);
  			const [child, setChild] = (0, react.useState)(null);
-@@ -292,6 +293,7 @@ window.__ModuleLoader__.load({
+@@ -292,6 +293,8 @@ window.__ModuleLoader__.load({
  			const [folderDraft, setFolderDraft] = (0, react.useState)(null);
  			const [creatingFolder, setCreatingFolder] = (0, react.useState)(false);
  			const [createError, setCreateError] = (0, react.useState)(null);
 +			const [nativePicking, setNativePicking] = (0, react.useState)(false);
++			const [validatingDirectory, setValidatingDirectory] = (0, react.useState)(false);
  			const requestSeq = (0, react.useRef)(0);
  			const scanController = (0, react.useRef)(null);
  			const openGeneration = (0, react.useRef)(0);
-@@ -669,12 +671,24 @@ window.__ModuleLoader__.load({
+@@ -669,12 +672,39 @@ window.__ModuleLoader__.load({
  			});
  			if (!open) return null;
  			const twoPane = selected !== null;
 -			const parentInert = busy || folderDraft !== null;
-+			const parentInert = busy || folderDraft !== null || nativePicking;
++			const parentInert = busy || folderDraft !== null || nativePicking || validatingDirectory;
++			const openDirectory = (path) => {
++				if (validateDirectory === void 0) {
++					onOpen(path);
++					return;
++				}
++				setError(null);
++				setValidatingDirectory(true);
++				validateDirectory(path).then((allowed) => {
++					setValidatingDirectory(false);
++					if (allowed) onOpen(path);
++				}, (reason) => {
++					setValidatingDirectory(false);
++					setError(failureText(reason));
++				});
++			};
 +			const pickFromSystem = () => {
 +				if (pickNativeDirectory === void 0) return;
 +				setError(null);
 +				setNativePicking(true);
 +				pickNativeDirectory().then((path) => {
 +					setNativePicking(false);
-+					if (path !== null) onOpen(path);
++					if (path !== null) openDirectory(path);
 +				}, (reason) => {
 +					setNativePicking(false);
 +					setError(failureText(reason));
@@ -70,7 +86,7 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1
  				},
  				title: t("browser.title"),
  				className: clsx(DirectoryBrowser_module_css_default.dialog),
-@@ -832,6 +846,19 @@ window.__ModuleLoader__.load({
+@@ -832,6 +862,19 @@ window.__ModuleLoader__.load({
  									},
  									children: t("browser.newFolder")
  								}),
@@ -90,15 +106,27 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1
  								(0, react_jsx_runtime.jsxs)("button", {
  									type: "button",
  									className: clsx(DirectoryBrowser_module_css_default.showHiddenToggle, showHidden && DirectoryBrowser_module_css_default.showHiddenToggleActive),
-@@ -955,6 +982,7 @@ window.__ModuleLoader__.load({
+@@ -857,9 +900,9 @@ window.__ModuleLoader__.load({
+ 									variant: "primary",
+ 									className: clsx(DirectoryBrowser_module_css_default.footerAction),
+ 									disabled: targetPath === null || loading || parentInert || draftPending,
+ 									/* v8 ignore next -- narrowing guard: Open disables while no target exists. */
+ 									onClick: () => {
+-										if (targetPath !== null) onOpen(targetPath);
++										if (targetPath !== null) openDirectory(targetPath);
+ 									},
+ 									children: t("browser.open")
+ 								})
+@@ -955,6 +998,8 @@ window.__ModuleLoader__.load({
  				busy: props.busy,
  				listDirectory: props.listDirectory,
  				createDirectory: props.createDirectory,
 +				pickNativeDirectory: props.pickNativeDirectory,
++				validateDirectory: props.validateDirectory,
  				t: props.t,
  				onOpen: props.onPicked,
  				onClose: props.onCancel
-@@ -992,7 +1020,8 @@ window.__ModuleLoader__.load({
+@@ -992,7 +1037,8 @@ window.__ModuleLoader__.load({
  					"browser.editPath": "编辑路径",
  					"browser.loading": "加载中…",
  					"browser.truncated": "文件夹过多，仅显示开头部分。",
@@ -108,7 +136,7 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1
  				}], ["en", {
  					"browser.title": "Select Workspace Directory",
  					"browser.home": "Home",
-@@ -1006,7 +1035,8 @@ window.__ModuleLoader__.load({
+@@ -1006,7 +1052,8 @@ window.__ModuleLoader__.load({
  					"browser.editPath": "Edit path",
  					"browser.loading": "Loading…",
  					"browser.truncated": "Too many folders to list; only the beginning is shown.",
@@ -118,7 +146,7 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1
  				}]];
  				try {
  					for (const [locale, dict] of dictionaries) disposers.push(ctx.locale.register(LOCALE_NS, locale, dict));
-@@ -1021,6 +1051,11 @@ window.__ModuleLoader__.load({
+@@ -1021,6 +1068,16 @@ window.__ModuleLoader__.load({
  			const injected = () => ({
  				listDirectory: (path, signal) => ctx.workspaces.listDirectory(path, signal),
  				createDirectory: (path, name) => ctx.workspaces.createDirectory(path, name),
@@ -127,39 +155,48 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..572b5f62acdb915866908f4c8a9d1aa1
 +					if (typeof pick !== "function") throw new Error("DSH Desktop native directory picker is unavailable");
 +					return pick();
 +				} : void 0,
++				validateDirectory: new URLSearchParams(window.location.search).get("dsh-desktop-platform") === "win32" ? (path) => {
++					const validate = window.__DSH_DESKTOP_VALIDATE_DIRECTORY__;
++					if (typeof validate !== "function") throw new Error("DSH Desktop directory validation is unavailable");
++					return validate(path);
++				} : void 0,
  				t: ctx.locale.bind(LOCALE_NS)
  			});
  			ctx.slots.inject("conversation.hero.workspace.directoryFlow", () => ctx.slots.inject("sidebar.workspaces.directoryFlow", function* () {
 diff --git a/lib/types/client/DirectoryBrowser.d.ts b/lib/types/client/DirectoryBrowser.d.ts
-index 51fcc428ab687d2703c8befdcf312469b047ccc4..186592f0d21156ae7c115250c77594cd6cf54759 100644
+index 51fcc428ab687d2703c8befdcf312469b047ccc4..cb0f64dd32ea45231f841da4abdffb15e8b049e2 100644
 --- a/lib/types/client/DirectoryBrowser.d.ts
 +++ b/lib/types/client/DirectoryBrowser.d.ts
-@@ -8,6 +8,8 @@ export interface DirectoryBrowserProps {
+@@ -8,6 +8,10 @@ export interface DirectoryBrowserProps {
      listDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>;
      /** Create one child directory under an existing parent. */
      createDirectory: (path: string, name: string) => Promise<string>;
 +    /** Optional native folder chooser contributed by a local desktop shell. */
 +    pickNativeDirectory?: () => Promise<string | null>;
++    /** Optional owner validation before a selected path is opened. */
++    validateDirectory?: (path: string) => Promise<boolean>;
      /** The operator confirmed a directory (the selection, else the listed level). */
      onOpen: (path: string) => void;
      /** Close without picking (mask, Escape, Cancel). */
-@@ -22,5 +24,5 @@ export interface DirectoryBrowserProps {
+@@ -22,5 +26,5 @@ export interface DirectoryBrowserProps {
   * @param props - owner-controlled browser props.
   * @returns the dialog element (null while closed, via Modal).
   */
 -export declare function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
-+export declare function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
++export declare function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, validateDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
  //# sourceMappingURL=DirectoryBrowser.d.ts.map
 diff --git a/lib/types/client/flow.d.ts b/lib/types/client/flow.d.ts
-index 689bb216f133826c2d4d4454645d643c81b48847..008f1727d4b8d5bfad646d46c7f9706bf41f3e42 100644
+index 689bb216f133826c2d4d4454645d643c81b48847..501956872a051724097baba7f75b565303fc102f 100644
 --- a/lib/types/client/flow.d.ts
 +++ b/lib/types/client/flow.d.ts
-@@ -8,6 +8,8 @@ export interface BrowseFlowInjected {
+@@ -8,6 +8,10 @@ export interface BrowseFlowInjected {
      listDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>;
      /** Create one child directory under an existing parent. */
      createDirectory: (path: string, name: string) => Promise<string>;
 +    /** Optional native folder chooser contributed by a local desktop shell. */
 +    pickNativeDirectory?: () => Promise<string | null>;
++    /** Optional owner validation before a selected path is opened. */
++    validateDirectory?: (path: string) => Promise<boolean>;
      /** Localized dialog copy (this package's namespace). */
      t: Translate;
  }
