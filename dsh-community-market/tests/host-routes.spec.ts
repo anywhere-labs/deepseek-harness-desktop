@@ -301,7 +301,7 @@ describe('community market Host routes', () => {
       expect(Date.now() - startedAt).toBeLessThan(500)
       expect(secondResponse.status).toBe(200)
       await expect(secondResponse.json()).resolves.toMatchObject({
-        results: [{ stale: true, snapshot: { items: [{ id: 'better-sidebar' }] } }],
+        results: [{ stale: false, snapshot: { items: [{ id: 'better-sidebar' }] } }],
         metadata: { cacheStatus: 'cached' },
       })
       expect(requests).toBe(2)

@@ -43,18 +43,12 @@ const source = (overrides: Partial<LocalSourceRecord> = {}): LocalSourceRecord =
 })
 
 const publisherAssetRef = 'mktimg_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-const pluginAssetRef = 'mktimg_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
 const renamedAssetRef = 'mktimg_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD'
 const fixtureAssetRef = 'mktimg_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE'
 
 const rawCatalog = {
-  name: 'dsh-1024store-catalog',
-  meta: {
-    total: 1,
-    generatedAt: '2026-08-17T15:49:53.062Z',
-    revision: 'sha256:fixture',
-  },
-  packages: [{
+  generatedAt: '2026-08-17T15:49:53.062Z',
+  plugins: [{
     id: 'anywhere-labs/deepseek-harness-desktop/dsh-plugin-desktop',
     name: 'deepseek-harness-desktop',
     owner: 'anywhere-labs',
@@ -73,7 +67,7 @@ function catalogIndex(record: LocalSourceRecord = source()): CatalogFullIndex {
     source: {
       ...record,
       name: 'DSH 1024Store',
-      endpoint: 'https://deepseek1024.com/api/v1/plugins',
+      endpoint: 'https://deepseek1024.com/api/v2/plugins',
       partnership: true,
     },
     snapshots: [],
@@ -152,7 +146,7 @@ describe('1024Store adapter', () => {
       signal: new AbortController().signal,
       http: {
         getJson: vi.fn(async () => ({
-          value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 0 }, packages: [] },
+          value: { ...rawCatalog, plugins: [] },
           finalUrl: 'https://deepseek1024.com/api/v1/plugins',
         })),
       },
@@ -172,7 +166,7 @@ describe('1024Store adapter', () => {
     )
 
     expect(snapshot.items[0]).toMatchObject({
-      id: rawCatalog.packages[0]!.id,
+      id: rawCatalog.plugins[0]!.id,
       summary: 'Desktop shell',
       repository: {
         url: 'https://github.com/anywhere-labs/deepseek-harness-desktop',
@@ -184,48 +178,20 @@ describe('1024Store adapter', () => {
     expect(JSON.stringify(snapshot)).not.toContain('unsafe-value')
     expect(snapshot.source).toMatchObject({
       providerGeneratedAt: '2026-08-17T15:49:53.062Z',
-      providerRevision: 'sha256:fixture',
     })
     expect(register).toHaveBeenCalledWith({
       remoteUrl: 'https://github.com/anywhere-labs.png?size=96',
       role: 'publisher-avatar',
       alt: 'anywhere-labs',
       sourceRecordId: source().sourceRecordId,
-      itemId: rawCatalog.packages[0]!.id,
+      itemId: rawCatalog.plugins[0]!.id,
       allowedHostnames: ['github.com', 'avatars.githubusercontent.com'],
     })
     expect(http.getJson).toHaveBeenCalledWith(
-      'https://deepseek1024.com/api/v1/plugins',
+      'https://deepseek1024.com/api/v2/plugins?limit=100&source=dsh-desktop',
       expect.any(AbortSignal),
       { allowedOrigin: 'https://deepseek1024.com' },
     )
-  })
-
-  it('prefers an explicit provider icon over the GitHub publisher avatar fallback', async () => {
-    const item = {
-      ...rawCatalog.packages[0]!,
-      media: { icon: { url: 'https://avatars.githubusercontent.com/u/1?v=4', alt: 'Plugin logo' } },
-    }
-    const http: CatalogHttpClient = {
-      getJson: vi.fn(async () => ({
-        value: { ...rawCatalog, packages: [item] },
-        finalUrl: 'https://deepseek1024.com/api/v1/plugins',
-      })),
-    }
-    const register = vi.fn(() => pluginAssetRef)
-    const snapshot = await dsh1024StoreAdapter.fetch(
-      {},
-      { source: source(), signal: new AbortController().signal, http, media: { register } },
-    )
-
-    expect(snapshot.items[0]?.media).toEqual({
-      icon: { assetRef: pluginAssetRef, role: 'plugin-icon', alt: 'Plugin logo' },
-    })
-    expect(register).toHaveBeenCalledOnce()
-    expect(register).toHaveBeenCalledWith(expect.objectContaining({
-      remoteUrl: 'https://avatars.githubusercontent.com/u/1?v=4',
-      role: 'plugin-icon',
-    }))
   })
 
   it('rejects a 1024Store response that leaves the reviewed provider origin', async () => {
@@ -242,14 +208,14 @@ describe('1024Store adapter', () => {
 
   it('uses the canonical repository URL after a provider item ID rename', async () => {
     const item = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'former-owner/former-repository',
       owner: 'current-owner',
       url: 'https://github.com/current-owner/current-repository',
     }
     const http: CatalogHttpClient = {
       getJson: vi.fn(async () => ({
-        value: { ...rawCatalog, packages: [item] },
+        value: { ...rawCatalog, plugins: [item] },
         finalUrl: 'https://deepseek1024.com/api/v1/plugins',
       })),
     }
@@ -276,14 +242,14 @@ describe('1024Store adapter', () => {
 
   it('keeps legacy GitHub owners that end in a hyphen', async () => {
     const item = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'tianxia--/fixture',
       owner: 'tianxia--',
       url: 'https://github.com/tianxia--/fixture',
     }
     const http: CatalogHttpClient = {
       getJson: vi.fn(async () => ({
-        value: { ...rawCatalog, packages: [item] },
+        value: { ...rawCatalog, plugins: [item] },
         finalUrl: 'https://deepseek1024.com/api/v1/plugins',
       })),
     }
@@ -307,7 +273,7 @@ describe('1024Store adapter', () => {
 
   it('browses the complete registry locally with filtering, sorting, and cursor paging', async () => {
     const low = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'example/low-plugin',
       name: 'Low Plugin',
       owner: 'example',
@@ -316,7 +282,7 @@ describe('1024Store adapter', () => {
       stars: 1,
     }
     const high = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'example/high-plugin',
       name: 'High Plugin',
       owner: 'example',
@@ -326,7 +292,7 @@ describe('1024Store adapter', () => {
     }
     const http: CatalogHttpClient = {
       getJson: vi.fn(async () => ({
-        value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 3 }, packages: [{ invalid: true }, low, high] },
+        value: { ...rawCatalog, plugins: [{ invalid: true }, low, high] },
         finalUrl: 'https://deepseek1024.com/api/v1/plugins',
       })),
     }
@@ -353,15 +319,15 @@ describe('1024Store adapter', () => {
   })
 
   it('keeps the reviewed 1024Store adapter page size fixed at 50', async () => {
-    const packages = Array.from({ length: 51 }, (_, index) => ({
-      ...rawCatalog.packages[0]!,
+    const plugins = Array.from({ length: 51 }, (_, index) => ({
+      ...rawCatalog.plugins[0]!,
       id: `anywhere-labs/plugin-${index}`,
       name: `plugin-${index}`,
       url: `https://github.com/anywhere-labs/plugin-${index}`,
     }))
     const http: CatalogHttpClient = {
       getJson: vi.fn(async () => ({
-        value: { ...rawCatalog, packages },
+        value: { ...rawCatalog, plugins },
         finalUrl: 'https://deepseek1024.com/api/v1/plugins',
       })),
     }
@@ -735,13 +701,13 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([first, second])
     const secondItem = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'anywhere-labs/second-plugin',
       name: 'second-plugin',
       url: 'https://github.com/anywhere-labs/second-plugin',
     }
     const getJson = vi.fn(async () => ({
-      value: { ...rawCatalog, packages: [...rawCatalog.packages, secondItem] },
+      value: { ...rawCatalog, plugins: [...rawCatalog.plugins, secondItem] },
       finalUrl: 'https://deepseek1024.com/api/v1/plugins',
     }))
     const service = new DefaultCatalogService(store, { getJson })
@@ -773,13 +739,13 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([record])
     const secondItem = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'anywhere-labs/second-plugin',
       name: 'second-plugin',
       url: 'https://github.com/anywhere-labs/second-plugin',
     }
     const getJson = vi.fn(async () => ({
-      value: { ...rawCatalog, packages: [...rawCatalog.packages, secondItem] },
+      value: { ...rawCatalog, plugins: [...rawCatalog.plugins, secondItem] },
       finalUrl: 'https://deepseek1024.com/api/v1/plugins',
     }))
     const service = new DefaultCatalogService(store, { getJson })
@@ -808,13 +774,13 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([first, second])
     const secondItem = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'anywhere-labs/second-plugin',
       name: 'second-plugin',
       url: 'https://github.com/anywhere-labs/second-plugin',
     }
     const getJson = vi.fn(async () => ({
-      value: { ...rawCatalog, packages: [...rawCatalog.packages, secondItem] },
+      value: { ...rawCatalog, plugins: [...rawCatalog.plugins, secondItem] },
       finalUrl: 'https://deepseek1024.com/api/v1/plugins',
     }))
     const service = new DefaultCatalogService(store, { getJson })
@@ -839,13 +805,13 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([record])
     const secondItem = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'anywhere-labs/second-plugin',
       name: 'second-plugin',
       url: 'https://github.com/anywhere-labs/second-plugin',
     }
     const getJson = vi.fn(async () => ({
-      value: { ...rawCatalog, packages: [...rawCatalog.packages, secondItem] },
+      value: { ...rawCatalog, plugins: [...rawCatalog.plugins, secondItem] },
       finalUrl: 'https://deepseek1024.com/api/v1/plugins',
     }))
     let now = 1_000
@@ -964,7 +930,7 @@ describe('catalog active-source reads', () => {
     const first = await service.scanCatalog(new AbortController().signal)
     const second = await service.scanCatalog(new AbortController().signal)
 
-    expect(first).toMatchObject({ cacheStatus: 'fresh', providerRevision: 'sha256:fixture' })
+    expect(first).toMatchObject({ cacheStatus: 'fresh' })
     expect(second).toMatchObject({ cacheStatus: 'cached', scanKey: first?.scanKey })
     expect(getJson).toHaveBeenCalledOnce()
   })
@@ -993,14 +959,14 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([source()])
     const secondItem = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'anywhere-labs/second-plugin',
       name: 'second-plugin',
       url: 'https://github.com/anywhere-labs/second-plugin',
     }
     const getJson = vi.fn()
       .mockResolvedValueOnce({
-        value: { ...rawCatalog, packages: [...rawCatalog.packages, secondItem] },
+        value: { ...rawCatalog, plugins: [...rawCatalog.plugins, secondItem] },
         finalUrl: 'https://deepseek1024.com/api/v1/plugins',
       })
       .mockRejectedValueOnce(new Error('offline'))
@@ -1101,12 +1067,12 @@ describe('catalog active-source reads', () => {
     const store = new MemoryCatalogSourceStore()
     await store.save([first])
     const secondItem = {
-      ...rawCatalog.packages[0]!,
+      ...rawCatalog.plugins[0]!,
       id: 'anywhere-labs/second-plugin',
       name: 'second-plugin',
       url: 'https://github.com/anywhere-labs/second-plugin',
     }
-    const completeCatalog = { ...rawCatalog, packages: [...rawCatalog.packages, secondItem] }
+    const completeCatalog = { ...rawCatalog, plugins: [...rawCatalog.plugins, secondItem] }
     const getJson = vi.fn()
       .mockResolvedValueOnce({ value: completeCatalog, finalUrl: 'https://deepseek1024.com/api/v1/plugins' })
       .mockResolvedValueOnce({ value: completeCatalog, finalUrl: 'https://deepseek1024.com/api/v1/plugins' })

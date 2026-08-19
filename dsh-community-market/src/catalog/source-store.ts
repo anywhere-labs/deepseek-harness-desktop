@@ -5,11 +5,12 @@ import { validateLocalSourceRecords } from '../contracts/validate.js'
 import type { CatalogSourceStore, LocalSourceRecord } from '../contracts/types.js'
 
 export interface MarketCatalogCache {
-  readonly version: 1
+  readonly version: 2
   readonly sourceRecordId: string
   readonly locale: string
   readonly savedAt: string
-  readonly snapshot: CatalogSnapshot
+  /** The complete normalized index, persisted so a restart can browse without re-downloading the remote registry. */
+  readonly snapshots: readonly CatalogSnapshot[]
   readonly categories: readonly string[]
   readonly scannedAt: string
   readonly expiresAt: string

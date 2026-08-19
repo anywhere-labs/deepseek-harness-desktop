@@ -5,49 +5,75 @@ import { parseCatalogSnapshot } from '../contracts/validate.js'
 import { normalizeRepositoryIdentity } from '../contracts/identity.js'
 
 export const DSH_1024STORE_KEY = 'dsh-1024store'
-export const DSH_1024STORE_ENDPOINT = 'https://deepseek1024.com/api/v1/plugins'
+export const DSH_1024STORE_ENDPOINT = 'https://deepseek1024.com/api/v2/plugins'
 export const DSH_1024STORE_HOSTNAME = 'deepseek1024.com'
 export const DSH_1024STORE_PROVIDER_ID = 'com.deepseek1024.catalog'
 export const DSH_1024STORE_ADAPTER_ID = 'market.dsh-1024store-v1'
 
-export interface Dsh1024StoreRawItem {
+// The reviewed provider publishes a paged v2 registry. The desktop asks for
+// exactly one page of the newest entries and never walks the remaining pages:
+// the full-registry download is intentionally replaced by a bounded first page
+// so overseas refreshes stay small and fast.
+const DSH_1024STORE_SOURCE = 'dsh-desktop'
+const DSH_1024STORE_LIMIT = 100
+const MAX_PLUGIN_ITEMS = 10_000
+const EXPECTED_ORIGIN = new URL(DSH_1024STORE_ENDPOINT).origin
+
+function requestUrl(): string {
+  const url = new URL(DSH_1024STORE_ENDPOINT)
+  url.searchParams.set('limit', String(DSH_1024STORE_LIMIT))
+  url.searchParams.set('source', DSH_1024STORE_SOURCE)
+  return url.href
+}
+
+interface Dsh1024StorePlugin {
   readonly id?: unknown
   readonly name?: unknown
   readonly owner?: unknown
+  readonly repository?: unknown
   readonly url?: unknown
   readonly category?: unknown
   readonly description?: unknown
-  readonly pushedAt?: unknown
   readonly added?: unknown
   readonly stars?: unknown
+  readonly forks?: unknown
+  readonly pushedAt?: unknown
+  readonly updatedAt?: unknown
+  readonly latestReleaseAt?: unknown
   readonly installCount?: unknown
-  readonly installMethods?: unknown
-  readonly media?: unknown
-}
-
-interface Dsh1024StoreInstallMethod {
-  readonly kind?: unknown
-  readonly spec?: unknown
-  readonly command?: unknown
-  readonly verification?: unknown
-  readonly code?: unknown
-  readonly requiresBuildAllowance?: unknown
-  readonly revision?: unknown
-}
-
-interface Dsh1024StoreMeta {
-  readonly updated?: unknown
-  readonly generatedAt?: unknown
-  readonly revision?: unknown
 }
 
 interface Dsh1024StoreCatalog {
-  readonly packages?: unknown
-  readonly meta?: unknown
+  readonly plugins?: unknown
+  readonly generatedAt?: unknown
+}
+
+type CatalogItem = CatalogSnapshot['items'][number]
+type CatalogRepository = NonNullable<CatalogItem['repository']>
+type CatalogPublisher = NonNullable<CatalogItem['publisher']>
+type CatalogMedia = NonNullable<CatalogItem['media']>
+type CatalogProvenance = CatalogItem['provenance']
+
+/**
+ * The exact normalized shape the 1024Store v2 adapter emits: a browse-only
+ * repository item without an npm package identity.
+ */
+interface BrowseOnlyItem {
+  readonly id: string
+  readonly name: string
+  readonly displayName: string
+  readonly summary: string
+  readonly description?: string
+  readonly categories?: string[]
+  readonly repository: CatalogRepository
+  readonly publisher?: CatalogPublisher
+  readonly updatedAt?: string
+  readonly media?: CatalogMedia
+  readonly provenance: CatalogProvenance
 }
 
 interface RegistryCandidate {
-  readonly item: CatalogSnapshot['items'][number]
+  readonly item: BrowseOnlyItem
   readonly mediaCandidates: readonly MediaCandidate[]
   readonly stars: number
   readonly downloads: number
@@ -63,8 +89,6 @@ interface MediaCandidate {
 
 const GITHUB_OWNER_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/iu
 const GITHUB_REPOSITORY_PATTERN = /^[a-z0-9._-]{1,100}$/iu
-const NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
-const STABLE_SEMVER_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u
 
 function plainText(value: unknown, max: number, fallback: string): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > max
@@ -73,32 +97,11 @@ function plainText(value: unknown, max: number, fallback: string): string {
 }
 
 /**
- * Convert only one provider-reviewed npm target into non-executable catalog
- * identity. The Host still revalidates the exact version against the npm
- * registry before it can create an install intent.
+ * Derive canonical GitHub repository identity from the provider's `url` field.
+ * The provider item `id` is source-local identity and never the authority for
+ * repository location; repository renames and transfers keep the URL canonical.
  */
-function reviewedNpmTarget(item: Dsh1024StoreRawItem): { name: string; version: string } | undefined {
-  if (!Array.isArray(item.installMethods)) return undefined
-  const targets = new Map<string, { name: string; version: string }>()
-  for (const value of item.installMethods) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) continue
-    const method = value as Dsh1024StoreInstallMethod
-    if (
-      method.kind !== 'npm'
-      || method.verification !== 'verified'
-      || method.code !== 'repository_backlink'
-      || method.requiresBuildAllowance !== false
-      || typeof method.spec !== 'string'
-      || typeof method.revision !== 'string'
-      || !NPM_PACKAGE_PATTERN.test(method.spec)
-      || !STABLE_SEMVER_PATTERN.test(method.revision)
-    ) continue
-    targets.set(`${method.spec}@${method.revision}`, { name: method.spec, version: method.revision })
-  }
-  return targets.size === 1 ? targets.values().next().value : undefined
-}
-
-function repositoryFromItem(item: Dsh1024StoreRawItem): { url: string; subdirectory?: string } | undefined {
+function repositoryFromItem(item: Dsh1024StorePlugin): { url: string; subdirectory?: string } | undefined {
   try {
     if (typeof item.url !== 'string') return undefined
     const suppliedUrl = new URL(item.url)
@@ -120,8 +123,6 @@ function repositoryFromItem(item: Dsh1024StoreRawItem): { url: string; subdirect
       && parts[0]!.toLowerCase() === owner.toLowerCase()
       && parts[1]!.replace(/\.git$/iu, '').toLowerCase() === repository.toLowerCase()
     return normalizeRepositoryIdentity({
-      // The provider item ID is source-local identity, not repository identity.
-      // Repository renames and transfers make the canonical URL authoritative.
       url: `https://github.com/${owner}/${repository}`,
       ...(idMatchesRepository && parts.length > 2 ? { subdirectory: parts.slice(2).join('/') } : {}),
     })
@@ -142,52 +143,21 @@ function githubOwner(repositoryUrl: string): string | undefined {
   }
 }
 
-function explicitIcon(item: Dsh1024StoreRawItem): Omit<MediaCandidate, 'role'> | undefined {
-  if (item.media === null || typeof item.media !== 'object' || Array.isArray(item.media)) return undefined
-  const icon = (item.media as Record<string, unknown>).icon
-  if (icon === null || typeof icon !== 'object' || Array.isArray(icon)) return undefined
-  const candidate = icon as Record<string, unknown>
-  if (typeof candidate.url !== 'string') return undefined
-  try {
-    const url = new URL(candidate.url)
-    const hostname = url.hostname.toLowerCase()
-    if (url.protocol !== 'https:' || url.username || url.password || url.hash
-      || ![DSH_1024STORE_HOSTNAME, 'github.com', 'avatars.githubusercontent.com'].includes(hostname)) return undefined
-    const alt = plainText(candidate.alt, 240, '')
-    return {
-      remoteUrl: url.href,
-      ...(alt ? { alt } : {}),
-      allowedHostnames: hostname === 'github.com'
-        ? ['github.com', 'avatars.githubusercontent.com']
-        : [hostname],
-    }
-  } catch {
-    return undefined
-  }
-}
-
-function mediaCandidates(
-  item: Dsh1024StoreRawItem,
-  repositoryUrl: string,
-): readonly MediaCandidate[] {
-  const explicit = explicitIcon(item)
+function mediaCandidates(repositoryUrl: string): readonly MediaCandidate[] {
   const owner = githubOwner(repositoryUrl)
-  return [
-    ...(explicit === undefined ? [] : [{ ...explicit, role: 'plugin-icon' as const }]),
-    ...(owner === undefined ? [] : [{
-      remoteUrl: `https://github.com/${owner}.png?size=96`,
-      role: 'publisher-avatar' as const,
-      alt: owner,
-      allowedHostnames: ['github.com', 'avatars.githubusercontent.com'],
-    }]),
-  ]
+  return owner === undefined ? [] : [{
+    remoteUrl: `https://github.com/${owner}.png?size=96`,
+    role: 'publisher-avatar' as const,
+    alt: owner,
+    allowedHostnames: ['github.com', 'avatars.githubusercontent.com'],
+  }]
 }
 
 function resolvedMedia(
   candidates: readonly MediaCandidate[],
   itemId: string,
   context: CatalogFetchContext,
-): CatalogSnapshot['items'][number]['media'] | undefined {
+): CatalogMedia | undefined {
   for (const candidate of candidates) {
     try {
       const assetRef = context.media.register({
@@ -203,6 +173,12 @@ function resolvedMedia(
   return undefined
 }
 
+/**
+ * Normalize one provider plugin into a browse-only catalog item. The v2
+ * registry does not carry an exact stable npm target; its `install` command
+ * string is provider input and is therefore never read, displayed as
+ * executable, or turned into an install intent.
+ */
 function normalizedItem(
   entry: unknown,
   context: CatalogFetchContext,
@@ -210,14 +186,14 @@ function normalizedItem(
 ): RegistryCandidate | undefined {
   try {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return undefined
-    const item = entry as Dsh1024StoreRawItem
+    const item = entry as Dsh1024StorePlugin
     const id = plainText(item.id, 160, '')
     const name = plainText(item.name, 120, '')
     if (!id || !name || !/^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/u.test(id)) return undefined
     const repository = repositoryFromItem(item)
     if (repository === undefined) return undefined
     const descriptionValue = item.description
-    const description = descriptionValue !== null && typeof descriptionValue === 'object'
+    const description = descriptionValue !== null && typeof descriptionValue === 'object' && !Array.isArray(descriptionValue)
       ? (descriptionValue as Record<string, unknown>)
       : {}
     const prefersChinese = locale?.toLowerCase().startsWith('zh') ?? false
@@ -234,14 +210,14 @@ function normalizedItem(
     const owner = repositoryOwner !== undefined && suppliedOwner.toLowerCase() === repositoryOwner
       ? suppliedOwner
       : repositoryOwner
-    const pushedAt = typeof item.pushedAt === 'string' && !Number.isNaN(Date.parse(item.pushedAt))
-      ? new Date(item.pushedAt).toISOString()
+    const updatedAtValue = item.pushedAt ?? item.updatedAt ?? item.latestReleaseAt
+    const updatedAt = typeof updatedAtValue === 'string' && !Number.isNaN(Date.parse(updatedAtValue))
+      ? new Date(updatedAtValue).toISOString()
       : undefined
-    const npmTarget = reviewedNpmTarget(item)
     const addedAt = typeof item.added === 'string' && !Number.isNaN(Date.parse(item.added))
       ? Date.parse(item.added)
       : 0
-    const normalized: CatalogSnapshot['items'][number] = {
+    const normalized: BrowseOnlyItem = {
       id,
       name,
       displayName: name,
@@ -249,12 +225,8 @@ function normalizedItem(
       ...(descriptionValue === undefined ? {} : { description: summary }),
       ...(category === undefined ? {} : { categories: [category] }),
       repository,
-      ...(npmTarget === undefined ? {} : {
-        latestVersion: npmTarget.version,
-        package: { registry: 'npm' as const, name: npmTarget.name },
-      }),
       ...(owner === undefined ? {} : { publisher: { name: owner, url: `https://github.com/${owner}` } }),
-      ...(pushedAt === undefined ? {} : { updatedAt: pushedAt }),
+      ...(updatedAt === undefined ? {} : { updatedAt }),
       provenance: {
         sourceRecordId: context.source.sourceRecordId,
         providerId: context.source.providerId,
@@ -263,10 +235,10 @@ function normalizedItem(
     }
     return {
       item: normalized,
-      mediaCandidates: mediaCandidates(item, repository.url),
+      mediaCandidates: mediaCandidates(repository.url),
       stars: typeof item.stars === 'number' && Number.isFinite(item.stars) ? item.stars : 0,
       downloads: typeof item.installCount === 'number' && Number.isFinite(item.installCount) ? item.installCount : 0,
-      updatedAt: pushedAt === undefined ? addedAt : Date.parse(pushedAt),
+      updatedAt: updatedAt === undefined ? addedAt : Date.parse(updatedAt),
     }
   } catch {
     return undefined
@@ -280,14 +252,31 @@ function compareCandidates(left: RegistryCandidate, right: RegistryCandidate, qu
   return right.stars - left.stars || left.item.displayName.localeCompare(right.item.displayName, 'en', { sensitivity: 'base' })
 }
 
+function providerGeneratedAt(raw: Dsh1024StoreCatalog): string | undefined {
+  const generatedAt = raw.generatedAt
+  return typeof generatedAt === 'string' && !Number.isNaN(Date.parse(generatedAt))
+    ? new Date(generatedAt).toISOString()
+    : undefined
+}
+
+function assertProviderOrigin(finalUrl: string): void {
+  let finalOrigin: string
+  try {
+    finalOrigin = new URL(finalUrl).origin
+  } catch {
+    throw new Error('1024Store final URL is invalid')
+  }
+  if (finalOrigin !== EXPECTED_ORIGIN) throw new Error('1024Store response changed the reviewed provider origin')
+}
+
 function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: string, query: CatalogQuery): CatalogSnapshot {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('1024Store response is not an object')
   const raw = value as Dsh1024StoreCatalog
-  if (!Array.isArray(raw.packages) || raw.packages.length > 10_000) throw new Error('1024Store catalog is invalid')
+  if (!Array.isArray(raw.plugins) || raw.plugins.length > MAX_PLUGIN_ITEMS) throw new Error('1024Store catalog is invalid')
   if (query.cursor !== undefined && !/^\d+$/u.test(query.cursor)) throw new Error('1024Store cursor is invalid')
   const requestedCategories = new Set(query.category ?? [])
   const search = query.q?.toLocaleLowerCase('en-US')
-  const candidates = raw.packages
+  const candidates = raw.plugins
     .map(entry => normalizedItem(entry, context, query.locale))
     .filter((candidate): candidate is RegistryCandidate => candidate !== undefined)
     .filter(candidate => requestedCategories.size === 0
@@ -304,14 +293,7 @@ function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: s
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > candidates.length) throw new Error('1024Store cursor is invalid')
   const limit = Math.min(query.limit ?? 50, 50)
   const end = Math.min(offset + limit, candidates.length)
-  const meta = raw.meta !== null && typeof raw.meta === 'object' && !Array.isArray(raw.meta)
-    ? raw.meta as Dsh1024StoreMeta
-    : {}
-  const generatedAt = typeof meta.generatedAt === 'string' ? meta.generatedAt : meta.updated
-  const providerGeneratedAt = typeof generatedAt === 'string' && !Number.isNaN(Date.parse(generatedAt))
-    ? new Date(generatedAt).toISOString()
-    : undefined
-  const providerRevision = plainText(meta.revision, 160, '') || undefined
+  const generatedAt = providerGeneratedAt(raw)
   return parseCatalogSnapshot({
     schemaVersion: '1.0.0',
     source: {
@@ -321,12 +303,11 @@ function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: s
       registrationKind: context.source.registrationKind,
       fetchedAt: new Date().toISOString(),
       finalUrl,
-      ...(providerGeneratedAt === undefined ? {} : { providerGeneratedAt }),
-      ...(providerRevision === undefined ? {} : { providerRevision }),
+      ...(generatedAt === undefined ? {} : { providerGeneratedAt: generatedAt }),
     },
     items: candidates.slice(offset, end).map(candidate => {
       const media = resolvedMedia(candidate.mediaCandidates, candidate.item.id, context)
-      return media === undefined ? candidate.item : { ...candidate.item, media }
+      return { ...candidate.item, ...(media === undefined ? {} : { media }) }
     }),
     page: end < candidates.length
       ? { nextCursor: String(end), total: candidates.length }
@@ -334,7 +315,7 @@ function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: s
   })
 }
 
-function buildCatalogScanSnapshots(
+function buildScanSnapshots(
   value: unknown,
   context: CatalogFetchContext,
   finalUrl: string,
@@ -344,48 +325,23 @@ function buildCatalogScanSnapshots(
     throw new Error('1024Store response is not an object')
   }
   const raw = value as Dsh1024StoreCatalog
-  if (!Array.isArray(raw.packages) || raw.packages.length > 10_000) {
+  if (!Array.isArray(raw.plugins) || raw.plugins.length > MAX_PLUGIN_ITEMS) {
     throw new Error('1024Store catalog is invalid')
   }
   context.signal.throwIfAborted()
 
-  const items: CatalogSnapshot['items'][number][] = []
+  const items: CatalogItem[] = []
   const seen = new Set<string>()
-  for (const entry of raw.packages) {
+  for (const entry of raw.plugins) {
     const candidate = normalizedItem(entry, context, locale)
     if (candidate === undefined) continue
     if (seen.has(candidate.item.id)) throw new Error('1024Store catalog contains duplicate item IDs')
     seen.add(candidate.item.id)
-    if (
-      candidate.item.package?.registry === 'npm'
-      && candidate.item.latestVersion !== undefined
-      && candidate.item.repository !== undefined
-    ) {
-      // Registration creates only an opaque Host reference. It does not fetch
-      // remote image bytes during the catalog scan. Browse-only items do not
-      // consume media references.
-      const media = resolvedMedia(candidate.mediaCandidates, candidate.item.id, context)
-      const item: CatalogSnapshot['items'][number] = {
-        ...candidate.item,
-        repository: candidate.item.repository,
-        latestVersion: candidate.item.latestVersion,
-        package: candidate.item.package,
-        ...(media === undefined ? {} : { media }),
-      }
-      items.push(item)
-    } else {
-      items.push(candidate.item)
-    }
+    const media = resolvedMedia(candidate.mediaCandidates, candidate.item.id, context)
+    items.push({ ...candidate.item, ...(media === undefined ? {} : { media }) })
   }
 
-  const meta = raw.meta !== null && typeof raw.meta === 'object' && !Array.isArray(raw.meta)
-    ? raw.meta as Dsh1024StoreMeta
-    : {}
-  const generatedAt = typeof meta.generatedAt === 'string' ? meta.generatedAt : meta.updated
-  const providerGeneratedAt = typeof generatedAt === 'string' && !Number.isNaN(Date.parse(generatedAt))
-    ? new Date(generatedAt).toISOString()
-    : undefined
-  const providerRevision = plainText(meta.revision, 160, '') || undefined
+  const generatedAt = providerGeneratedAt(raw)
   const fetchedAt = new Date().toISOString()
   const snapshots: CatalogSnapshot[] = []
   for (let offset = 0; offset < items.length; offset += 100) {
@@ -398,8 +354,7 @@ function buildCatalogScanSnapshots(
         registrationKind: context.source.registrationKind,
         fetchedAt,
         finalUrl,
-        ...(providerGeneratedAt === undefined ? {} : { providerGeneratedAt }),
-        ...(providerRevision === undefined ? {} : { providerRevision }),
+        ...(generatedAt === undefined ? {} : { providerGeneratedAt: generatedAt }),
       },
       items: items.slice(offset, offset + 100),
       page: { total: items.length },
@@ -415,8 +370,7 @@ function buildCatalogScanSnapshots(
         registrationKind: context.source.registrationKind,
         fetchedAt,
         finalUrl,
-        ...(providerGeneratedAt === undefined ? {} : { providerGeneratedAt }),
-        ...(providerRevision === undefined ? {} : { providerRevision }),
+        ...(generatedAt === undefined ? {} : { providerGeneratedAt: generatedAt }),
       },
       items: [],
       page: { total: 0 },
@@ -429,30 +383,14 @@ export const dsh1024StoreAdapter: CatalogAdapter = {
   adapterId: DSH_1024STORE_ADAPTER_ID,
   async fetch(queryValue, context) {
     const query = { ...queryValue, limit: Math.min(queryValue.limit ?? 50, 50) }
-    const expectedOrigin = new URL(DSH_1024STORE_ENDPOINT).origin
-    const response = await context.http.getJson(
-      DSH_1024STORE_ENDPOINT,
-      context.signal,
-      { allowedOrigin: expectedOrigin },
-    )
-    let finalOrigin: string
-    try { finalOrigin = new URL(response.finalUrl).origin }
-    catch { throw new Error('1024Store final URL is invalid') }
-    if (finalOrigin !== expectedOrigin) throw new Error('1024Store response changed the reviewed provider origin')
+    const response = await context.http.getJson(requestUrl(), context.signal, { allowedOrigin: EXPECTED_ORIGIN })
+    assertProviderOrigin(response.finalUrl)
     return buildSnapshot(response.value, context, response.finalUrl, query)
   },
   async scanCatalog(query, context) {
-    const expectedOrigin = new URL(DSH_1024STORE_ENDPOINT).origin
-    const response = await context.http.getJson(
-      DSH_1024STORE_ENDPOINT,
-      context.signal,
-      { allowedOrigin: expectedOrigin },
-    )
+    const response = await context.http.getJson(requestUrl(), context.signal, { allowedOrigin: EXPECTED_ORIGIN })
     context.signal.throwIfAborted()
-    let finalOrigin: string
-    try { finalOrigin = new URL(response.finalUrl).origin }
-    catch { throw new Error('1024Store final URL is invalid') }
-    if (finalOrigin !== expectedOrigin) throw new Error('1024Store response changed the reviewed provider origin')
-    return buildCatalogScanSnapshots(response.value, context, response.finalUrl, query.locale)
+    assertProviderOrigin(response.finalUrl)
+    return buildScanSnapshots(response.value, context, response.finalUrl, query.locale)
   },
 }

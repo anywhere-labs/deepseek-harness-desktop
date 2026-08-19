@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { CatalogSourceManifest } from '../contracts/index.js'
-import { parseCatalogSnapshot, parseCatalogSource, validateLocalSourceRecords } from '../contracts/validate.js'
+import { parseCatalogSource, validateLocalSourceRecords } from '../contracts/validate.js'
 import type { CatalogHttpClient } from '../contracts/types.js'
 import type {
   MarketBuiltInProvider,
@@ -28,7 +28,7 @@ import {
 } from '../adapters/dsh-1024store.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_HOSTNAME } from '../adapters/dshfind.js'
 import { assertStandardSourceTrustRoot } from '../adapters/standard-http.js'
-import { BUILT_IN_PROVIDERS, DefaultCatalogService, type CatalogFetchScope, type CatalogFullIndex } from '../catalog/service.js'
+import { BUILT_IN_PROVIDERS, DefaultCatalogService, type CatalogFetchScope, type CatalogFullIndex, type RestoredCatalogScan } from '../catalog/service.js'
 import { SettingsCatalogSourceStore, type MarketCatalogCache, type MarketSettingsDocument } from '../catalog/source-store.js'
 import { MARKET_MEDIA_ASSET_REF_PATTERN } from '../media/ref.js'
 import { createRestrictedImageFetcher } from '../media/restricted-image.js'
@@ -68,7 +68,7 @@ const SETTINGS_SCHEMA = z.object({
     sourceRecordId: z.string(),
     locale: z.string(),
     savedAt: z.string(),
-    snapshot: z.any(),
+    snapshots: z.array(z.any()),
     categories: z.array(z.string()),
     scannedAt: z.string(),
     expiresAt: z.string(),
@@ -149,83 +149,49 @@ function catalogManualInstall(results: readonly { readonly snapshot?: { readonly
   return manualInstallHints(results.flatMap(result => result.snapshot?.items ?? []))
 }
 
-function cachedCatalogResponse(
+function restoredScanFromCache(
   cache: MarketCatalogCache | undefined,
-  source: MarketCatalogResponse['results'][number]['source'],
-  locale: string,
-  now = Date.now(),
-): MarketCatalogResponse | undefined {
-  if (cache === undefined
-    || cache.version !== 1
-    || cache.sourceRecordId !== source.sourceRecordId
-    || cache.locale !== locale
-    || !Number.isFinite(Date.parse(cache.savedAt))
-    || now - Date.parse(cache.savedAt) < 0
-    || now - Date.parse(cache.savedAt) > CATALOG_CACHE_MAX_AGE_MS
-    || !Array.isArray(cache.categories)
-    || cache.categories.length > 4_096
-    || !cache.categories.every(value => typeof value === 'string')
-    || !Number.isFinite(Date.parse(cache.scannedAt))
-    || !Number.isFinite(Date.parse(cache.expiresAt))) return undefined
-  let snapshot: CatalogFullIndex['snapshots'][number]
-  try {
-    snapshot = parseCatalogSnapshot(cache.snapshot)
-  } catch {
-    return undefined
-  }
-  if (
-    snapshot.source.sourceRecordId !== source.sourceRecordId
-    || snapshot.source.providerId !== source.providerId
-    || snapshot.source.adapterId !== source.adapterId
-    || snapshot.source.registrationKind !== source.registrationKind
-  ) return undefined
-  return {
-    query: { limit: 50, locale },
-    results: [{ source, stale: true, snapshot }],
-    categories: [...cache.categories],
-    manualInstall: catalogManualInstall([{ snapshot }]),
-    metadata: {
-      scannedAt: cache.scannedAt,
-      expiresAt: cache.expiresAt,
-      ...(cache.providerRevision === undefined ? {} : { providerRevision: cache.providerRevision }),
-      cacheStatus: 'cached',
-    },
-    fetchedAt: new Date(now).toISOString(),
-  }
-}
-
-function catalogCacheFromResponse(
-  response: MarketCatalogResponse,
   sourceRecordId: string,
   locale: string,
   now = Date.now(),
-): MarketCatalogCache | undefined {
-  const result = response.results.find(value => value.source.sourceRecordId === sourceRecordId)
-  const snapshot = result?.snapshot
-  const metadata = response.metadata
-  if (snapshot === undefined || metadata === undefined
-    || !Number.isFinite(Date.parse(metadata.scannedAt))
-    || !Number.isFinite(Date.parse(metadata.expiresAt))
-    || !Array.isArray(response.categories)
-    || response.categories.length > 4_096
-    || !response.categories.every(value => typeof value === 'string')) return undefined
-  const { nextCursor: _nextCursor, ...page } = snapshot.page
-  let normalizedSnapshot: CatalogFullIndex['snapshots'][number]
-  try {
-    normalizedSnapshot = parseCatalogSnapshot({ ...snapshot, page })
-  } catch {
-    return undefined
-  }
+): RestoredCatalogScan | undefined {
+  if (cache === undefined
+    || cache.version !== 2
+    || cache.sourceRecordId !== sourceRecordId
+    || cache.locale !== locale
+    || !Number.isFinite(Date.parse(cache.savedAt))
+    || !Array.isArray(cache.snapshots)
+    || !Number.isFinite(Date.parse(cache.scannedAt))
+    || !Number.isFinite(Date.parse(cache.expiresAt))) return undefined
+  const savedAt = Date.parse(cache.savedAt)
+  if (now - savedAt < 0 || now - savedAt > CATALOG_CACHE_MAX_AGE_MS) return undefined
   return {
-    version: 1,
-    sourceRecordId,
+    sourceRecordId: cache.sourceRecordId,
+    locale: cache.locale,
+    snapshots: cache.snapshots,
+    scannedAt: cache.scannedAt,
+    expiresAt: new Date(savedAt + CATALOG_CACHE_MAX_AGE_MS).toISOString(),
+    ...(cache.providerRevision === undefined ? {} : { providerRevision: cache.providerRevision }),
+  }
+}
+
+function catalogCacheFromIndex(
+  index: CatalogFullIndex,
+  locale: string,
+  now = Date.now(),
+): MarketCatalogCache | undefined {
+  if (!Number.isFinite(Date.parse(index.scannedAt))
+    || !Number.isFinite(Date.parse(index.expiresAt))) return undefined
+  return {
+    version: 2,
+    sourceRecordId: index.source.sourceRecordId,
     locale,
     savedAt: new Date(now).toISOString(),
-    snapshot: normalizedSnapshot,
-    categories: [...response.categories],
-    scannedAt: metadata.scannedAt,
-    expiresAt: metadata.expiresAt,
-    ...(metadata.providerRevision === undefined ? {} : { providerRevision: metadata.providerRevision }),
+    snapshots: index.snapshots,
+    categories: catalogCategories(index),
+    scannedAt: index.scannedAt,
+    expiresAt: index.expiresAt,
+    ...(index.providerRevision === undefined ? {} : { providerRevision: index.providerRevision }),
   }
 }
 
@@ -816,11 +782,10 @@ export function registerMarketRoutes(
     }
   }
   const persistCatalogResponse = async (
-    response: MarketCatalogResponse,
-    sourceRecordId: string,
+    index: CatalogFullIndex,
     locale: string,
   ): Promise<void> => {
-    const cache = catalogCacheFromResponse(response, sourceRecordId, locale)
+    const cache = catalogCacheFromIndex(index, locale)
     if (cache !== undefined) await scope.update({ catalogCache: cache })
   }
   const settingsScope = scope
@@ -903,16 +868,10 @@ export function registerMarketRoutes(
           ? undefined
           : catalogPreviewKey(previewSourceRecordId, localeKey)
         if (force) refreshPreviewKey = previewKey
-        if (!force && previewKey !== undefined && !servedCatalogPreviews.has(previewKey)) {
-          const sources = await service.listSources()
-          const source = sources.find(value => value.sourceRecordId === previewSourceRecordId && value.enabled)
-          const cached = source === undefined
-            ? undefined
-            : cachedCatalogResponse(settingsScope.get().catalogCache, source, localeKey)
-          if (cached !== undefined) {
-            servedCatalogPreviews.add(previewKey)
-            if (!signal.aborted && !res.destroyed) sendJson(res, 200, cached)
-            return
+        if (!force && previewSourceRecordId !== undefined) {
+          const restored = restoredScanFromCache(settingsScope.get().catalogCache, previewSourceRecordId, localeKey)
+          if (restored !== undefined) {
+            await service.restoreScan(restored)
           }
         }
         const index = await service.scanCatalog(signal, {
@@ -924,9 +883,9 @@ export function registerMarketRoutes(
         const response = buildCatalogResponse(index, query, scope)
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, response)
         if (previewKey !== undefined && previewSourceRecordId !== undefined
-          && index !== undefined && !generationController.signal.aborted) {
+          && index !== undefined && index.cacheStatus === 'fresh' && !generationController.signal.aborted) {
           servedCatalogPreviews.add(previewKey)
-          void persistCatalogResponse(response, previewSourceRecordId, localeKey)
+          void persistCatalogResponse(index, localeKey)
         }
       } catch {
         if (refreshPreviewKey !== undefined) servedCatalogPreviews.delete(refreshPreviewKey)
@@ -1068,14 +1027,8 @@ export function registerMarketRoutes(
           }
           const response = await install.listInstallable(index, signal)
           if (!signal.aborted && !res.destroyed) sendJson(res, 200, response)
-          if (!generationController.signal.aborted) {
-            servedCatalogPreviews.add(catalogPreviewKey(index.source.sourceRecordId, localeKey))
-            const preview = buildCatalogResponse(
-              index,
-              { limit: 50, ...(localeKey === '' ? {} : { locale: localeKey }) },
-              { sourceRecordId: index.source.sourceRecordId },
-            )
-            void persistCatalogResponse(preview, index.source.sourceRecordId, localeKey)
+          if (!generationController.signal.aborted && index.cacheStatus === 'fresh') {
+            void persistCatalogResponse(index, localeKey)
           }
         } catch (cause) {
           if (!signal.aborted && !res.destroyed) sendInstallError(res, cause)

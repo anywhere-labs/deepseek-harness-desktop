@@ -207,6 +207,8 @@ export interface CatalogService {
     query: unknown,
     scope?: CatalogFetchScope,
   ): readonly MarketCatalogSourceResult[]
+  /** Restore a previously persisted complete index into the in-memory scan cache. */
+  restoreScan(restore: RestoredCatalogScan): Promise<CatalogFullIndex | undefined>
   invalidateSource(sourceRecordId: string): void
 }
 
@@ -236,6 +238,17 @@ export interface CatalogFullIndex {
 export interface CatalogFetchScope {
   readonly sourceRecordId: string
   readonly cursor?: string
+}
+
+/** Disk-persisted complete index handed back to the Host for a cold-start restore. */
+export interface RestoredCatalogScan {
+  readonly sourceRecordId: string
+  readonly locale?: string
+  readonly snapshots: readonly CatalogSnapshot[]
+  readonly scannedAt: string
+  /** Effective end of the restore window; already computed by the persistence owner. */
+  readonly expiresAt: string
+  readonly providerRevision?: string
 }
 
 export interface CatalogServiceOptions {
@@ -402,6 +415,39 @@ export class DefaultCatalogService implements CatalogService {
     }
     this.revokeSourceCursors(sourceRecordId)
     this.media.unregisterSource(sourceRecordId)
+  }
+
+  async restoreScan(restore: RestoredCatalogScan): Promise<CatalogFullIndex | undefined> {
+    const scannedAt = Date.parse(restore.scannedAt)
+    const expiresAt = Date.parse(restore.expiresAt)
+    if (!Number.isFinite(scannedAt) || !Number.isFinite(expiresAt) || expiresAt <= this.now()) return undefined
+    const records = [...await this.store.load()].sort((left, right) => left.order - right.order)
+    const source = records.find(record => record.enabled && record.sourceRecordId === restore.sourceRecordId)
+    if (source === undefined) return undefined
+    let complete: { readonly snapshots: readonly CatalogSnapshot[]; readonly providerRevision?: string }
+    try {
+      complete = validateCompleteCatalogScan(source, restore.snapshots)
+    } catch {
+      return undefined
+    }
+    const sourceGeneration = this.sourceGenerations.get(source.sourceRecordId) ?? 0
+    const locale = restore.locale === undefined || restore.locale === '' ? undefined : restore.locale
+    const key = catalogScanKey(source.sourceRecordId, locale)
+    const scanGeneration = this.catalogScanGenerations.get(key) ?? 0
+    const entry: CatalogFullIndexCacheEntry = {
+      sourceRecordId: source.sourceRecordId,
+      sourceGeneration,
+      scanGeneration,
+      ...(locale === undefined ? {} : { locale }),
+      source: sourceView(source),
+      snapshots: complete.snapshots,
+      scannedAt,
+      expiresAt,
+      ...(complete.providerRevision === undefined ? {} : { providerRevision: complete.providerRevision }),
+      scanKey: randomUUID(),
+    }
+    this.catalogScanCache.set(key, entry)
+    return cachedScanView(entry, 'cached')
   }
 
   private purgeExpiredCursors(): void {
