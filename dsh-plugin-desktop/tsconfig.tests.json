@@ -8,6 +8,8 @@
   "include": ["scripts/**/*.ts", "src/*.ts", "tests/**/*.ts", "tests/**/*.tsx"],
   "exclude": [
     "tests/client-boot-health.spec.ts",
+    "tests/client-artifact-context-menu-contract.spec.tsx",
+    "tests/client-artifact-context-menu.spec.tsx",
     "tests/client-environment.spec.ts",
     "tests/client-workspace-folder-drop.spec.ts"
   ]

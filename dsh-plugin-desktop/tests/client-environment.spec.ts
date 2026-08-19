@@ -15,6 +15,13 @@ import {
   WINDOWS_TITLEBAR_HEIGHT,
 } from '../src/window-chrome.ts'
 
+// The published client face is a ModuleLoader bundle; this node-only suite
+// exercises environment gating and never mounts produced-file presentation.
+vi.mock('@deepseek-ai/dsh-client-ui-deliverables/client', () => ({
+  ProducedFiles: () => null,
+  producedForClosing: () => [],
+}))
+
 describe('desktop client environment', () => {
   it('does not activate desktop effects for an ordinary browser URL', () => {
     vi.stubGlobal('window', { location: { search: '' } })

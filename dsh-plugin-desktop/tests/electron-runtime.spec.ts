@@ -1,9 +1,11 @@
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL } from '../src/artifact-context-menu-contract.ts'
 import type { DesktopShellSpec } from '../src/runtime.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
 const diagnostics = vi.hoisted(() => ({ export: vi.fn() }))
+const artifactFileSystem = vi.hoisted(() => ({ lstat: vi.fn() }))
 const updater = vi.hoisted(() => ({
   download: vi.fn(),
   filename: vi.fn(),
@@ -59,6 +61,11 @@ vi.mock('node:child_process', async (importOriginal) => ({
   spawn: childProcess.spawn,
 }))
 
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:fs/promises')>(),
+  lstat: artifactFileSystem.lstat,
+}))
+
 const electron = vi.hoisted(() => {
   const browserWindowOptions: unknown[] = []
   const browserWindowThemeSources: string[] = []
@@ -67,6 +74,8 @@ const electron = vi.hoisted(() => {
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
   const menuTemplates: unknown[][] = []
+  const menuPopups: Array<{ options: unknown; template: unknown[] }> = []
+  const ipcHandlers = new Map<string, (event: unknown, request: unknown) => Promise<void>>()
   const notifications: Notification[] = []
   let zoomLevel = 0
   const dialog = {
@@ -177,12 +186,23 @@ const electron = vi.hoisted(() => {
     browserWindowOn,
     loadURL,
     dialog,
+    ipcHandlers,
+    ipcMain: {
+      handle: vi.fn((channel: string, handler: (event: unknown, request: unknown) => Promise<void>) => {
+        if (ipcHandlers.has(channel)) throw new Error(`duplicate IPC handler ${channel}`)
+        ipcHandlers.set(channel, handler)
+      }),
+      removeHandler: vi.fn((channel: string) => { ipcHandlers.delete(channel) }),
+    },
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
         menuTemplates.push(template)
-        return {}
+        return {
+          popup: vi.fn((options: unknown) => { menuPopups.push({ options, template }) }),
+        }
       }),
     },
+    menuPopups,
     menuTemplates,
     nativeImage: { createFromPath },
     nativeTheme,
@@ -206,6 +226,7 @@ vi.mock('electron', () => ({
   app: electron.app,
   BrowserWindow: electron.BrowserWindow,
   dialog: electron.dialog,
+  ipcMain: electron.ipcMain,
   Menu: electron.Menu,
   nativeImage: electron.nativeImage,
   nativeTheme: electron.nativeTheme,
@@ -243,6 +264,8 @@ describe('Electron desktop runtime', () => {
     electron.browserWindows.length = 0
     electron.trays.length = 0
     electron.menuTemplates.length = 0
+    electron.menuPopups.length = 0
+    electron.ipcHandlers.clear()
     electron.notifications.length = 0
     childProcess.reset()
     vi.clearAllMocks()
@@ -264,6 +287,8 @@ describe('Electron desktop runtime', () => {
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
     electron.dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
     electron.shell.openPath.mockResolvedValue('')
+    artifactFileSystem.lstat.mockReset()
+    artifactFileSystem.lstat.mockResolvedValue({ isDirectory: () => false })
     electron.nativeTheme.themeSource = 'system'
     electron.resetZoomLevel()
   })
@@ -354,6 +379,152 @@ describe('Electron desktop runtime', () => {
 
     await release()
     expect(electron.trays[0]?.off).toHaveBeenCalledWith('click', expect.any(Function))
+  })
+
+  it('reveals a default compatibility-mode artifact from a trusted native context menu', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
+    const release = runtime.schedule({ ...spec, readLocalePreference: () => 'zh' })
+
+    await runtime.mountScheduled()
+    const handler = electron.ipcHandlers.get(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)
+    expect(handler).toEqual(expect.any(Function))
+    await handler?.({
+      sender: electron.webContents,
+      senderFrame: { url: spec.url },
+    }, {
+      cwd: '/tmp/workspace',
+      path: 'reports/result.md',
+    })
+
+    const popup = electron.menuPopups.at(-1)
+    const item = popup?.template[0] as { click(): void; label: string } | undefined
+    expect(popup?.options).toEqual({ window: electron.browserWindows[0] })
+    expect(item?.label).toBe('在访达中显示')
+    item?.click()
+    await vi.waitFor(() => {
+      expect(artifactFileSystem.lstat).toHaveBeenCalledWith('/tmp/workspace/reports/result.md')
+      expect(electron.shell.showItemInFolder).toHaveBeenCalledWith('/tmp/workspace/reports/result.md')
+    })
+
+    artifactFileSystem.lstat.mockRejectedValueOnce(new Error('ENOENT'))
+    await handler?.({
+      sender: electron.webContents,
+      senderFrame: { url: spec.url },
+    }, {
+      cwd: '/tmp/workspace',
+      path: 'missing.md',
+    })
+    const missingItem = electron.menuPopups.at(-1)?.template[0] as { click(): void } | undefined
+    missingItem?.click()
+    await vi.waitFor(() => {
+      expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(
+        electron.browserWindows[0],
+        expect.objectContaining({
+          type: 'error',
+          title: '无法显示文件',
+          detail: '/tmp/workspace/missing.md',
+        }),
+      )
+    })
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('ENOENT'))
+
+    await release()
+    expect(electron.ipcHandlers.has(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)).toBe(false)
+  })
+
+  it('reveals Windows files and opens produced directories', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+    const handler = electron.ipcHandlers.get(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)
+
+    await handler?.({
+      sender: electron.webContents,
+      senderFrame: { url: spec.url },
+    }, {
+      cwd: 'D:\\workspace',
+      path: 'reports\\result.md',
+    })
+    const fileItem = electron.menuPopups.at(-1)?.template[0] as { click(): void; label: string } | undefined
+    expect(fileItem?.label).toBe('Show in File Explorer')
+    fileItem?.click()
+    await vi.waitFor(() => {
+      expect(electron.shell.showItemInFolder).toHaveBeenCalledWith('D:\\workspace\\reports\\result.md')
+    })
+
+    artifactFileSystem.lstat.mockResolvedValueOnce({ isDirectory: () => true })
+    await handler?.({
+      sender: electron.webContents,
+      senderFrame: { url: spec.url },
+    }, {
+      cwd: 'D:\\workspace',
+      path: 'exports',
+    })
+    const directoryItem = electron.menuPopups.at(-1)?.template[0] as { click(): void } | undefined
+    directoryItem?.click()
+    await vi.waitFor(() => {
+      expect(electron.shell.openPath).toHaveBeenCalledWith('D:\\workspace\\exports')
+    })
+
+    await release()
+  })
+
+  it('reports native context-menu construction failures instead of failing silently', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, logger)
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+    electron.Menu.buildFromTemplate.mockImplementationOnce(() => {
+      throw new Error('native menu unavailable')
+    })
+
+    const handler = electron.ipcHandlers.get(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)
+    await handler?.({
+      sender: electron.webContents,
+      senderFrame: { url: spec.url },
+    }, {
+      cwd: '/tmp/workspace',
+      path: 'result.md',
+    })
+
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('native menu unavailable'))
+    expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(
+      electron.browserWindows[0],
+      expect.objectContaining({ type: 'error', title: 'Unable to Show File' }),
+    )
+    await release()
+  })
+
+  it('registers the artifact menu in both modes and rejects an untrusted sender', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const compatibilityRuntime = new ElectronDesktopRuntime(async () => {})
+    const releaseCompatibility = compatibilityRuntime.schedule(spec)
+    await compatibilityRuntime.mountScheduled()
+    expect(electron.ipcHandlers.has(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)).toBe(true)
+    await releaseCompatibility()
+
+    const advancedRuntime = new ElectronDesktopRuntime(async () => {})
+    const releaseAdvanced = advancedRuntime.schedule({ ...spec, mode: 'advanced' })
+    await advancedRuntime.mountScheduled()
+    const handler = electron.ipcHandlers.get(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)
+    await expect(handler?.({
+      sender: {},
+      senderFrame: { url: spec.url },
+    }, {
+      cwd: 'C:\\workspace',
+      path: 'result.md',
+    })).rejects.toThrow('untrusted renderer')
+    expect(electron.menuPopups).toHaveLength(0)
+
+    await releaseAdvanced()
   })
 
   it('selects the restricted Linux platform adapter once for native capabilities', async () => {
