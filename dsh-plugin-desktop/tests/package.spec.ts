@@ -11,6 +11,7 @@ const packageRoot = new URL('../', import.meta.url)
 const workspaceRoot = new URL('../', packageRoot)
 const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), 'utf8')) as {
   name?: unknown
+  desktopName?: unknown
   version?: unknown
   bin?: Record<string, unknown>
   exports?: Record<string, unknown>
@@ -35,7 +36,17 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
     win?: { icon?: unknown; target?: unknown; artifactName?: unknown }
     nsis?: Record<string, unknown>
     portable?: Record<string, unknown>
-    linux?: { icon?: unknown }
+    linux?: {
+      artifactName?: unknown
+      category?: unknown
+      executableArgs?: unknown
+      executableName?: unknown
+      files?: unknown
+      extraResources?: unknown
+      icon?: unknown
+      syncDesktopName?: unknown
+      target?: unknown
+    }
   }
   dependencies?: Record<string, unknown>
   optionalDependencies?: Record<string, unknown>
@@ -322,6 +333,7 @@ describe('published package surface', () => {
 
   it('fixes the installed application identity', () => {
     expect(manifest.version).toBe(workspaceManifest.version)
+    expect(manifest.desktopName).toBe('dsh-plugin-desktop')
     expect(manifest.build?.productName).toBe('DSH Desktop')
     expect(manifest.build?.appId).toBe('ai.deepseek.dsh.desktop')
     expect(manifest.build?.asarUnpack).toEqual([
@@ -371,6 +383,20 @@ describe('published package surface', () => {
       artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
+    expect(manifest.build?.linux?.target).toEqual([{
+      target: 'AppImage',
+      arch: ['x64'],
+    }])
+    expect(manifest.build?.linux?.files).toEqual(['!node_modules/node-pty/**'])
+    expect(manifest.build?.linux?.extraResources).toEqual([{
+      from: 'node_modules/node-pty',
+      to: 'app.asar.unpacked/node_modules/node-pty',
+    }])
+    expect(manifest.build?.linux?.artifactName).toBe('DSH-Desktop-${version}-x86_64.${ext}')
+    expect(manifest.build?.linux?.category).toBe('Development')
+    expect(manifest.build?.linux?.executableArgs).toEqual([])
+    expect(manifest.build?.linux?.executableName).toBe('dsh-plugin-desktop')
+    expect(manifest.build?.linux?.syncDesktopName).toBe(true)
   })
 
   it('separates unsigned smoke packaging from the signed macOS release', () => {
@@ -381,8 +407,15 @@ describe('published package surface', () => {
     expect(packageDir).toContain("CSC_IDENTITY_AUTO_DISCOVERY: 'false'")
     expect(manifest.scripts?.['dist:mac']).toBe('node scripts/release-mac.ts')
     expect(manifest.scripts?.['dist:mac-smoke']).toBe('node scripts/package-mac.ts')
+    expect(manifest.scripts?.['dist:linux']).toBe('node scripts/package-linux.ts')
     expect(manifest.scripts?.['dist:win']).toBe('node scripts/package-win.ts')
     expect(manifest.scripts?.['dist:win-portable']).toBe('node scripts/package-win-portable.ts')
+    expect(manifest.scripts?.['check:linux-package']).toContain('yarn run build')
+    expect(manifest.scripts?.['check:linux-package']).toContain('yarn run typecheck')
+    expect(manifest.scripts?.['check:linux-package']).toContain('tests/linux-native-runtime.spec.ts')
+    expect(manifest.scripts?.['check:linux-package']).toContain('tests/package-linux.spec.ts')
+    expect(manifest.scripts?.['check:linux-package']).toContain('tests/verify-linux-appimage.spec.ts')
+    expect(manifest.scripts?.['check:linux-package']).toContain('yarn run verify:closure')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run build')
     expect(manifest.scripts?.['check:win-package']).toContain('yarn run typecheck')
     expect(manifest.scripts?.['check:win-package']).toContain('tests/package-win.spec.ts')
@@ -398,6 +431,8 @@ describe('published package surface', () => {
       .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac')
     expect(workspaceManifest.scripts?.['dist:mac-smoke'])
       .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:mac-smoke')
+    expect(workspaceManifest.scripts?.['dist:linux'])
+      .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:linux')
     expect(workspaceManifest.scripts?.['dist:win'])
       .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win')
     expect(workspaceManifest.scripts?.['dist:win-portable'])
