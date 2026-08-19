@@ -2,7 +2,7 @@
 
 [中文](install-and-uninstall.zh.md)
 
-Status: implemented for private Desktop integration testing; not a plugin security review
+Status: delivered and built into DSH Desktop; this does not constitute a plugin security review
 
 This guide explains what users see and the boundary developers must preserve. The current Market installs only a narrow class of exact npm packages into the active DSH Desktop profile. It does not install from GitHub or run a command supplied by a catalog. For plugins installed elsewhere, it can only persist a Desktop-owned enabled/disabled loading choice; it never claims uninstall ownership.
 
@@ -11,7 +11,7 @@ This guide explains what users see and the boundary developers must preserve. Th
 | View | What it shows | What it does not mean |
 | --- | --- | --- |
 | **Discover** | Every normalized item in the selected source's complete local index, shown 50 at a time | A listing is not install approval, compatibility evidence, or endorsement |
-| **Installable** | A fail-closed local structural subset requiring reviewed provider verification with `repository_backlink`, an exact stable npm target, and a canonical repository, while excluding blocked, installed, or receipted packages | Presence is not npm verification, compatibility proof, a code review, or endorsement |
+| **Installable** | A fail-closed structural subset of the selected catalog requiring reviewed provider verification with `repository_backlink`, an exact stable npm target, and a canonical repository, while excluding product-blocked packages | Local install, receipt, uninstall, and enabled/disabled state do not remove a listing; presence is not permission to install, npm verification, compatibility proof, code review, or endorsement |
 | **Installed** | Host-reconciled direct bundles for the active profile | A valid matching Market receipt grants uninstall; disabled mutable bundles can be enabled, while external active bundles grant disable but never uninstall |
 | **Sources** | Saved source records and the one currently selected source | Changing source does not change the active profile or remove receipts |
 
@@ -31,11 +31,11 @@ Optional catalog metadata reports `scannedAt`, cache `expiresAt`, optional `prov
 
 If managed preview is unavailable, the dialog remains a details view. For an exact stable npm identity, the Host may show a bounded display-only command reconstructed from normalized identity. It may differ from the command described in the repository, is not the provider's original command, and has not passed the managed installer's complete verification. **Open DSH Terminal** sends no command, path, or profile: it only opens Desktop's built-in terminal so the user can inspect the source and decide whether to copy and run the text. A `dsh plugin add` launched through that built-in terminal uses the same configuration-recovery record as a Market install. Direct `pnpm` or `npm` commands typed there, and commands run from an external system terminal, are outside this recovery boundary. A manual install creates no Market receipt and therefore grants no Market uninstall authority.
 
-The **Installable** label means only “this listing is a local structural candidate for the current profile.” It does not mean npm has been contacted, compatibility is proven, or the code is approved or safe. Preview may still reject it, and a successful preview is not a promise that execution will succeed if registry, catalog, or profile state changes.
+The **Installable** label means only “this listing is a structural candidate from the selected catalog.” It does not mean npm has been contacted, the current profile permits installation, compatibility is proven, or the code is approved or safe. Installed, receipted, disabled, or subsequently uninstalled packages remain listed while the catalog still contains them. Preview may still reject a local operation, and a successful preview is not a promise that execution will succeed if registry, catalog, or profile state changes.
 
 ## What the Host accepts
 
-The current MVP supports only an npm package when all of these checks succeed. The first structural check is local; the remaining authoritative package checks run during preview for the selected item and are repeated where mutable during execution:
+The built-in managed installation boundary supports only an npm package when all of these checks succeed. The first structural check is local; the remaining authoritative package checks run during preview for the selected item and are repeated where mutable during execution:
 
 - the catalog supplies a normalized npm package name, an exact stable SemVer version, and a canonical repository identity;
 - npm returns the same package name and exact version;
@@ -46,7 +46,7 @@ The current MVP supports only an npm package when all of these checks succeed. T
 - npm supplies an official HTTPS tarball with a valid SHA-512 integrity value; and
 - the package declares a safe DSH bundle patch, which is present and contained inside the installed package after the managed operation.
 
-Building **Installable** does not perform per-package registry I/O. It additionally excludes blocked product packages and any package already referenced by the active profile or one of its Market receipts. Preview performs official-registry and active-profile verification for the selected candidate. Immediately before confirmed installation, execution repeats mutable checks; if integrity, tarball, bundle path, catalog candidate, or active profile changed, it refuses the operation. Only one Market package mutation runs at a time.
+Building **Installable** does not perform per-package registry I/O. It excludes product-blocked packages, but does not read the active profile, Market receipts, or enabled/disabled state to decide catalog membership. Preview performs official-registry and active-profile verification for the selected candidate. Immediately before confirmed installation, execution repeats mutable checks; if integrity, tarball, bundle path, catalog candidate, or active profile changed, it refuses the operation. Only one Market package mutation runs at a time.
 
 ## Protected install recovery
 
@@ -64,7 +64,7 @@ The next Desktop generation claims the record before profile preparation. Succes
 
 When a Market receipt was already saved for an install that startup recovery rolls back, the Market removes that exact receipt before acknowledging and clearing the recovery record. If receipt persistence fails, the record remains pending and the cleanup is retried. The local diagnostics archive is not uploaded automatically and may contain logs, system information, and crash evidence; treat it as sensitive rather than assuming every artifact can be completely redacted.
 
-The current MVP rejects:
+The built-in managed installer rejects:
 
 - GitHub URLs, Git repositories, release archives, commits, and other repository-based install targets;
 - version ranges, tags such as `latest`, and prerelease versions;
@@ -84,7 +84,7 @@ A GitHub repository link may still appear as inert provenance and may be used to
 4. Desktop runs the managed remove operation. The Host verifies that the package has left the profile before removing the receipt.
 5. Restart DSH Desktop so the running process no longer uses the removed plugin.
 
-Uninstall does not need the provider to remain online and does not refetch the original listing. If a plugin has no Market receipt, belongs to another profile, or was changed after installation, this MVP refuses to remove it. That conservative behavior avoids claiming ownership of packages managed elsewhere.
+Uninstall does not need the provider to remain online and does not refetch the original listing. If a plugin has no Market receipt, belongs to another profile, or was changed after installation, the built-in Market refuses to remove it. That conservative behavior avoids claiming ownership of packages managed elsewhere.
 
 ## Disable or enable a plugin
 

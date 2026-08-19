@@ -2,7 +2,9 @@
 
 [中文](catalog-adapter-guide.zh.md)
 
-Status: Draft implementation guide. The schemas remain versioned by the [catalog provider contract](catalog-provider-contract.md).
+Status: Implemented public v1 integration guide. The authoritative Schemas and compatibility rules are versioned by the [catalog provider contract](catalog-provider-contract.md).
+
+DSH Community Market is open to every catalog provider and user-owned source. Anyone can use path A immediately by publishing Schema-conforming public HTTPS JSON and sharing the manifest URL; no Market code change or partnership approval is required. Providers that need path B are welcome to propose a reviewed adapter collaboration for their existing public API.
 
 ## Choose one integration path
 
@@ -26,7 +28,7 @@ Use this path when an existing API cannot return the standard page shape. Give t
 - stable field meanings and pagination rules;
 - attribution, rate limits, and the provider's icon ownership semantics.
 
-The adapter is local TypeScript reviewed, tested, and released with Market. It uses the constrained Host HTTP client and returns a validated `CatalogSnapshot`. A manifest or remote response can never supply JavaScript, mapping expressions, install commands, credentials, or adapter code.
+The adapter is local TypeScript reviewed, tested, and released with Market. It uses the constrained Host HTTP client and returns a validated `CatalogSnapshot`. Open cooperation does not bypass review: a manifest or remote response can never supply JavaScript, mapping expressions, install commands, credentials, or adapter code.
 
 ## Copyable adapter skeleton
 

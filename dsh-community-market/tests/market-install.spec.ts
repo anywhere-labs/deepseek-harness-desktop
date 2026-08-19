@@ -3,7 +3,9 @@ import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { Context } from '@deepseek-ai/cordis'
 import type { SettingsScope } from '@deepseek-ai/dsh-settings'
+import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { stringify as stringifyYaml } from 'yaml'
 import { DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_PROVIDER_ID } from '../src/adapters/dsh-1024store.js'
@@ -17,7 +19,7 @@ import {
   type MarketDesktopPnpm,
   type MarketInstallReceipt,
 } from '../src/install/service.js'
-import { marketRoutes, registerMarketRoutes } from '../src/host/routes.js'
+import { marketRoutes, registerMarketRoutes, registerMarketSettings } from '../src/host/routes.js'
 import { manualInstallHint } from '../src/install/manual.js'
 
 const packageName = 'dsh-plugin-safe'
@@ -435,44 +437,85 @@ describe('market install service', () => {
     expect(settings.receipts()).toEqual([])
   })
 
-  it('lists structurally installable, currently uninstalled candidates without registry fan-out', async () => {
+  it('restores an installed receipt through a new service and file-backed settings context', async () => {
+    const profileDir = await createProfile()
+    const settingsPath = join(profileDir, 'settings.yaml')
+    const firstContext = new Context()
+    await firstContext.plugin(FileSettingsProvider, { path: settingsPath, watch: false })
+    const firstService = new MarketInstallService(
+      registerMarketSettings(firstContext),
+      () => ({ name: 'web', dir: profileDir }),
+      runner(profileDir, []),
+      { verify: vi.fn(async () => verification) },
+    )
+    firstService.observeCatalog(snapshot())
+    const preview = await firstService.previewInstall(
+      'source-1',
+      'example/dsh-plugin-safe',
+      new AbortController().signal,
+    )
+    const installed = await firstService.executeInstall(preview.intent, new AbortController().signal)
+    firstService.dispose()
+    await firstContext.fiber.dispose()
+
+    const secondContext = new Context()
+    await secondContext.plugin(FileSettingsProvider, { path: settingsPath, watch: false })
+    const secondService = new MarketInstallService(
+      registerMarketSettings(secondContext),
+      () => ({ name: 'web', dir: profileDir }),
+      runner(profileDir, []),
+      { verify: vi.fn(async () => verification) },
+    )
+    try {
+      await expect(secondService.listReceipts()).resolves.toEqual([installed.receipt])
+    } finally {
+      secondService.dispose()
+      await secondContext.fiber.dispose()
+    }
+  })
+
+  it('lists structural catalog candidates independently of profile, receipt, and disabled state without registry fan-out', async () => {
     const profileDir = await createProfile()
     await writeFile(join(profileDir, 'package.json'), JSON.stringify({
       name: 'fixture-profile',
       dependencies: { [`${packageName}-0`]: version },
       dsh: { profile: { bundles: [`${packageName}-0`] } },
     }))
-    let active = 0
-    let maximumActive = 0
-    const verifiedPackages: string[] = []
-    const verifier = {
-      verify: vi.fn(async (candidate: { packageName: string }, signal: AbortSignal) => {
-        signal.throwIfAborted()
-        verifiedPackages.push(candidate.packageName)
-        active += 1
-        maximumActive = Math.max(maximumActive, active)
-        try {
-          await new Promise(resolve => setTimeout(resolve, 5))
-          if (candidate.packageName === `${packageName}-1`) {
-            throw new MarketInstallError('verification-failed', 'fixture rejection')
-          }
-          return verification
-        } finally {
-          active -= 1
-        }
-      }),
+    const receipt: MarketInstallReceipt = {
+      receiptId: 'receipt:list-state-independent-0001',
+      profileName: 'web',
+      packageName: `${packageName}-1`,
+      version,
+      integrity,
+      bundlePatch: './cordis.patch.yml',
+      sourceRecordId: 'source-1',
+      providerId: DSH_1024STORE_PROVIDER_ID,
+      itemId: `example/${packageName}-1`,
+      displayName: 'Safe Plugin 1',
+      installedAt: '2026-08-18T00:00:00.000Z',
     }
+    const verifier = {
+      verify: vi.fn(async () => verification),
+    }
+    const recoveredInstallReceiptIds = vi.fn(async () => [receipt.receiptId])
+    const acknowledgeRecoveredInstall = vi.fn(async () => {})
+    const currentProfile = vi.fn(() => ({ name: 'web', dir: profileDir }))
+    const disabledPackageNames = vi.fn(() => [`${packageName}-2`])
     const service = new MarketInstallService(
-      memoryScope().scope,
-      () => ({ name: 'web', dir: profileDir }),
-      runner(profileDir, []),
+      memoryScope([receipt]).scope,
+      currentProfile,
+      {
+        ...runner(profileDir, []),
+        recoveredInstallReceiptIds,
+        acknowledgeRecoveredInstall,
+      },
       verifier,
+      { disabledPackageNames },
     )
     const index = fullIndex(snapshotWithCandidates(7))
     const installable = await service.listInstallable(index, new AbortController().signal)
-    expect(maximumActive).toBe(0)
-    expect(verifiedPackages).toHaveLength(0)
     expect(installable.items.map(target => target.package?.name)).toEqual([
+      `${packageName}-0`,
       `${packageName}-1`,
       `${packageName}-2`,
       `${packageName}-3`,
@@ -481,11 +524,15 @@ describe('market install service', () => {
       `${packageName}-6`,
     ])
     expect(installable.items[0]).toMatchObject({
-      id: `example/${packageName}-1`,
+      id: `example/${packageName}-0`,
       latestVersion: version,
     })
     await expect(service.listInstallable(index, new AbortController().signal)).resolves.toMatchObject({ items: installable.items })
     expect(verifier.verify).not.toHaveBeenCalled()
+    expect(currentProfile).not.toHaveBeenCalled()
+    expect(disabledPackageNames).not.toHaveBeenCalled()
+    expect(recoveredInstallReceiptIds).not.toHaveBeenCalled()
+    expect(acknowledgeRecoveredInstall).not.toHaveBeenCalled()
   })
 
   it('returns the complete local catalog beyond the former 2048-candidate cap', async () => {
@@ -1274,6 +1321,35 @@ describe('market install Host routes', () => {
     })).resolves.toMatchObject({ status: 200, body: { action: 'enable' } })
     await expect(request(marketRoutes.operationExecute, 'POST', { previewId: 'enable_opaque_preview' }))
       .resolves.toMatchObject({ status: 200, body: { action: 'enable' } })
+
+    await expect(request(marketRoutes.installations, 'GET')).resolves.toMatchObject({
+      status: 200,
+      body: {
+        installations: [{
+          kind: 'managed',
+          status: 'active',
+          action: 'uninstall',
+          disableBundleId: bundle.bundleId,
+          receipt: { receiptId: receiptRace.receiptId },
+        }],
+      },
+    })
+
+    await expect(request(marketRoutes.operationPreview, 'POST', {
+      action: 'disable',
+      bundleId: bundle.bundleId,
+    })).resolves.toMatchObject({ status: 200, body: { action: 'disable' } })
+    listVerifiedReceipts.mockResolvedValue([{ ...receiptRace, receiptId: 'receipt-race-0002' }])
+    await expect(request(marketRoutes.operationExecute, 'POST', { previewId: 'disable_opaque_preview' }))
+      .resolves.toMatchObject({ status: 409, body: { code: 'conflict' } })
+
+    listVerifiedReceipts.mockResolvedValue([receiptRace])
+    await expect(request(marketRoutes.operationPreview, 'POST', {
+      action: 'disable',
+      bundleId: bundle.bundleId,
+    })).resolves.toMatchObject({ status: 200, body: { action: 'disable' } })
+    await expect(request(marketRoutes.operationExecute, 'POST', { previewId: 'disable_opaque_preview' }))
+      .resolves.toMatchObject({ status: 200, body: { action: 'disable' } })
     expect(install.listInstallable).not.toHaveBeenCalled()
     dispose()
   })

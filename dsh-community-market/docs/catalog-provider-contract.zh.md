@@ -2,14 +2,17 @@
 
 [English](catalog-provider-contract.md)
 
-状态：**Draft / 实现交接稿**。生成类型、校验、来源持久化、受限网络访问、标准与 DSH 1024Store adapter，以及可加载 Host/Client 入口已实现并进入集成测试。它仍是 private draft，不提供兼容性承诺。
+状态：**已实现的公开 v1 契约。** 带版本的 Schema、生成类型、严格校验、来源持久化、受限网络与媒体边界、标准 HTTP adapter、经过审核的 DSH 1024Store 与仅浏览的 dshfind adapter、完整本地索引，以及可加载的 Host/Client 入口均已在 DSH Desktop 中实现并通过测试。本文档和 fixture 是 `manifestVersion` 与 `schemaVersion` `1.x` 的公开互操作契约。
 
 ## 决策摘要
 
 - DSH Community Market **没有默认、优先或兜底目录来源**。
 - 用户可以保存多个来源注册，但当前浏览会话必须明确且最多只选择一个来源。
 - 用户可以添加任何符合本契约的来源。添加来源不会安装插件，也不会给该来源任何执行能力。
+- 目录生态是开放的：任何个人、社区或服务都可以发布符合规范的来源，任何用户都可以登记其 manifest URL。标准接入不需要修改 Market 代码，也不需要先获得合作批准。
+- 已有公开 API 无法直接输出标准 page 结构的 provider，可以提出经过审核的 adapter 合作接入。合作只会增加本地、经过测试的 Market 代码，绝不允许 provider 下发可执行 adapter 代码。
 - DSH 1024Store 是当前与本项目合作的目录提供方之一。市场已包含经过审核的内置 adapter；这个 adapter 不会自动选择 1024Store，也不会在当前来源失败时用它兜底。
+- dshfind 是另一个可选合作提供方。它经过审查的 adapter 当前仅用于浏览，不会被默认选择、优先排序、推荐或用作兜底。
 - 某个来源出现在内置选项中或受到 adapter 支持，不代表 Anywhere Labs 推荐、审核或背书该来源及其收录的插件。
 - 所有 provider 必须先转换成同一个标准化模型，数据才能到达市场界面或安装边界。
 
@@ -25,7 +28,7 @@
 - 市场消费的标准化快照；
 - 已保存来源注册、单一来源选择、provenance、分页和失败行为；
 - 最小网络与数据安全边界；
-- 第一版实现的交接清单和测试矩阵。
+- 已实现的 v1 能力清单和已验证验收矩阵。
 
 它不定义目录治理、插件审核、账号系统、付费、任意鉴权来源或 package 安装命令。安装仍然是独立的用户确认操作，由 Market Host 和当前 profile 服务负责。
 
@@ -82,21 +85,21 @@ flowchart LR
 
 ### 第一层：来源 manifest
 
-标准来源发布一份静态 manifest，并由 [`catalog-source.schema.json`](schemas/catalog-source.schema.json) 校验。Draft v1 的结构用于声明：
+标准来源发布一份静态 manifest，并由 [`catalog-source.schema.json`](schemas/catalog-source.schema.json) 校验。公开 v1 的结构用于声明：
 
-- `manifestVersion`，本草案固定为 `1.0.0`；
+- `manifestVersion`，v1 固定为 `1.0.0`；
 - provider 声称的 `providerId`、可读 `name`，以及可选 description/homepage；
 - 包含名称、URL 和可选 notice 的 provider 来源声明；
 - 一个公开的 `https-json` GET endpoint；
 - 支持的 query 参数、默认和最大分页大小，以及支持的排序值。
 
-Manifest 描述 provider 能力，不控制本地策略。Draft v1 只支持公开匿名来源：不包含 bearer token、cookie、request header、secret 字段、可执行 mapping 或动态 JavaScript。
+Manifest 描述 provider 能力，不控制本地策略。公开 v1 标准来源只支持匿名访问：契约不包含 bearer token、cookie、request header、secret 字段、可执行 mapping 或动态 JavaScript。
 
 来源 manifest URL 与目录 endpoint 是两个不同地址。添加 manifest URL 必须来自用户明确操作。Host 生成全新 `sourceRecordId`，校验 manifest 后将注册时副本与该本地用户来源记录一起保存，在来源管理中展示其披露字段，并且只有用户选择后才把它设为当前来源。
 
 标准直接接入时，用户只需要登记 manifest URL。建议的最小 manifest 只使用一个公开 GET endpoint，只声明 `q`、`category`、`cursor` 和 `limit`，把示例中的两个 page limit 都设为 50，并将 `sorts` 留空。50 是方便起步的值，不是标准来源上限；manifest 可以在 Schema 安全上限 100 以内声明 limit。Capability、sort、locale、图标和更丰富的展示字段仍是可选扩展。参见[最小来源 manifest](examples/catalog-source.example.json)与[最小 provider page](examples/catalog-provider-page.minimal.example.json)。
 
-注册同时固定 provider 声明与网络 origin。每次请求都必须重新确认 manifest 的 `providerId` 与本地来源记录保存的值完全一致。用户确认的 manifest URL、manifest 请求的最终 URL、`transport.endpoint` 和 provider-page 请求的最终 URL 必须始终属于同一个无凭据 HTTPS origin。Draft v1 的网络 URL 和 manifest 只允许标准 HTTPS 443 端口，不把自定义端口纳入标准来源契约。允许同源 redirect；即使两个地址都使用 HTTPS，也必须拒绝跨 origin。确实需要独立 API origin 或端口的部署，在未来契约版本明确描述这种关系之前，必须使用经过审核的 provider adapter。
+注册同时固定 provider 声明与网络 origin。每次请求都必须重新确认 manifest 的 `providerId` 与本地来源记录保存的值完全一致。用户确认的 manifest URL、manifest 请求的最终 URL、`transport.endpoint` 和 provider-page 请求的最终 URL 必须始终属于同一个无凭据 HTTPS origin。公开 v1 的网络 URL 和 manifest 只允许标准 HTTPS 443 端口，不把自定义端口纳入标准来源契约。允许同源 redirect；即使两个地址都使用 HTTPS，也必须拒绝跨 origin。确实需要独立 API origin 或端口的部署，应使用经过审核的 provider adapter 接入路径，除非后续契约修订明确描述这种关系。
 
 ### 第二层：adapter
 
@@ -109,7 +112,7 @@ interface CatalogAdapter {
 }
 ```
 
-`CatalogFetchContext` 应只提供 `AbortSignal`、受限 HTTP client、已校验来源身份、配置限制，以及一个只接受已审核候选并返回不透明 asset reference 的窄 Host media registrar。它不能暴露 Electron 全局对象、任意文件系统访问、shell、ambient credentials 或包管理器执行能力。
+`CatalogFetchContext` 只提供 `AbortSignal`、受限 HTTP client、已校验来源身份、配置限制，以及一个只接受已审核候选并返回不透明 asset reference 的窄 Host media registrar。它不暴露 Electron 全局对象、任意文件系统访问、shell、ambient credentials 或包管理器执行能力。
 
 接入只有两条受支持路径：
 
@@ -126,7 +129,7 @@ Provider 输入绝不提供 Host provenance。Response 成功后，adapter 注�
 
 每个成功结果都必须先通过 [`catalog-snapshot.schema.json`](schemas/catalog-snapshot.schema.json) 校验，之后才能缓存、展示或用于生成安装候选。
 
-Draft v1 标准化快照包含：
+公开 v1 标准化快照包含：
 
 - `schemaVersion: "1.0.0"`；
 - Host 生成的来源记录身份、provider claim、本地 adapter 身份、registration kind、观测的抓取时间和最终 URL；
@@ -170,7 +173,7 @@ Accept: application/json
 
 Host 先构造并校验 [`CatalogQuery`](schemas/catalog-query.schema.json)，然后只序列化来源 manifest 的 `query.supported` 数组中声明的参数。缺失值直接省略，不能序列化为空字符串或 `null`。
 
-| 参数 | 数量 | Draft v1 语义 |
+| 参数 | 数量 | 公开 v1 语义 |
 | --- | --- | --- |
 | `q` | 0 或 1 个 | 去除首尾空白的搜索文本，1–200 个字符；匹配和排序方式由 provider 决定。 |
 | `category` | 0 或多个 | 稳定 category ID。重复参数表示“匹配任意一个请求分类”；不允许重复值。 |
@@ -211,7 +214,7 @@ Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝
 
 ## 与 DSH 1024Store 的合作
 
-[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 是当前与 DSH Community Market 合作的提供方之一。它现有的 registry API 不需要为了本草案而修改。接入方式是一份经过审核的内置 provider adapter，它会：
+[DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 是当前与 DSH Community Market 合作的提供方之一。它现有的 registry API 不需要改成标准 wire 结构，而是通过公开的受审 adapter 路径接入，并随 Market 提供一份内置 provider adapter。它会：
 
 - 在相同 Host 网络限制下请求该 provider 公开文档中的 API；
 - 把其分类和插件元数据映射成标准化快照；
@@ -224,16 +227,28 @@ Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝
 
 这一合作关系使 1024Store 成为一个受到支持的来源选项，但**不会**使它成为默认、优先、官方、推荐、已审核或兜底来源。Adapter 不会自动选择它；没有选择或当前来源失败也不会触发对它的隐藏请求。它的目录仍属于独立项目，收录某个插件不等于完成了该插件的安全审核。
 
+## 与 dshfind 的合作
+
+[dshfind](https://dshfind.com) 是一个可选合作来源，Market 为其公开 REST API 提供经过审查的内置 adapter。Adapter 只使用编译期固定的 `https://api.dshfind.com` origin 和公开匿名请求。它以 `per_page=100` 请求首页，记录返回的 `data_version`，并在所有后续分页中携带完全相同的值。遇到 `409 stale_data`、版本/总数不一致、非法分页或遍历不完整时，整次扫描失败，不能发布部分索引。搜索、分类筛选、分类枚举、排序和每页 50 条的 UI 分页随后都在完整本地索引上运行，不会把这些交互继续发给 dshfind。
+
+dshfind 文档说明匿名配额为每分钟 30 次、突发 10 次，而当前目录以每页 100 条读取时需要超过 30 个 page。因此 adapter 会使用低于已公布持续速率的固定串行间隔，并把较慢的首次同步表现为来源加载状态，不能通过并发绕过 provider 限制。限流 response 会使整轮扫描失败，用户可以通过普通来源“重试”重新开始。完成的本地索引仍遵循普通有界 cache；明确刷新会启动一轮新的、一致的完整扫描。
+
+dshfind response 可能包含 `install.cmd`、`install.kind`、`install.pkg_name`、`install.npm_published` 与 `install.probed_at`，但当前没有提供精确稳定 npm 版本或同等 `repository_backlink` 证据。这些是不可信 provider claim，不是执行权限。Adapter 会在标准化前丢弃 `install.cmd`，不展示、不执行，也不从中解析 package/版本，并且不会为 dshfind 输出 `package` 或 `latestVersion`。因此所有 dshfind 条目都只能浏览，不能进入**可安装**或 Host 重建的手动提示。
+
+Adapter 可以标准化有界纯文本身份、描述、标签/分类、更新时间，以及规范、无凭据的 `https://github.com/owner/repository` 链接。当前 API 没有插件图标或 README 字段。任何 owner 头像 fallback 都必须标记为 `publisher-avatar` 并通过 Host 媒体边界解析；adapter 不获取或渲染远程 README 内容。dshfind 的分数、等级、`official`/精选标记、风险标记和安装结论仍是 provider 自有运营声明，绝不会成为 Anywhere Labs 的安全审核、推荐或验证信号。
+
+这一合作只会让 dshfind 作为可选合作来源显示；它**不会**成为默认、优先、官方、推荐、已审核或兜底来源，来源失败也不会触发对其他 provider 的隐藏切换。
+
 ## 安装边界
 
 目录浏览与插件安装是两个独立操作：
 
 - 获取 manifest 或 snapshot 是只读操作，绝不会调用 pnpm、DSH、shell 或 lifecycle script。
 - 远程数据不能提供 install command、自定义包管理器参数、环境变量或工作目录。
-- 浏览记录还不是安装目标。Host 必须独立把 npm identity 解析为精确 SemVer 版本，或把 repository identity 解析为不可变 commit，并使用语义化版本解析器而不是正则表达式。
-- 一个记录同时声明 npm package 和 repository 时，它们只是 provider 提供的两项独立声明：任何一项都不能静默优先，同时存在也不能证明两者包含相同代码。用户必须明确选择要安装的 identity；Host 无法独立验证两者关系或发现冲突时，安装保持禁用。
-- 无法解析并重新校验不可变版本或 commit 时，安装保持禁用。
-- 最终确认必须展示精确来源记录、已锁定 package 版本或 repository commit、当前 profile 和本地代码风险提示。
+- 浏览记录还不是安装目标。当前受管路径只接受具有经过审核的 provider 验证、规范 repository backlink 和精确稳定版本的 npm 结构候选。
+- Preview 会根据权威本地与 registry 状态独立复核 npm identity、repository、integrity、runtime、lifecycle script、DSH bundle 证据和当前 profile。声明冲突或无法验证时，安装保持禁用。
+- 执行时会重新检查可变证据，并拒绝 package 或 profile 已改变的操作。
+- 最终确认展示精确来源记录、锁定的 npm package 与版本、当前 profile 和本地代码风险提示。
 - 只有用户明确操作后才开始安装，并使用现有的受管当前 profile 服务。
 
 支持一个来源只表示可以浏览它的元数据，不会授予该来源安装、更新、启用或执行插件的能力。
@@ -245,12 +260,12 @@ Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝
 - 生产环境中的 manifest 和目录 URL 必须使用 HTTPS。拒绝 URL credentials、fragment、非标准 scheme，以及 endpoint 自带 query 的情况。
 - 校验每次 redirect，限制 redirect 次数，拒绝 HTTPS downgrade，并在每一跳重新执行全部地址检查。
 - DNS 解析后阻止 loopback、private、link-local、multicast、unspecified、运营商级 NAT 和 cloud metadata 地址，并保护连接不受 DNS rebinding 影响。仅可提供明确、可见且生产 build 不存在的本地开发 override。
-- 不附带 ambient cookie、authorization header、client certificate 或 provider 提供的自定义 header。Draft v1 来源只支持公开匿名访问。
+- 不附带 ambient cookie、authorization header、client certificate 或 provider 提供的自定义 header。公开 v1 标准来源只支持匿名访问。
 - 设置 connect、first-byte 和 total deadline，并支持 `AbortSignal` 取消。
 - 限制压缩后与解压后 response 大小、条目数量、分页深度、字符串、数组和 URL 长度。限制值必须是有测试的常量；数据字段以 schema maximum 为准。
 - 目录 response 必须使用 JSON media type，只解码一次，校验后才能缓存。目录 loader 绝不跟随数据中发现的 URL；只有明确的 Host 媒体解析器可以在独立图片限制下处理已校验 provider-page `media.icon.url`。
 
-当前 Draft v1 的运行时预算属于 provider contract，而不只是实现提示：
+公开 v1 的运行时预算属于 provider contract，而不只是实现提示：
 
 | 边界 | Body 与 redirect 预算 | Deadline | 其他规则 |
 | --- | --- | --- | --- |
@@ -279,7 +294,7 @@ Host 只为当前已选来源执行目录 I/O。图标 asset service 同时最�
 
 ## 版本与 schema 权威性
 
-草案 schema 使用 JSON Schema Draft 2020-12：
+公开 v1 Schema 使用 JSON Schema Draft 2020-12：
 
 - [`catalog-source.schema.json`](schemas/catalog-source.schema.json) 是来源 manifest 的权威定义。
 - [`catalog-query.schema.json`](schemas/catalog-query.schema.json) 是标准化 query object 和参数边界的权威定义。
@@ -288,11 +303,11 @@ Host 只为当前已选来源执行目录 I/O。图标 asset service 同时最�
 
 实现必须在启用 Draft 2020-12 format assertion 的情况下编译这些 schema，并完整校验 URI、date-time 和 UUID format。这里的 `format` 是校验要求，不是只用于说明的 annotation。字段间关系仍需语义校验，例如 `defaultLimit <= maxLimit`，以及宣告支持 `sort` 时 `sorts` 不得为空。
 
-### 可复制的草案 fixture
+### 可复制的 v1 fixture
 
-实现团队可以直接从对应的[最小来源 manifest](examples/catalog-source.example.json)、[最小 query](examples/catalog-query.example.json)、[最小 provider page](examples/catalog-provider-page.minimal.example.json)、带可选媒体的完整 [provider page](examples/catalog-provider-page.example.json) 和[标准化 snapshot](examples/catalog-snapshot.example.json) fixture 开始编写契约测试。它们只是示例：来源 fixture 不是内置或已选择的 provider，这些文件也都不是 runtime configuration。
+Provider 与 adapter 作者可以直接使用对应的[最小来源 manifest](examples/catalog-source.example.json)、[最小 query](examples/catalog-query.example.json)、[最小 provider page](examples/catalog-provider-page.minimal.example.json)、带可选媒体的完整 [provider page](examples/catalog-provider-page.example.json) 和[标准化 snapshot](examples/catalog-snapshot.example.json) fixture 编写兼容性测试。它们只是示例：来源 fixture 不是内置或已选择的 provider，这些文件也都不是 runtime configuration。
 
-`manifestVersion` 和 response `schemaVersion` 对本契约进行版本管理，不代表 DSH、Desktop、Market package、provider 或插件版本。在草案完成审核并标记 stable 之前，四个 schema 都是临时定义，不能宣传成已经实现的兼容承诺。
+`manifestVersion` 和 response `schemaVersion` 对本契约进行版本管理，不代表 DSH、Desktop、Market package、provider 或插件版本。已发布的 `1.x` Schema 是当前已实现的兼容性边界。兼容性的新增必须同时经过评审、fixture、生成类型和契约测试；不兼容变更必须使用新的 major version。
 
 实现必须拒绝不支持的 major version。所有契约修改都需要连同 schema fixture 和兼容性测试一起评审；不允许在某个 provider adapter 中临时放宽校验。
 
@@ -307,50 +322,52 @@ Host 只为当前已选来源执行目录 I/O。图标 asset service 同时最�
 7. 在有界有效期内复用完成的索引；明确刷新会使其失效，并绕过目录 HTTP cache 后重新扫描。
 8. 已选来源变化、清空选择、plugin generation 被 dispose 或 DSH 关闭时，取消自己拥有的请求并重置会话。
 
-## 实现交接清单
+## 已实现的 v1 清单
+
+当前 package 已实现并测试以下全部能力。
 
 ### 契约与类型
 
-- [ ] 一起评审并冻结四个 draft schema；生成或维护对应 TypeScript 类型。
-- [ ] 为每个 schema 添加正向和反向 JSON fixture。
-- [ ] 实现 JSON Schema 无法表达的语义校验，包括 endpoint path、provider page 条目 ID 唯一性、`provenance.itemId` 一致性、source record/provenance 一致性、source record 唯一性、query limit 关系、package/repository 冲突处理、repository 规范化和 cursor 归属。
-- [ ] 在至少一个标准来源和一个 provider 私有 adapter 通过同一套契约测试前，provider adapter 类型保持内部使用。
+- [x] 同时发布四份 v1 Schema，并生成对应 TypeScript 类型。
+- [x] 为每份 Schema 维护正向与反向 JSON fixture。
+- [x] 执行 JSON Schema 无法单独表达的 endpoint、identity、provenance、query limit、repository 和 cursor 跨字段语义校验。
+- [x] Adapter 类型保持本地使用，标准来源、DSH 1024Store 与 dshfind 通过同一标准化契约。
 
 ### 来源 registry 与 UI
 
-- [ ] 持久化用户拥有的来源记录，包括 Host 生成 UUID、adapter identity、manifest URL 或内置 provider ID 与 registration kind；另行持久化一个 provider 无法控制的本地已选来源标记。
-- [ ] 实现添加、检查、选择、切换、重试和删除操作。
-- [ ] 首次交付时不预选任何来源，并实现明确的零来源状态。
-- [ ] 选择前展示来源声明与 endpoint host，并在每个结果、详情和安装界面继续展示。
-- [ ] 明确展示当前已选来源的错误；不能自动替换失败来源，也不能自动选择其他来源。
+- [x] 持久化用户拥有的来源记录，以及 provider 无法控制的一条本地选择标记。
+- [x] 提供添加、检查、选择、切换、重试、排序和删除操作。
+- [x] 首次启动不预选来源，并显示明确的来源选择状态。
+- [x] 在来源管理中展示来源声明、endpoint host、adapter 类型和最近结果，并在目录与安装界面保留 provenance。
+- [x] 让失败归属于当前已选来源，不自动替换或兜底。
 
 ### 请求与单一已选来源会话
 
-- [ ] 实现一个由标准 adapter 和内置 provider adapter 共用的受限 HTTP client。
-- [ ] 实现标准 GET `/v1/plugins` adapter 和精确 query 序列化。
-- [ ] 把经审核的 DSH 1024Store adapter 实现为一个可选来源。
-- [ ] 增加已选来源的 abort/timeout/完整索引 cache 和强制刷新；标准来源网络 page 按有效请求值或默认值执行限制，Schema 上限 100，可见结果使用每页最多 50 条的本地分页。
-- [ ] 适用时先校验 provider 原始数据，再做 normalization；之后对每个标准化 snapshot 再次校验。
-- [ ] 在完整扫描、本地搜索、分组、分页、缓存、详情和安装确认中始终保留 provenance。
+- [x] 标准 adapter 与受审 provider adapter 共用一个受限 HTTP client。
+- [x] 实现标准 GET `/v1/plugins`、精确 query 序列化、完整 cursor 扫描和本地完整索引。
+- [x] 提供经过审核的可选 DSH 1024Store 与仅浏览 dshfind adapter。
+- [x] 实施取消、deadline、有界 cache、强制刷新、Schema 有界网络分页和每页最多 50 条的本地 UI 分页。
+- [x] 在标准化前校验不可信 wire 数据，并再次校验每份标准化 snapshot。
+- [x] 在扫描、本地筛选、分页、cache、详情和安装确认中始终保留 provenance。
 
 ### 安装交接
 
-- [ ] 只从标准化 identity 推导候选，永不消费远程 command。
-- [ ] 启用安装前解析并锁定精确 npm SemVer 版本或不可变 repository commit；绝不把 provider `latestVersion` 文本当作 pin。
-- [ ] 只从用户当前看见并选择的来源记录推导安装候选。
-- [ ] 调用受管安装服务前，立即重新校验所选记录和当前 profile。
-- [ ] 缺少安装能力时，目录浏览仍然完整可用。
+- [x] 只从标准化 identity 与经过审核的 provider 验证推导候选，永不消费远程 command。
+- [x] 只接纳精确稳定的 npm 候选，并在 preview 与执行时独立复核 registry identity、repository、integrity、runtime、lifecycle script 和 DSH bundle 证据。
+- [x] 把每个候选绑定到用户当前看见并选择的来源记录。
+- [x] 调用受管安装服务前重新校验所选记录、可变 package 证据和当前 profile。
+- [x] 缺少安装能力或条目只能浏览时，目录浏览仍然完整可用。
 
 ### 发布门槛
 
-- [ ] 在运行时入口经过审核并具有 Loader smoke test 前，`dsh-community-market` 保持 private 且不可加载。
-- [ ] 记录所有网络/数据限制，并提供安全的用户可见失败信息。
-- [ ] 完成针对用户添加 URL、redirect、DNS rebinding、renderer 文本和安装候选推导的安全审核。
-- [ ] 至少两个 wire format 独立的 provider 通过 interoperability fixture 后，才把本契约标记为 stable。
+- [x] 提供经过审核的 Host/Client runtime 入口、package export 检查和 Loader smoke test。
+- [x] 记录网络/数据限制，并返回有界的用户可见失败信息。
+- [x] 以 fail-closed 边界覆盖用户添加 URL、redirect、DNS pinning、renderer 文本、媒体隔离和安装候选推导。
+- [x] 通过标准来源和两个 wire 结构独立的受审 provider API 验证标准化契约。
 
-## 规划测试矩阵
+## 已验证测试矩阵
 
-下列内容是后续实现必须通过的验收测试，不表示当前已有这些测试。
+当前自动化契约、adapter、Host、Client、媒体和安装测试覆盖以下验收行为；部分行汇总同一测试套件中的多项断言。
 
 | 范围 | 用例 | 预期结果 |
 | --- | --- | --- |
@@ -390,10 +407,10 @@ Host 只为当前已选来源执行目录 I/O。图标 asset service 同时最�
 | 安全 | 来源尝试使用 cookie、auth、自定义 header 或远程 adapter 代码 | 该能力不存在，输入被拒绝 |
 | 生命周期 | 请求中切换/清空选择或 dispose Host | Fetch abort，释放资源，适用时重置会话，迟到结果不能修改状态 |
 | 安装 | Snapshot 包含 command-like string，或 URL query 被构造成命令 | 无法进入受管安装操作 |
-| 安装 | npm 版本或 repository revision 缺失、可变、非法，或在重新校验期间改变 | 安装保持禁用；不启动 package 操作 |
-| 安装 | 一个记录同时声明 npm package 与 repository，但二者关系未验证或互相冲突 | 任何 identity 都不能隐式胜出；安装保持禁用 |
+| 安装 | 精确稳定 npm 版本或经过审核的 provider 验证缺失、非法，或在重新校验期间改变 | 安装保持禁用；不启动 package 操作 |
+| 安装 | 目录 repository 与权威 npm package repository 的关系未验证或互相冲突 | 安装保持禁用；任何目录 claim 都不能压过权威复核 |
 | 安装 | 用户选择当前来源中的一个条目 | 执行前确认展示精确来源、identity 和当前 profile |
 
-## 开放的实现细节
+## 版本化扩展点
 
-实现团队可以在评审中提出具体 cache TTL、字节/条目预算、locale fallback 行为和 UI 布局。这些选择必须记录并测试；如果不先修订本契约，不得弱化“同时最多一个已选来源”、用户明确选择、无默认、无兜底、strict validation、provenance 或远程数据不可执行等规则。
+兼容的 v1 修订可以连同测试一起细化已经记录的 cache TTL、字节/条目预算、locale fallback 行为和 UI 布局，但不得弱化“同时最多一个已选来源”、用户明确选择、无默认、无兜底、strict validation、provenance 或远程数据不可执行等规则；改变这些边界必须经过契约修订评审。

@@ -2,7 +2,7 @@
 
 [English](install-and-uninstall.md)
 
-状态：已实现并用于 private Desktop 集成测试；不代表插件已经通过安全审核
+状态：已完成并内置于 DSH Desktop；不代表插件已经通过安全审核
 
 本文同时说明用户会看到什么，以及开发者必须保持哪些边界。当前 Market 只会把一小类精确 npm package 安装到 DSH Desktop 的当前 profile；它不会从 GitHub 安装，也不会运行目录提供的命令。对于通过其他工具安装的插件，它只能保存 Desktop 自己拥有的启用/禁用加载选择，绝不会取得卸载所有权。
 
@@ -11,7 +11,7 @@
 | 视图 | 展示内容 | 不代表什么 |
 | --- | --- | --- |
 | **发现** | 当前已选来源完整本地索引中的全部标准化条目，每次展示 50 条 | 被收录不等于允许安装、兼容性证据或推荐 |
-| **可安装** | 本地 fail-closed 结构子集：要求经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，同时排除被阻止、已经安装或已有 receipt 的 package | 出现在这里不等于 npm 已复核、兼容性证据、代码审核或推荐 |
+| **可安装** | 已选目录的 fail-closed 结构子集：要求经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，同时排除产品 blocklist 中的 package | 本地安装、receipt、卸载和启用/禁用状态不会移除条目；出现在这里不等于允许安装、npm 已复核、兼容性证据、代码审核或推荐 |
 | **已安装** | Host 核对后的当前 profile direct bundle | 有效且匹配的 Market receipt 授予卸载；已禁用的可变 bundle 可以启用，外部 active bundle 只授予禁用、绝不授予卸载 |
 | **来源** | 已保存的来源记录，以及当前唯一选中的来源 | 切换来源不会切换当前 profile，也不会删除 receipt |
 
@@ -31,11 +31,11 @@
 
 如果受管 preview 不可用，弹窗会保留为详情。对于精确稳定的 npm 身份，Host 可以展示一条根据规范化身份重建的、有界且只用于展示的命令。它可能与仓库中描述的命令不同，不是 provider 返回的原始命令，也没有通过受管安装器的全部验证。**打开 DSH 终端**不会提交命令、路径或 profile，只负责打开 Desktop 内置终端；用户需要先检查源码，再自行决定是否复制并运行文本。通过该内置终端运行的 `dsh plugin add` 会使用与 Market 安装相同的配置恢复记录；在其中直接执行 `pnpm`、`npm`，或在外部系统终端中运行命令，都不在这个恢复边界内。手动安装不会生成 Market receipt，因此也不会授予 Market 卸载权限。
 
-**可安装**只表示“这个条目是当前 profile 的本地结构候选”。它不表示已经联系 npm、兼容性已经证明，或代码已经获批、安全。Preview 仍可能拒绝它；即使 preview 成功，如果 registry、目录或 profile 状态发生变化，也不承诺执行一定成功。
+**可安装**只表示“这个条目是已选目录中的结构候选”。它不表示已经联系 npm、当前 profile 允许安装、兼容性已经证明，或代码已经获批、安全。只要目录仍然包含该条目，已经安装、已有 receipt、处于禁用状态或后来已卸载的 package 都会继续显示。Preview 仍可能拒绝本地操作；即使 preview 成功，如果 registry、目录或 profile 状态发生变化，也不承诺执行一定成功。
 
 ## Host 接受什么
 
-当前 MVP 只在以下检查全部通过时支持 npm package。第一项结构检查在本地完成；其余权威 package 检查在用户选择条目后的 preview 阶段执行，并在执行阶段按可变性再次检查：
+内置受管安装边界只在以下检查全部通过时支持 npm package。第一项结构检查在本地完成；其余权威 package 检查在用户选择条目后的 preview 阶段执行，并在执行阶段按可变性再次检查：
 
 - 目录给出标准化 npm package 名、精确稳定的 SemVer 版本和规范仓库身份；
 - npm 返回相同的 package 名和精确版本；
@@ -46,7 +46,7 @@
 - npm 提供官方 HTTPS tarball 和合法 SHA-512 integrity；以及
 - package 声明安全的 DSH bundle patch，受管操作结束后，该文件确实存在于安装 package 内且没有越出 package 目录。
 
-生成**可安装**列表时不会逐包访问 registry；它还会排除产品阻止的 package，以及当前 profile 或 Market receipt 中已经存在的 package。Preview 针对用户选中的候选完成官方 registry 与当前 profile 复核。用户确认后、真正安装前，执行阶段会立即重复可变检查；如果 integrity、tarball、bundle 路径、目录候选或当前 profile 发生变化，就会拒绝执行。同一时间只允许一个 Market package 修改操作。
+生成**可安装**列表时不会逐包访问 registry。它会排除产品 blocklist 中的 package，但不会读取当前 profile、Market receipt 或启用/禁用状态来决定目录成员资格。Preview 针对用户选中的候选完成官方 registry 与当前 profile 复核。用户确认后、真正安装前，执行阶段会立即重复可变检查；如果 integrity、tarball、bundle 路径、目录候选或当前 profile 发生变化，就会拒绝执行。同一时间只允许一个 Market package 修改操作。
 
 ## 受保护安装恢复
 
@@ -64,7 +64,7 @@ Add 成功后，Desktop 会封存白名单文件的结果 hash，并保留一条
 
 如果 Market receipt 已经保存，但该安装随后被启动恢复回滚，Market 会先移除这条精确 receipt，再确认并清除恢复记录。Receipt 持久化失败时，记录会继续保持 pending，之后重试清理。本地诊断归档不会自动上传，其中可能包含日志、系统信息和 crash 证据；应把它当作敏感数据处理，不能假设每一类 artifact 都能彻底脱敏。
 
-当前 MVP 会拒绝：
+内置受管安装器会拒绝：
 
 - GitHub URL、Git repository、release archive、commit，以及其他基于仓库的安装目标；
 - 版本范围、`latest` 等 tag 和 prerelease 版本；
@@ -84,7 +84,7 @@ GitHub 仓库链接仍可作为不可执行的来源信息显示，也可以用�
 4. Desktop 执行受管 remove 操作。Host 确认 package 已离开 profile 后，才移除 receipt。
 5. 重启 DSH Desktop，让当前运行的进程不再使用已移除插件。
 
-卸载不需要 provider 保持在线，也不会重新请求原目录条目。没有 Market receipt、属于其他 profile，或安装后已被修改的插件，当前 MVP 都会拒绝移除。这种保守行为可以避免 Market 错误接管由其他工具维护的 package。
+卸载不需要 provider 保持在线，也不会重新请求原目录条目。没有 Market receipt、属于其他 profile，或安装后已被修改的插件，内置 Market 都会拒绝移除。这种保守行为可以避免 Market 错误接管由其他工具维护的 package。
 
 ## 禁用或启用插件
 

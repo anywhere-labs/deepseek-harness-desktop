@@ -41,7 +41,11 @@ body:
       options:
         - Windows 11 x64
         - Windows 10 x64
+        - Windows ARM64
         - macOS Apple Silicon
+        - macOS Intel
+        - macOS Universal package / macOS 通用安装包
+        - Linux
         - Other or unsupported / 其他或未支持平台
     validations:
       required: true
@@ -52,7 +56,9 @@ body:
       label: Installation method / 安装方式
       options:
         - Windows installer / Windows 安装包
+        - Windows portable ZIP / Windows 便携版 ZIP
         - macOS DMG
+        - Linux package / Linux 安装包
         - Built from source / 源码运行
         - Other or unknown / 其他或不确定
     validations:
@@ -122,8 +128,8 @@ body:
     id: logs
     attributes:
       label: Logs or error details / 日志或错误信息
-      description: Attach the diagnostics ZIP from the tray. If the app cannot stay open, run the installed executable with `--export-diagnostics`. Review the archive before public upload / 请附上托盘导出的诊断 ZIP；如果应用持续闪退，请用 `--export-diagnostics` 运行安装后的程序。公开上传前请检查内容
-      placeholder: Paste relevant lines or attach diagnostics-*.zip; complete evidence usually speeds up diagnosis / 粘贴相关内容或附上 diagnostics-*.zip；完整证据通常能加快定位
+      description: Attach the diagnostics ZIP from the tray whenever possible. If the app cannot stay open, run the installed executable with `--export-diagnostics`. Please do not write only "none" unless diagnostics cannot be created. Review the archive before public upload / 请尽量附上托盘导出的诊断 ZIP；如果应用持续闪退，请用 `--export-diagnostics` 运行安装后的程序。除非确实无法生成诊断包，请不要只写“无”。公开上传前请检查内容
+      placeholder: Attach diagnostics-*.zip or paste the exact error lines, startup logs, crash text, or terminal output. Complete evidence usually speeds up diagnosis / 请附上 diagnostics-*.zip，或粘贴准确报错、启动日志、崩溃文字、终端输出；完整证据通常能加快定位
 
   - type: textarea
     id: screenshots

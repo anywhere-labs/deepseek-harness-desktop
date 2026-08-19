@@ -28,8 +28,17 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
     title,
     children,
     footer,
-  }: { open: boolean; title: string; children?: ReactNode; footer?: ReactNode }) => open
-    ? <div role="dialog" aria-label={title}><h2>{title}</h2>{children}{footer}</div>
+    className,
+    contentClassName,
+  }: {
+    open: boolean
+    title: string
+    children?: ReactNode
+    footer?: ReactNode
+    className?: string
+    contentClassName?: string
+  }) => open
+    ? <div role="dialog" className={className} aria-label={title}><h2>{title}</h2><div className={contentClassName}>{children}</div>{footer}</div>
     : null
   const icon = () => null
   return {
@@ -375,6 +384,11 @@ describe('community market overlay', () => {
     await screen.findByText('Better Sidebar')
     fireEvent.click(screen.getByRole('button', { name: 'sources' }))
     fireEvent.click(screen.getByRole('button', { name: 'addStandard' }))
+    const sourceDialog = screen.getByRole('dialog', { name: 'addStandard' })
+    expect(sourceDialog.classList.contains('dshMarketModal')).toBe(true)
+    expect(sourceDialog.classList.contains('dshMarketSourceModal')).toBe(true)
+    expect(sourceDialog.querySelector('.dshMarketModalContent')).not.toBeNull()
+    expect(sourceDialog.querySelector('.dshMarketModalActions')).not.toBeNull()
     fireEvent.change(screen.getByLabelText('standardSource'), { target: { value: '  https://plugins.example.org/catalog-source.json  ' } })
     fireEvent.click(screen.getByRole('button', { name: 'confirmAdd' }))
 

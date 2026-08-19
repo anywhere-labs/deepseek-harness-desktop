@@ -16,7 +16,10 @@ import {
   type Config as DesktopConfig,
   type DesktopSettings,
 } from '../src/index.ts'
-import { DESKTOP_DIRECTORY_PICKER_PATH } from '../src/directory-picker-contract.ts'
+import {
+  DESKTOP_DIRECTORY_PICKER_PATH,
+  DESKTOP_DIRECTORY_VALIDATOR_PATH,
+} from '../src/directory-picker-contract.ts'
 import type { DesktopRuntime, DesktopShellSpec } from '../src/runtime.ts'
 import { RENDERER_BOOT_REPORT_PATH, type RendererBootReport } from '../src/renderer-boot-contract.ts'
 
@@ -41,6 +44,7 @@ interface PluginHarness {
   setThemeSource: ReturnType<typeof vi.fn<(source: ThemePreference) => void>>
   rendererBoot: ReturnType<typeof vi.fn<(report: RendererBootReport) => void>>
   pickDirectory: ReturnType<typeof vi.fn<() => Promise<string | null>>>
+  validateDirectory: ReturnType<typeof vi.fn<(path: string) => Promise<boolean>>>
   route(path: string): WebRoute | undefined
   notify(next: DesktopSettings, prev: DesktopSettings): Promise<void>
   notifyLocale(preference: LocaleId | undefined): void
@@ -56,6 +60,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   const setThemeSource = vi.fn<(source: ThemePreference) => void>()
   const rendererBoot = vi.fn<(report: RendererBootReport) => void>()
   const pickDirectory = vi.fn(async () => null)
+  const validateDirectory = vi.fn(async () => true)
   const routes = new Map<string, WebRoute>()
   const settingsUpdated = new Set<(namespace: unknown, next: unknown) => void>()
   let localePreference: LocaleId | undefined
@@ -84,6 +89,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     openTerminal: () => {},
     exportDiagnostics: async () => {},
     pickDirectory,
+    validateDirectory,
     reportRendererBoot: rendererBoot,
     setLocalePreference,
     setThemeSource,
@@ -135,6 +141,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     setThemeSource,
     rendererBoot,
     pickDirectory,
+    validateDirectory,
     route: path => routes.get(path),
     notify: async (next, prev) => { await watcher?.(next, prev) },
     notifyLocale: (preference) => {
@@ -276,6 +283,33 @@ describe('desktop Host plugin', () => {
     expect(harness.pickDirectory).toHaveBeenCalledOnce()
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(body)).toEqual({ path: 'C:\\Work' })
+  })
+
+  it('validates a Windows workspace through a same-origin desktop route', async () => {
+    const harness = createHarness('win32')
+    harness.validateDirectory.mockResolvedValue(false)
+    apply(harness.ctx, config)
+    const route = harness.route(DESKTOP_DIRECTORY_VALIDATOR_PATH)
+    const req = {
+      method: 'POST',
+      headers: {
+        origin: 'http://127.0.0.1:43120',
+        'content-type': 'application/json',
+      },
+      async * [Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify({ path: 'E:\\repo' })) },
+    } as unknown as IncomingMessage
+    let body = ''
+    const res = {
+      statusCode: 200,
+      setHeader: vi.fn(),
+      end: vi.fn((value?: string) => { body = value ?? '' }),
+    } as unknown as ServerResponse
+
+    await route?.handler(req, res)
+
+    expect(harness.validateDirectory).toHaveBeenCalledWith('E:\\repo')
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(body)).toEqual({ allowed: false })
   })
 
   it.each(['win32', 'linux'] as const)(

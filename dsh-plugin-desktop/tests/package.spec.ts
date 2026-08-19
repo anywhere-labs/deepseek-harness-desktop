@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
@@ -140,6 +142,22 @@ describe('published package surface', () => {
     expect(manifest.optionalDependencies ?? {}).not.toHaveProperty('dshmarket')
   })
 
+  it('patches app boot to accept an empty patch layer', () => {
+    const patchPath = './patches/dsh-app-boot@0.1.0-rc.7.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-app-boot@npm:0.1.0-rc.7': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-app-boot@npm:^0.1.0-rc.7': expect.stringContaining(patchPath),
+    })
+    const marker = 'if (parsed === void 0 || parsed === null) return [];'
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedBoot = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-app-boot/lib/index.js',
+      packageRoot,
+    ), 'utf8')
+    expect(patch).toContain(marker)
+    expect(installedBoot).toContain(marker)
+  })
+
   it('patches the browse panel with the Windows native-picker icon bridge', () => {
     const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.7.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
@@ -153,6 +171,9 @@ describe('published package surface', () => {
     ), 'utf8')
     for (const marker of [
       '__DSH_DESKTOP_PICK_DIRECTORY__',
+      '__DSH_DESKTOP_VALIDATE_DIRECTORY__',
+      'openDirectory(path)',
+      'openDirectory(targetPath)',
       'IconFolderOpen16',
       'nativePickerButton',
       'browser.nativePicker',
@@ -428,7 +449,7 @@ describe('published package surface', () => {
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
   })
 
-  it('runs the full gate on Windows and packages through root scripts on native runners', () => {
+  it('runs the full gate once before reusing native packaging outputs on Windows', () => {
     const windowsJob = ciWorkflow.slice(
       ciWorkflow.indexOf('  desktop-windows:'),
       ciWorkflow.indexOf('  desktop-macos:'),
@@ -439,12 +460,39 @@ describe('published package surface', () => {
     )
 
     expect(windowsJob).toContain('- run: yarn check')
-    expect(windowsJob).toContain('- run: yarn dist:win')
-    expect(windowsJob).toContain('- run: yarn dist:win-portable')
-    expect(windowsJob).not.toContain('yarn workspace dsh-plugin-desktop dist:win')
-    expect(macosJob).toContain('- run: yarn workspace dsh-community-market check')
-    expect(macosJob).toContain('- run: yarn dist:mac-smoke')
-    expect(macosJob).not.toContain('yarn workspace dsh-plugin-desktop dist:mac-smoke')
+    expect(windowsJob).toContain('run: yarn workspace dsh-plugin-desktop dist:win')
+    expect(windowsJob).toContain('run: yarn workspace dsh-plugin-desktop dist:win-portable')
+    expect(windowsJob).toContain('DSH_PACKAGE_CHECK_ALREADY_RAN: \'1\'')
+    expect(macosJob).not.toContain('- run: yarn workspace dsh-community-market check')
+    expect(macosJob).toContain('- run: yarn check')
+    expect(macosJob).toContain('run: yarn workspace dsh-plugin-desktop dist:mac-smoke')
+    expect(macosJob).toContain('DSH_PACKAGE_CHECK_ALREADY_RAN: \'1\'')
+    expect(macosJob).not.toContain('- run: yarn dist:mac-smoke')
+  })
+
+  it('skips product packaging only for documentation-only changes', () => {
+    const classifier = fileURLToPath(new URL('../../scripts/classify-ci-changes.mjs', import.meta.url))
+    const classify = (paths: string[]): string => execFileSync(
+      process.execPath,
+      [classifier],
+      { input: Buffer.from(`${paths.join('\0')}\0`), encoding: 'utf8' },
+    ).trim()
+
+    expect(classify([
+      'docs/architecture.md',
+      '.agents/notes/implemented/architecture/decision.md',
+      '.agents/notes/implemented/architecture/decision.i18n.yaml',
+      'dsh-community-market/docs/schema.json',
+      '.github/ISSUE_TEMPLATE/feature_request.yml',
+    ])).toBe('false')
+    expect(classify(['README.md', 'dsh-plugin-desktop/src/index.ts'])).toBe('true')
+    expect(classify(['.github/workflows/ci.yml'])).toBe('true')
+    expect(classify(['THIRD_PARTY_NOTICES.md'])).toBe('true')
+    expect(classify([])).toBe('true')
+
+    expect(ciWorkflow).toContain('product="$(git diff --name-only -z')
+    expect(ciWorkflow).toContain("if: needs.changes.outputs.product == 'true'")
+    expect(ciWorkflow).toContain('Documentation-only change; product build and tests are not required.')
   })
 
   it('keeps one fixed brand-blue tray source for generated native assets', () => {

@@ -26,12 +26,12 @@ const baseItem = {
   description: { en: 'A better sidebar.' },
 }
 
-async function adapt(installMethods: readonly unknown[]) {
+async function adapt(installMethods: readonly unknown[], itemOverrides: Record<string, unknown> = {}) {
   const http: CatalogHttpClient = {
     getJson: vi.fn(async () => ({
       value: {
         meta: { revision: 'sha256:fixture' },
-        packages: [{ ...baseItem, installMethods }],
+        packages: [{ ...baseItem, ...itemOverrides, installMethods }],
       },
       finalUrl: 'https://deepseek1024.com/api/v1/plugins',
     })),
@@ -107,6 +107,54 @@ describe('1024Store install target normalization', () => {
 
     expect(snapshot.items[0]).not.toHaveProperty('package')
     expect(snapshot.items[0]).not.toHaveProperty('latestVersion')
+  })
+
+  it('accepts duplicate evidence for the same reviewed npm target without treating it as ambiguity', async () => {
+    const snapshot = await adapt([
+      {
+        kind: 'npm',
+        spec: 'dsh-better-sidebar',
+        verification: 'verified',
+        code: 'repository_backlink',
+        requiresBuildAllowance: false,
+        revision: '0.12.3',
+      },
+      {
+        kind: 'npm',
+        spec: 'dsh-better-sidebar',
+        command: 'still ignored',
+        verification: 'verified',
+        code: 'repository_backlink',
+        requiresBuildAllowance: false,
+        revision: '0.12.3',
+      },
+    ])
+
+    expect(snapshot.items[0]).toMatchObject({
+      latestVersion: '0.12.3',
+      package: { registry: 'npm', name: 'dsh-better-sidebar' },
+    })
+    expect(JSON.stringify(snapshot)).not.toContain('still ignored')
+  })
+
+  it.each([
+    ['non-GitHub repository', { url: 'https://gitlab.example/omdsh-dev/DSH-better-sidebar' }],
+    ['repository with extra path segments', { url: 'https://github.com/omdsh-dev/DSH-better-sidebar/releases' }],
+    ['repository with credentials', { url: 'https://user@github.com/omdsh-dev/DSH-better-sidebar' }],
+    ['repository with query text', { url: 'https://github.com/omdsh-dev/DSH-better-sidebar?tab=readme' }],
+    ['control character in item id', { id: 'omdsh-dev/DSH-better-sidebar\u0000hidden' }],
+  ] as const)('drops a catalog item with %s', async (_label, itemOverrides) => {
+    const snapshot = await adapt([{
+      kind: 'npm',
+      spec: 'dsh-better-sidebar',
+      verification: 'verified',
+      code: 'repository_backlink',
+      requiresBuildAllowance: false,
+      revision: '0.12.3',
+    }], itemOverrides)
+
+    expect(snapshot.items).toEqual([])
+    expect(snapshot.page).toEqual({ total: 0 })
   })
 
   it('scans the full normalized catalog beyond discovery page one with one registry read', async () => {

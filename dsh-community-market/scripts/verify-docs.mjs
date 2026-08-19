@@ -18,7 +18,9 @@ const readJson = path => {
 const manifest = JSON.parse(read('package.json'))
 
 if (manifest.name !== 'dsh-community-market') fail('package name must remain dsh-community-market')
-if (manifest.private !== true) fail('the market must stay private until the release gate is approved')
+if (manifest.private !== true) {
+  fail('the built-in Market workspace package must stay private to prevent unsupported standalone publication')
+}
 if (manifest.main !== 'lib/index.js' || manifest.types !== 'lib/index.d.ts') {
   fail('runtime package must expose the reviewed Host entry and declarations')
 }

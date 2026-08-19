@@ -720,7 +720,6 @@ export class MarketInstallService {
     signal: AbortSignal,
   ): Promise<MarketInstallableResponse> {
     const operationSignal = this.operationSignal(signal)
-    await this.ensureRecoveredInstallReconciled()
     operationSignal.throwIfAborted()
     this.purge()
     const currentKeys = new Set(index.snapshots.flatMap(snapshot => (
@@ -733,26 +732,10 @@ export class MarketInstallService {
     }
     for (const snapshot of index.snapshots) this.observeCatalog(snapshot)
     operationSignal.throwIfAborted()
-    const profile = this.profile()
-    let profileManifest: JsonManifest
-    try { profileManifest = await readManifest(join(profile.dir, 'package.json')) }
-    catch {
-      throw new MarketInstallError('operation-failed', 'The active desktop profile could not be inspected.')
-    }
-    operationSignal.throwIfAborted()
-    const receiptPackages = new Set(
-      this.receipts()
-        .filter(receipt => receipt.profileName === profile.name)
-        .map(receipt => receipt.packageName),
-    )
-    const disabledPackages = this.disabledPackages()
     const items = index.snapshots.flatMap(snapshot => snapshot.items).filter(item => {
       const candidate = this.candidates.get(candidateKey(index.source.sourceRecordId, item.id))
       return candidate !== undefined
         && candidate.providerId === item.provenance.providerId
-        && !disabledPackages.has(candidate.packageName)
-        && !receiptPackages.has(candidate.packageName)
-        && !profileReferencesPlugin(profileManifest, candidate.packageName)
     })
     return {
       source: index.source,

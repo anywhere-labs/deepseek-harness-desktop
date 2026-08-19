@@ -14,7 +14,7 @@ DSH Desktop 是面向 Windows 和 macOS 的开源 DeepSeek Harness 桌面客户�
 
 ## 支持哪些操作系统？
 
-当前正式安装包支持 Windows x64 和搭载 Apple 芯片的 macOS。当前没有 Linux 安装包，也不支持 Intel Mac；不要根据源码中存在跨平台兼容代码推断已经发布了对应安装包。
+当前正式安装包支持 Windows x64 和 universal macOS（Intel 与 Apple Silicon）。当前没有 Linux 安装包；不要根据源码中存在跨平台兼容代码推断已经发布了对应安装包。
 
 ## 需要安装 Node.js、pnpm 或 DSH 吗？
 
@@ -42,7 +42,7 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 ## 应用如何更新？
 
-打包后的应用会在后台检查稳定版本，但不会静默安装。发现新版本后先征得用户确认；macOS 下载并打开 DMG，Windows 下载并启动 NSIS 安装程序。网络或下载失败不会破坏当前安装。
+打包后的应用会在后台检查稳定版本，但不会静默安装。发现新版本后先征得用户确认；下载前可以在原生保存对话框中选择安装包的目录和文件名，取消保存不会开始下载。macOS 下载并打开 DMG，Windows 下载并启动 NSIS 安装程序。升级完成并重新启动后，应用会询问是否删除或保留安装包。网络或下载失败不会破坏当前安装。
 
 ## 在哪里下载和报告问题？
 

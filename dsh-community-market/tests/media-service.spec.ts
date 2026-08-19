@@ -6,6 +6,8 @@ import {
   createRestrictedImageFetcher,
   marketMediaAssetUrl,
   normalizeMarketImage,
+  normalizeAllowedHostnames,
+  validateRemoteImageUrl,
   type MarketMediaCandidate,
 } from '../src/media/index.js'
 
@@ -156,6 +158,47 @@ describe('market media service', () => {
 })
 
 describe('restricted market image fetcher', () => {
+  it('normalizes reviewed hostnames without accepting wildcards, ports, paths, or IP literals', () => {
+    expect(normalizeAllowedHostnames([
+      'avatars.githubusercontent.com',
+      'GitHub.com',
+      'github.com',
+    ])).toEqual(['avatars.githubusercontent.com', 'github.com'])
+
+    for (const value of [
+      '',
+      '*.github.com',
+      'github.com/avatar.png',
+      'github.com:443',
+      '127.0.0.1',
+      'github.com@attacker.example',
+    ]) {
+      expect(() => normalizeAllowedHostnames([value]), value)
+        .toThrow(MarketMediaError)
+    }
+  })
+
+  it('validates remote image URLs against the exact reviewed host set', () => {
+    const allowed = new Set(['github.com', 'avatars.githubusercontent.com'])
+
+    expect(validateRemoteImageUrl('https://github.com/anywhere-labs.png?size=128', allowed).href)
+      .toBe('https://github.com/anywhere-labs.png?size=128')
+    expect(validateRemoteImageUrl('https://github.com:443/anywhere-labs.png', allowed).href)
+      .toBe('https://github.com/anywhere-labs.png')
+
+    for (const value of [
+      'http://github.com/anywhere-labs.png',
+      'https://github.com:444/anywhere-labs.png',
+      'https://user:pass@github.com/anywhere-labs.png',
+      'https://github.com/anywhere-labs.png#fragment',
+      'https://github.com.attacker.example/anywhere-labs.png',
+      'not a url',
+    ]) {
+      expect(() => validateRemoteImageUrl(value, allowed), value)
+        .toThrow(MarketMediaError)
+    }
+  })
+
   it('pins every redirect DNS lookup and permits only adapter-reviewed hosts', async () => {
     const lookupAddresses = vi.fn(async (_hostname: string) => [{ address: '93.184.216.34', family: 4 as const }])
     const request = vi.fn()

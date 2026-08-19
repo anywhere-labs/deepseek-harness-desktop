@@ -1,9 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
-import { handleDesktopDirectoryPickerRequest } from '../src/directory-picker-route.ts'
+import {
+  handleDesktopDirectoryPickerRequest,
+  handleDesktopDirectoryValidationRequest,
+} from '../src/directory-picker-route.ts'
 
 function request(origin = 'http://127.0.0.1:43120', method = 'POST'): IncomingMessage {
   return { method, headers: { origin } } as IncomingMessage
+}
+
+function jsonRequest(value: unknown, origin = 'http://127.0.0.1:43120'): IncomingMessage {
+  const req = Readable.from([JSON.stringify(value)]) as IncomingMessage
+  req.method = 'POST'
+  req.headers = { origin, 'content-type': 'application/json' }
+  return req
 }
 
 function response(): ServerResponse & {
@@ -75,5 +86,71 @@ describe('desktop directory picker route', () => {
 
     expect(res.statusCode).toBe(500)
     expect(JSON.parse(res.body)).toEqual({ error: 'native directory picker failed' })
+  })
+})
+
+describe('desktop directory validation route', () => {
+  it('returns the runtime decision for a selected path', async () => {
+    const validate = vi.fn(async () => false)
+    const res = response()
+
+    await handleDesktopDirectoryValidationRequest(
+      jsonRequest({ path: 'E:\\repo' }),
+      res,
+      'http://127.0.0.1:43120',
+      validate,
+    )
+
+    expect(validate).toHaveBeenCalledWith('E:\\repo')
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toEqual({ allowed: false })
+  })
+
+  it.each([
+    [{}, 400],
+    [{ path: '' }, 400],
+    [{ path: 42 }, 400],
+  ])('rejects an invalid validation body', async (body, statusCode) => {
+    const validate = vi.fn(async () => true)
+    const res = response()
+
+    await handleDesktopDirectoryValidationRequest(
+      jsonRequest(body),
+      res,
+      'http://127.0.0.1:43120',
+      validate,
+    )
+
+    expect(validate).not.toHaveBeenCalled()
+    expect(res.statusCode).toBe(statusCode)
+  })
+
+  it('rejects cross-origin validation before reading the path', async () => {
+    const validate = vi.fn(async () => true)
+    const res = response()
+
+    await handleDesktopDirectoryValidationRequest(
+      jsonRequest({ path: 'C:\\Work' }, 'https://example.com'),
+      res,
+      'http://127.0.0.1:43120',
+      validate,
+    )
+
+    expect(validate).not.toHaveBeenCalled()
+    expect(res.statusCode).toBe(403)
+  })
+
+  it('reports a runtime validation failure as a stable server error', async () => {
+    const res = response()
+
+    await handleDesktopDirectoryValidationRequest(
+      jsonRequest({ path: 'E:\\repo' }),
+      res,
+      'http://127.0.0.1:43120',
+      async () => { throw new Error('private volume query failure') },
+    )
+
+    expect(res.statusCode).toBe(500)
+    expect(JSON.parse(res.body)).toEqual({ error: 'directory validation failed' })
   })
 })

@@ -81,7 +81,7 @@
     },
     "media": {
       "type": "object",
-      "description": "Optional provider-declared plugin media. In draft v1, only a direct plugin icon is standardized.",
+      "description": "Optional provider-declared plugin media. In v1, only a direct plugin icon is standardized.",
       "additionalProperties": false,
       "required": [
         "icon"

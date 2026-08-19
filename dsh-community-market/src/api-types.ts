@@ -107,6 +107,8 @@ export type MarketInstallationView =
       readonly kind: 'managed'
       readonly status: 'active' | 'disabled'
       readonly action: 'uninstall'
+      /** An active mutable bundle can be disabled without surrendering uninstall ownership. */
+      readonly disableBundleId?: string
       /** A disabled mutable bundle can be enabled without surrendering uninstall ownership. */
       readonly enableBundleId?: string
       readonly receipt: MarketInstallReceipt
@@ -139,7 +141,7 @@ export interface MarketInstallationsResponse {
   readonly installations: readonly MarketInstallationView[]
 }
 
-/** Complete Host-preverified subset for the active catalog source. */
+/** Complete Host-derived structural subset; local install state never changes catalog membership. */
 export interface MarketInstallableResponse {
   readonly source: MarketSourceView
   readonly items: CatalogSnapshot['items']

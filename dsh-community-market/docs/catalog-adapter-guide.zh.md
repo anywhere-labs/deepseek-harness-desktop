@@ -2,7 +2,9 @@
 
 [English](catalog-adapter-guide.md)
 
-状态：Draft 实现指南。Schema 版本仍以[目录提供方契约](catalog-provider-contract.zh.md)为准。
+状态：已实现的公开 v1 接入指南。权威 Schema 与兼容规则仍以[目录提供方契约](catalog-provider-contract.zh.md)为准。
+
+DSH Community Market 对所有目录 provider 和用户自有来源开放。任何人都可以直接选择路径 A：发布符合 Schema 的公开 HTTPS JSON，并分享 manifest URL；无需修改 Market 代码，也无需先获得合作批准。需要路径 B 的 provider 也可以使用现有公开 API 提出经过审核的 adapter 合作接入。
 
 ## 选择一条接入路径
 
@@ -26,7 +28,7 @@ Provider 能在同一个 origin 发布两个匿名 HTTPS JSON 资源时，选择
 - 稳定字段语义和分页规则；
 - 来源声明、rate limit 和 provider 的图标所有权语义。
 
-Adapter 是本地 TypeScript，经过审核与测试后随 Market 发布。它只使用受限 Host HTTP client，并返回经过校验的 `CatalogSnapshot`。Manifest 或远程 response 绝不能提供 JavaScript、mapping 表达式、install command、credential 或 adapter 代码。
+Adapter 是本地 TypeScript，经过审核与测试后随 Market 发布。它只使用受限 Host HTTP client，并返回经过校验的 `CatalogSnapshot`。开放合作不会绕过审核：manifest 或远程 response 绝不能提供 JavaScript、mapping 表达式、install command、credential 或 adapter 代码。
 
 ## 可复制 adapter skeleton
 

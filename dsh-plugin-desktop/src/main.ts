@@ -9,6 +9,7 @@ import {
   boot,
   installFailLoud,
   loadLayeredEnv,
+  PROFILE_PATCH_FILENAME,
   resolveProfileDir,
   type FailLoudProcess,
 } from '@deepseek-ai/dsh-app-boot'
@@ -60,6 +61,7 @@ import { DesktopPluginsService } from './desktop-plugins.ts'
 import { DesktopStartupRecoveryController } from './startup-recovery-controller.ts'
 import {
   DesktopStartupRecoveryWindow,
+  type DesktopStartupRecoveryConfigurationPaths,
   type DesktopStartupFailureStage,
 } from './startup-recovery-window.ts'
 import { routeDesktopStartupFailure } from './startup-failure-routing.ts'
@@ -208,6 +210,7 @@ async function start(): Promise<void> {
   let installRecovery: DesktopInstallRecoveryStore | undefined
   let startupRecoveryController: DesktopStartupRecoveryController | undefined
   let startupRecoveryWindow: DesktopStartupRecoveryWindow | undefined
+  let startupRecoveryConfigurationPaths: DesktopStartupRecoveryConfigurationPaths | undefined
   let verifyingInstall: DesktopInstallRecoveryTransaction | undefined
   let verifiedInstallToClear: DesktopInstallRecoveryTransaction | undefined
   let rolledBackInstallToNotify: DesktopInstallRecoveryTransaction | undefined
@@ -330,6 +333,9 @@ async function start(): Promise<void> {
     try {
       startupRecoveryWindow = new DesktopStartupRecoveryWindow({
         ...(controller === undefined ? {} : { controller }),
+        ...(startupRecoveryConfigurationPaths === undefined
+          ? {}
+          : { configurationPaths: startupRecoveryConfigurationPaths }),
         locale: desktopLocaleFromLanguageTag(app.getLocale()),
         failureStage: startupStage,
         failureDetail: maskSecrets(failureDetail),
@@ -435,10 +441,16 @@ async function start(): Promise<void> {
     profileStatePath = selectionStatePath
     profileStartup = beginDesktopProfileStartup(selectionStatePath, homeDir)
     const activeProfileName = profileStartup.profileName
+    const activeProfileDir = resolveProfileDir(activeProfileName, homeDir)
+    startupRecoveryConfigurationPaths = {
+      profilePatch: join(activeProfileDir, PROFILE_PATCH_FILENAME),
+      profileManifest: join(activeProfileDir, 'package.json'),
+      profileDirectory: activeProfileDir,
+    }
     installRecovery = new DesktopInstallRecoveryStore({
       statePath: installRecoveryStatePath,
       profileName: activeProfileName,
-      profileDir: resolveProfileDir(activeProfileName, homeDir),
+      profileDir: activeProfileDir,
       generationId,
     })
     startupRecoveryController = new DesktopStartupRecoveryController({

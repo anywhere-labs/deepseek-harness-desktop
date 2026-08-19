@@ -1,8 +1,9 @@
 import { dirname, parse, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
-import koffi from 'koffi'
+import { createRequire } from 'node:module'
 
 const REMOVABLE_DRIVE = 2
+const FIXED_DRIVE = 3
 const REMOTE_DRIVE = 4
 const SUPPORTED_FILE_SYSTEMS = new Set(['NTFS', 'REFS'])
 
@@ -25,6 +26,11 @@ export interface WindowsVolumeConcern extends WindowsVolumePath {
 }
 
 export type WindowsVolumeQuery = (path: string) => WindowsVolumeInfo
+
+export type WindowsWorkspaceVolumeDecision =
+  | { readonly action: 'allow' }
+  | { readonly action: 'confirm', readonly concern: WindowsVolumeConcern }
+  | { readonly action: 'block', readonly concern: WindowsVolumeConcern }
 
 function existingAncestor(path: string): string {
   let current = resolve(path)
@@ -50,6 +56,7 @@ let cachedQuery: WindowsVolumeQuery | undefined
 
 export function windowsVolumeQuery(): WindowsVolumeQuery {
   cachedQuery ??= (() => {
+    const koffi = createRequire(import.meta.url)('koffi') as typeof import('koffi').default
     const kernel32 = koffi.load('kernel32.dll')
     const getDriveTypeW = kernel32.func('uint32 __stdcall GetDriveTypeW(str16)')
     const getVolumeInformationW = kernel32.func(
@@ -111,6 +118,13 @@ function concernForPath(
       reason: 'network drives can reject local ACL, junction, or executable runtime operations',
     }
   }
+  if (info.driveType !== FIXED_DRIVE) {
+    return {
+      ...entry,
+      ...info,
+      reason: `Windows drive type ${String(info.driveType)} is not a fixed local volume`,
+    }
+  }
   return undefined
 }
 
@@ -131,6 +145,24 @@ export function diagnoseWindowsVolumes(
     if (concern !== undefined) concerns.push(concern)
   }
   return concerns
+}
+
+/** Decide whether one Windows workspace path is safe to persist. */
+export function evaluateWindowsWorkspaceVolume(
+  platform: NodeJS.Platform,
+  path: string,
+  query?: WindowsVolumeQuery,
+): WindowsWorkspaceVolumeDecision {
+  const concern = diagnoseWindowsVolumes(platform, [{ label: 'workspace', path }], query)[0]
+  if (concern === undefined) return { action: 'allow' }
+  if (
+    concern.driveType === REMOVABLE_DRIVE
+    && concern.fileSystem !== undefined
+    && SUPPORTED_FILE_SYSTEMS.has(concern.fileSystem)
+  ) {
+    return { action: 'confirm', concern }
+  }
+  return { action: 'block', concern }
 }
 
 export function formatWindowsVolumeConcern(concern: WindowsVolumeConcern): string {

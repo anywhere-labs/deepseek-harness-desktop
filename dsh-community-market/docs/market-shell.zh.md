@@ -2,9 +2,9 @@
 
 [English](market-shell.md)
 
-状态：Host/Client 市场与有限 npm 安装、基于 receipt 的卸载及 direct-bundle 启用/禁用已实现，正在进行 private 集成测试
+状态：已完成并内置于 DSH Desktop，包括 Host/Client 市场、有限 npm 安装、基于 receipt 的卸载及 direct-bundle 启用/禁用
 
-本文定义 `dsh-community-market` 第一阶段的实现边界。它刻意比完整的插件市场更小：package 只负责产品内的市场壳和适配器，不负责社区目录、包 registry 或 DSH profile 格式。
+本文定义 `dsh-community-market` 已交付的实现边界。它刻意比完整的插件市场更小：package 只负责产品内的市场壳和适配器，不负责社区目录、包 registry 或 DSH profile 格式。
 
 ## 产品目标
 
@@ -28,7 +28,7 @@
 - 修改未激活 profile，或在 profile 之间迁移插件。
 - 备份或主动回滚 `node_modules`、保护直接执行的 `pnpm`/`npm` 命令，或恢复在外部系统终端运行的命令。
 
-## 规划边界
+## 已实现边界
 
 ```mermaid
 flowchart LR
@@ -56,19 +56,23 @@ Host 支持两条来源路径：
 1. 用户添加的来源实现公开 HTTPS JSON 合同，由标准适配器处理。
 2. 接口不同的合作方，通过随 Market 代码发布且经过审查的适配器接入。
 
+DSH Community Market 以开放方式与各种插件数据源合作。任何人都可以发布实现公开标准合同的插件目录，任何用户也都可以添加和使用这样的来源。使用不同 API 的提供方可以提出经过审查的内置适配器；符合标准合同的来源则可以通过公开合同直接接入。
+
 远程 manifest 可以描述数据，但不能提供适配器代码、凭据、命令、启用状态或优先级。每个适配器都必须先把私有响应转成同一套标准化页面，才能交给 renderer；来源私有字段不能变成 UI 假设。
 
 标准 adapter 只序列化来源 manifest 的 `query.supported` 清单中声明的字段。尤其是，来源没有声明支持 `category` 时，adapter 会针对该来源省略该字段，而不是模拟该能力或把筛选广播给该来源。
 
 [DSH 1024Store](https://github.com/imsai-sh/awesome-deepseek-harness-plugins) 是目前与项目合作的提供方之一，市场已包含针对其公开 API、经过审查的内置适配器。它不是默认、优先或兜底来源，合作关系也不表示其收录内容经过我们审核或推荐。它的接口和 schema 继续归该独立项目所有。
 
-面向实现团队的规范是[目录提供方合同](catalog-provider-contract.zh.md)，其中包含来源 manifest、query、不可信 provider page 和 Host 标准化响应的机器可读 Schema。远程字段只是展示数据，不是可执行指令；文本只能按文本渲染，不能作为原始 HTML。
+[dshfind](https://dshfind.com) 是另一个通过经审查内置 adapter 接入的可选合作来源。它不会被默认选择、优先排序、推荐或用作兜底。它的目录收录、分数、等级、`official`/精选标记、风险标记和安装探测仍是 provider claim，不是 Anywhere Labs 作出的信任判断。
+
+已发布的规范合同是[目录提供方合同](catalog-provider-contract.zh.md)，其中包含来源 manifest、query、不可信 provider page 和 Host 标准化响应的机器可读 Schema。远程字段只是展示数据，不是可执行指令；文本只能按文本渲染，不能作为原始 HTML。
 
 ## 完整本地索引与 cache
 
-Host 会先针对已选来源和当前 locale 完成一次全量标准化扫描，再提供目录交互。标准来源按照声明的 cursor 和有效 page limit 扫描到结束；经过审核的 1024Store adapter 则只执行一次完整 registry GET，标准化每个合法条目，并按每块最多 100 条的 Schema 上限输出。10,000 条 Host 上限、来源身份、取消、provenance 和同源检查覆盖整次扫描。
+Host 会先针对已选来源和当前 locale 完成一次全量标准化扫描，再提供目录交互。标准来源按照声明的 cursor 和有效 page limit 扫描到结束；经过审核的 1024Store adapter 则只执行一次完整 registry GET，标准化每个合法条目，并按每块最多 100 条的 Schema 上限输出。dshfind adapter 会遍历每页最多 100 条的 REST 数据，并在所有后续分页中固定首页的 `data_version`。由于其公布的匿名配额低于当前首次同步所需的 page 数，首次扫描会主动节流，可能明显更慢；版本过期或限流失败时不会发布部分索引。10,000 条 Host 上限、来源身份、取消、provenance 和同源检查覆盖整次扫描。
 
-搜索、排序、多分类 OR 筛选、分类枚举和分页只在这份完整本地索引上运行。UI 每页最多展示 50 条匹配结果；**加载更多**推进 Host 拥有的本地 cursor，不会再次向 provider 发出带筛选的请求。分类列表是索引中存在的完整分类集合。**可安装**是同一索引上 fail-closed 的结构子集，不是第二个 provider feed，也不是逐包请求 registry 得出的结果。
+搜索、排序、多分类 OR 筛选、分类枚举和分页只在这份完整本地索引上运行。UI 每页最多展示 50 条匹配结果；**加载更多**推进 Host 拥有的本地 cursor，不会再次向 provider 发出带筛选的请求。分类列表是索引中存在的完整分类集合。**可安装**是同一索引上 fail-closed 的结构子集，不是第二个 provider feed，也不是逐包请求 registry 得出的结果。它的目录成员资格与本地安装、receipt、卸载历史及启用/禁用状态无关。
 
 完成的索引会在有界时间内复用，当前默认五分钟。可选 response metadata 可以提供：`scannedAt`（扫描完成时间）、`expiresAt`（cache 截止时间）、可选 `providerRevision`（所有分块中一致观察到的 revision），以及 `cacheStatus`（完成新扫描时为 `fresh`，复用索引时为 `cached`）。明确刷新会使旧索引失效，并绕过底层目录 HTTP cache 后重新建立。选择另一个来源会取消旧扫描并建立独立索引。
 
@@ -77,7 +81,7 @@ Host 会先针对已选来源和当前 locale 完成一次全量标准化扫描�
 Market 界面包含四个视图：
 
 - **发现**对当前已选来源完整本地索引中的全部标准化条目进行分页。点击卡片会立即打开统一操作弹窗；Host 会让合格条目进入受管 preview，否则弹窗保持为详情。
-- **可安装**在本地以 fail-closed 方式生成。条目必须具有经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，同时排除被阻止的 package，以及当前 profile 或 Market receipt 中已经存在的 package。这里的卡片使用同一个弹窗。结构候选身份不等于 npm 复核、代码审核或推荐。
+- **可安装**从已选来源的完整索引中以 fail-closed 方式生成。条目必须具有经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，同时排除产品 blocklist 中的 package。只要已选目录仍然包含条目，已经安装、已有 receipt、处于禁用状态或后来已卸载的 package 都会继续显示。这里的卡片使用同一个弹窗。结构候选身份不等于 npm 复核、本地操作许可、代码审核或推荐。由于 dshfind 当前没有提供精确稳定的 npm 版本，它的所有条目都只在**发现**中浏览。
 - **已安装**会核对当前 profile 的 Host 清单与合法 Market receipt，绝不会根据目录猜测安装状态。
 - **来源**管理已保存来源和唯一的当前选择。
 
@@ -98,7 +102,7 @@ Market 界面包含四个视图：
 
 ## 安装边界
 
-点击卡片表示用户明确要求检查该条目。弹窗会同步打开，同时由 Host 判断这个精确的标准化来源/条目能否进入受管 preview。候选身份由 Host 而不是 renderer 掌握；Host 会首次针对该 package 访问官方 npm registry，并结合当前 profile 做权威复核。只有 preview 成功后，同一个弹窗才会切换成确认框并展示：
+点击卡片表示用户明确要求检查该条目。弹窗会同步打开，同时由 Host 判断这个精确的标准化来源/条目能否进入受管 preview。目录推导的结构候选身份与本地操作是否可用是两件事：Host 可以因为当前 profile、receipt 或其他本地状态拒绝安装，但不会因此移除目录卡片。候选身份由 Host 而不是 renderer 掌握；Host 会首次针对该 package 访问官方 npm registry，并结合当前 profile 做权威复核。只有 preview 成功后，同一个弹窗才会切换成确认框并展示：
 
 - 插件名称；
 - Host 解析出的精确 npm package 名与稳定版本；
@@ -106,7 +110,7 @@ Market 界面包含四个视图：
 - 短时确认的过期时间；以及
 - 插件会以用户权限作为本地代码运行、而且该复核不等于代码审计的提示。
 
-目录中的 `install` 字段、文档命令、provider 命令和任意字符串都会失去执行授权，并且绝不会被执行。当标准化条目具有精确稳定的 npm 身份时，Host 可以另行重建一条有界、只用于展示的命令。该文本可能与仓库文档中的命令不同，会明确标为未完成全部验证，而且绝不会发送给 package manager 或 Desktop action。当前受管 MVP 会拒绝 GitHub 与其他仓库安装目标、range、tag、prerelease、deprecated 版本、目标 manifest 中包含 `preinstall`、`install`、`postinstall` 或 `prepare` 的 package、与内置 DSH `0.1.0-rc.7`/Cordis/Node.js runtime 不兼容的 package、仓库身份不匹配的 package，以及缺少官方 npm SHA-512/tarball 或有效 DSH bundle 证据的 package。
+目录中的 `install` 字段、文档命令、provider 命令和任意字符串都会失去执行授权，绝不会被执行，也不会作为 Host 手动提示展示。当标准化条目具有精确稳定的 npm 身份时，Host 可以另行重建一条有界、只用于展示的命令。该文本可能与仓库文档中的命令不同，会明确标为未完成全部验证，而且绝不会发送给 package manager 或 Desktop action。dshfind adapter 会明确丢弃 `install.cmd`，绝不解析或转发它。内置受管安装器会拒绝 GitHub 与其他仓库安装目标、range、tag、prerelease、deprecated 版本、目标 manifest 中包含 `preinstall`、`install`、`postinstall` 或 `prepare` 的 package、与内置 DSH `0.1.0-rc.7`/Cordis/Node.js runtime 不兼容的 package、仓库身份不匹配的 package，以及缺少官方 npm SHA-512/tarball 或有效 DSH bundle 证据的 package。
 
 Preview 会针对这一个 package 完整检查 npm registry、规范仓库、deprecated 状态、lifecycle script、runtime、integrity、tarball、DSH bundle 和当前 profile，并用一次性不透明 preview 绑定已验证事实。用户确认后、真正修改前，执行阶段会立即重新获取或检查可变的 registry、候选和 profile 证据；候选、当前 profile、tarball、integrity 或 bundle 路径发生变化时会拒绝执行。受管操作中，renderer 只提交不透明身份，绝不会提交 package-manager spec 或命令。
 
@@ -133,7 +137,7 @@ Add 成功后，系统会在开放重启许可前封存白名单文件的结果 
 
 **已安装**视图来自当前 profile 的 direct-bundle 清单与合法本地 receipt，不依赖已选来源。因此，即使安装来源后来被禁用、删除或离线，通过 Market 安装的插件仍然可以卸载。
 
-卸载预览只接受 `receiptId`。Host 会确认 receipt 仍然存在，并且当前 profile 仍包含 receipt 记录的精确 package 版本和 DSH bundle。执行阶段只接受由此生成的不透明一次性 preview，调用受管 `remove` 操作，确认 package 已移除后再删除 receipt。通过其他方式安装的 package、其他 profile 的 receipt，或安装后已经发生变化的 package，当前 MVP 都不会移除。成功后同样显示**立即重启**与**稍后重启**。
+卸载预览只接受 `receiptId`。Host 会确认 receipt 仍然存在，并且当前 profile 仍包含 receipt 记录的精确 package 版本和 DSH bundle。执行阶段只接受由此生成的不透明一次性 preview，调用受管 `remove` 操作，确认 package 已移除后再删除 receipt。内置 Market 不会移除通过其他方式安装的 package、其他 profile 的 receipt，或安装后已经发生变化的 package。成功后同样显示**立即重启**与**稍后重启**。
 
 可变 direct bundle 还会暴露 generation-scoped 不透明启用/禁用能力。已禁用的 Market 受管 bundle 会保留基于 receipt 的“卸载”，并可独立选择“启用”。Host 与 Desktop 会在 preview 和执行时重验精确 bundle 状态、可变性、profile generation 与 receipt 所有权；renderer 绝不会提交 package 名或文件系统目标。
 
@@ -168,15 +172,15 @@ Add 成功后，系统会在开放重启许可前封存白名单文件的结果 
 
 面向用户的错误或遥测中，不得包含原始响应 body、文件路径、token、环境变量或命令字符串。
 
-## 交付阶段
+## 交付状态与后续工作
 
-### Phase 0：文档初始化工程
+### Phase 0：package 与信任基础——已交付
 
-- 确认 npm 名称和 monorepo package 边界。
-- 记录目录来源、信任规则和集成决策。
-- package 保持私有且不可加载。
+- npm 名称和 monorepo package 边界已经确立。
+- 目录来源、信任规则和集成决策已经记录。
+- Host/Client package 已作为 DSH Desktop 内置实现交付。
 
-### Phase 1：目录市场壳——已实现并进入集成测试
+### Phase 1：目录市场壳——已交付并内置
 
 - Host 与 Client 插件入口。
 - 用户拥有的来源选择、标准来源、经审查的合作方适配器与严格标准化。
@@ -184,7 +188,7 @@ Add 成功后，系统会在开放重启许可前封存白名单文件的结果 
 - 搜索、分类、详情和完整状态处理。
 - headless 单元测试与 Loader smoke。
 
-### Phase 2：确认后的当前 profile 操作——已实现并进入集成测试
+### Phase 2：确认后的当前 profile 操作——已交付并内置
 
 - Desktop 能力检测和不可用状态。
 - 精确稳定 npm 目标复核和两步用户意图。
@@ -193,13 +197,13 @@ Add 成功后，系统会在开放重启许可前封存白名单文件的结果 
 - 不依赖目录来源、基于 receipt 的卸载，以及针对可变 direct bundle 的不透明启用/禁用。
 - profile 修改成功后的重启说明。
 
-### 后续工作
+### 交付后的增强
 
 - 更新与发布加固。
 - 基于独立规范证据的更强验证信号。
 
 ## 来源与独立性
 
-本设计参考了多个社区目录项目，其中包括 [imsai-sh/awesome-deepseek-harness-plugins](https://github.com/imsai-sh/awesome-deepseek-harness-plugins)，该项目也以 DSH 1024Store 展示。DSH 1024Store 是当前合作的提供方，并另行发布 `dsh-1024store` 插件。DSH Community Market 不是该插件的 fork、重新打包版本或官方客户端。其应用代码使用 MIT，目录元数据使用 CC0-1.0。当前初始化工程没有复制其代码或素材，也没有打包目录快照。
+本设计参考了多个社区目录项目，其中包括 [imsai-sh/awesome-deepseek-harness-plugins](https://github.com/imsai-sh/awesome-deepseek-harness-plugins)，该项目也以 DSH 1024Store 展示。DSH 1024Store 是当前合作的提供方，并另行发布 `dsh-1024store` 插件。DSH Community Market 不是该插件的 fork、重新打包版本或官方客户端。其应用代码使用 MIT，目录元数据使用 CC0-1.0。Market 没有复制其代码或素材，也没有打包目录快照。
 
 DSH Community Market 是 Anywhere Labs 的独立项目。目录收录不表示 Anywhere Labs、DSH 1024Store、DeepSeek 或插件作者对项目作出推荐。

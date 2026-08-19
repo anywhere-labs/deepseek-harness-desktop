@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`dsh-community-market` 仍在 monorepo 内保持 private，正在进行 Desktop 集成测试。Host/Client runtime 会校验并规范化目录数据、持久化用户拥有的来源选择，并且只在来源被明确启用后执行受限 HTTPS 请求。在 DSH Desktop 中，它还通过受管 package 能力实现了有限的精确版本 npm 安装和基于 receipt 的卸载；renderer 不能访问 package manager。
+`dsh-community-market` 已完成并内置于 DSH Desktop。它以开放方式连接各种插件数据源：任何人都可以提供、接入和使用符合公开 Schema 的来源，已有 API 也可以通过随 Market 发布的受审 adapter 成为合作数据源。Host/Client runtime 会校验并规范化目录数据、持久化用户拥有的来源选择，并且只在来源被明确启用后执行受限 HTTPS 请求。Market 通过受管 package 能力实现有限的精确版本 npm 安装和基于 receipt 的卸载；renderer 不能访问 package manager。
 
 ## 信任模型
 

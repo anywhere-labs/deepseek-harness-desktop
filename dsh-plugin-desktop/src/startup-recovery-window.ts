@@ -1,6 +1,6 @@
 /** Host-independent Electron recovery window for profile startup failures. */
 
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import { basename } from 'node:path'
 import type { DesktopLocale } from './runtime.ts'
 import {
@@ -12,6 +12,11 @@ import {
 
 const RECOVERY_SCHEME = 'dsh-recovery:'
 const MAX_FAILURE_DETAIL_LENGTH = 4_000
+const DEFAULT_RECOVERY_WIDTH = 800
+const DEFAULT_RECOVERY_HEIGHT = 760
+const DEFAULT_RECOVERY_MIN_WIDTH = 680
+const DEFAULT_RECOVERY_MIN_HEIGHT = 560
+const RECOVERY_WORK_AREA_INSET = 48
 
 type RecoveryWindowResult = 'restart' | 'quit'
 type RecoveryNoticeTone = 'info' | 'success' | 'warning' | 'error'
@@ -45,10 +50,83 @@ interface RecoveryDiagnosticsState {
 
 export interface DesktopStartupRecoveryWindowOptions {
   readonly controller?: DesktopStartupRecoveryController
+  /** Fixed active-profile paths selected by the main process. */
+  readonly configurationPaths?: DesktopStartupRecoveryConfigurationPaths
   readonly locale: DesktopLocale
   readonly failureStage: DesktopStartupFailureStage
   readonly failureDetail: string
   readonly exportDiagnostics: () => Promise<string>
+}
+
+export interface DesktopStartupRecoveryConfigurationPaths {
+  readonly profilePatch: string
+  readonly profileManifest: string
+  readonly profileDirectory: string
+}
+
+export interface DesktopStartupRecoveryScreenApi {
+  getCursorScreenPoint(): { readonly x: number; readonly y: number }
+  getDisplayNearestPoint(point: { readonly x: number; readonly y: number }): {
+    readonly workAreaSize: { readonly width: number; readonly height: number }
+  }
+  getPrimaryDisplay(): {
+    readonly workAreaSize: { readonly width: number; readonly height: number }
+  }
+}
+
+export interface DesktopStartupRecoveryWindowBounds {
+  readonly width: number
+  readonly height: number
+  readonly minWidth: number
+  readonly minHeight: number
+}
+
+function validWorkAreaSize(
+  value: { readonly width: number; readonly height: number } | undefined,
+): { readonly width: number; readonly height: number } | undefined {
+  if (value === undefined
+    || !Number.isFinite(value.width)
+    || !Number.isFinite(value.height)
+    || value.width < 1
+    || value.height < 1) return undefined
+  return { width: Math.floor(value.width), height: Math.floor(value.height) }
+}
+
+function currentWorkAreaSize(
+  screenApi: DesktopStartupRecoveryScreenApi,
+): { readonly width: number; readonly height: number } | undefined {
+  try {
+    const current = validWorkAreaSize(
+      screenApi.getDisplayNearestPoint(screenApi.getCursorScreenPoint()).workAreaSize,
+    )
+    if (current !== undefined) return current
+  } catch {
+    // Electron's screen API can be unavailable during an early-ready failure.
+  }
+  try {
+    return validWorkAreaSize(screenApi.getPrimaryDisplay().workAreaSize)
+  } catch {
+    return undefined
+  }
+}
+
+/** Clamp recovery dimensions to the current display, with the primary display as fallback. */
+export function desktopStartupRecoveryWindowBounds(
+  screenApi: DesktopStartupRecoveryScreenApi = screen,
+): DesktopStartupRecoveryWindowBounds {
+  const workArea = currentWorkAreaSize(screenApi)
+  const width = workArea === undefined
+    ? DEFAULT_RECOVERY_WIDTH
+    : Math.min(DEFAULT_RECOVERY_WIDTH, Math.max(1, workArea.width - RECOVERY_WORK_AREA_INSET))
+  const height = workArea === undefined
+    ? DEFAULT_RECOVERY_HEIGHT
+    : Math.min(DEFAULT_RECOVERY_HEIGHT, Math.max(1, workArea.height - RECOVERY_WORK_AREA_INSET))
+  return {
+    width,
+    height,
+    minWidth: Math.min(DEFAULT_RECOVERY_MIN_WIDTH, width),
+    minHeight: Math.min(DEFAULT_RECOVERY_MIN_HEIGHT, height),
+  }
 }
 
 export interface DesktopStartupRecoveryViewModel {
@@ -62,6 +140,7 @@ export interface DesktopStartupRecoveryViewModel {
   readonly notice?: RecoveryNotice
   readonly busy: boolean
   readonly restartReady: boolean
+  readonly configurationAvailable: boolean
 }
 
 interface RecoveryCopy {
@@ -106,6 +185,11 @@ interface RecoveryCopy {
   readonly retrySuccess: string
   readonly manualRequired: string
   readonly diagnosticsRequired: string
+  readonly manualConfiguration: string
+  readonly manualConfigurationBody: string
+  readonly openProfilePatch: string
+  readonly openProfileManifest: string
+  readonly openProfileDirectory: string
 }
 
 const COPY: Record<DesktopLocale, RecoveryCopy> = {
@@ -161,6 +245,11 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     retrySuccess: 'One startup retry was authorized. Restart Desktop to continue.',
     manualRequired: 'The protected files changed outside the known install transaction. Desktop did not overwrite them.',
     diagnosticsRequired: 'Diagnostics were not saved, so configuration recovery was not started.',
+    manualConfiguration: 'Edit configuration manually',
+    manualConfigurationBody: 'Use the system editor for patch overrides or the plugin manifest for duplicate bundle entries. This recovery page cannot choose an arbitrary path.',
+    openProfilePatch: 'Edit configuration patch',
+    openProfileManifest: 'Edit plugin manifest',
+    openProfileDirectory: 'Open configuration folder',
   },
   zh: {
     title: 'DSH Desktop 恢复',
@@ -214,6 +303,11 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     retrySuccess: '已授权一次启动重试。请重新启动 Desktop。',
     manualRequired: '受保护文件出现了安装事务之外的改动。为避免覆盖你的修改，Desktop 没有恢复这些文件。',
     diagnosticsRequired: '诊断信息尚未保存，因此没有开始恢复配置。',
+    manualConfiguration: '手动编辑配置',
+    manualConfigurationBody: '配置覆盖错误请编辑补丁文件；插件重复加载请编辑插件加载清单。恢复页面不能选择任意路径。',
+    openProfilePatch: '编辑配置补丁',
+    openProfileManifest: '编辑插件加载清单',
+    openProfileDirectory: '打开配置目录',
   },
 }
 
@@ -275,12 +369,15 @@ export function renderDesktopStartupRecoveryHtml(model: DesktopStartupRecoveryVi
   const diagnosticAction = model.diagnostics.status === 'saved'
     ? button(copy.showDiagnostics, 'show-diagnostics')
     : button(copy.saveDiagnostics, 'export-diagnostics')
+  const configurationHtml = model.configurationAvailable
+    ? `<section class="card"><h2>${escapeHtml(copy.manualConfiguration)}</h2><p>${escapeHtml(copy.manualConfigurationBody)}</p><div class="actions">${button(copy.openProfilePatch, 'open-profile-patch')}${button(copy.openProfileManifest, 'open-profile-manifest')}${button(copy.openProfileDirectory, 'open-profile-directory')}</div></section>`
+    : ''
   const restart = model.restartReady || pending === undefined
     ? button(copy.restart, 'restart', undefined, model.restartReady)
     : ''
   const body = confirmation.length > 0
     ? confirmation
-    : `${pendingHtml}${bundlesHtml}<section class="card"><h2>${escapeHtml(copy.diagnostics)}</h2><p>${escapeHtml(diagnosticsText)}</p>${model.diagnostics.filename === undefined ? '' : `<p><code>${escapeHtml(model.diagnostics.filename)}</code></p>`}<p class="muted">${escapeHtml(copy.privacy)}</p><div class="actions">${diagnosticAction}</div></section>`
+    : `${pendingHtml}${bundlesHtml}${configurationHtml}<section class="card"><h2>${escapeHtml(copy.diagnostics)}</h2><p>${escapeHtml(diagnosticsText)}</p>${model.diagnostics.filename === undefined ? '' : `<p><code>${escapeHtml(model.diagnostics.filename)}</code></p>`}<p class="muted">${escapeHtml(copy.privacy)}</p><div class="actions">${diagnosticAction}</div></section>`
   return `<!doctype html>
 <html lang="${model.locale === 'zh' ? 'zh-CN' : 'en'}">
 <head>
@@ -289,7 +386,7 @@ export function renderDesktopStartupRecoveryHtml(model: DesktopStartupRecoveryVi
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(copy.title)}</title>
   <style>
-    :root{color-scheme:light dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f3f5;color:#202124}*{box-sizing:border-box}body{margin:0}main{width:min(820px,100%);margin:0 auto;padding:34px 30px 28px}h1{font-size:28px;margin:0 0 8px}h2{font-size:17px;margin:0 0 10px}p{margin:7px 0}.lead{color:#5f6368;margin-bottom:20px}.profile{font-size:13px;color:#6b7280}.card,.notice{background:#fff;border:1px solid #dfe1e5;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 1px 2px #0000000d}.error-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:8px;padding:12px}.notice strong{display:block}.notice.error,.notice.warning{border-color:#d97706}.notice.success{border-color:#16a34a}.notice.info{border-color:#2563eb}ul{list-style:none;padding:0;margin:14px 0 0;border-top:1px solid #e5e7eb}li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e5e7eb}.meta{display:block;color:#6b7280;font-size:12px;margin-top:2px}.row-actions,.actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.actions{margin-top:15px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 13px;border:1px solid #9aa0a6;border-radius:9px;color:inherit;text-decoration:none;background:transparent}.button:hover{background:#eef0f2}.button.primary{background:#1a73e8;border-color:#1a73e8;color:white}.pill{font-size:12px;padding:3px 8px;border-radius:999px;background:#e8eaed}.muted{font-size:12px;color:#6b7280}.footer{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.busy{opacity:.7;pointer-events:none}@media(prefers-color-scheme:dark){:root{background:#202124;color:#f1f3f4}.lead,.profile,.meta,.muted{color:#9aa0a6}.card,.notice{background:#292a2d;border-color:#45464a}.error-detail{background:#202124}.button:hover{background:#35363a}.pill{background:#3c4043}ul,li{border-color:#45464a}}
+    :root{color-scheme:light dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f3f5;color:#202124}*{box-sizing:border-box}body{margin:0}main{width:min(820px,100%);margin:0 auto;padding:34px 30px 28px}h1{font-size:28px;margin:0 0 8px}h2{font-size:17px;margin:0 0 10px}p{margin:7px 0}.lead{color:#5f6368;margin-bottom:20px}.profile{font-size:13px;color:#6b7280}.card,.notice{background:#fff;border:1px solid #dfe1e5;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 1px 2px #0000000d}.error-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:8px;padding:12px}.notice strong{display:block}.notice.error,.notice.warning{border-color:#d97706}.notice.success{border-color:#16a34a}.notice.info{border-color:#2563eb}ul{list-style:none;padding:0;margin:14px 0 0;border-top:1px solid #e5e7eb}li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e5e7eb}.meta{display:block;color:#6b7280;font-size:12px;margin-top:2px}.row-actions,.actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.actions{margin-top:15px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 13px;border:1px solid #9aa0a6;border-radius:9px;color:inherit;text-decoration:none;background:transparent}.button:hover{background:#eef0f2}.button.primary{background:#1a73e8;border-color:#1a73e8;color:white}.pill{font-size:12px;padding:3px 8px;border-radius:999px;background:#e8eaed}.muted{font-size:12px;color:#6b7280}.footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}.busy{opacity:.7;pointer-events:none}@media(max-width:640px){main{padding:22px 16px 18px}h1{font-size:24px}.card,.notice{padding:14px}.footer{justify-content:stretch}.footer .button{flex:1 1 180px}}@media(max-width:420px){main{padding:18px 12px 14px}li{align-items:stretch;flex-direction:column}.row-actions,.actions,.footer{align-items:stretch;flex-direction:column}.button{width:100%}}@media(prefers-color-scheme:dark){:root{background:#202124;color:#f1f3f4}.lead,.profile,.meta,.muted{color:#9aa0a6}.card,.notice{background:#292a2d;border-color:#45464a}.error-detail{background:#202124}.button:hover{background:#35363a}.pill{background:#3c4043}ul,li{border-color:#45464a}}
   </style>
 </head>
 <body><main class="${model.busy ? 'busy' : ''}">
@@ -327,6 +424,9 @@ export function parseDesktopStartupRecoveryAction(
     'confirm-retry',
     'export-diagnostics',
     'show-diagnostics',
+    'open-profile-patch',
+    'open-profile-manifest',
+    'open-profile-directory',
     'restart',
     'quit',
   ])
@@ -366,10 +466,7 @@ export class DesktopStartupRecoveryWindow {
     }
     const window = new BrowserWindow({
       title: COPY[this.options.locale].title,
-      width: 880,
-      height: 760,
-      minWidth: 680,
-      minHeight: 560,
+      ...desktopStartupRecoveryWindowBounds(),
       show: false,
       autoHideMenuBar: true,
       backgroundColor: '#202124',
@@ -409,8 +506,7 @@ export class DesktopStartupRecoveryWindow {
       this.finish('quit')
     })
     await this.render()
-    this.diagnosticTask = this.saveDiagnostics()
-    void this.diagnosticTask.catch(() => {})
+    void this.startDiagnosticExport().catch(() => {})
     return await result
   }
 
@@ -478,10 +574,15 @@ export class DesktopStartupRecoveryWindow {
           })
         }
       } else if (action.action === 'export-diagnostics') {
-        this.diagnosticTask = this.saveDiagnostics()
-        await this.diagnosticTask.catch(() => {})
+        await this.startDiagnosticExport().catch(() => {})
       } else if (action.action === 'show-diagnostics' && this.diagnosticPath !== undefined) {
         shell.showItemInFolder(this.diagnosticPath)
+      } else if (action.action === 'open-profile-patch') {
+        await this.openConfigurationPath('profilePatch')
+      } else if (action.action === 'open-profile-manifest') {
+        await this.openConfigurationPath('profileManifest')
+      } else if (action.action === 'open-profile-directory') {
+        await this.openConfigurationPath('profileDirectory')
       } else if (action.action === 'restart') {
         this.finish('restart')
         return
@@ -516,14 +617,26 @@ export class DesktopStartupRecoveryWindow {
   }
 
   private async ensureDiagnostics(): Promise<boolean> {
-    if (this.diagnostics.status === 'saved') return true
-    this.diagnosticTask ??= this.saveDiagnostics()
     try {
-      await this.diagnosticTask
+      await this.startDiagnosticExport()
       return true
     } catch {
       return false
     }
+  }
+
+  private startDiagnosticExport(): Promise<string> {
+    if (this.diagnostics.status === 'saved' && this.diagnosticPath !== undefined) {
+      return Promise.resolve(this.diagnosticPath)
+    }
+    if (this.diagnosticTask !== undefined) return this.diagnosticTask
+
+    const task = this.saveDiagnostics()
+    this.diagnosticTask = task
+    void task.catch(() => {
+      if (this.diagnosticTask === task) this.diagnosticTask = undefined
+    })
+    return task
   }
 
   private async saveDiagnostics(): Promise<string> {
@@ -561,6 +674,7 @@ export class DesktopStartupRecoveryWindow {
       ...(this.notice === undefined ? {} : { notice: this.notice }),
       busy: this.busy,
       restartReady: this.restartReady,
+      configurationAvailable: this.options.configurationPaths !== undefined,
     })
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
   }
@@ -580,6 +694,15 @@ export class DesktopStartupRecoveryWindow {
       throw new Error('Desktop plugin recovery actions are unavailable for this startup stage.')
     }
     return this.options.controller
+  }
+
+  private async openConfigurationPath(
+    kind: keyof DesktopStartupRecoveryConfigurationPaths,
+  ): Promise<void> {
+    const path = this.options.configurationPaths?.[kind]
+    if (path === undefined) throw new Error('Desktop profile configuration is unavailable for this startup stage.')
+    const error = await shell.openPath(path)
+    if (error.length > 0) throw new Error(error)
   }
 }
 

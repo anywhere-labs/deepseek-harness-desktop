@@ -64,6 +64,18 @@ const css = `
   gap: 6px;
 }
 
+.dshMarketCurrentSource a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.dshMarketCurrentSource a:hover {
+  text-decoration: underline;
+}
+
 .dshMarketMain,
 .dshMarketContent {
   min-width: 0;
@@ -445,6 +457,40 @@ const css = `
   gap: 16px;
 }
 
+.dshMarketItemSourceRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+}
+
+.dshMarketItemSourceRow > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dshMarketItemSourceRow a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  color: var(--dsw-alias-label-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--dsw-alias-border-l3);
+  text-underline-offset: 2px;
+}
+
+.dshMarketItemSourceRow a:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
 .dshMarketDetailsIntro {
   display: flex;
   align-items: flex-start;
@@ -478,19 +524,39 @@ const css = `
   gap: 10px;
 }
 
+.dshMarketModal {
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+}
+
 .dshMarketWideModal {
   width: min(800px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
 }
 
 .dshMarketConfirmModal {
   width: min(600px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
 }
 
-.dshMarketWideModalContent {
+.dshMarketSourceModal {
+  width: min(600px, calc(100vw - 48px));
+}
+
+.dshMarketStatusModal {
+  width: min(480px, calc(100vw - 48px));
+}
+
+.dshMarketModalContent {
   min-height: 0;
   overflow-y: auto;
+}
+
+.dshMarketModalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
 }
 
 .dshMarketManualInstall h3 {
@@ -650,7 +716,7 @@ const css = `
   z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(1080px, 100%);
+  width: min(800px, 100%);
   height: min(700px, 100%);
   min-width: 0;
   min-height: 0;
