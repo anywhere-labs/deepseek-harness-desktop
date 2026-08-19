@@ -23,6 +23,8 @@ const CANDIDATE_TTL_MS = 30 * 60 * 1000
 const MAX_INTENTS = 256
 const MAX_CANDIDATES = 10_000
 const MAX_RECEIPTS = 512
+const MAX_PACKAGE_MANAGER_ERROR_CHARS = 512
+const MAX_PACKAGE_MANAGER_STDERR_CHARS = MAX_PACKAGE_MANAGER_ERROR_CHARS * 8
 const LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'] as const
 const BLOCKED_PRODUCT_PACKAGES = new Set(['dsh-plugin-desktop', 'dsh-community-market'])
 const DSH_RUNTIME_VERSION = '0.1.0-rc.7'
@@ -200,6 +202,42 @@ function opaqueToken(): string {
 
 function own(object: object, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(object, key)
+}
+
+function capturePackageManagerError(stream: Readable): () => string | undefined {
+  let tail = ''
+  stream.setEncoding('utf8')
+  stream.on('data', (chunk: string) => {
+    tail = `${tail}${chunk}`.slice(-MAX_PACKAGE_MANAGER_STDERR_CHARS)
+  })
+  return () => {
+    const lines = tail
+      .split(/\r?\n/u)
+      .map(line => [...line]
+        .filter(character => {
+          const codePoint = character.codePointAt(0)
+          return codePoint !== undefined && codePoint >= 0x20 && codePoint !== 0x7f
+        })
+        .join('')
+        .trim())
+    const detail = lines.findLast(line => /\bERR_PNPM_[A-Z0-9_]+\b/u.test(line))
+    const errorStart = detail?.search(/\bERR_PNPM_[A-Z0-9_]+\b/u) ?? -1
+    if (detail === undefined || errorStart < 0) return undefined
+    return detail
+      .slice(errorStart)
+      .replace(/\[[0-9;]*m/gu, '')
+      .replace(/(https?:\/\/)(?:[^@\s/]+@)?([^?\s#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/giu, '$1$2')
+      .replace(/\b(?:npm|ghp|github_pat)_[A-Za-z0-9_]{10,}\b/gu, '[redacted token]')
+      .replace(/\b(Bearer|Basic)\s+\S+/giu, '$1 [redacted]')
+      .slice(0, MAX_PACKAGE_MANAGER_ERROR_CHARS)
+  }
+}
+
+function packageManagerFailure(message: string, detail: string | undefined): MarketInstallError {
+  return new MarketInstallError(
+    'operation-failed',
+    detail === undefined ? message : `${message} pnpm reported: ${detail}`,
+  )
 }
 
 function sha512Integrity(value: unknown): value is string {
@@ -1171,6 +1209,7 @@ export class MarketInstallService {
     }
     catch { throw new MarketInstallError('operation-failed', 'The desktop package manager could not start.') }
     handle.stdout.resume()
+    const readPackageManagerError = capturePackageManagerError(handle.stderr)
     handle.stderr.resume()
     const cancel = () => handle.cancel()
     combinedSignal.addEventListener('abort', cancel, { once: true })
@@ -1178,12 +1217,15 @@ export class MarketInstallService {
     try { outcome = await handle.done }
     catch {
       combinedSignal.throwIfAborted()
-      throw new MarketInstallError('operation-failed', 'The desktop package manager failed.')
+      throw packageManagerFailure('The desktop package manager failed.', readPackageManagerError())
     }
     finally { combinedSignal.removeEventListener('abort', cancel) }
     combinedSignal.throwIfAborted()
     if (outcome.exitCode !== 0 || outcome.signal !== null) {
-      throw new MarketInstallError('operation-failed', 'The desktop package manager did not complete successfully.')
+      throw packageManagerFailure(
+        'The desktop package manager did not complete successfully.',
+        readPackageManagerError(),
+      )
     }
   }
 

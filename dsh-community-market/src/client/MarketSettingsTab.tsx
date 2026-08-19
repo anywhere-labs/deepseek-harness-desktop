@@ -137,6 +137,12 @@ function catalogFailureMessage(
   return `${t('catalogFailureSource')}: ${source.name}. ${reason}`
 }
 
+function marketApiErrorMessage(cause: unknown): string | undefined {
+  return cause instanceof Error && cause.name === 'MarketApiError' && cause.message.trim().length > 0
+    ? cause.message.trim()
+    : undefined
+}
+
 function PluginIcon({ item, large = false }: { item: MarketItem; large?: boolean }) {
   const icon = item.media?.icon
   return (
@@ -894,7 +900,8 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
         setInstallationsError(t('desktopUnavailable'))
         setOperationError(t('desktopUnavailable'))
       } else {
-        setOperationError(t('executeError'))
+        const detail = marketApiErrorMessage(cause)
+        setOperationError(detail === undefined ? t('executeError') : `${t('executeError')} ${detail}`)
       }
     } finally {
       if (operationRequest.current === request) {
