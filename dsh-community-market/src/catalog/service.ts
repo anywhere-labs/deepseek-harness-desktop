@@ -34,7 +34,7 @@ export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
     attribution: {
       name: 'DSH 1024Store',
       url: 'https://deepseek1024.com',
-      notice: 'Community catalog data provided by a cooperating provider.',
+      notice: '社区合作方提供的插件目录数据。',
     },
     partnership: true,
   },
@@ -48,7 +48,7 @@ export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
     attribution: {
       name: 'dshfind',
       url: 'https://dshfind.com',
-      notice: 'Community catalog data provided by a cooperating provider.',
+      notice: '社区合作方提供的插件目录数据。',
     },
     partnership: true,
   },

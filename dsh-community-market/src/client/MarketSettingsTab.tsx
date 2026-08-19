@@ -53,6 +53,36 @@ import {
 type MarketItem = CatalogSnapshot['items'][number]
 export type MarketView = 'discover' | 'installable' | 'installed' | 'sources'
 const INSTALLABLE_PAGE_SIZE = 50
+// 社区插件市场界面本地化：分类标签中英文映射（筛选仍使用原始英文值）
+const CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  agent: '智能体',
+  channel: '频道',
+  client: '客户端',
+  fun: '娱乐',
+  memory: '记忆',
+  resource: '资源',
+  skin: '皮肤',
+  tools: '工具',
+  ui: '界面',
+}
+function categoryLabel(category: string): string {
+  return CATEGORY_LABELS[category] ?? category
+}
+// 双语插件描述取中文段；无中文或无法拆分时保持原文
+function zhSummary(text: string | undefined): string | undefined {
+  if (typeof text !== 'string' || text.length === 0) return text
+  if (!/[\u3400-\u9fff]/.test(text)) return text
+  const parts = text.split(/\s*[｜|]\s*/u).map(part => part.trim()).filter(Boolean)
+  const zhPart = parts.find(part => /[\u3400-\u9fff]/.test(part))
+  return zhPart ?? text
+}
+// 内置合作来源固定英文说明的本地化（自定义来源的说明保持原样）
+const NOTICE_ZH: Readonly<Record<string, string>> = {
+  'Community catalog data provided by a cooperating provider.': '社区合作方提供的插件目录数据。',
+}
+function localizedNotice(notice: string | undefined): string | undefined {
+  return typeof notice === 'string' ? NOTICE_ZH[notice] ?? notice : notice
+}
 const INSTALL_REQUIREMENTS_DOCS = {
   en: 'https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/install-and-uninstall.md',
   zh: 'https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/install-and-uninstall.zh.md',
@@ -1230,7 +1260,7 @@ function DiscoverView(props: {
               aria-pressed={props.selectedCategories.includes(category)}
               disabled={props.mutationPending}
               onClick={() => props.onToggleCategory(category)}
-            >{category}</Pill>
+            >{categoryLabel(category)}</Pill>
           ))}
         </div>
       )}
@@ -1368,7 +1398,7 @@ function InstallableView(props: {
               aria-pressed={props.selectedCategories.includes(category)}
               disabled={props.operationPending}
               onClick={() => props.onToggleCategory(category)}
-            >{category}</Pill>
+            >{categoryLabel(category)}</Pill>
           ))}
         </div>
       )}
@@ -1598,12 +1628,12 @@ function PluginCard({ value, actionLabel, disabled = false, onClick, t }: {
         <PluginIcon item={value.item} />
         <div className="dshMarketCardName"><strong>{value.item.displayName}</strong><span>{publisher}</span></div>
       </div>
-      <p className="dshMarketSummary">{value.item.summary}</p>
+      <p className="dshMarketSummary">{zhSummary(value.item.summary)}</p>
       <div className="dshMarketTags">
         <Pill>{t('source')}: {sourceLabel}</Pill>
         {actionLabel !== undefined && <Pill>{actionLabel}</Pill>}
         {value.stale && <Pill>{t('stale')}</Pill>}
-        {value.item.categories?.slice(0, 2).map(category => <Pill key={category}>{category}</Pill>)}
+        {value.item.categories?.slice(0, 2).map(category => <Pill key={category}>{categoryLabel(category)}</Pill>)}
       </div>
     </button>
   )
@@ -1618,7 +1648,7 @@ function SourceAttribution({ attribution }: {
       {href === undefined
         ? <span>{attribution.name}</span>
         : <a href={href} target="_blank" rel="noopener noreferrer">{attribution.name}</a>}
-      {attribution.notice !== undefined && <span>{attribution.notice}</span>}
+      {attribution.notice !== undefined && <span>{localizedNotice(attribution.notice)}</span>}
     </div>
   )
 }
@@ -2067,7 +2097,7 @@ function ItemActionModal({
           <div className="dshMarketDetails">
             <div className="dshMarketDetailsIntro">
               <PluginIcon item={value.item} large />
-              <p>{value.item.description ?? value.item.summary}</p>
+              <p>{zhSummary(value.item.description ?? value.item.summary)}</p>
             </div>
             {inventoryLoading && (
               <div className="dshMarketOperationProgress" role="status">
