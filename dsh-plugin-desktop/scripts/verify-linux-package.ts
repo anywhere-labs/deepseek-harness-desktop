@@ -14,6 +14,10 @@ export interface LinuxPackageArtifacts {
   readonly appImagePath: string
   /** Unpacked application executable path. */
   readonly applicationPath: string
+  /** Unpacked dsh command shim path. */
+  readonly dshCommandPath: string
+  /** Unpacked bundled pnpm command shim path. */
+  readonly pnpmCommandPath: string
 }
 
 /** Injectable Linux package verification boundary. */
@@ -88,6 +92,35 @@ function assertAppImage(path: string, label: string): void {
   }
 }
 
+/**
+ * Reject a packaged command that is not an executable shell script dispatching the expected entries.
+ * @param path - packaged command file path.
+ * @param label - human-readable command label used in failure messages.
+ * @param markers - substrings the script must contain to prove it dispatches the intended entry.
+ */
+function assertExecutableScript(path: string, label: string, markers: readonly string[]): void {
+  let stat: ReturnType<typeof statSync>
+  try {
+    stat = statSync(path)
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`${label} is not an executable file: ${path}`)
+    }
+    throw cause
+  }
+  if (!stat.isFile() || (stat.mode & 0o111) === 0) {
+    throw new Error(`${label} is not an executable file: ${path}`)
+  }
+  const content = readFileSync(path, 'utf8')
+  if (!content.startsWith('#!/bin/sh')) {
+    throw new Error(`${label} does not start with a shell shebang: ${path}`)
+  }
+  const missing = markers.filter(marker => !content.includes(marker))
+  if (missing.length > 0) {
+    throw new Error(`${label} is missing required dispatch markers: ${missing.join(', ')}`)
+  }
+}
+
 function defaultOptions(): LinuxPackageVerificationOptions {
   const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   return {
@@ -100,7 +133,7 @@ function defaultOptions(): LinuxPackageVerificationOptions {
 }
 
 /**
- * Verify the exact deb, rpm, AppImage, and unpacked application executable.
+ * Verify the exact deb, rpm, AppImage, unpacked application executable, and dsh/pnpm command shims.
  * @param options - Artifact root and expected product version.
  * @returns The verified artifact paths.
  */
@@ -111,12 +144,20 @@ export function verifyLinuxPackage(
   const rpmPath = join(options.outputDir, `DSH-Desktop-${options.version}-x86_64.rpm`)
   const appImagePath = join(options.outputDir, `DSH-Desktop-${options.version}-x86_64.AppImage`)
   const applicationPath = join(options.outputDir, 'linux-unpacked', 'dsh-desktop')
+  const dshCommandPath = join(options.outputDir, 'linux-unpacked', 'dsh')
+  const pnpmCommandPath = join(options.outputDir, 'linux-unpacked', 'bin', 'pnpm')
 
   assertDebArchive(debPath, 'Linux deb archive')
   assertRpmArchive(rpmPath, 'Linux rpm archive')
   assertAppImage(appImagePath, 'Linux AppImage')
   assertElfExecutable(applicationPath, 'unpacked Linux application')
-  return { debPath, rpmPath, appImagePath, applicationPath }
+  assertExecutableScript(dshCommandPath, 'unpacked Linux dsh command', [
+    '--expose-internals',
+    'desktop-cli.js',
+    'APP_DIR/bin',
+  ])
+  assertExecutableScript(pnpmCommandPath, 'unpacked Linux pnpm command', ['pnpm.mjs'])
+  return { debPath, rpmPath, appImagePath, applicationPath, dshCommandPath, pnpmCommandPath }
 }
 
 const invokedPath = process.argv[1]

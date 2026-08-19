@@ -1,0 +1,18 @@
+#!/bin/sh
+# Packaged pnpm: run the bundled pnpm CLI through the packaged Electron runtime
+# in Node mode (mirrors the desktop pnpm shim), so the system dsh command can
+# manage profile plugins without a system-wide pnpm install.
+SELF="$(readlink -f -- "$0" 2>/dev/null || printf '%s\n' "$0")"
+BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)"
+APP_DIR="$(CDPATH= cd -- "$BIN_DIR/.." && pwd)"
+export ELECTRON_RUN_AS_NODE=1
+export NODE="$BIN_DIR/node"
+# Resolve the packaged Electron version so pnpm builds native dependencies
+# against the bundled runtime's ABI instead of the system node ABI.
+ELECTRON_VERSION="$("$APP_DIR/dsh-desktop" -e 'process.stdout.write(process.versions.electron)' 2>/dev/null)"
+if [ -z "$ELECTRON_VERSION" ]; then ELECTRON_VERSION="unknown"; fi
+npm_config_runtime=electron
+npm_config_target="$ELECTRON_VERSION"
+npm_config_disturl="https://electronjs.org/headers"
+export npm_config_runtime npm_config_target npm_config_disturl
+exec "$APP_DIR/dsh-desktop" --import "file://$BIN_DIR/clear-env.mjs" "$APP_DIR/resources/app.asar.unpacked/node_modules/pnpm/bin/pnpm.mjs" "$@"

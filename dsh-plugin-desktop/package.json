@@ -334,7 +334,25 @@
       "maintainer": "DSH Desktop Maintainers <maintainers@dshdesktop.cn>",
       "synopsis": "DeepSeek Harness Desktop",
       "description": "DeepSeek Harness Desktop - Electron desktop shell for the DeepSeek Harness client",
-      "syncDesktopName": true
+      "syncDesktopName": true,
+      "extraFiles": [
+        {
+          "from": "build/linux/dsh",
+          "to": "dsh"
+        },
+        {
+          "from": "build/linux/bin",
+          "to": "bin"
+        }
+      ]
+    },
+    "deb": {
+      "afterInstall": "build/linux/after-install.tpl",
+      "afterRemove": "build/linux/after-remove.tpl"
+    },
+    "rpm": {
+      "afterInstall": "build/linux/after-install.tpl",
+      "afterRemove": "build/linux/after-remove.tpl"
     }
   }
 }

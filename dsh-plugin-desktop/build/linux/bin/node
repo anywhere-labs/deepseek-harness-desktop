@@ -1,0 +1,10 @@
+#!/bin/sh
+# Packaged node: run a Node script through the packaged Electron runtime in
+# Node mode (mirrors the desktop node shim). pnpm lifecycle scripts and other
+# tools that look up `node` on PATH resolve here, keeping the command tree
+# self-contained without a system Node install.
+SELF="$(readlink -f -- "$0" 2>/dev/null || printf '%s\n' "$0")"
+BIN_DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)"
+APP_DIR="$(CDPATH= cd -- "$BIN_DIR/.." && pwd)"
+export ELECTRON_RUN_AS_NODE=1
+exec "$APP_DIR/dsh-desktop" --import "file://$BIN_DIR/clear-env.mjs" "$@"
