@@ -29,6 +29,10 @@ function isZoomShortcut(input: Electron.Input): 'in' | 'out' | 'reset' | undefin
   return undefined
 }
 
+function isDevToolsShortcut(input: Electron.Input): boolean {
+  return input.type === 'keyDown' && input.key === 'F12'
+}
+
 export interface ElectronShellGenerationOptions {
   readonly platform: ElectronPlatformStrategy
   readonly spec: DesktopShellSpec
@@ -75,7 +79,12 @@ export class ElectronShellGeneration {
       window.hide()
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
-    const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
+    const handleShortcut = (event: Electron.Event, input: Electron.Input): void => {
+      if (isDevToolsShortcut(input)) {
+        event.preventDefault()
+        window.webContents.toggleDevTools()
+        return
+      }
       const action = isZoomShortcut(input)
       if (action === undefined) return
       event.preventDefault()
@@ -134,7 +143,7 @@ export class ElectronShellGeneration {
     app.on('activate', show)
     window.on('close', close)
     window.on('page-title-updated', preserveBlankTitle)
-    window.webContents.on('before-input-event', handleZoomShortcut)
+    window.webContents.on('before-input-event', handleShortcut)
     window.webContents.on('will-frame-navigate', navigate)
     window.webContents.on('will-redirect', redirect)
     window.webContents.on('render-process-gone', rendererGone)
@@ -159,7 +168,7 @@ export class ElectronShellGeneration {
       window.off('close', close)
       window.off('page-title-updated', preserveBlankTitle)
       window.off('ready-to-show', show)
-      window.webContents.off('before-input-event', handleZoomShortcut)
+      window.webContents.off('before-input-event', handleShortcut)
       window.webContents.off('will-frame-navigate', navigate)
       window.webContents.off('will-redirect', redirect)
       window.webContents.off('render-process-gone', rendererGone)

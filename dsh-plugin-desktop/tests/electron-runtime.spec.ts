@@ -93,6 +93,7 @@ const electron = vi.hoisted(() => {
     off: vi.fn(),
     setZoomLevel: vi.fn((level: number) => { zoomLevel = level }),
     setWindowOpenHandler: vi.fn(),
+    toggleDevTools: vi.fn(),
   }
   const nativeTheme = { themeSource: 'system' }
 
@@ -640,6 +641,36 @@ describe('Electron desktop runtime', () => {
     await release()
     expect(electron.trays[0]?.destroy).toHaveBeenCalledOnce()
     expect(electron.browserWindows[0]?.destroy).toHaveBeenCalledOnce()
+  })
+
+  it('toggles DevTools with F12 while keeping zoom shortcuts intact', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    const shortcutListener = electron.webContents.on.mock.calls
+      .find(([event]) => event === 'before-input-event')?.[1]
+    expect(shortcutListener).toEqual(expect.any(Function))
+
+    const f12 = { preventDefault: vi.fn() }
+    shortcutListener(f12, { type: 'keyDown', key: 'F12' })
+    expect(f12.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.webContents.toggleDevTools).toHaveBeenCalledOnce()
+
+    const f12Release = { preventDefault: vi.fn() }
+    shortcutListener(f12Release, { type: 'keyUp', key: 'F12' })
+    expect(f12Release.preventDefault).not.toHaveBeenCalled()
+    expect(electron.webContents.toggleDevTools).toHaveBeenCalledOnce()
+
+    const zoomIn = { preventDefault: vi.fn() }
+    shortcutListener(zoomIn, { type: 'keyDown', control: true, key: '=' })
+    expect(zoomIn.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.webContents.setZoomLevel).toHaveBeenLastCalledWith(1)
+
+    await release()
   })
 
   it('does not block a sandboxed iframe from navigating to an external origin', async () => {
