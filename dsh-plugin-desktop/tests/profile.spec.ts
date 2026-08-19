@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { composeEntries, initProfile, PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
+import {
+  composeEntries,
+  initProfile,
+  loadOptionalPatches,
+  PROFILE_PATCH_FILENAME,
+  PROFILE_TEMPLATES,
+} from '@deepseek-ai/dsh-app-boot'
 import {
   DESKTOP_PACKAGE_NAME,
   desktopShellModeFromSettings,
@@ -61,6 +67,14 @@ afterEach(() => {
 describe('desktop profile composition', {
   timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
+  it.each(['', '\n# no user patches\n'])('treats an empty home patch file as no patch layer (%j)', content => {
+    const home = temporaryHome()
+    const patchFile = join(home, PROFILE_PATCH_FILENAME)
+    writeFileSync(patchFile, content)
+
+    expect(loadOptionalPatches('dsh-plugin-desktop', patchFile)).toEqual([])
+  })
+
   it('reads packaged Cordis skills from the physical unpacked preset root', () => {
     const home = temporaryHome()
     const resources = join(home, 'resources')
