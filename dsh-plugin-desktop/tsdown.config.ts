@@ -25,6 +25,7 @@ export default defineConfig([
       'update-checker': 'src/update-checker.ts',
       'update-download': 'src/update-download.ts',
       updates: 'src/updates.ts',
+      'windows-directory-picker-browse': 'src/windows-directory-picker-browse.ts',
       'windows-agent-presets': 'src/windows-agent-presets.ts',
       'windows-pwsh-sandbox': 'src/windows-pwsh-sandbox.ts',
       'windows-acl-runner': 'src/windows-acl-runner.ts',

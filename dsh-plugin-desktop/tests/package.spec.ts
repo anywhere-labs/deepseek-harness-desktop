@@ -74,6 +74,10 @@ describe('published package surface', () => {
       types: './lib/types/windows-pwsh-sandbox.d.ts',
       default: './lib/windows-pwsh-sandbox.js',
     })
+    expect(manifest.exports).toHaveProperty('./windows-directory-picker-browse', {
+      types: './lib/types/windows-directory-picker-browse.d.ts',
+      default: './lib/windows-directory-picker-browse.js',
+    })
     expect(manifest.exports).toHaveProperty('./windows-agent-presets', {
       types: './lib/types/windows-agent-presets.d.ts',
       default: './lib/windows-agent-presets.js',
@@ -195,6 +199,7 @@ describe('published package surface', () => {
     expect(config).toContain("'windows-pwsh-sandbox': 'src/windows-pwsh-sandbox.ts'")
     expect(config).toContain("'windows-agent-presets': 'src/windows-agent-presets.ts'")
     expect(config).toContain("'windows-acl-runner': 'src/windows-acl-runner.ts'")
+    expect(config).toContain("'windows-directory-picker-browse': 'src/windows-directory-picker-browse.ts'")
     expect(config).toContain("'desktop-cli': 'src/desktop-cli.ts'")
     expect(config).toContain("'desktop-runtime-environment': 'src/desktop-runtime-environment.ts'")
     expect(config).toContain("'desktop-terminal': 'src/desktop-terminal.ts'")

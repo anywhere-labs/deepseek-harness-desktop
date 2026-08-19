@@ -382,7 +382,7 @@ describe('desktop profile composition', {
     }))
     expect(rows).toContainEqual(expect.objectContaining({
       id: 'desktop-directory-picker-browse-host',
-      name: '@deepseek-ai/dsh-host-directory-picker-browse',
+      name: 'dsh-plugin-desktop/windows-directory-picker-browse',
     }))
     expect(rows).toContainEqual(expect.objectContaining({
       id: 'desktop-directory-picker-browse-surface',
