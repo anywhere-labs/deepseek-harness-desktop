@@ -166,6 +166,21 @@ describe('desktop profile composition', () => {
     }))
   })
 
+  it('points the agent-presets root at the shipped dsh config directory', () => {
+    const home = temporaryHome()
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin')
+    const patches = prepared.patches as Array<Record<string, unknown>>
+    const preset = patches.find(patch => patch.id === 'agent-presets') as {
+      config?: { roots?: Array<{ path: string }> }
+    }
+    const shippedRoot = preset.config?.roots?.[0]?.path
+    expect(shippedRoot).toBeDefined()
+    // unpackedAsarPath is a no-op outside app.asar, so the development root stays
+    // inside the resolved @deepseek-ai/dsh dependency tree.
+    expect(shippedRoot).toContain(join('node_modules', '@deepseek-ai', 'dsh', 'config', 'agent-presets'))
+    expect(shippedRoot).toMatch(/[\\/]agent-presets$/)
+  })
+
   it('boots a selected Web profile without overriding its compatibility UI rows', () => {
     const home = temporaryHome()
     const webDir = join(home, 'profiles', 'web')
