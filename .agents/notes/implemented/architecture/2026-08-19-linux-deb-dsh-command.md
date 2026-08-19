@@ -46,6 +46,13 @@ already exercises this dispatch against the dev tree.
   `pnpm` on `PATH`, so the packaged pnpm (`resources/app.asar.unpacked/node_modules/pnpm`)
   runs through the packaged Electron binary with Electron-native-build settings
   (`npm_config_runtime/target/disturl`, electron version resolved at runtime).
+  pnpm 11 defaults `strictDepBuilds: true`, which turns any dependency with an
+  unapproved build script (node-pty, ssh2, ...) into a hard install failure. Because
+  `dsh plugin` runs pnpm with `cwd` = the profile directory, the pnpm shim (only
+  inside the packaged dsh context marked by `DSH_DESKTOP_DSH_CONTEXT`) appends
+  `strictDepBuilds: false` to the profile's `pnpm-workspace.yaml` when it is absent,
+  so plugin installs complete and ignored native builds stay opt-in via
+  `pnpm approve-builds`. An explicit user value is never overridden.
 - `build/linux/after-install.tpl` / `after-remove.tpl` — copies of the pinned
   Electron Builder 26.15.7 Linux templates (launcher symlink / update-alternatives,
   chrome-sandbox perms, mime/desktop DB refresh, AppArmor profile) plus one block

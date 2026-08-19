@@ -15,4 +15,13 @@ npm_config_runtime=electron
 npm_config_target="$ELECTRON_VERSION"
 npm_config_disturl="https://electronjs.org/headers"
 export npm_config_runtime npm_config_target npm_config_disturl
+# pnpm 11 defaults `strictDepBuilds: true`, turning any dependency with an
+# unapproved build script into a hard install failure. The desktop owns profile
+# package management, so inside a packaged dsh invocation (dsh plugin runs pnpm
+# with cwd = the profile directory) relax that to a warning: installs complete
+# and ignored native builds stay opt-in via `pnpm approve-builds`. An explicit
+# user value is never overridden.
+if [ "${DSH_DESKTOP_DSH_CONTEXT:-}" = "1" ] && [ -f pnpm-workspace.yaml ] && ! grep -q '^strictDepBuilds:' pnpm-workspace.yaml; then
+  printf '\nstrictDepBuilds: false\n' >> pnpm-workspace.yaml
+fi
 exec "$APP_DIR/dsh-desktop" --import "file://$BIN_DIR/clear-env.mjs" "$APP_DIR/resources/app.asar.unpacked/node_modules/pnpm/bin/pnpm.mjs" "$@"

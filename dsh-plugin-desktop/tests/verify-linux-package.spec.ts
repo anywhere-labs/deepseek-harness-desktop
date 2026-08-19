@@ -26,11 +26,11 @@ function appImage(): Buffer {
 }
 
 function dshShim(): Buffer {
-  return Buffer.from('#!/bin/sh\nexport PATH="$APP_DIR/bin:$PATH"\nexec "$APP_DIR/dsh-desktop" --expose-internals "$APP_DIR/resources/app.asar/lib/desktop-cli.js" "$@"\n')
+  return Buffer.from('#!/bin/sh\nexport PATH="$APP_DIR/bin:$PATH"\nexport DSH_DESKTOP_DSH_CONTEXT=1\nexec "$APP_DIR/dsh-desktop" --expose-internals "$APP_DIR/resources/app.asar/lib/desktop-cli.js" "$@"\n')
 }
 
 function pnpmShim(): Buffer {
-  return Buffer.from('#!/bin/sh\nexec "$APP_DIR/dsh-desktop" --import "file://$BIN_DIR/clear-env.mjs" "$APP_DIR/resources/app.asar.unpacked/node_modules/pnpm/bin/pnpm.mjs" "$@"\n')
+  return Buffer.from('#!/bin/sh\nstrictDepBuilds: false\nexec "$APP_DIR/dsh-desktop" --import "file://$BIN_DIR/clear-env.mjs" "$APP_DIR/resources/app.asar.unpacked/node_modules/pnpm/bin/pnpm.mjs" "$@"\n')
 }
 
 function fixture(version = '2.0.0'): {

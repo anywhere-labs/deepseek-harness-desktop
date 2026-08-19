@@ -155,8 +155,12 @@ export function verifyLinuxPackage(
     '--expose-internals',
     'desktop-cli.js',
     'APP_DIR/bin',
+    'DSH_DESKTOP_DSH_CONTEXT',
   ])
-  assertExecutableScript(pnpmCommandPath, 'unpacked Linux pnpm command', ['pnpm.mjs'])
+  assertExecutableScript(pnpmCommandPath, 'unpacked Linux pnpm command', [
+    'pnpm.mjs',
+    'strictDepBuilds',
+  ])
   return { debPath, rpmPath, appImagePath, applicationPath, dshCommandPath, pnpmCommandPath }
 }
 
