@@ -258,6 +258,33 @@ describe('restricted market image fetcher', () => {
     )).rejects.toMatchObject({ code: 'blocked-address' })
   })
 
+  it('allows IPv4 and IPv6 fake-IP proxy addresses together for a reviewed hostname', async () => {
+    const request = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { 'content-type': 'image/png' },
+      body: Buffer.from('network boundary only'),
+    }))
+    const lookupAddresses = vi.fn(async (_hostname: string) => [
+      { address: '198.18.0.42', family: 4 as const },
+      { address: 'fdfe:dcba:9876::2a', family: 6 as const },
+    ])
+    const allowedFetcher = createRestrictedImageFetcher({
+      syntheticProxyHostnames: ['github.com'],
+      lookupAddresses,
+      request,
+    })
+    await expect(allowedFetcher(
+      candidate({ allowedHostnames: ['github.com'] }),
+      new AbortController().signal,
+    )).resolves.toMatchObject({ contentType: 'image/png' })
+
+    const blockedFetcher = createRestrictedImageFetcher({ lookupAddresses, request })
+    await expect(blockedFetcher(
+      candidate({ allowedHostnames: ['github.com'] }),
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'blocked-address' })
+  })
+
   it('rejects redirects outside the reviewed hostname set and non-image responses', async () => {
     const lookupAddresses = vi.fn(async (_hostname: string) => [{ address: '93.184.216.34', family: 4 as const }])
     const redirectFetcher = createRestrictedImageFetcher({

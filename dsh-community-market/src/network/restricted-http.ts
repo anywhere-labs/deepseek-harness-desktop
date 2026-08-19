@@ -11,6 +11,11 @@ const FIRST_BYTE_TIMEOUT_MS = 12_000
 const TOTAL_TIMEOUT_MS = 30_000
 const SYNTHETIC_PROXY_NETWORK = '198.18.0.0'
 const SYNTHETIC_PROXY_PREFIX = 15
+// Default IPv6 fake-IP pool of mihomo and Clash Verge (fake-ip-range6). Reviewed
+// hostnames are allowed to resolve here so a local proxy's fake-IP DNS does not
+// break catalog fetches or install verification when IPv6 is enabled.
+const SYNTHETIC_PROXY_NETWORK6 = 'fdfe:dcba:9876::'
+const SYNTHETIC_PROXY_PREFIX6 = 64
 
 export class CatalogNetworkError extends Error {
   constructor(readonly code: 'invalid-url' | 'blocked-address' | 'redirect' | 'timeout' | 'http' | 'response') {
@@ -58,7 +63,8 @@ interface RestrictedHttpResponse {
 export interface RestrictedHttpClientOptions {
   /**
    * Exact, reviewed hostnames that may resolve through a local proxy's
-   * RFC 2544 fake-IP range. User-provided catalog hosts must never be added.
+   * RFC 2544 fake-IP ranges (IPv4 and IPv6). User-provided catalog hosts must
+   * never be added.
    */
   readonly syntheticProxyHostnames?: readonly string[]
   readonly lookupAddresses?: (hostname: string) => Promise<readonly PinnedAddress[]>
@@ -74,14 +80,15 @@ export interface RestrictedHttpClientOptions {
 
 const syntheticProxyAddresses = new BlockList()
 syntheticProxyAddresses.addSubnet(SYNTHETIC_PROXY_NETWORK, SYNTHETIC_PROXY_PREFIX, 'ipv4')
+syntheticProxyAddresses.addSubnet(SYNTHETIC_PROXY_NETWORK6, SYNTHETIC_PROXY_PREFIX6, 'ipv6')
 
 function assertSafeAddress(address: string, allowSyntheticProxyAddress = false): 4 | 6 {
   const normalized = address.replace(/^\[|\]$/gu, '').split('%', 1)[0]!
   const family = isIP(normalized)
   const addressFamily = family === 4 ? 'ipv4' : 'ipv6'
   const allowedSyntheticAddress = allowSyntheticProxyAddress
-    && family === 4
-    && syntheticProxyAddresses.check(normalized, 'ipv4')
+    && (family === 4 && syntheticProxyAddresses.check(normalized, 'ipv4')
+      || family === 6 && syntheticProxyAddresses.check(normalized, 'ipv6'))
   if (family === 0 || blockedAddresses.check(normalized, addressFamily) && !allowedSyntheticAddress) {
     throw new CatalogNetworkError('blocked-address')
   }
