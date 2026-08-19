@@ -9,6 +9,8 @@
     "src/client/**/*.ts",
     "src/client/**/*.tsx",
     "tests/client-boot-health.spec.ts",
+    "tests/client-artifact-context-menu-contract.spec.tsx",
+    "tests/client-artifact-context-menu.spec.tsx",
     "tests/client-directory-picker.spec.ts",
     "tests/client-environment.spec.ts",
     "tests/client-workspace-folder-drop.spec.ts"

@@ -73,6 +73,7 @@ export default defineConfig([
       'react-dom/client',
       '@deepseek-ai/cordis',
       '@deepseek-ai/dsh-client-runtime/client',
+      '@deepseek-ai/dsh-client-ui-deliverables/client',
       '@deepseek-ai/dsh-client-ui-slots',
       '@deepseek-ai/dsh-client-web-react',
       '@deepseek-ai/dsh-client-ui-primitives',

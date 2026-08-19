@@ -1,16 +1,20 @@
+import { lstat } from 'node:fs/promises'
 import {
   app,
   BrowserWindow,
   dialog,
+  ipcMain,
   Menu,
   nativeImage,
   nativeTheme,
   shell,
   Tray,
 } from 'electron'
+import { DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL } from './artifact-context-menu-contract.ts'
+import { desktopArtifactRevealCopy, resolveDesktopArtifactPath } from './artifact-reveal.ts'
 import { formatDesktopExitCode } from './desktop-logger.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
-import type { DesktopShellSpec } from './runtime.ts'
+import type { DesktopLocale, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
 
@@ -35,6 +39,7 @@ export interface ElectronShellGenerationOptions {
   readonly preloadPath: string
   readonly isQuitting: () => boolean
   readonly buildTrayTemplate: () => Electron.MenuItemConstructorOptions[]
+  readonly readLocale: () => DesktopLocale
   readonly stopRendererBootMonitoring: () => void
   readonly failRendererBoot: (error: string) => void
   readonly logError: (message: string) => void
@@ -130,6 +135,40 @@ export class ElectronShellGeneration {
         )
       }
     }
+    let artifactContextMenuRegistered = false
+    const showArtifactContextMenu = async (
+      event: Electron.IpcMainInvokeEvent,
+      request: unknown,
+    ): Promise<void> => {
+      let senderOrigin: string | undefined
+      try {
+        senderOrigin = event.senderFrame === null ? undefined : new URL(event.senderFrame.url).origin
+      } catch {
+        senderOrigin = undefined
+      }
+      if (event.sender !== window.webContents || senderOrigin !== origin) {
+        throw new Error('dsh-plugin-desktop: rejected artifact menu request from an untrusted renderer')
+      }
+      const artifactPlatform = platform.platform
+      if (artifactPlatform !== 'darwin' && artifactPlatform !== 'win32') {
+        throw new Error(`dsh-plugin-desktop: artifact reveal is unavailable on ${artifactPlatform}`)
+      }
+
+      let target: string | undefined
+      try {
+        const resolvedTarget = resolveDesktopArtifactPath(request, artifactPlatform)
+        target = resolvedTarget
+        if (window.isDestroyed()) throw new Error('artifact menu window is no longer available')
+        const copy = desktopArtifactRevealCopy(artifactPlatform, this.options.readLocale())
+        const menu = Menu.buildFromTemplate([{
+          label: copy.label,
+          click: () => { void this.revealArtifact(window, artifactPlatform, resolvedTarget) },
+        }])
+        menu.popup({ window })
+      } catch (cause) {
+        await this.reportArtifactRevealError(window, artifactPlatform, cause, target)
+      }
+    }
 
     app.on('activate', show)
     window.on('close', close)
@@ -164,10 +203,18 @@ export class ElectronShellGeneration {
       window.webContents.off('will-redirect', redirect)
       window.webContents.off('render-process-gone', rendererGone)
       window.webContents.off('did-fail-load', loadFailed)
+      if (artifactContextMenuRegistered) {
+        ipcMain.removeHandler(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL)
+        artifactContextMenuRegistered = false
+      }
       tray?.off('click', show)
     }
 
     try {
+      if (platform.platform !== 'linux') {
+        ipcMain.handle(DESKTOP_ARTIFACT_CONTEXT_MENU_CHANNEL, showArtifactContextMenu)
+        artifactContextMenuRegistered = true
+      }
       await window.loadURL(spec.url)
       tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
       this.tray = tray
@@ -204,6 +251,49 @@ export class ElectronShellGeneration {
 
   refreshThemeMaterial(): void {
     if (this.window !== undefined && !this.window.isDestroyed()) this.options.platform.refreshThemeMaterial(this.window)
+  }
+
+  private async revealArtifact(
+    window: BrowserWindow,
+    platform: 'darwin' | 'win32',
+    target: string,
+  ): Promise<void> {
+    try {
+      const metadata = await lstat(target)
+      if (metadata.isDirectory()) {
+        const error = await shell.openPath(target)
+        if (error !== '') throw new Error(error)
+      } else {
+        shell.showItemInFolder(target)
+      }
+    } catch (cause) {
+      await this.reportArtifactRevealError(window, platform, cause, target)
+    }
+  }
+
+  private async reportArtifactRevealError(
+    window: BrowserWindow,
+    platform: 'darwin' | 'win32',
+    cause: unknown,
+    target?: string,
+  ): Promise<void> {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    this.options.logError(`dsh-plugin-desktop: failed to reveal produced file${target === undefined ? '' : ` ${target}`}: ${detail}`)
+    const copy = desktopArtifactRevealCopy(platform, this.options.readLocale())
+    try {
+      await dialog.showMessageBox(window, {
+        type: 'error',
+        title: copy.title,
+        message: copy.message,
+        ...(target === undefined ? {} : { detail: target }),
+        buttons: [copy.confirm],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      })
+    } catch (dialogCause) {
+      this.options.logError(`dsh-plugin-desktop: failed to show artifact reveal error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}`)
+    }
   }
 
   async release(): Promise<void> {

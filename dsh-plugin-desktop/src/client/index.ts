@@ -5,7 +5,15 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // The desktop client does not load or register a settings surface.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
+import {
+  DESKTOP_ARTIFACT_CONTEXT_MENU_BRIDGE,
+  type DesktopArtifactContextMenuWindow,
+} from '../artifact-context-menu-contract.ts'
 import { applyAdvancedShell } from './advanced-shell.ts'
+import {
+  installCompatibilityArtifactContextMenu,
+  registerDesktopArtifactContextMenu,
+} from './artifact-context-menu.tsx'
 import { startRendererBootReporter } from './boot-health.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
@@ -25,6 +33,7 @@ export type { DesktopClientEnvironment, DesktopClientMode, DesktopClientPlatform
 /** Services required by advanced presentation. */
 export const inject = [
   'slots',
+  'connection',
   'sessions',
   'theme',
   'workspaces',
@@ -51,5 +60,18 @@ export function apply(ctx: ClientContext): void {
       'dsh-plugin-desktop: native directory picker bridge',
     )
   }
-  if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
+  const desktopWindow = window as unknown as DesktopArtifactContextMenuWindow
+  const artifactContextMenu = desktopWindow[DESKTOP_ARTIFACT_CONTEXT_MENU_BRIDGE]
+  if (environment.mode === 'compatibility'
+    && environment.platform !== 'linux'
+    && artifactContextMenu !== undefined) {
+    ctx.effect(
+      () => installCompatibilityArtifactContextMenu(ctx.sessions.list, artifactContextMenu),
+      'dsh-plugin-desktop: compatibility produced-file context menu',
+    )
+  }
+  if (environment.mode === 'advanced') {
+    registerDesktopArtifactContextMenu(ctx, environment)
+    applyAdvancedShell(ctx, environment)
+  }
 }
