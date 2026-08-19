@@ -239,6 +239,12 @@ The adapter may normalize bounded plain-text identity, description, tags/categor
 
 This cooperation makes dshfind visible as an optional partner choice only. It does **not** make it default, preferred, official, recommended, audited, or a fallback, and source failure never causes a hidden switch to another provider.
 
+## DSH Plugin Collection cooperation
+
+[DSH Plugin Collection](https://github.com/daha1216/dsh-plugin-collection) is an optional cooperating source with a reviewed built-in adapter. The adapter requests the public `plugins.json` catalog from the fixed `https://raw.githubusercontent.com` origin, validates the catalog revision, bounded text fields, duplicate IDs, and canonical GitHub repository identities, and emits one normalized snapshot. The provider's `version` field is retained only as plain description metadata; it is not emitted as `latestVersion` because the source does not provide provider-verified npm identity and repository-backlink evidence. The provider's `install` field is discarded before normalization and is never displayed or executed.
+
+This cooperation makes DSH Plugin Collection visible as an optional source choice only. It does **not** make it default, preferred, official, recommended, audited, or a fallback. The catalog contains third-party projects and its inclusion is not a security review or endorsement by Anywhere Labs, DeepSeek, or DSH Plugin Collection.
+
 ## Installation boundary
 
 Catalog browsing and plugin installation are separate operations:

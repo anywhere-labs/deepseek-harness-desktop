@@ -66,6 +66,8 @@ The standard adapter serializes only fields declared in the source manifest's `q
 
 [dshfind](https://dshfind.com) is another optional cooperating source with a reviewed built-in adapter. It is not selected by default, preferred, recommended, or used as a fallback. Its listings, scores, grades, `official`/featured labels, risk labels, and installation probes remain provider claims rather than Anywhere Labs trust decisions.
 
+[DSH Plugin Collection](https://github.com/daha1216/dsh-plugin-collection) is an optional cooperating source with a reviewed built-in adapter. The adapter reads its public GitHub-hosted catalog through a fixed HTTPS origin, validates canonical GitHub repository identities, and exposes the catalog's version as plain provider metadata. The catalog's GitHub installation field is discarded and never executed. Because the source does not provide provider-verified npm identities and repository-backlink evidence, its entries remain browse-only until those claims are published and independently verified.
+
 The published normative contract is the [catalog provider contract](catalog-provider-contract.md), with machine-readable schemas for the source manifest, query, untrusted provider page, and Host-normalized response. Remote fields are display data, not executable instructions. Text is rendered as text, never as raw HTML.
 
 ## Complete local index and cache

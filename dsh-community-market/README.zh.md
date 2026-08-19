@@ -33,6 +33,8 @@ Host 会在 cache 过期前复用已经完成的索引（当前默认五分钟�
 
 dshfind 当前会返回由提供方维护的安装结论和命令文本，但没有提供符合 Market 受管安装边界的精确稳定 npm 版本。Adapter 不展示也不执行 `install.cmd`，不会从命令中猜测版本，并且会让所有 dshfind 条目保持仅浏览、不能进入**可安装**。dshfind 的分数、等级、精选/官方标记、风险标记与安装探测都只是 provider claim；它们都不代表 Anywhere Labs 完成了安全审核或作出推荐。
 
+[DSH Plugin Collection](https://github.com/daha1216/dsh-plugin-collection) 是另一个可选合作目录来源。经审查的 adapter 从固定 GitHub Raw origin 读取公开目录，校验规范 GitHub 仓库身份，把目录版本保留为普通描述元数据，并丢弃 provider 返回的 GitHub 安装字段。由于该来源没有提供经过 provider 验证的 npm 身份和 repository backlink 证据，所有条目保持仅浏览，不能进入**可安装**。
+
 所有目录数据都是远程、且不可信的输入。项目被收录只表示提供方返回了相关元数据；这**不表示** Anywhere Labs 已经审核、推荐或保证该插件。
 
 ## 安全承诺

@@ -27,6 +27,7 @@ import {
   DSH_1024STORE_HOSTNAME,
 } from '../adapters/dsh-1024store.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_HOSTNAME } from '../adapters/dshfind.js'
+import { DAHA1216_ADAPTER_ID, DAHA1216_HOSTNAME } from '../adapters/daha1216.js'
 import { assertStandardSourceTrustRoot } from '../adapters/standard-http.js'
 import { BUILT_IN_PROVIDERS, DefaultCatalogService, type CatalogFetchScope, type CatalogFullIndex } from '../catalog/service.js'
 import { SettingsCatalogSourceStore, type MarketCatalogCache, type MarketSettingsDocument } from '../catalog/source-store.js'
@@ -104,6 +105,14 @@ const dshfindHttpClient = createCachedCatalogHttpClient(
     // This exact hostname is compiled into the reviewed adapter. User-added
     // source hostnames must never inherit this local-proxy exception.
     syntheticProxyHostnames: [DSHFIND_HOSTNAME],
+  }),
+)
+
+const daha1216HttpClient = createCachedCatalogHttpClient(
+  createRestrictedHttpClient({
+    // This exact hostname is compiled into the reviewed adapter. User-added
+    // source hostnames must never inherit this local-proxy exception.
+    syntheticProxyHostnames: [DAHA1216_HOSTNAME],
   }),
 )
 
@@ -780,6 +789,7 @@ export function registerMarketRoutes(
     adapterHttpClients: new Map([
       [DSH_1024STORE_ADAPTER_ID, dsh1024StoreHttpClient],
       [DSHFIND_ADAPTER_ID, dshfindHttpClient],
+      [DAHA1216_ADAPTER_ID, daha1216HttpClient],
     ]),
     media,
     observeSnapshot: snapshot => installProvider?.get()?.observeCatalog(snapshot),

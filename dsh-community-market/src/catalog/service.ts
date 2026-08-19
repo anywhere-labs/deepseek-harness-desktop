@@ -6,6 +6,7 @@ import type { CatalogAdapter, CatalogHttpClient, CatalogMediaRegistry, LocalSour
 import type { MarketCatalogSourceResult, MarketSourceView } from '../api-types.js'
 import { DSH_1024STORE_ADAPTER_ID, DSH_1024STORE_ENDPOINT, DSH_1024STORE_KEY, DSH_1024STORE_PROVIDER_ID, dsh1024StoreAdapter } from '../adapters/dsh-1024store.js'
 import { DSHFIND_ADAPTER_ID, DSHFIND_ENDPOINT, DSHFIND_KEY, DSHFIND_PROVIDER_ID, dshfindAdapter } from '../adapters/dshfind.js'
+import { DAHA1216_ADAPTER_ID, DAHA1216_ENDPOINT, DAHA1216_KEY, DAHA1216_PROVIDER_ID, daha1216Adapter } from '../adapters/daha1216.js'
 import { standardHttpAdapter } from '../adapters/standard-http.js'
 
 export interface BuiltInProviderDefinition {
@@ -52,12 +53,27 @@ export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
     },
     partnership: true,
   },
+  {
+    key: DAHA1216_KEY,
+    name: 'DSH Plugin Collection',
+    description: '第三方 DSH 插件目录。需要用户明确添加并启用。目录收录不代表插件经过审核或推荐。',
+    providerId: DAHA1216_PROVIDER_ID,
+    adapterId: DAHA1216_ADAPTER_ID,
+    endpoint: DAHA1216_ENDPOINT,
+    attribution: {
+      name: 'daha1216',
+      url: 'https://github.com/daha1216/dsh-plugin-collection',
+      notice: 'Community catalog data provided by a cooperating provider.',
+    },
+    partnership: true,
+  },
 ]
 
 const adapters = new Map<string, CatalogAdapter>([
   [standardHttpAdapter.adapterId, standardHttpAdapter],
   [dsh1024StoreAdapter.adapterId, dsh1024StoreAdapter],
   [dshfindAdapter.adapterId, dshfindAdapter],
+  [daha1216Adapter.adapterId, daha1216Adapter],
 ])
 
 const MAX_CATALOG_ITEMS = 10_000
