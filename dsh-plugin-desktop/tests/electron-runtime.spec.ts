@@ -591,6 +591,74 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
+  it('uses the operating-system Russian locale across native runtime surfaces', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    electron.app.getLocale.mockReturnValueOnce('ru-RU')
+    electron.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['C:\\Работа'] })
+    electron.dialog.showMessageBox.mockResolvedValue({ response: 1, checkboxChecked: false })
+    const query = vi.fn(() => ({ root: 'E:\\', fileSystem: 'NTFS', driveType: 2 }))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {}, undefined, undefined, query)
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+    expect(runtime.locale).toBe('ru')
+    expect((electron.menuTemplates.at(-1) as Array<{ label?: string }>).map(item => item.label))
+      .toEqual(expect.arrayContaining([
+        'Открыть DSH Desktop',
+        'Перейти в расширенный режим',
+        'Выйти',
+      ]))
+
+    await expect(runtime.pickDirectory()).resolves.toBe('C:\\Работа')
+    expect(electron.dialog.showOpenDialog).toHaveBeenCalledWith(
+      electron.browserWindows[0],
+      expect.objectContaining({ title: 'Выберите папку рабочей области' }),
+    )
+
+    await expect(runtime.validateDirectory('E:\\Проекты')).resolves.toBe(false)
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'Рабочая область на съёмном диске',
+      message: 'Эта рабочая область находится на съёмном диске с файловой системой NTFS/ReFS.',
+      detail: expect.stringContaining('E:\\Проекты'),
+      buttons: ['Использовать эту папку', 'Выбрать другую папку'],
+    }))
+
+    await runtime.exportDiagnostics()
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'Экспорт данных диагностики',
+      buttons: ['Экспортировать', 'Отмена'],
+    }))
+
+    await runtime.updates.showManualCheckResult({
+      status: 'up-to-date',
+      currentVersion: '2.0.1',
+      latestVersion: '2.0.1',
+    })
+    expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'Установлена последняя версия DSH Desktop',
+      detail: 'Установленная версия: 2.0.1',
+      buttons: ['ОК'],
+    }))
+
+    runtime.openTerminal()
+    expect(electron.dialog.showErrorBox).toHaveBeenLastCalledWith(
+      'Не удалось открыть терминал DSH',
+      'dsh-plugin-desktop: terminal profile is not configured',
+    )
+
+    runtime.reportRendererBoot({ status: 'failed', plugins: ['dsh-vision-router'] })
+    await vi.waitFor(() => {
+      expect(electron.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
+        title: 'Восстановление загрузки плагинов',
+        message: 'Не все плагины удалось загрузить.',
+        buttons: ['Открыть терминал DSH', 'Перезапустить DSH Desktop', 'Закрыть'],
+      }))
+    })
+
+    await release()
+  })
+
   it('handles desktop zoom shortcuts without relying on the native menu', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')

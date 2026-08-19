@@ -28,7 +28,10 @@ interface NotificationHarness {
   dispose(): void
 }
 
-function createHarness(available: readonly OptionalService[] = ['jobs', 'sessions', 'settings']): NotificationHarness {
+function createHarness(
+  available: readonly OptionalService[] = ['jobs', 'sessions', 'settings'],
+  locale: DesktopRuntime['locale'] = 'en',
+): NotificationHarness {
   const notifyAttention = vi.fn()
   const stopJobs = vi.fn()
   const stopSessions = vi.fn()
@@ -46,7 +49,7 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
 
   const runtime = {
     platform: 'darwin',
-    locale: 'en',
+    locale,
     notifyAttention,
   } as unknown as DesktopRuntime
 
@@ -207,6 +210,39 @@ describe('desktop notifications Host plugin', () => {
       [{ title: 'Background Job Failed', body: 'A background job needs attention.' }],
     ])
     expect(JSON.stringify(harness.notifyAttention.mock.calls)).not.toMatch(/Users|private|secret|session-123/u)
+  })
+
+  it('uses privacy-safe Russian copy for jobs and direct user turns', async () => {
+    const harness = createHarness(['jobs', 'sessions'], 'ru')
+    const snapshot = {
+      id: 'bash-ru' as JobId,
+      kind: 'bash',
+      label: 'private',
+      status: 'completed',
+      startedAt: 1,
+      finishedAt: 2,
+      reported: false,
+    } satisfies JobSnapshot
+
+    await harness.jobDone(snapshot)
+    await harness.jobDone({ ...snapshot, status: 'failed' })
+    const active = session('russian-turn')
+    await harness.sessionEvent(active, event('turn/start', { turn: 1 }, 1))
+    await harness.sessionEvent(active, userMessage('user', 2))
+    await harness.sessionEvent(active, event('turn/end', { turn: 1, reason: { kind: 'completed' } }, 3))
+    await harness.sessionEvent(active, event('turn/start', { turn: 2 }, 4))
+    await harness.sessionEvent(active, userMessage('user', 5))
+    await harness.sessionEvent(active, event('turn/end', {
+      turn: 2,
+      reason: { kind: 'error', error: { code: 'UNKNOWN', message: 'private error' } },
+    }, 6))
+
+    expect(harness.notifyAttention.mock.calls).toEqual([
+      [{ title: 'Фоновая задача выполнена', body: 'Выполнение фоновой задачи завершено.' }],
+      [{ title: 'Фоновая задача завершилась с ошибкой', body: 'Фоновая задача требует внимания.' }],
+      [{ title: 'Пользовательский запрос выполнен', body: 'Обработка пользовательского запроса завершена.' }],
+      [{ title: 'Не удалось выполнить пользовательский запрос', body: 'Пользовательский запрос требует внимания.' }],
+    ])
   })
 
   it('applies live settings independently to successful and failed outcomes', async () => {

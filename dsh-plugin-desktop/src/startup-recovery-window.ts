@@ -309,6 +309,64 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     openProfileManifest: '编辑插件加载清单',
     openProfileDirectory: '打开配置目录',
   },
+  ru: {
+    title: 'Восстановление DSH Desktop',
+    lead: 'Не удалось запустить текущий профиль. Сохраните данные диагностики, восстановите конфигурацию до состояния перед последней защищённой установкой либо временно отключите плагин, а затем повторите запуск.',
+    currentProfile: 'Текущий профиль',
+    startupError: 'Ошибка запуска',
+    startupStage: 'Этап сбоя',
+    stageLabels: {
+      'electron-ready': 'Инициализация Electron',
+      'shell-environment': 'Окружение командной оболочки',
+      'runtime-bootstrap': 'Подготовка среды выполнения DSH Desktop',
+      'profile-selection': 'Выбор профиля',
+      'install-recovery': 'Восстановление защищённой установки',
+      'profile-composition': 'Формирование состава плагинов профиля',
+      'host-boot': 'Запуск Plugin Host',
+      'renderer-startup': 'Запуск интерфейса DSH Desktop',
+      'health-commit': 'Проверка работоспособности после запуска',
+    },
+    recentInstall: 'Последняя защищённая установка',
+    rollbackBody: 'Восстанавливает только package.json, pnpm-lock.yaml и pnpm-workspace.yaml до состояния перед установкой. Каталог node_modules не восстанавливается.',
+    rollback: 'Восстановить конфигурацию до установки',
+    retry: 'Повторить запуск один раз',
+    retryBody: 'Разрешает один повторный запуск с проверкой текущей конфигурации. Если запуск завершится с ошибкой, окно восстановления откроется снова.',
+    plugins: 'Временно отключить плагин',
+    pluginsBody: 'При следующем запуске этот плагин не будет загружен. Его файлы останутся установленными, а код не будет изолирован.',
+    core: 'Встроенный компонент',
+    managed: 'Установлен через маркетплейс плагинов',
+    external: 'Установлен другим способом',
+    disabled: 'Отключён',
+    disable: 'Отключить',
+    diagnostics: 'Данные диагностики',
+    savingDiagnostics: 'Сохраняем локальный архив диагностики…',
+    diagnosticsSaved: 'Данные диагностики сохранены локально и не будут отправлены автоматически.',
+    diagnosticsFailed: 'Не удалось сохранить данные диагностики. Прежде чем восстанавливать конфигурацию, повторите попытку.',
+    saveDiagnostics: 'Сохранить данные диагностики',
+    showDiagnostics: 'Показать в папке',
+    privacy: 'Архивы диагностики могут содержать локальные пути, журналы, сведения о системе и фрагменты памяти из дампов сбоев. Перед отправкой проверьте содержимое архива.',
+    restart: 'Перезапустить DSH Desktop',
+    quit: 'Выйти',
+    cancel: 'Отмена',
+    confirmDisable: 'Отключить плагин?',
+    confirmDisableBody: 'После перезапуска этот плагин будет пропущен в текущем профиле. Файлы плагина останутся установленными.',
+    confirmRollback: 'Восстановить конфигурацию?',
+    confirmRollbackBody: 'Сначала необходимо сохранить локальный архив диагностики. Затем три защищённых файла профиля будут восстановлены до состояния перед установкой.',
+    confirmRetry: 'Повторить запуск один раз?',
+    confirmRetryBody: 'При следующем запуске DSH Desktop один раз попробует использовать конфигурацию, полученную после установки. Если запуск снова завершится с ошибкой, откроется окно восстановления.',
+    working: 'Выполняется восстановление…',
+    disabledSuccess: 'Плагин помечен как отключённый. Чтобы применить изменение, перезапустите DSH Desktop.',
+    disabledPending: 'Плагин помечен как отключённый. Повторите запуск с текущей конфигурацией или восстановите конфигурацию до установки.',
+    rollbackSuccess: 'Восстановлена конфигурация, использовавшаяся до установки. Перезапустите DSH Desktop, чтобы продолжить.',
+    retrySuccess: 'Можно повторить запуск один раз. Перезапустите DSH Desktop, чтобы продолжить.',
+    manualRequired: 'Защищённые файлы были изменены вне отслеживаемой транзакции установки, поэтому DSH Desktop не стал их перезаписывать.',
+    diagnosticsRequired: 'Данные диагностики не сохранены, поэтому восстановление конфигурации не началось.',
+    manualConfiguration: 'Изменить конфигурацию вручную',
+    manualConfigurationBody: 'Изменяйте переопределения в файле патча через системный редактор, а повторяющиеся записи пакетов плагинов — в манифесте плагинов. На этой странице нельзя выбрать произвольный путь.',
+    openProfilePatch: 'Открыть патч конфигурации',
+    openProfileManifest: 'Открыть список плагинов',
+    openProfileDirectory: 'Открыть папку профиля',
+  },
 }
 
 function escapeHtml(value: string): string {
@@ -348,6 +406,7 @@ function confirmationHtml(model: DesktopStartupRecoveryViewModel, copy: Recovery
 /** Render the complete no-script local recovery document. */
 export function renderDesktopStartupRecoveryHtml(model: DesktopStartupRecoveryViewModel): string {
   const copy = COPY[model.locale]
+  const labelSeparator = model.locale === 'zh' ? '：' : ': '
   const snapshot = model.snapshot
   const diagnosticsText = model.diagnostics.status === 'saving'
     ? copy.savingDiagnostics
@@ -379,21 +438,21 @@ export function renderDesktopStartupRecoveryHtml(model: DesktopStartupRecoveryVi
     ? confirmation
     : `${pendingHtml}${bundlesHtml}${configurationHtml}<section class="card"><h2>${escapeHtml(copy.diagnostics)}</h2><p>${escapeHtml(diagnosticsText)}</p>${model.diagnostics.filename === undefined ? '' : `<p><code>${escapeHtml(model.diagnostics.filename)}</code></p>`}<p class="muted">${escapeHtml(copy.privacy)}</p><div class="actions">${diagnosticAction}</div></section>`
   return `<!doctype html>
-<html lang="${model.locale === 'zh' ? 'zh-CN' : 'en'}">
+<html lang="${model.locale === 'zh' ? 'zh-CN' : model.locale}">
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(copy.title)}</title>
   <style>
-    :root{color-scheme:light dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f3f5;color:#202124}*{box-sizing:border-box}body{margin:0}main{width:min(820px,100%);margin:0 auto;padding:34px 30px 28px}h1{font-size:28px;margin:0 0 8px}h2{font-size:17px;margin:0 0 10px}p{margin:7px 0}.lead{color:#5f6368;margin-bottom:20px}.profile{font-size:13px;color:#6b7280}.card,.notice{background:#fff;border:1px solid #dfe1e5;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 1px 2px #0000000d}.error-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:8px;padding:12px}.notice strong{display:block}.notice.error,.notice.warning{border-color:#d97706}.notice.success{border-color:#16a34a}.notice.info{border-color:#2563eb}ul{list-style:none;padding:0;margin:14px 0 0;border-top:1px solid #e5e7eb}li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e5e7eb}.meta{display:block;color:#6b7280;font-size:12px;margin-top:2px}.row-actions,.actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.actions{margin-top:15px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 13px;border:1px solid #9aa0a6;border-radius:9px;color:inherit;text-decoration:none;background:transparent}.button:hover{background:#eef0f2}.button.primary{background:#1a73e8;border-color:#1a73e8;color:white}.pill{font-size:12px;padding:3px 8px;border-radius:999px;background:#e8eaed}.muted{font-size:12px;color:#6b7280}.footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}.busy{opacity:.7;pointer-events:none}@media(max-width:640px){main{padding:22px 16px 18px}h1{font-size:24px}.card,.notice{padding:14px}.footer{justify-content:stretch}.footer .button{flex:1 1 180px}}@media(max-width:420px){main{padding:18px 12px 14px}li{align-items:stretch;flex-direction:column}.row-actions,.actions,.footer{align-items:stretch;flex-direction:column}.button{width:100%}}@media(prefers-color-scheme:dark){:root{background:#202124;color:#f1f3f4}.lead,.profile,.meta,.muted{color:#9aa0a6}.card,.notice{background:#292a2d;border-color:#45464a}.error-detail{background:#202124}.button:hover{background:#35363a}.pill{background:#3c4043}ul,li{border-color:#45464a}}
+    :root{color-scheme:light dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f3f5;color:#202124}*{box-sizing:border-box}body{margin:0}main{width:min(820px,100%);margin:0 auto;padding:34px 30px 28px}h1{font-size:28px;margin:0 0 8px}h2{font-size:17px;margin:0 0 10px}p{margin:7px 0}.lead{color:#5f6368;margin-bottom:20px}.profile{font-size:13px;color:#6b7280}.card,.notice{background:#fff;border:1px solid #dfe1e5;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 1px 2px #0000000d}.error-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:8px;padding:12px}.notice strong{display:block}.notice.error,.notice.warning{border-color:#d97706}.notice.success{border-color:#16a34a}.notice.info{border-color:#2563eb}ul{list-style:none;padding:0;margin:14px 0 0;border-top:1px solid #e5e7eb}li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e5e7eb}.meta{display:block;color:#6b7280;font-size:12px;margin-top:2px}.row-actions,.actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.actions{margin-top:15px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 13px;border:1px solid #9aa0a6;border-radius:9px;color:inherit;text-decoration:none;background:transparent}.button:hover{background:#eef0f2}.button.primary{background:#1a73e8;border-color:#1a73e8;color:white}.pill{font-size:12px;padding:3px 8px;border-radius:999px;background:#e8eaed}.muted{font-size:12px;color:#6b7280}.footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}.busy{opacity:.7;pointer-events:none}@media(max-width:640px){main{padding:22px 16px 18px}h1{font-size:24px}.card,.notice{padding:14px}.footer{justify-content:stretch}.footer .button{flex:1 1 180px}}@media(max-width:420px){main{padding:18px 12px 14px}li{align-items:stretch;flex-direction:column}.row-actions,.actions,.footer{align-items:stretch;flex-direction:column}.button{width:100%}.footer .button{flex:0 0 auto}}@media(prefers-color-scheme:dark){:root{background:#202124;color:#f1f3f4}.lead,.profile,.meta,.muted{color:#9aa0a6}.card,.notice{background:#292a2d;border-color:#45464a}.error-detail{background:#202124}.button:hover{background:#35363a}.pill{background:#3c4043}ul,li{border-color:#45464a}}
   </style>
 </head>
 <body><main class="${model.busy ? 'busy' : ''}">
   <h1>${escapeHtml(copy.title)}</h1>
   <p class="lead">${escapeHtml(copy.lead)}</p>
-  ${snapshot === undefined ? '' : `<p class="profile">${escapeHtml(copy.currentProfile)}：${escapeHtml(snapshot.profileName)}</p>`}
-  <section class="card"><h2>${escapeHtml(copy.startupError)}</h2><p class="profile">${escapeHtml(copy.startupStage)}：${escapeHtml(copy.stageLabels[model.failureStage])}</p><div class="error-detail">${escapeHtml(model.failureDetail.slice(0, MAX_FAILURE_DETAIL_LENGTH))}</div></section>
+  ${snapshot === undefined ? '' : `<p class="profile">${escapeHtml(copy.currentProfile)}${labelSeparator}${escapeHtml(snapshot.profileName)}</p>`}
+  <section class="card"><h2>${escapeHtml(copy.startupError)}</h2><p class="profile">${escapeHtml(copy.startupStage)}${labelSeparator}${escapeHtml(copy.stageLabels[model.failureStage])}</p><div class="error-detail">${escapeHtml(model.failureDetail.slice(0, MAX_FAILURE_DETAIL_LENGTH))}</div></section>
   ${model.snapshotError === undefined ? '' : noticeHtml({ tone: 'error', title: copy.plugins, body: model.snapshotError })}
   ${noticeHtml(model.notice)}
   ${model.busy ? `<section class="card"><p>${escapeHtml(copy.working)}</p></section>` : body}

@@ -43,6 +43,12 @@ const NOTIFICATION_COPY: Record<DesktopLocale, Record<NotificationOutcome, Deskt
     'job-completed': { title: '后台任务已完成', body: '有一个后台任务已结束。' },
     'job-failed': { title: '后台任务失败', body: '有一个后台任务需要处理。' },
   },
+  ru: {
+    'turn-completed': { title: 'Пользовательский запрос выполнен', body: 'Обработка пользовательского запроса завершена.' },
+    'turn-failed': { title: 'Не удалось выполнить пользовательский запрос', body: 'Пользовательский запрос требует внимания.' },
+    'job-completed': { title: 'Фоновая задача выполнена', body: 'Выполнение фоновой задачи завершено.' },
+    'job-failed': { title: 'Фоновая задача завершилась с ошибкой', body: 'Фоновая задача требует внимания.' },
+  },
 }
 
 interface OpenTurn {

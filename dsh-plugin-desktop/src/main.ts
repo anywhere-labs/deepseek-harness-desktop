@@ -89,6 +89,13 @@ import {
 } from './windows-volume-diagnostics.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { desktopLocaleFromLanguageTag } from './tray-locale.ts'
+import {
+  desktopInstallRollbackCopy,
+  desktopProfileRecoveryNotification,
+  desktopSkippedOptionalEntriesNotification,
+  desktopWindowsVolumeNotification,
+} from './native-locale.ts'
+import type { DesktopLocale } from './runtime.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const PRODUCT_NAME = 'DSH Desktop'
@@ -98,7 +105,7 @@ class RendererStartupFailure extends Error {
     readonly reason: Extract<DesktopInstallRecoveryFailureReason, 'renderer-failed' | 'renderer-timeout'>,
     report: Extract<RendererBootReport, { status: 'failed' }>,
   ) {
-    super(report.error ?? `Renderer boot failed for ${String(report.plugins.length)} plugin(s)`)
+    super(report.error ?? `Renderer boot failed; plugin count: ${String(report.plugins.length)}`)
     this.name = 'RendererStartupFailure'
   }
 }
@@ -118,9 +125,14 @@ function lifecycleStartupFailureReason(
 }
 
 /** Report profile recovery without changing startup or rollback outcomes. */
-function notifyProfileRecovery(runtime: ElectronDesktopRuntime, logger: DesktopLogger, body: string): void {
+function notifyProfileRecovery(
+  runtime: ElectronDesktopRuntime,
+  logger: DesktopLogger,
+  profileName: string,
+  state: 'reopened' | 'reopening',
+): void {
   try {
-    runtime.updates.notify({ title: 'Unable to Open Profile', body })
+    runtime.updates.notify(desktopProfileRecoveryNotification(runtime.locale, profileName, state))
   } catch (cause) {
     logger.error(`${BIN_NAME}: failed to show profile recovery notification: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
@@ -129,22 +141,10 @@ function notifyProfileRecovery(runtime: ElectronDesktopRuntime, logger: DesktopL
 /** Explain a completed cross-restart install rollback after Desktop is healthy again. */
 async function showInstallRollbackNotice(
   transaction: DesktopInstallRecoveryTransaction,
-  locale: 'en' | 'zh',
+  locale: DesktopLocale,
   logger: DesktopLogger,
 ): Promise<boolean> {
-  const copy = locale === 'zh'
-    ? {
-        title: '插件安装已回滚',
-        message: `DSH Desktop 已恢复安装 ${transaction.packageName} 前的配置。`,
-        detail: '上一次启动未能通过健康验证。DSH Desktop 已在本地保存诊断信息，并恢复 package.json、pnpm-lock.yaml 和 pnpm-workspace.yaml；诊断信息不会自动上传。',
-        confirm: '知道了',
-      }
-    : {
-        title: 'Plugin installation rolled back',
-        message: `DSH Desktop restored the configuration from before ${transaction.packageName} was installed.`,
-        detail: 'The previous startup did not pass its health check. DSH Desktop saved diagnostics locally and restored package.json, pnpm-lock.yaml, and pnpm-workspace.yaml. Diagnostics are not uploaded automatically.',
-        confirm: 'OK',
-      }
+  const copy = desktopInstallRollbackCopy(locale, transaction.packageName)
   try {
     await dialog.showMessageBox({
       type: 'info',
@@ -171,12 +171,10 @@ function notifySkippedOptionalEntries(
 ): void {
   if (entries.length === 0) return
   const names = entries.map(entry => entry.name)
-  const suffix = names.length > 1 ? ` and ${names.length - 1} more` : ''
+  const notification = desktopSkippedOptionalEntriesNotification(runtime.locale, names)
+  if (notification === undefined) return
   try {
-    runtime.updates.notify({
-      title: 'Skipped Unavailable UI Plugin',
-      body: `${names[0]} is not installed in this profile${suffix}.`,
-    })
+    runtime.updates.notify(notification)
   } catch (cause) {
     logger.error(`${BIN_NAME}: failed to show skipped plugin notification: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
@@ -197,10 +195,7 @@ function notifyWindowsVolumeConcerns(
 ): void {
   if (concerns.length === 0) return
   try {
-    runtime.updates.notify({
-      title: 'Storage May Be Unsupported',
-      body: `${concerns[0]?.label ?? 'A configured path'} is on a volume that may break sandboxed commands or plugin installs.`,
-    })
+    runtime.updates.notify(desktopWindowsVolumeNotification(runtime.locale, concerns[0]?.label))
   } catch (cause) {
     logger.error(`${BIN_NAME}: failed to show Windows volume warning: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
@@ -714,7 +709,8 @@ async function start(): Promise<void> {
       notifyProfileRecovery(
         runtime,
         electronLogger,
-        `Reopened last-known-good profile ${activeProfileName}.`,
+        activeProfileName,
+        'reopened',
       )
     }
   } catch (cause) {
@@ -767,7 +763,8 @@ async function start(): Promise<void> {
           notifyProfileRecovery(
             runtime,
             electronLogger,
-            `Reopening last-known-good profile ${profileStartup.state.lastKnownGood}.`,
+            profileStartup.state.lastKnownGood,
+            'reopening',
           )
         }
       } catch (stateCause) {

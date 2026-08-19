@@ -11,8 +11,8 @@ export type DesktopShellMode = 'compatibility' | 'advanced'
 /** Electron appearance source used by native frame and material rendering. */
 export type DesktopThemeSource = 'system' | 'light' | 'dark'
 
-/** Locale identifiers shared by the Web client and native desktop tray. */
-export type DesktopLocale = 'zh' | 'en'
+/** Locale identifiers supported by desktop-owned native surfaces. */
+export type DesktopLocale = 'zh' | 'en' | 'ru'
 
 /** Window values resolved from the desktop-shell Cordis row. */
 export interface DesktopWindowConfig {
