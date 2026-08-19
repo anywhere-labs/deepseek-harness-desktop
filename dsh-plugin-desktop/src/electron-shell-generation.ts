@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -16,6 +19,53 @@ import { desktopWindowOptions } from './window-options.ts'
 
 const MIN_ZOOM_LEVEL = -4
 const MAX_ZOOM_LEVEL = 4
+
+/** Stable UUID used as the macOS NSStatusItem autosave name so the user-dragged status bar position survives relaunches. */
+export const TRAY_GUID = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d'
+
+/** Fallback bundle identifier used when the running executable is not inside an app bundle. */
+const DESKTOP_BUNDLE_ID = 'ai.deepseek.dsh.desktop'
+
+/** CFPreferences key macOS uses to persist one NSStatusItem autosave position. */
+const trayPositionKey = (): string => `NSStatusItem Preferred Position ${TRAY_GUID}`
+
+let cachedBundleIdentifier: string | undefined
+
+/** Resolve the running app's CFBundleIdentifier so the defaults domain matches what macOS writes. */
+function applicationBundleIdentifier(): string {
+  if (cachedBundleIdentifier === undefined) {
+    try {
+      const bundleRoot = resolve(dirname(process.execPath), '..', '..')
+      const plist = readFileSync(join(bundleRoot, 'Info.plist'), 'utf8')
+      const match = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist)
+      cachedBundleIdentifier = match !== null ? match[1] : DESKTOP_BUNDLE_ID
+    } catch {
+      cachedBundleIdentifier = DESKTOP_BUNDLE_ID
+    }
+  }
+  return cachedBundleIdentifier ?? DESKTOP_BUNDLE_ID
+}
+
+/** Read the current macOS autosaved tray position from the app preferences domain. */
+function readSavedTrayPosition(): number | undefined {
+  const result = spawnSync(
+    '/usr/bin/defaults',
+    ['read', applicationBundleIdentifier(), trayPositionKey()],
+    { encoding: 'utf8', timeout: 2_000 },
+  )
+  if (result.error !== undefined || result.status !== 0) return undefined
+  const value = Number.parseInt(result.stdout.trim(), 10)
+  return Number.isFinite(value) ? value : undefined
+}
+
+/** Write the macOS autosave position so the next tray creation restores the previous spot. */
+function writeSavedTrayPosition(value: number): void {
+  spawnSync(
+    '/usr/bin/defaults',
+    ['write', applicationBundleIdentifier(), trayPositionKey(), '-int', String(value)],
+    { encoding: 'utf8', timeout: 2_000 },
+  )
+}
 
 function clampedZoomLevel(level: number): number {
   return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level))
@@ -49,6 +99,35 @@ export class ElectronShellGeneration {
   private cleanupListeners: (() => void) | undefined
 
   constructor(private readonly options: ElectronShellGenerationOptions) {}
+
+  private trayPositionBackupPath(): string {
+    return join(app.getPath('userData'), 'tray-autosave-position')
+  }
+
+  /** Preserve the current macOS tray position before the item is destroyed. */
+  private backupTrayPosition(): void {
+    if (this.options.platform.platform !== 'darwin') return
+    const position = readSavedTrayPosition()
+    if (position === undefined) return
+    try {
+      writeFileSync(this.trayPositionBackupPath(), String(position), { mode: 0o600 })
+    } catch {
+      // Best-effort: losing the backup only means the icon starts at the default slot.
+    }
+  }
+
+  /** Reapply the last known macOS tray position before the item is recreated. */
+  private restoreTrayPosition(): void {
+    if (this.options.platform.platform !== 'darwin') return
+    let position: number | undefined
+    try {
+      const value = Number.parseInt(readFileSync(this.trayPositionBackupPath(), 'utf8').trim(), 10)
+      position = Number.isFinite(value) ? value : undefined
+    } catch {
+      position = undefined
+    }
+    if (position !== undefined) writeSavedTrayPosition(position)
+  }
 
   async mount(beforeInteractive?: () => void): Promise<void> {
     if (this.mounted || this.window !== undefined) {
@@ -169,7 +248,8 @@ export class ElectronShellGeneration {
 
     try {
       await window.loadURL(spec.url)
-      tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
+      this.restoreTrayPosition()
+      tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform), TRAY_GUID)
       this.tray = tray
       tray.setToolTip(spec.productName)
       this.refreshTrayMenu()
@@ -219,6 +299,7 @@ export class ElectronShellGeneration {
 
     this.cleanupListeners?.()
     this.cleanupListeners = undefined
+    this.backupTrayPosition()
     tray?.destroy()
     if (!window.isDestroyed()) window.destroy()
   }

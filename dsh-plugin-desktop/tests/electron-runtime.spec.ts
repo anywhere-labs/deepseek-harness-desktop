@@ -1,5 +1,7 @@
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { TRAY_GUID } from '../src/electron-shell-generation.ts'
 import type { DesktopShellSpec } from '../src/runtime.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
@@ -34,6 +36,12 @@ const childProcess = vi.hoisted(() => {
     },
     reset() { listeners.clear() },
     spawn: vi.fn(() => child),
+    spawnSync: vi.fn((command: string, args: string[]) => {
+      if (command === '/usr/bin/defaults' && args[0] === 'read') {
+        return { status: 0, stdout: '123\n', stderr: '', signal: null, error: undefined }
+      }
+      return { status: 0, stdout: '', stderr: '', signal: null, error: undefined }
+    }),
   }
 })
 
@@ -57,6 +65,7 @@ vi.mock('../src/update-download.ts', () => ({
 vi.mock('node:child_process', async (importOriginal) => ({
   ...await importOriginal<typeof import('node:child_process')>(),
   spawn: childProcess.spawn,
+  spawnSync: childProcess.spawnSync,
 }))
 
 const electron = vi.hoisted(() => {
@@ -122,14 +131,16 @@ const electron = vi.hoisted(() => {
 
   class Tray {
     readonly image: unknown
+    readonly guid: string | undefined
     readonly setToolTip = vi.fn()
     readonly setContextMenu = vi.fn()
     readonly on = vi.fn()
     readonly off = vi.fn()
     readonly destroy = vi.fn()
 
-    constructor(image: unknown) {
+    constructor(image: unknown, guid?: string) {
       this.image = image
+      this.guid = guid
       trays.push(this)
     }
   }
@@ -318,6 +329,7 @@ describe('Electron compatibility runtime', () => {
     expect(electron.app.dock.setIcon).toHaveBeenCalledWith(electron.appIcon)
     expect(electron.templateIcon.setTemplateImage).toHaveBeenCalledWith(true)
     expect(electron.trays[0]?.image).toBe(electron.templateIcon)
+    expect(electron.trays[0]?.guid).toBe(TRAY_GUID)
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Advanced Mode', enabled: true }),
     ]))
@@ -331,6 +343,39 @@ describe('Electron compatibility runtime', () => {
     await release()
     expect(electron.browserWindowOff).toHaveBeenCalledWith('page-title-updated', titleListener)
     expect(electron.trays[0]?.off).toHaveBeenCalledWith('click', expect.any(Function))
+  })
+
+  it('backs up and restores the macOS tray position around shell generation', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const userData = electron.app.getPath('userData')
+    mkdirSync(userData, { recursive: true })
+    const backupPath = join(userData, 'tray-autosave-position')
+    writeFileSync(backupPath, '432\n', { mode: 0o600 })
+
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    const writeCall = childProcess.spawnSync.mock.calls.find(([, args]) =>
+      args[0] === 'write' && args[1] === 'ai.deepseek.dsh.desktop')
+    expect(writeCall?.[1]).toEqual([
+      'write',
+      'ai.deepseek.dsh.desktop',
+      `NSStatusItem Preferred Position ${TRAY_GUID}`,
+      '-int',
+      '432',
+    ])
+
+    await release()
+
+    const readCall = childProcess.spawnSync.mock.calls.find(([, args]) =>
+      args[0] === 'read' && args[1] === 'ai.deepseek.dsh.desktop')
+    expect(readCall).toBeDefined()
+    expect(readFileSync(backupPath, 'utf8')).toBe('123')
+
+    rmSync(userData, { recursive: true, force: true })
   })
 
   it('uses the Windows caption, hidden menu bar, removed menu, and fixed blue tray image', async () => {
