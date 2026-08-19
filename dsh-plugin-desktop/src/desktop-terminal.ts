@@ -14,6 +14,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { basename, dirname, join, win32 } from 'node:path'
 import { DESKTOP_INSTALL_RECOVERY_STATE_ENV } from './install-recovery.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
+import type { DesktopLocale } from './runtime.ts'
+import { desktopTerminalCopy } from './terminal-locale.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const DEFAULT_PROFILE = 'DSH_DESKTOP_DEFAULT_PROFILE'
@@ -81,6 +83,8 @@ export interface WindowsTerminalLauncher {
 export interface DesktopTerminalOptions {
   /** Host platform selecting the generated scripts and native launcher. */
   platform: NodeJS.Platform
+  /** Desktop locale used only for explanatory terminal welcome copy. */
+  locale: DesktopLocale
   /** Electron executable reused as Node by command shims. */
   appExecutable: string
   /** Desktop-owned bootstrap that clears Node mode before importing the `dsh` CLI. */
@@ -332,6 +336,7 @@ function macWelcome(
   shimDir: string,
   bashRcPath: string,
 ): string {
+  const copy = desktopTerminalCopy(options.locale)
   const commandHelp = 'dsh --dump-config'
   const pluginAdd = 'dsh plugin add <third-party-plugin>'
   const pluginRemove = 'dsh plugin remove <third-party-plugin>'
@@ -343,17 +348,17 @@ function macWelcome(
     `export PATH=${quoteSh(shimDir)}:"\${PATH:-}"`,
     `cd ${quoteSh(options.profileDir)}`,
     "printf '\\033[2J\\033[3J\\033[H'",
-    `printf '%s\\n' ${quoteSh(`DSH Desktop ${options.productVersion} terminal`)}`,
-    `printf '%s\\n' ${quoteSh(`Profile: ${options.profileName}`)}`,
-    `printf '%s\\n' ${quoteSh(`Profile directory: ${options.profileDir}`)}`,
-    `printf '%s\\n' ${quoteSh(`Harness home: ${options.homeDir}`)}`,
-    `printf '%s\\n' ${quoteSh(`Plugin commands without --profile modify the ${options.profileName} profile.`)}`,
-    `printf '%s\\n' ${quoteSh('Commands:')}`,
+    `printf '%s\\n' ${quoteSh(copy.title(options.productVersion))}`,
+    `printf '%s\\n' ${quoteSh(copy.profile(options.profileName))}`,
+    `printf '%s\\n' ${quoteSh(copy.profileDirectory(options.profileDir))}`,
+    `printf '%s\\n' ${quoteSh(copy.harnessHome(options.homeDir))}`,
+    `printf '%s\\n' ${quoteSh(copy.profileMutationNotice(options.profileName))}`,
+    `printf '%s\\n' ${quoteSh(copy.commands)}`,
     `printf '  %s\\n' ${quoteSh(commandHelp)}`,
     `printf '  %s\\n' ${quoteSh(pluginAdd)}`,
     `printf '  %s\\n' ${quoteSh(pluginRemove)}`,
     `printf '  %s\\n' ${quoteSh(pluginUpdate)}`,
-    `printf '%s\\n' ${quoteSh('Restart DSH Desktop after plugin changes.')}`,
+    `printf '%s\\n' ${quoteSh(copy.restartNotice)}`,
     'case "${SHELL:-/bin/zsh}" in',
     '  */bash)',
     '    export DSH_DESKTOP_USER_BASHRC="${HOME:-}/.bashrc"',
@@ -375,54 +380,57 @@ function macWelcome(
 }
 
 /** Build the PowerShell script that remains active in the new console. */
-function windowsWelcome(): string {
+function windowsWelcome(locale: DesktopLocale): string {
+  const copy = desktopTerminalCopy(locale)
   const commandHelp = 'dsh --dump-config'
   const pluginAdd = 'dsh plugin add <third-party-plugin>'
   const pluginRemove = 'dsh plugin remove <third-party-plugin>'
   const pluginUpdate = 'dsh plugin update'
   return [
-    `Remove-Item Env:${RUN_AS_NODE} -ErrorAction SilentlyContinue`,
+    (locale === 'en' ? '' : '\uFEFF') + `Remove-Item Env:${RUN_AS_NODE} -ErrorAction SilentlyContinue`,
     `$dshDesktopShimDir = $env:${WINDOWS_SHIM_DIRECTORY}`,
     `$dshDesktopPath = @($env:${PATH} -split ';' | Where-Object { -not [string]::Equals($_, $dshDesktopShimDir, [StringComparison]::OrdinalIgnoreCase) })`,
     `$env:${PATH} = (@($dshDesktopShimDir) + $dshDesktopPath) -join ';'`,
     `Set-Location -LiteralPath $env:${WINDOWS_PROFILE_DIRECTORY}`,
-    `Write-Host ("DSH Desktop {0} terminal" -f $env:${WINDOWS_PRODUCT_VERSION})`,
-    `Write-Host ("Profile: {0}" -f $env:${DEFAULT_PROFILE})`,
-    `Write-Host ("Profile directory: {0}" -f $env:${WINDOWS_PROFILE_DIRECTORY})`,
-    `Write-Host ("Harness home: {0}" -f $env:${DSH_HOME})`,
-    `Write-Host ("Plugin commands without --profile modify the {0} profile." -f $env:${DEFAULT_PROFILE})`,
-    `Write-Host 'Commands:'`,
+    `Write-Host ("${copy.title('{0}')}" -f $env:${WINDOWS_PRODUCT_VERSION})`,
+    `Write-Host ("${copy.profile('{0}')}" -f $env:${DEFAULT_PROFILE})`,
+    `Write-Host ("${copy.profileDirectory('{0}')}" -f $env:${WINDOWS_PROFILE_DIRECTORY})`,
+    `Write-Host ("${copy.harnessHome('{0}')}" -f $env:${DSH_HOME})`,
+    `Write-Host ("${copy.profileMutationNotice('{0}')}" -f $env:${DEFAULT_PROFILE})`,
+    `Write-Host '${copy.commands}'`,
     `Write-Host '  ${commandHelp}'`,
     `Write-Host '  ${pluginAdd}'`,
     `Write-Host '  ${pluginRemove}'`,
     `Write-Host '  ${pluginUpdate}'`,
-    `Write-Host 'Restart DSH Desktop after plugin changes.'`,
+    `Write-Host '${copy.restartNotice}'`,
     '',
   ].join('\r\n')
 }
 
 /** Build the fallback batch welcome script used when PowerShell is unavailable. */
-function windowsCmdWelcome(): string {
+function windowsCmdWelcome(locale: DesktopLocale): string {
+  const copy = desktopTerminalCopy(locale)
   const commandHelp = 'dsh --dump-config'
   const pluginAdd = 'dsh plugin add <third-party-plugin>'
   const pluginRemove = 'dsh plugin remove <third-party-plugin>'
   const pluginUpdate = 'dsh plugin update'
   return [
     '@echo off',
+    'chcp 65001 >nul',
     'setlocal EnableDelayedExpansion',
     `set "${RUN_AS_NODE}="`,
     `cd /d "!${WINDOWS_PROFILE_DIRECTORY}!"`,
-    `echo(DSH Desktop !${WINDOWS_PRODUCT_VERSION}! terminal`,
-    `echo(Profile: !${DEFAULT_PROFILE}!`,
-    `echo(Profile directory: !${WINDOWS_PROFILE_DIRECTORY}!`,
-    `echo(Harness home: !${DSH_HOME}!`,
-    `echo(Plugin commands without --profile modify the !${DEFAULT_PROFILE}! profile.`,
-    'echo(Commands:',
+    `echo(${escapeBatchText(copy.title(`!${WINDOWS_PRODUCT_VERSION}!`))}`,
+    `echo(${escapeBatchText(copy.profile(`!${DEFAULT_PROFILE}!`))}`,
+    `echo(${escapeBatchText(copy.profileDirectory(`!${WINDOWS_PROFILE_DIRECTORY}!`))}`,
+    `echo(${escapeBatchText(copy.harnessHome(`!${DSH_HOME}!`))}`,
+    `echo(${escapeBatchText(copy.profileMutationNotice(`!${DEFAULT_PROFILE}!`))}`,
+    `echo(${escapeBatchText(copy.commands)}`,
     `echo(  ${escapeBatchText(commandHelp)}`,
     `echo(  ${escapeBatchText(pluginAdd)}`,
     `echo(  ${escapeBatchText(pluginRemove)}`,
     `echo(  ${escapeBatchText(pluginUpdate)}`,
-    `echo(${escapeBatchText('Restart DSH Desktop after plugin changes.')}`,
+    `echo(${escapeBatchText(copy.restartNotice)}`,
     'endlocal & set "ELECTRON_RUN_AS_NODE="',
     '',
   ].join('\r\n')
@@ -479,8 +487,8 @@ function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTe
     replacePrivateFile(files.dshShimPath, windowsDshShim(), PRIVATE_FILE_MODE)
     replacePrivateFile(files.pnpmShimPath, windowsPnpmShim(), PRIVATE_FILE_MODE)
     replacePrivateFile(files.nodeShimPath, windowsShim(), PRIVATE_FILE_MODE)
-    replacePrivateFile(files.welcomePath, windowsWelcome(), PRIVATE_FILE_MODE)
-    replacePrivateFile(windowsCmdWelcomePath, windowsCmdWelcome(), PRIVATE_FILE_MODE)
+    replacePrivateFile(files.welcomePath, windowsWelcome(options.locale), PRIVATE_FILE_MODE)
+    replacePrivateFile(windowsCmdWelcomePath, windowsCmdWelcome(options.locale), PRIVATE_FILE_MODE)
     return files
   }
   throw new Error(`dsh-plugin-desktop: terminal is unsupported on ${options.platform}`)

@@ -51,6 +51,28 @@ describe('Desktop startup recovery document', () => {
     expect(html).not.toMatch(/\son[a-z]+\s*=/iu)
   })
 
+  it('renders the complete Russian recovery surface with the correct document language', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel({
+      locale: 'ru',
+      failureStage: 'health-commit',
+      failureDetail: 'health check failed for plugin@example',
+      diagnostics: { status: 'failed' },
+      configurationAvailable: true,
+      snapshot: { profileName: 'основной', bundles: [] },
+    }))
+
+    expect(html).toContain('<html lang="ru">')
+    expect(html).toContain('<title>Восстановление DSH Desktop</title>')
+    expect(html).toContain('Проверка работоспособности после запуска')
+    expect(html).toContain('Сохранить данные диагностики')
+    expect(html).toContain('Открыть список плагинов')
+    expect(html).toContain('Текущий профиль: основной')
+    expect(html).not.toContain('Текущий профиль：')
+    expect(html).toContain('Перезапустить DSH Desktop')
+    expect(html).toContain('health check failed for plugin@example')
+    expect(html).not.toContain('诊断信息')
+  })
+
   it('keeps the page and footer usable at narrow widths', () => {
     const html = renderDesktopStartupRecoveryHtml(viewModel())
 
@@ -59,6 +81,7 @@ describe('Desktop startup recovery document', () => {
     expect(html).toContain('.footer .button{flex:1 1 180px}')
     expect(html).toContain('@media(max-width:420px)')
     expect(html).toContain('.row-actions,.actions,.footer{align-items:stretch;flex-direction:column}')
+    expect(html).toContain('.footer .button{flex:0 0 auto}')
   })
 
   it('escapes failure, profile, bundle, diagnostics, and notice values', () => {

@@ -38,6 +38,7 @@ import {
   desktopLocaleFromLanguageTag,
   desktopTrayLabel,
 } from './tray-locale.ts'
+import { desktopNativeCopy } from './native-locale.ts'
 import {
   desktopUpdateFilename,
   downloadDesktopUpdate,
@@ -307,6 +308,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       }
       openDesktopTerminal({
         platform: this.platform,
+        locale: this.currentLocale,
         appExecutable: process.execPath,
         dshBootstrapPath: fileURLToPath(new URL('./desktop-cli.js', import.meta.url)),
         pnpmBinPath: packagedDependencyPath(import.meta.url, 'pnpm/bin/pnpm.mjs'),
@@ -420,16 +422,17 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   private async showRendererBootRecovery(report: Extract<RendererBootReport, { status: 'failed' }>): Promise<void> {
+    const copy = desktopNativeCopy(this.currentLocale).pluginRecovery
     const plugins = report.plugins.length === 0
-      ? 'Unknown client plugin'
+      ? copy.unknownPlugin
       : report.plugins.map(plugin => `- ${plugin}`).join('\n')
-    const error = report.error === undefined ? 'The client Loader did not provide an error message.' : report.error
+    const error = report.error === undefined ? copy.unknownError : report.error
     const result = await dialog.showMessageBox({
       type: 'error',
-      title: 'Plugin Recovery',
-      message: 'DSH Desktop could not load all plugins.',
-      detail: `Failed plugins:\n${plugins}\n\n${error}\n\nOpen DSH Terminal to update or remove the failing third-party plugin, then restart DSH Desktop.`,
-      buttons: ['Open DSH Terminal', 'Restart DSH Desktop', 'Dismiss'],
+      title: copy.title,
+      message: copy.message,
+      detail: copy.detail(plugins, error),
+      buttons: [copy.openTerminal, copy.restart, copy.dismiss],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
@@ -486,12 +489,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** Ask before making the fixed download endpoint's counted request. */
   private async confirmUpdateDownload(version: string): Promise<boolean> {
+    const copy = desktopNativeCopy(this.currentLocale).updates
     const result = await dialog.showMessageBox({
       type: 'info',
-      title: 'DSH Desktop Update Available',
-      message: `DSH Desktop ${version} is available.`,
-      detail: 'Download this update now?',
-      buttons: ['Download', 'Later'],
+      title: copy.availableTitle,
+      message: copy.availableMessage(version),
+      detail: copy.downloadPrompt,
+      buttons: [copy.download, copy.later],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
@@ -501,13 +505,14 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** Report one user-triggered check without exposing network or response details. */
   private async showManualUpdateCheckResult(result: UpdateCheckResult | null): Promise<void> {
+    const copy = desktopNativeCopy(this.currentLocale).updates
     if (result === null) {
       await dialog.showMessageBox({
         type: 'warning',
-        title: 'Unable to Check for Updates',
-        message: 'DSH Desktop could not check for updates.',
-        detail: 'Please try again later.',
-        buttons: ['OK'],
+        title: copy.checkFailedTitle,
+        message: copy.checkFailedMessage,
+        detail: copy.tryAgainLater,
+        buttons: [copy.ok],
         defaultId: 0,
         noLink: true,
       })
@@ -517,10 +522,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     if (result.status === 'up-to-date') {
       await dialog.showMessageBox({
         type: 'info',
-        title: 'DSH Desktop Is Up to Date',
-        message: 'No newer version of DSH Desktop is available.',
-        detail: `Installed version: ${result.currentVersion}`,
-        buttons: ['OK'],
+        title: copy.upToDateTitle,
+        message: copy.upToDateMessage,
+        detail: copy.installedVersion(result.currentVersion),
+        buttons: [copy.ok],
         defaultId: 0,
         noLink: true,
       })
@@ -529,10 +534,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
     await dialog.showMessageBox({
       type: 'info',
-      title: 'DSH Desktop Update Available',
-      message: `DSH Desktop ${result.latestVersion} is available.`,
-      detail: 'Installer downloads are unavailable in this build.',
-      buttons: ['OK'],
+      title: copy.availableTitle,
+      message: copy.availableMessage(result.latestVersion),
+      detail: copy.downloadUnavailable,
+      buttons: [copy.ok],
       defaultId: 0,
       noLink: true,
     })
@@ -556,6 +561,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     })
     signal.throwIfAborted()
     const artifact: DesktopUpdateArtifact = { platform, version, path: artifactPath }
+    const copy = desktopNativeCopy(this.currentLocale).updates
     try {
       await recordDesktopUpdateArtifact(app.getPath('userData'), artifact)
     } catch (cause) {
@@ -568,10 +574,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       signal.throwIfAborted()
       await dialog.showMessageBox({
         type: 'info',
-        title: 'DSH Desktop Update Downloaded',
-        message: `DSH Desktop ${version} is ready to install.`,
-        detail: 'The disk image has opened. Replace DSH Desktop in Applications, then reopen it.',
-        buttons: ['OK'],
+        title: copy.downloadedTitle,
+        message: copy.readyToInstall(version),
+        detail: copy.macInstallDetail,
+        buttons: [copy.ok],
         defaultId: 0,
         noLink: true,
       })
@@ -580,10 +586,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
     const result = await dialog.showMessageBox({
       type: 'info',
-      title: 'DSH Desktop Update Downloaded',
-      message: `DSH Desktop ${version} is ready to install.`,
-      detail: 'Restart DSH Desktop and run the installer now?',
-      buttons: ['Restart and Install', 'Later'],
+      title: copy.downloadedTitle,
+      message: copy.readyToInstall(version),
+      detail: copy.windowsInstallDetail,
+      buttons: [copy.restartAndInstall, copy.later],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
@@ -600,17 +606,17 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   private async chooseUpdateDestination(version: string): Promise<string | undefined> {
     if (this.platform !== 'darwin' && this.platform !== 'win32') return undefined
-    const zh = this.currentLocale === 'zh'
+    const copy = desktopNativeCopy(this.currentLocale).updates
     const filename = desktopUpdateFilename(this.platform, version)
     const extension = this.platform === 'darwin' ? 'dmg' : 'exe'
     const result = await dialog.showSaveDialog({
-      title: zh ? '保存更新安装包' : 'Save Update Installer',
+      title: copy.saveInstallerTitle,
       defaultPath: join(app.getPath('downloads'), filename),
-      buttonLabel: zh ? '保存并下载' : 'Save and Download',
+      buttonLabel: copy.saveAndDownload,
       filters: [{
         name: this.platform === 'darwin'
-          ? zh ? '磁盘映像' : 'Disk Image'
-          : zh ? 'Windows 安装程序' : 'Windows Installer',
+          ? copy.diskImage
+          : copy.windowsInstaller,
         extensions: [extension],
       }],
       properties: ['createDirectory', 'showOverwriteConfirmation', 'dontAddToRecent'],
@@ -632,17 +638,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const userDataPath = app.getPath('userData')
     const artifact = await pendingDesktopUpdateArtifact(userDataPath, PRODUCT_VERSION, this.platform)
     if (artifact === undefined) return
-    const zh = this.currentLocale === 'zh'
+    const copy = desktopNativeCopy(this.currentLocale).updates
     const result = await dialog.showMessageBox({
       type: 'question',
-      title: zh ? '删除更新安装包' : 'Remove Update Installer',
-      message: zh
-        ? `DSH Desktop ${artifact.version} 已安装。`
-        : `DSH Desktop ${artifact.version} has been installed.`,
-      detail: zh
-        ? `是否删除下载的安装包以释放磁盘空间？\n\n${artifact.path}`
-        : `Delete the downloaded installer to free disk space?\n\n${artifact.path}`,
-      buttons: zh ? ['删除安装包', '保留安装包'] : ['Delete Installer', 'Keep Installer'],
+      title: copy.removeInstallerTitle,
+      message: copy.installedMessage(artifact.version),
+      detail: copy.removeInstallerDetail(artifact.path),
+      buttons: [copy.deleteInstaller, copy.keepInstaller],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
@@ -683,7 +685,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const error = cause instanceof Error ? cause : new Error(String(cause))
     this.logError(`dsh-plugin-desktop: failed to open terminal: ${error.message}`)
     try {
-      dialog.showErrorBox('Unable to Open DSH Terminal', error.message)
+      dialog.showErrorBox(desktopNativeCopy(this.currentLocale).terminalErrorTitle, error.message)
     } catch (dialogCause) {
       this.logError(`dsh-plugin-desktop: failed to show terminal error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}`)
     }
@@ -694,7 +696,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const error = cause instanceof Error ? cause : new Error(String(cause))
     this.logError(`dsh-plugin-desktop: failed to export diagnostics: ${error.message}`)
     try {
-      dialog.showErrorBox('Unable to Export Diagnostics', error.message)
+      dialog.showErrorBox(desktopNativeCopy(this.currentLocale).diagnosticsErrorTitle, error.message)
     } catch (dialogCause) {
       this.logError(`dsh-plugin-desktop: failed to show diagnostics error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}`)
     }

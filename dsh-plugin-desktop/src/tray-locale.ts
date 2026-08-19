@@ -45,6 +45,20 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     unavailableForDesktop: profileName => `${profileName}（不可用于桌面端）`,
     updateAvailable: version => `DSH Desktop ${version} 可用`,
   },
+  ru: {
+    checkForUpdates: () => 'Проверить обновления…',
+    checkingForUpdates: () => 'Проверяем обновления…',
+    downloadingUpdate: version => `Загрузка обновления DSH Desktop ${version}…`,
+    exportDiagnostics: () => 'Экспортировать данные диагностики…',
+    openDesktop: productName => `Открыть ${productName}`,
+    openTerminal: () => 'Открыть терминал DSH',
+    profile: profileName => `Профиль: ${profileName}`,
+    quit: () => 'Выйти',
+    switchToAdvanced: () => 'Перейти в расширенный режим',
+    switchToCompatibility: () => 'Перейти в режим совместимости',
+    unavailableForDesktop: profileName => `${profileName} (недоступен в DSH Desktop)`,
+    updateAvailable: version => `Доступна версия DSH Desktop ${version}`,
+  },
 }
 
 export interface DesktopDiagnosticsPrivacyCopy {
@@ -70,11 +84,20 @@ const diagnosticsPrivacyCopy: Record<DesktopLocale, DesktopDiagnosticsPrivacyCop
     confirm: '导出',
     cancel: '取消',
   },
+  ru: {
+    title: 'Экспорт данных диагностики',
+    message: 'Перед отправкой проверьте содержимое архива диагностики.',
+    detail: 'Архив содержит последние журналы приложения, локальные дампы сбоев и сведения о системе. В журналах могут быть локальные пути, идентификаторы рабочих областей и сессий, а в дампах — фрагменты памяти процесса. DSH Desktop маскирует распознанные учётные данные в журналах, но перед публикацией архива в открытом доступе всё равно проверьте его содержимое.',
+    confirm: 'Экспортировать',
+    cancel: 'Отмена',
+  },
 }
 
-/** Resolve DSH's zh/en locale from an Electron or browser language tag. */
+/** Resolve a native desktop locale from an Electron or browser language tag. */
 export function desktopLocaleFromLanguageTag(languageTag: string): DesktopLocale {
-  return /^zh(?:[-_]|$)/i.test(languageTag) ? 'zh' : 'en'
+  if (/^zh(?:[-_]|$)/i.test(languageTag)) return 'zh'
+  if (/^ru(?:[-_]|$)/i.test(languageTag)) return 'ru'
+  return 'en'
 }
 
 /** Resolve one native tray label in the active desktop locale. */

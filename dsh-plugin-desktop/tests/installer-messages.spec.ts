@@ -11,5 +11,6 @@ describe('Windows assisted installer messages', () => {
 
     expect(messages.installing?.zh_CN).toBe('DSH Desktop 正在安装，可能需要几分钟；请保持此窗口打开。')
     expect(messages.installing?.en).toContain('This may take several minutes')
+    expect(messages.installing?.ru).toBe('Установка DSH Desktop может занять несколько минут. Не закрывайте это окно.')
   })
 })
