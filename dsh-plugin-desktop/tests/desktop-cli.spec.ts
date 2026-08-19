@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  blockedBuildsHint,
   clearElectronRunAsNode,
   runDesktopDshCli,
   withDefaultDesktopProfile,
@@ -250,6 +251,78 @@ describe('packaged dsh bootstrap', () => {
       expect(packagedDependencyPath(moduleUrl, 'pnpm/bin/pnpm.mjs'))
         .toBe(join(realpathSync(root), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'))
     } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('prints the allowBuilds edit when pnpm left its blocked-build placeholder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-blocked-builds-hint-'))
+    const profileDir = join(root, 'profiles', 'desktop')
+    try {
+      mkdirSync(profileDir, { recursive: true })
+      writeFileSync(join(profileDir, 'pnpm-workspace.yaml'),
+        'allowBuilds:\n  node-pty: set this to true or false\n  @scope/pkg: set this to true or false\n')
+      const hint = await blockedBuildsHint(profileDir)
+      expect(hint).toContain('node-pty')
+      expect(hint).toContain('@scope/pkg')
+      expect(hint).toContain(join(profileDir, 'pnpm-workspace.yaml'))
+      expect(hint).toContain('allowBuilds:')
+      expect(hint).toContain('    node-pty: true')
+      expect(hint).toContain('    @scope/pkg: true')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('returns no hint when pnpm recorded no blocked-build placeholder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-blocked-builds-clean-'))
+    const profileDir = join(root, 'profiles', 'desktop')
+    try {
+      mkdirSync(profileDir, { recursive: true })
+      writeFileSync(join(profileDir, 'pnpm-workspace.yaml'), 'allowBuilds:\n  node-pty: true\n')
+      expect(await blockedBuildsHint(profileDir)).toBeUndefined()
+      expect(await blockedBuildsHint(join(root, 'missing'))).toBeUndefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('surfaces the allowBuilds edit before restoring a failed built-in terminal install', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-terminal-allowbuilds-'))
+    const homeDir = join(root, 'home')
+    const profileDir = join(homeDir, 'profiles', 'desktop')
+    const statePath = desktopInstallRecoveryStatePath(join(root, 'user-data'))
+    const manifestPath = join(profileDir, 'package.json')
+    const workspacePath = join(profileDir, 'pnpm-workspace.yaml')
+    const originalExitCode = process.exitCode
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    try {
+      mkdirSync(profileDir, { recursive: true })
+      const originalManifest = JSON.stringify({ dependencies: {} })
+      const originalWorkspace = 'packages:\n  - .\n'
+      writeFileSync(manifestPath, originalManifest)
+      writeFileSync(workspacePath, originalWorkspace)
+      await runDesktopDshCli({
+        DSH_HOME: homeDir,
+        DSH_DESKTOP_DEFAULT_PROFILE: 'desktop',
+        [DESKTOP_INSTALL_RECOVERY_STATE_ENV]: statePath,
+      }, async () => {
+        writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'broken-plugin': '0.0.0' } }))
+        writeFileSync(workspacePath, 'allowBuilds:\n  node-pty: set this to true or false\n')
+        process.exit(1)
+      }, [process.execPath, '/app/desktop-cli.js', 'plugin', 'add', 'broken-plugin'])
+
+      expect(readFileSync(manifestPath, 'utf8')).toBe(originalManifest)
+      expect(readFileSync(workspacePath, 'utf8')).toBe(originalWorkspace)
+      expect(existsSync(statePath)).toBe(false)
+      expect(process.exitCode).toBe(1)
+      const written = stderrWrite.mock.calls.map(call => String(call[0])).join('')
+      expect(written).toContain('pnpm blocked the build scripts of node-pty')
+      expect(written).toContain(join(profileDir, 'pnpm-workspace.yaml'))
+      expect(written).toContain('    node-pty: true')
+    } finally {
+      stderrWrite.mockRestore()
+      process.exitCode = originalExitCode
       rmSync(root, { recursive: true, force: true })
     }
   })
