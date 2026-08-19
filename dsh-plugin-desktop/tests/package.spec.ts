@@ -25,6 +25,9 @@ const manifest = JSON.parse(readFileSync(new URL('package.json', packageRoot), '
     electronFuses?: unknown
     files?: unknown
     mac?: {
+      entitlements?: unknown
+      entitlementsInherit?: unknown
+      extendInfo?: unknown
       hardenedRuntime?: unknown
       icon?: unknown
       mergeASARs?: unknown
@@ -48,6 +51,10 @@ const workspaceManifest = JSON.parse(readFileSync(new URL('package.json', worksp
   scripts?: Record<string, unknown>
 }
 const ciWorkflow = readFileSync(new URL('.github/workflows/ci.yml', workspaceRoot), 'utf8')
+const macEntitlements = [
+  readFileSync(new URL('build/entitlements.mac.plist', packageRoot), 'utf8'),
+  readFileSync(new URL('build/entitlements.mac.inherit.plist', packageRoot), 'utf8'),
+]
 
 describe('published package surface', () => {
   it('runs desktop and community market typechecks from the root command', () => {
@@ -451,12 +458,22 @@ describe('published package surface', () => {
       .toBe('yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dist:win-portable')
     expect(manifest.build?.afterPack).toBe('./scripts/verify-packaged-runtime.ts')
     expect(manifest.build?.mac).toEqual(expect.objectContaining({
+      entitlements: 'build/entitlements.mac.plist',
+      entitlementsInherit: 'build/entitlements.mac.inherit.plist',
+      extendInfo: {
+        NSMicrophoneUsageDescription: 'DSH Desktop needs microphone access for voice input.',
+      },
       hardenedRuntime: true,
       mergeASARs: false,
       notarize: true,
       target: ['dir'],
       x64ArchFiles: expect.stringContaining('node-pty/prebuilds/darwin-*'),
     }))
+    for (const entitlements of macEntitlements) {
+      expect(entitlements).toMatch(
+        /<key>com\.apple\.security\.device\.audio-input<\/key>\s*<true\/>/u,
+      )
+    }
     expect(manifest.build?.files).toContain('!node_modules/node-pty/build/**')
     expect(manifest.devDependencies?.['@electron/asar']).toBe('3.4.1')
   })

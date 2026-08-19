@@ -285,6 +285,11 @@
         "dir"
       ],
       "category": "public.app-category.developer-tools",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "DSH Desktop needs microphone access for voice input."
+      },
       "hardenedRuntime": true,
       "icon": "build/app-icon-mac.png",
       "mergeASARs": false,
