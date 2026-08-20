@@ -147,6 +147,7 @@ const childProcess = vi.hoisted(() => {
   const listeners = new Map<string, Listener[]>()
   const stdoutListeners = new Map<string, Listener[]>()
   let watcherPresent = true
+  let autoSettle = true
   const child = {
     stdout: {
       on: vi.fn((event: string, listener: Listener) => {
@@ -171,11 +172,13 @@ const childProcess = vi.hoisted(() => {
       listeners.clear()
       stdoutListeners.clear()
       watcherPresent = true
+      autoSettle = true
     },
     setWatcherPresent(present: boolean) { watcherPresent = present },
+    setAutoSettle(enabled: boolean) { autoSettle = enabled },
     spawn: vi.fn((_command: string, args: string[]) => {
       // Auto-settle the StatusNotifier probe so tests never hang on the bus.
-      if (args.includes('org.freedesktop.DBus.ListNames')) {
+      if (autoSettle && args.includes('org.freedesktop.DBus.ListNames')) {
         queueMicrotask(() => {
           if (watcherPresent) {
             for (const listener of [...(stdoutListeners.get('data') ?? [])]) {
@@ -224,10 +227,14 @@ describe('probeStatusNotifierWatcher', () => {
   it('resolves false after a timeout without a watcher response', async () => {
     vi.useFakeTimers()
     try {
+      // Disable the auto-settling queueMicrotask so the setTimeout path is
+      // exercised; otherwise the microtask resolves the probe first.
+      childProcess.setAutoSettle(false)
       const promise = probeStatusNotifierWatcher(1_000)
       const assertion = expect(promise).resolves.toBe(false)
       await vi.advanceTimersByTimeAsync(1_001)
       await assertion
+      expect(childProcess.child.kill).toHaveBeenCalledOnce()
     } finally {
       vi.useRealTimers()
     }
