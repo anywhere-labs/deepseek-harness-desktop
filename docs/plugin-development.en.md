@@ -78,7 +78,7 @@ export function apply(ctx: Context, config: { profile?: string }): void {
     return
   }
 
-  ctx.inject(['desktopPnpm'], (desktopPnpm) => {
+  ctx.inject(['desktopProfiles', 'desktopPnpm'], (desktopPnpm) => {
     mountManager(ctx, {
       profile: profiles.current.name,
       profileDir: profiles.current.dir,
@@ -89,6 +89,16 @@ export function apply(ctx: Context, config: { profile?: string }): void {
 ```
 
 The ordinary DSH fallback remains the plugin's authoritative implementation. Do not infer the Desktop profile from `process.argv`, `ctx.baseUrl`, settings, or `$DSH_HOME`; in Desktop, use `desktopProfiles.current`.
+
+## Isolated development-sandbox mirrors
+
+An external development-sandbox plugin can use this cross-environment pattern to test a local plugin checkout without changing the active Desktop profile. Its target is an isolated DSH Web mirror, not a second Electron process.
+
+When `desktopProfiles` is available, retain both `desktopProfiles` and `desktopPnpm` in the nested `ctx.inject()` dependency set. Build a `host-web` mirror from the immutable `desktopProfiles.current.dir` for that Host generation; do not assume `profiles/web`, and do not retain the profile or runner after either Desktop service leaves the generation.
+
+A user-requested build may use the low-level `desktopPnpm.run(['--dir', absolutePluginDir, 'run', 'build'], signal)` because it builds a local checkout and does not mutate the active profile. Give it a deadline, read both output streams, retain the returned handle, and on disposal call `cancel()` and await `done`. A nonzero exit, signal termination, or rejected `done` must stop the mirror from launching.
+
+A reference implementation is [`dsh-dev-sandbox`](https://github.com/zp-home/dsh-dev-sandbox).
 
 ## `run()`, `runPlugin()`, and `installPlugin()`
 
