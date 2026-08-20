@@ -339,6 +339,7 @@
       "synopsis": "DeepSeek Harness Desktop",
       "description": "DeepSeek Harness Desktop - Electron desktop shell for the DeepSeek Harness client",
       "syncDesktopName": true,
+      "depends": ["libayatana-appindicator3-1"],
       "extraFiles": [
         {
           "from": "build/linux/dsh",
