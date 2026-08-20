@@ -26,7 +26,7 @@
 - `dsh-plugin-desktop/src/index.ts` — `DesktopSettingsSchema` 增加 `closeBehavior` 字段；注册 `applies` 改 `'live'`；`schedule()` 提供 `readCloseBehavior`。
 - `dsh-plugin-desktop/src/electron-runtime.ts` — `mountScheduled()` 透传新回调；新增 `notifyTrayUnavailable()` 一次性降级通知。
 - `dsh-plugin-desktop/src/electron-shell-generation.ts` — `trayAvailable` 状态、挂载时探测、close 处理器三分支。
-- `dsh-plugin-desktop/package.json` — `build.linux.depends` 增加 `libayatana-appindicator3-1`。
+- `dsh-plugin-desktop/package.json` — `build.deb.depends` 增加 `libayatana-appindicator3-1`（electron-builder 26.x 的 `linux` 顶层配置无 `depends` 字段）。
 - `dsh-plugin-desktop/tests/plugin.spec.ts` — `applies` 断言 `'restart'`→`'live'`；harness `settings.get` 增加 dsh-desktop 分支；`shell()` 断言增加 `readCloseBehavior`。
 - `dsh-plugin-desktop/tests/electron-runtime.spec.ts` — `spec` mock 增加 `readCloseBehavior`/`requestQuit`；child_process mock 支持 stdout + 探测自动结算；新增 close 行为测试。
 - `docs/faq.md` / `docs/faq.en.md` — 新增 Linux 托盘问答。
@@ -865,11 +865,13 @@ git commit -m "feat(desktop): hide, quit, or degrade on window close from tray a
 
 - [x] **Step 1: 增加 appindicator 依赖**
 
-打开 `dsh-plugin-desktop/package.json`，在 `build.linux` 对象的 `"syncDesktopName": true,` 之后增加一行：
+打开 `dsh-plugin-desktop/package.json`，在 `build.deb` 对象的 `"afterRemove"` 之后增加：
 
 ```json
-    "depends": ["libayatana-appindicator3-1"],
+      "depends": ["libayatana-appindicator3-1"]
 ```
+
+注意：electron-builder 26.x 顶层 `build.linux`（`LinuxConfiguration`）不包含 `depends`（`additionalProperties: false`），该字段只属于目标专属配置（`DebOptions`/`RpmOptions`/`PacmanOptions`）。放错位置会让整个 `linux` 配置校验失败。rpm 的包名不同（Fedora 用 `libayatana-appindicator-gtk3`），不在此处照抄 deb 包名。
 
 - [x] **Step 2: 验证 JSON 合法**
 

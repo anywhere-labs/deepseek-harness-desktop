@@ -339,7 +339,6 @@
       "synopsis": "DeepSeek Harness Desktop",
       "description": "DeepSeek Harness Desktop - Electron desktop shell for the DeepSeek Harness client",
       "syncDesktopName": true,
-      "depends": ["libayatana-appindicator3-1"],
       "extraFiles": [
         {
           "from": "build/linux/dsh",
@@ -353,7 +352,8 @@
     },
     "deb": {
       "afterInstall": "build/linux/after-install.tpl",
-      "afterRemove": "build/linux/after-remove.tpl"
+      "afterRemove": "build/linux/after-remove.tpl",
+      "depends": ["libayatana-appindicator3-1"]
     },
     "rpm": {
       "afterInstall": "build/linux/after-install.tpl",
