@@ -35,6 +35,7 @@ export interface ElectronShellGenerationOptions {
   readonly spec: DesktopShellSpec
   readonly preloadPath: string
   readonly isQuitting: () => boolean
+  readonly applicationMenuOpenLabel: () => string
   readonly buildTrayTemplate: () => Electron.MenuItemConstructorOptions[]
   readonly stopRendererBootMonitoring: () => void
   readonly abortRendererBootMonitoring: (cause: unknown) => void
@@ -49,6 +50,7 @@ export class ElectronShellGeneration {
   private mounted = false
   private released = false
   private attentionCount = 0
+  private releaseApplicationMenu: (() => void) | undefined
   private cleanupListeners: (() => void) | undefined
 
   constructor(private readonly options: ElectronShellGenerationOptions) {}
@@ -178,7 +180,7 @@ export class ElectronShellGeneration {
       tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
       this.tray = tray
       tray.setToolTip(spec.productName)
-      this.refreshTrayMenu()
+      this.refreshMenus()
       tray.on('click', show)
       beforeInteractive?.()
       this.mounted = true
@@ -219,9 +221,23 @@ export class ElectronShellGeneration {
       : await dialog.showOpenDialog(window, options)
   }
 
+  refreshMenus(): void {
+    this.refreshApplicationMenu()
+    this.refreshTrayMenu()
+  }
+
   refreshTrayMenu(): void {
     if (this.tray === undefined) return
     this.tray.setContextMenu(Menu.buildFromTemplate(this.options.buildTrayTemplate()))
+  }
+
+  private refreshApplicationMenu(): void {
+    this.releaseApplicationMenu?.()
+    this.releaseApplicationMenu = this.options.platform.installApplicationMenu({
+      productName: this.options.spec.productName,
+      openDesktopLabel: this.options.applicationMenuOpenLabel(),
+      showDesktop: () => { this.show() },
+    })
   }
 
   refreshThemeMaterial(): void {
@@ -235,13 +251,16 @@ export class ElectronShellGeneration {
 
     const window = this.window
     const tray = this.tray
+    const releaseApplicationMenu = this.releaseApplicationMenu
     this.clearAttention()
     this.window = undefined
     this.tray = undefined
+    this.releaseApplicationMenu = undefined
     if (window === undefined) return
 
     this.cleanupListeners?.()
     this.cleanupListeners = undefined
+    releaseApplicationMenu?.()
     tray?.destroy()
     if (!window.isDestroyed()) window.destroy()
   }

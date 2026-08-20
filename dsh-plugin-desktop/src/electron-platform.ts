@@ -1,7 +1,13 @@
-import { app } from 'electron'
+import { app, Menu } from 'electron'
 import type { BrowserWindow, NativeImage } from 'electron'
 import type { DesktopPlatform } from './runtime.ts'
 import type { DesktopDownloadPlatform } from './update-download.ts'
+
+export interface ElectronApplicationMenuOptions {
+  readonly productName: string
+  readonly openDesktopLabel: string
+  readonly showDesktop: () => void
+}
 
 /** Native presentation and capability differences selected once at startup. */
 export interface ElectronPlatformStrategy {
@@ -11,6 +17,7 @@ export interface ElectronPlatformStrategy {
   readonly canToggleShellMode: boolean
   configureApplication(icon: NativeImage): void
   configureWindow(window: BrowserWindow): void
+  installApplicationMenu(options: ElectronApplicationMenuOptions): () => void
   refreshThemeMaterial(window: BrowserWindow): void
 }
 
@@ -24,6 +31,10 @@ class WindowsPlatformStrategy implements ElectronPlatformStrategy {
 
   configureWindow(window: BrowserWindow): void {
     window.removeMenu()
+  }
+
+  installApplicationMenu(_options: ElectronApplicationMenuOptions): () => void {
+    return () => {}
   }
 
   refreshThemeMaterial(window: BrowserWindow): void {
@@ -43,6 +54,36 @@ class MacPlatformStrategy implements ElectronPlatformStrategy {
 
   configureWindow(_window: BrowserWindow): void {}
 
+  installApplicationMenu(options: ElectronApplicationMenuOptions): () => void {
+    const previousMenu = Menu.getApplicationMenu()
+    const menu = Menu.buildFromTemplate([
+      {
+        label: options.productName,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { label: options.openDesktopLabel, click: options.showDesktop },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' },
+        ],
+      },
+      { role: 'fileMenu' },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' },
+    ])
+    Menu.setApplicationMenu(menu)
+    return () => {
+      if (Menu.getApplicationMenu() === menu) Menu.setApplicationMenu(previousMenu)
+    }
+  }
+
   refreshThemeMaterial(_window: BrowserWindow): void {}
 }
 
@@ -55,6 +96,10 @@ class LinuxPlatformStrategy implements ElectronPlatformStrategy {
   configureApplication(_icon: NativeImage): void {}
 
   configureWindow(_window: BrowserWindow): void {}
+
+  installApplicationMenu(_options: ElectronApplicationMenuOptions): () => void {
+    return () => {}
+  }
 
   refreshThemeMaterial(_window: BrowserWindow): void {}
 }
