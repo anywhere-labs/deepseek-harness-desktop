@@ -14,6 +14,9 @@ export type DesktopThemeSource = 'system' | 'light' | 'dark'
 /** Locale identifiers shared by the Web client and native desktop tray. */
 export type DesktopLocale = 'zh' | 'en'
 
+/** Close-button behavior selected through desktop settings. */
+export type DesktopCloseBehavior = 'tray' | 'quit'
+
 /** Window values resolved from the desktop-shell Cordis row. */
 export interface DesktopWindowConfig {
   /** Native presentation mode selected before BrowserWindow construction. */
