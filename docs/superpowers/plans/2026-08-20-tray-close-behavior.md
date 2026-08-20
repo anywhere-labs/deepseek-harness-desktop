@@ -219,8 +219,15 @@ describe('probeStatusNotifierWatcher', () => {
   })
 
   it('resolves false when the probe process exits with an error', async () => {
+    childProcess.setAutoSettle(false)
     const promise = probeStatusNotifierWatcher()
     childProcess.emit('error', new Error('dbus unavailable'))
+    await expect(promise).resolves.toBe(false)
+  })
+
+  it('resolves false when the probe exits with a non-zero code', async () => {
+    const promise = probeStatusNotifierWatcher()
+    childProcess.emit('close', 1)
     await expect(promise).resolves.toBe(false)
   })
 
