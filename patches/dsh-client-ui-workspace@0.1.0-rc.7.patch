@@ -1,12 +1,170 @@
 diff --git a/lib/client.js b/lib/client.js
-index 63d3f59..e2c7c9a 100644
+index ec779d5750f3810736ee05290bdd45d858cd00e0..9d600022bfb0e12f0d56fd2de5a131ce6f0eb4bf 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -1849,6 +1849,7 @@ window.__ModuleLoader__.load({
- 			};
- 			return (0, react_jsx_runtime.jsxs)("div", {
- 				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
+@@ -20 +20,3 @@
+-		const FLAT_SESSION_ORDER_KEY = "__flat_session_order__";
++		const FLAT_SESSION_ORDER_KEY = "__flat_session_order__";
++		/** Stable fallback while an older persisted view snapshot has no pin field. */
++		const EMPTY_PINNED_WORKSPACE_IDS = [];
+@@ -30 +32,2 @@
+-					groupExpansion: {},
++					groupExpansion: {},
++					pinnedWorkspaceIds: [],
+@@ -47 +50,2 @@
+-						d.groupExpansion = Object.fromEntries(Object.entries(d.groupExpansion).filter(([key]) => retained.has(key)));
++						d.groupExpansion = Object.fromEntries(Object.entries(d.groupExpansion).filter(([key]) => retained.has(key)));
++						d.pinnedWorkspaceIds = (d.pinnedWorkspaceIds ?? []).filter((workspaceId) => retained.has(workspaceId));
+@@ -51 +55,5 @@
+-					syncSessionOrderAccount: (d, accountKey, order, updatedAt) => {
++					toggleWorkspacePin: (d, workspaceId) => {
++						const pinned = d.pinnedWorkspaceIds ?? [];
++						d.pinnedWorkspaceIds = pinned.includes(workspaceId) ? pinned.filter((id) => id !== workspaceId) : [...pinned, workspaceId];
++					},
++					syncSessionOrderAccount: (d, accountKey, order, updatedAt) => {
+@@ -441 +449,21 @@
+-		/**
++		/** Standard pin glyph for the Workspace menu (the shared icon set has no pin icon). */
++		function IconPinOutline16() {
++			return (0, react_jsx_runtime.jsxs)("svg", {
++				width: 16,
++				height: 16,
++				viewBox: "0 0 24 24",
++				fill: "none",
++				stroke: "currentColor",
++				strokeWidth: 2,
++				strokeLinecap: "round",
++				strokeLinejoin: "round",
++				"aria-hidden": "true",
++				children: [
++					(0, react_jsx_runtime.jsx)("path", { d: "M12 17v5" }),
++					(0, react_jsx_runtime.jsx)("path", { d: "M5 17h14" }),
++					(0, react_jsx_runtime.jsx)("path", { d: "M8 2h8" }),
++					(0, react_jsx_runtime.jsx)("path", { d: "m9 7-2.7 7.3A2 2 0 0 0 8.2 17h7.6a2 2 0 0 0 1.9-2.7L15 7" })
++				]
++			});
++		}
++		/**
+@@ -458 +486,5 @@
+-			const workspaceMenuItems = [{
++			const workspaceMenuItems = [{
++				id: "pin",
++				label: t(actions?.pinned === true ? "menu.unpinWorkspace" : "menu.pinWorkspace"),
++				icon: (0, react_jsx_runtime.jsx)(IconPinOutline16, {})
++			}, {
+@@ -506,3 +538,4 @@
+-								/* v8 ignore next -- workspaceMenuItems carries exactly these two rows today. */
+-								if (id !== "rename" && id !== "delete") return;
+-								if (id === "rename") actions.rename();
++								/* v8 ignore next -- workspaceMenuItems carries exactly these three rows today. */
++								if (id !== "pin" && id !== "rename" && id !== "delete") return;
++								if (id === "pin") actions.togglePin();
++								else if (id === "rename") actions.rename();
+@@ -1053 +1086,35 @@
+-		/**
++		/** Put pinned Workspaces first while retaining the Host order inside each partition. */
++		function partitionPinnedWorkspaces(workspaces, pinnedWorkspaceIds) {
++			const pinned = new Set(pinnedWorkspaceIds);
++			return [
++				...workspaces.filter((workspace) => pinned.has(workspace.workspaceId)),
++				...workspaces.filter((workspace) => !pinned.has(workspace.workspaceId))
++			];
++		}
++		/**
++		* Translate a same-partition display drop into one Host insert-before anchor.
++		* Opposite-partition drops are rejected so dragging never changes pin state.
++		*/
++		function workspaceDragMove(workspaces, pinnedWorkspaceIds, sourceId, targetId, half) {
++			const pinned = new Set(pinnedWorkspaceIds);
++			const sourcePinned = pinned.has(sourceId);
++			if (sourcePinned !== pinned.has(targetId)) return;
++			const partition = workspaces.filter((workspace) => pinned.has(workspace.workspaceId) === sourcePinned).map((workspace) => workspace.workspaceId);
++			const sourceIndex = partition.indexOf(sourceId);
++			const targetIndex = partition.indexOf(targetId);
++			if (sourceIndex === -1 || targetIndex === -1) return;
++			const anchor = half === "before" ? targetId : partition[targetIndex + 1];
++			if (anchor === sourceId) return;
++			const nextPartition = partition.filter((workspaceId) => workspaceId !== sourceId);
++			const insertAt = anchor === void 0 ? nextPartition.length : nextPartition.indexOf(anchor);
++			nextPartition.splice(insertAt === -1 ? nextPartition.length : insertAt, 0, sourceId);
++			if (nextPartition.every((workspaceId, index) => workspaceId === partition[index])) return;
++			const nextSamePartition = nextPartition[nextPartition.indexOf(sourceId) + 1];
++			if (nextSamePartition !== void 0) return { beforeWorkspaceId: nextSamePartition };
++			const remaining = workspaces.filter((workspace) => workspace.workspaceId !== sourceId);
++			const previousSamePartition = nextPartition[nextPartition.length - 2];
++			if (previousSamePartition === void 0) return;
++			const previousIndex = remaining.findIndex((workspace) => workspace.workspaceId === previousSamePartition);
++			return { beforeWorkspaceId: remaining[previousIndex + 1]?.workspaceId };
++		}
++		/**
+@@ -1199 +1266 @@
+-		function SessionTree({ useSessions, startSession, open, forkSession, workspaces, archivedSessionIds, onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive, insertWorkspaceBefore, insertSessionBefore, orderBy, groupExpansion, setGroupExpanded, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t }) {
++		function SessionTree({ useSessions, startSession, open, forkSession, workspaces, archivedSessionIds, onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive, insertWorkspaceBefore, insertSessionBefore, orderBy, groupExpansion, setGroupExpanded, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, pinnedWorkspaceIds, toggleWorkspacePin, t }) {
+@@ -1200 +1267,2 @@
+-			const list = useSessions((s) => s);
++			const list = useSessions((s) => s);
++			const pinnedWorkspaceSet = (0, react.useMemo)(() => new Set(pinnedWorkspaceIds), [pinnedWorkspaceIds]);
+@@ -1257 +1325 @@
+-				return workspaces.map((workspace) => {
++				const reconciled = workspaces.map((workspace) => {
+@@ -1265 +1333,6 @@
+-			}, [sessionOrderByAccount, workspaces]);
++				return partitionPinnedWorkspaces(reconciled, pinnedWorkspaceIds);
++			}, [
++				pinnedWorkspaceIds,
++				sessionOrderByAccount,
++				workspaces
++			]);
+@@ -1306,8 +1379,3 @@
+-				const rowIndex = workspaces.findIndex((workspace) => workspace.workspaceId === over.id);
+-				if (rowIndex === -1) return;
+-				const anchor = over.half === "before" ? over.id : workspaces[rowIndex + 1]?.workspaceId;
+-				if (anchor === activeDrag.workspaceId) return;
+-				const sourceIndex = workspaces.findIndex((workspace) => workspace.workspaceId === activeDrag.workspaceId);
+-				const anchorIndex = anchor === void 0 ? workspaces.length : workspaces.findIndex((workspace) => workspace.workspaceId === anchor);
+-				if (sourceIndex !== -1 && (anchorIndex === sourceIndex || anchorIndex === sourceIndex + 1)) return;
+-				insertWorkspaceBefore(activeDrag.workspaceId, anchor).catch((reason) => {
++				const move = workspaceDragMove(workspaces, pinnedWorkspaceIds, activeDrag.workspaceId, over.id, over.half);
++				if (move === void 0) return;
++				insertWorkspaceBefore(activeDrag.workspaceId, move.beforeWorkspaceId).catch((reason) => {
+@@ -1334 +1402,2 @@
+-							const workspaceMarker = workspaceId !== void 0 && workspaceDrag?.over?.id === workspaceId ? workspaceDrag.over.half : null;
++							const samePinPartition = workspaceId !== void 0 && workspaceDrag !== null && pinnedWorkspaceSet.has(workspaceId) === pinnedWorkspaceSet.has(workspaceDrag.workspaceId);
++							const workspaceMarker = samePinPartition && workspaceDrag?.over?.id === workspaceId ? workspaceDrag.over.half : null;
+@@ -1352 +1421 @@
+-									over: {
++									over: pinnedWorkspaceSet.has(active.workspaceId) === pinnedWorkspaceSet.has(workspaceId) ? {
+@@ -1355 +1424 @@
+-									}
++									} : null
+@@ -1392 +1461,6 @@
+-											rename: () => {
++											pinned: pinnedWorkspaceIds.includes(group.workspaceId),
++											togglePin: () => {
++												/* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
++												if (group.workspaceId !== void 0) toggleWorkspacePin(group.workspaceId);
++											},
++											rename: () => {
+@@ -1655 +1729,2 @@
+-			const sessionOrderByAccount = useStore((s) => s.sessionOrderByAccount);
++			const pinnedWorkspaceIds = useStore((s) => s.pinnedWorkspaceIds ?? EMPTY_PINNED_WORKSPACE_IDS);
++			const sessionOrderByAccount = useStore((s) => s.sessionOrderByAccount);
+@@ -1850 +1925,2 @@
+-				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
++				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
 +				"data-dsh-workspace-drop-target": "",
- 				children: [
- 					(0, react_jsx_runtime.jsxs)("div", {
- 						className: WorkspaceBrowser_module_css_default.sectionHeader,
+@@ -2019 +2095,3 @@
+-							archivedSessionIds,
++							pinnedWorkspaceIds,
++							toggleWorkspacePin: actions.toggleWorkspacePin,
++							archivedSessionIds,
+@@ -2222 +2300,3 @@
+-			"menu.fork": "分叉会话",
++			"menu.pinWorkspace": "置顶工作区",
++			"menu.unpinWorkspace": "取消置顶",
++			"menu.fork": "分叉会话",
+@@ -2287 +2367,3 @@
+-			"menu.fork": "Fork session",
++			"menu.pinWorkspace": "Pin workspace",
++			"menu.unpinWorkspace": "Unpin workspace",
++			"menu.fork": "Fork session",
