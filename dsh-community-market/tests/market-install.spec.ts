@@ -688,7 +688,14 @@ describe('market install service', () => {
           await removeInstalledPlugin(profileDir)
           return { exitCode: 0, signal: null }
         })()
-        return { stdout: Readable.from([]), stderr: Readable.from([]), done, cancel: vi.fn() }
+        return {
+          stdout: Readable.from([]),
+          stderr: Readable.from(args[0] === 'add'
+            ? ['ERR_PNPM_FETCH_401 GET https://registry.example.invalid/package?token=not-a-real-token\n']
+            : []),
+          done,
+          cancel: vi.fn(),
+        }
       },
     })
     const service = new MarketInstallService(
@@ -699,10 +706,13 @@ describe('market install service', () => {
     )
     service.observeCatalog(snapshot())
     const preview = await service.previewInstall('source-1', 'example/dsh-plugin-safe', new AbortController().signal)
-    await expect(service.executeInstall(preview.intent, new AbortController().signal)).rejects.toMatchObject({
+    const execution = service.executeInstall(preview.intent, new AbortController().signal)
+    await expect(execution).rejects.toMatchObject({
       code: 'operation-failed',
-      message: expect.stringContaining('partial installation was rolled back'),
+      message: expect.stringContaining('ERR_PNPM_FETCH_401 GET https://registry.example.invalid/package'),
     })
+    await expect(execution).rejects.toThrow('partial installation was rolled back')
+    await expect(execution).rejects.not.toThrow('not-a-real-token')
     expect(calls).toEqual(['add', 'remove'])
     expect(settings.receipts()).toEqual([])
     expect(JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')).dependencies).toEqual({})

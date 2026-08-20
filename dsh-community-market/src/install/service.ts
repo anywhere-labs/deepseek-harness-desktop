@@ -901,6 +901,12 @@ export class MarketInstallService {
       } catch (cause) {
         if (!await this.installMayHaveMutatedProfile(profile, candidate.packageName)) throw cause
         await this.rollbackInstall(profile, candidate.packageName, receipt.receiptId)
+        if (cause instanceof MarketInstallError && cause.code === 'operation-failed') {
+          throw new MarketInstallError(
+            'operation-failed',
+            `${cause.message} The partial installation was rolled back.`,
+          )
+        }
         throw new MarketInstallError(
           'operation-failed',
           'The package manager failed after changing the active profile, so the partial installation was rolled back.',
