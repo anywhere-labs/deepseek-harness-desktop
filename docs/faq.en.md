@@ -44,6 +44,12 @@ No plugins are copied automatically. Each profile has its own bundle and depende
 
 Packaged applications check for stable releases in the background but never install silently. A newer version requires confirmation. Before downloading, a native save dialog lets you choose the installer's directory and filename; cancelling it does not start a download. macOS downloads and opens a DMG; Windows downloads and starts an NSIS installer. After the upgrade and next launch, the app asks whether to delete or keep the installer. Network and download failures leave the current installation intact.
 
+## On Linux, does closing the window exit the app or hide it to the tray?
+
+On Linux, clicking the window close button hides the app to the system tray by default and keeps the process running. The tray relies on StatusNotifier support in the desktop environment: GNOME does not show a tray by default and needs the "AppIndicator and KStatusNotifierItem Support" extension (Ubuntu's default session includes this support).
+
+When the tray is unavailable, closing the window exits the app directly (with a one-time notice) so the window does not vanish while a background process stays impossible to reopen. You can set the "close button behavior" to "exit" or back to "minimize to tray" in settings.
+
 ## Where can I download the app or report a problem?
 
 Download from the [project download page](https://www.dshdesktop.cn/) or the [latest GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest). Check the [troubleshooting section](user-guide.en.md#troubleshooting) first. If the problem remains, open a [GitHub Issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues/new/choose) with the operating system, app version, reproduction steps, and error details.

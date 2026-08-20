@@ -44,6 +44,12 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 打包后的应用会在后台检查稳定版本，但不会静默安装。发现新版本后先征得用户确认；下载前可以在原生保存对话框中选择安装包的目录和文件名，取消保存不会开始下载。macOS 下载并打开 DMG，Windows 下载并启动 NSIS 安装程序。升级完成并重新启动后，应用会询问是否删除或保留安装包。网络或下载失败不会破坏当前安装。
 
+## Linux 下关闭窗口会退出应用或系统托盘不显示？
+
+Linux 下点击窗口关闭按钮默认把应用收起到系统托盘，进程继续运行。但托盘依赖桌面环境的 StatusNotifier 支持：GNOME 桌面默认不显示托盘，需要安装 "AppIndicator and KStatusNotifierItem Support" 扩展（Ubuntu 自带的会话已内置该支持）。
+
+如果托盘不可用，关闭窗口会直接退出应用（并提示一次），避免窗口消失后进程仍在后台运行却无法重新打开。你可以在设置中把"关闭按钮行为"改为"退出"，或改回"最小化到托盘"。
+
 ## 在哪里下载和报告问题？
 
 从[项目下载页](https://www.dshdesktop.cn/)或[最新 GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest)下载安装包。遇到问题时先查看[用户指南的排查部分](user-guide.md#排查)，仍无法解决再提交 [GitHub Issue](https://github.com/anywhere-labs/deepseek-harness-desktop/issues/new/choose)，并附上操作系统、应用版本、复现步骤和错误信息。
