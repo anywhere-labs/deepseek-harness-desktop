@@ -28,6 +28,7 @@ import {
 } from './directory-picker-route.ts'
 import type { DesktopCloseBehavior, DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
+import { DESKTOP_SETTINGS_NAMESPACE } from './settings-namespaces.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-shell'
@@ -37,7 +38,7 @@ export const name = 'desktop-shell'
 export const inject = ['webServer', 'webRuntime', 'appExit', 'settings']
 
 /** Standard settings namespace shared by tray and configuration surfaces. */
-export const DESKTOP_SETTINGS_NAMESPACE = settingsNamespace('dsh-desktop')
+export { DESKTOP_SETTINGS_NAMESPACE }
 
 const UI_THEME_SETTINGS_NAMESPACE = settingsNamespace(THEME_SETTINGS_NAMESPACE)
 const UI_LOCALE_SETTINGS_NAMESPACE = settingsNamespace(LOCALE_SETTINGS_NAMESPACE)
