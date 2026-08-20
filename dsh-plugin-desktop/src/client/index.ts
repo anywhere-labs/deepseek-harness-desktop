@@ -6,6 +6,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { applyAdvancedShell } from './advanced-shell.ts'
+import { registerCloseBehaviorRow } from './close-behavior-settings.ts'
+import { createCloseBehaviorRowStore } from './close-behavior-settings-store.ts'
 import { startRendererBootReporter } from './boot-health.ts'
 import { installDesktopDirectoryPickerBridge, requestDesktopDirectoryValidation } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
@@ -28,6 +30,8 @@ export const inject = [
   'sessions',
   'theme',
   'workspaces',
+  'locale',
+  'settingsScope',
 ]
 
 /** Register desktop-owned client surfaces for the current BrowserWindow mode. @param ctx - browser Cordis context. */
@@ -54,5 +58,6 @@ export function apply(ctx: ClientContext): void {
       'dsh-plugin-desktop: native directory picker bridge',
     )
   }
+  registerCloseBehaviorRow(ctx, createCloseBehaviorRowStore)
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
 }
