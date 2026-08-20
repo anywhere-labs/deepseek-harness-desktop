@@ -48,7 +48,7 @@ Packaged applications check for stable releases in the background but never inst
 
 On Linux, clicking the window close button hides the app to the system tray by default and keeps the process running. The tray relies on StatusNotifier support in the desktop environment: GNOME does not show a tray by default and needs the "AppIndicator and KStatusNotifierItem Support" extension (Ubuntu's default session includes this support).
 
-When the tray is unavailable, closing the window exits the app directly (with a one-time notice) so the window does not vanish while a background process stays impossible to reopen. You can set the "close button behavior" to "exit" or back to "minimize to tray" in settings.
+When the tray is unavailable, closing the window exits the app directly (with a one-time notice), so the window does not disappear while a background process keeps running with no way to reopen it. You can set the "close button behavior" to "exit" or back to "minimize to tray" in settings.
 
 ## Where can I download the app or report a problem?
 
