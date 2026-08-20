@@ -222,6 +222,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         spec,
         preloadPath: desktopPreloadPath(),
         isQuitting: () => this.quitting,
+        applicationMenuOpenLabel: () => desktopTrayLabel(this.locale, 'openDesktop', spec.productName),
         buildTrayTemplate: () => this.buildTrayTemplate(spec),
         stopRendererBootMonitoring: () => { this.stopRendererBootMonitoring() },
         abortRendererBootMonitoring: cause => { this.rendererHealthGate?.stop(cause) },
@@ -386,7 +387,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const locale = preference ?? desktopLocaleFromLanguageTag(app.getLocale())
     if (locale === this.currentLocale) return
     this.currentLocale = locale
-    this.rebuildTrayMenu()
+    this.rebuildNativeMenus()
   }
 
   /** @inheritdoc */
@@ -728,5 +729,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const spec = this.scheduled
     if (spec === undefined) return
     this.generation?.refreshTrayMenu()
+  }
+
+  private rebuildNativeMenus(): void {
+    const spec = this.scheduled
+    if (spec === undefined) return
+    this.generation?.refreshMenus()
   }
 }

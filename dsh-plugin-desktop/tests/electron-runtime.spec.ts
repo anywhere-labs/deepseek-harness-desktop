@@ -66,6 +66,8 @@ const electron = vi.hoisted(() => {
   const browserWindowOn = vi.fn()
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
+  const previousApplicationMenu = { name: 'previous application menu' }
+  let applicationMenu: unknown = previousApplicationMenu
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
   let zoomLevel = 0
@@ -183,15 +185,20 @@ const electron = vi.hoisted(() => {
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
         menuTemplates.push(template)
-        return {}
+        return { template }
       }),
+      getApplicationMenu: vi.fn(() => applicationMenu),
+      setApplicationMenu: vi.fn((menu: unknown) => { applicationMenu = menu }),
     },
     menuTemplates,
+    previousApplicationMenu,
     nativeImage: { createFromPath },
     nativeTheme,
     net: { fetch: vi.fn() },
     Notification,
     notifications,
+    currentApplicationMenu: () => applicationMenu,
+    resetApplicationMenu: () => { applicationMenu = previousApplicationMenu },
     resetZoomLevel: () => { zoomLevel = 0 },
     shell: {
       openExternal: vi.fn(async () => {}),
@@ -247,6 +254,7 @@ describe('Electron desktop runtime', () => {
     electron.trays.length = 0
     electron.menuTemplates.length = 0
     electron.notifications.length = 0
+    electron.resetApplicationMenu()
     childProcess.reset()
     vi.clearAllMocks()
     updater.download.mockReset()
@@ -276,7 +284,7 @@ describe('Electron desktop runtime', () => {
     vi.restoreAllMocks()
   })
 
-  it('uses the native macOS frame, Dock icon, and template tray image', async () => {
+  it('uses the native macOS frame, recoverable application menu, and template tray image', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
@@ -322,8 +330,35 @@ describe('Electron desktop runtime', () => {
     expect(electron.app.dock.setIcon).toHaveBeenCalledWith(electron.appIcon)
     expect(electron.templateIcon.setTemplateImage).toHaveBeenCalledWith(true)
     expect(electron.trays[0]?.image).toBe(electron.templateIcon)
-    expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
+    const applicationMenuTemplate = electron.menuTemplates[0]
+    const applicationMenu = applicationMenuTemplate?.[0] as {
+      label?: string
+      submenu?: Array<{ label?: string, click?: () => void }>
+    }
+    expect(applicationMenu.label).toBe('DSH Desktop')
+    expect(applicationMenu.submenu).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Open DSH Desktop' }),
+    ]))
+    expect(applicationMenuTemplate?.slice(1)).toEqual([
+      { role: 'fileMenu' },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' },
+    ])
+    expect(electron.menuTemplates[1]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Advanced Mode', enabled: true }),
+    ]))
+
+    applicationMenu.submenu?.find(item => item.label === 'Open DSH Desktop')?.click?.()
+    expect(electron.browserWindows[0]?.show).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.focus).toHaveBeenCalledOnce()
+
+    runtime.setLocalePreference('zh')
+    const localizedApplicationMenu = electron.menuTemplates.at(-2)?.[0] as {
+      submenu?: Array<{ label?: string }>
+    }
+    expect(localizedApplicationMenu.submenu).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '打开 DSH Desktop' }),
     ]))
 
     const titleListener = electron.browserWindowOn.mock.calls.find(([event]) => event === 'page-title-updated')?.[1]
@@ -335,6 +370,7 @@ describe('Electron desktop runtime', () => {
     await release()
     expect(electron.browserWindowOff).toHaveBeenCalledWith('page-title-updated', titleListener)
     expect(electron.trays[0]?.off).toHaveBeenCalledWith('click', expect.any(Function))
+    expect(electron.currentApplicationMenu()).toBe(electron.previousApplicationMenu)
   })
 
   it('uses the Windows caption, hidden menu bar, removed menu, and fixed blue tray image', async () => {
@@ -881,6 +917,7 @@ describe('Electron desktop runtime', () => {
     expect(electron.browserWindows[0]?.destroy).toHaveBeenCalledOnce()
     expect(electron.app.off).toHaveBeenCalledWith('activate', expect.any(Function))
     expect(electron.trays[0]?.off).toHaveBeenCalledWith('click', expect.any(Function))
+    expect(electron.currentApplicationMenu()).toBe(electron.previousApplicationMenu)
 
     await expect(release()).rejects.toThrow('interactive wiring failed')
     expect(electron.trays[0]?.destroy).toHaveBeenCalledOnce()
@@ -943,7 +980,8 @@ describe('Electron desktop runtime', () => {
     const release = runtime.schedule({ ...spec, requestModeChange })
 
     await runtime.mountScheduled()
-    const item = (electron.menuTemplates[0] as Array<{ label?: string, click?: () => void }>)
+    const item = electron.menuTemplates
+      .flatMap(template => template as Array<{ label?: string, click?: () => void }>)
       .find(candidate => candidate.label === 'Switch to Advanced Mode')
     expect(item).toBeDefined()
     item?.click?.()
@@ -1602,9 +1640,10 @@ describe('Electron desktop runtime', () => {
       transparent: true,
       vibrancy: 'sidebar',
     }))
-    expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Switch to Compatibility Mode', enabled: true }),
-    ]))
+    expect(electron.menuTemplates.some(template => template.some(item => (
+      (item as { label?: string, enabled?: boolean }).label === 'Switch to Compatibility Mode'
+      && (item as { enabled?: boolean }).enabled === true
+    )))).toBe(true)
 
     runtime.setThemeSource('system')
     expect(electron.nativeTheme.themeSource).toBe('system')
