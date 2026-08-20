@@ -1,5 +1,5 @@
 # Bilingual-pair consistency record: the git blob hash of each side as of the last
 # confirmed-consistent state. Both languages carry equal authority. Update both files
 # and re-record their hashes after editing either side.
-2026-08-20-desktop-composer-prompt-history.md: 3ad506a094d8d48cb8244a93619ff7be27ae8170
-2026-08-20-desktop-composer-prompt-history.zh.md: 57215e7b408de86f82ca8a477a780b33e0d57f2c
+2026-08-20-desktop-composer-prompt-history.md: 12d088848e6178f82f2f35d8ee6a0c4c5117e5c0
+2026-08-20-desktop-composer-prompt-history.zh.md: c4a1a3c70301b742e3cb94271658692ec467fc77

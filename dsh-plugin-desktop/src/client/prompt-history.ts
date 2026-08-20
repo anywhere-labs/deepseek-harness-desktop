@@ -32,23 +32,20 @@ interface NavigationState {
   readonly draft: string
 }
 
-/** In-memory submitted-input history isolated by session. */
+/** Session-local recall view derived from loaded durable conversation nodes. */
 export class PromptHistory {
   private readonly entries = new Map<string, string[]>()
   private readonly navigation = new Map<string, NavigationState>()
-  private readonly hydrated = new Set<string>()
 
-  /** Seed one session from its already-loaded durable conversation nodes. */
-  hydrate(sessionId: string, drafts: readonly string[]): void {
-    if (this.hydrated.has(sessionId)) return
-    for (const draft of drafts) this.recordEntry(sessionId, draft)
-    this.hydrated.add(sessionId)
-  }
-
-  /** Record a non-empty submitted draft and leave history navigation. */
-  record(sessionId: string, draft: string): void {
-    this.recordEntry(sessionId, draft)
-    this.navigation.delete(sessionId)
+  /** Synchronize one session from its currently loaded durable conversation nodes. */
+  sync(sessionId: string, drafts: readonly string[]): void {
+    const entries: string[] = []
+    for (const draft of drafts) {
+      if (draft.trim() !== '' && entries.at(-1) !== draft) entries.push(draft)
+    }
+    this.entries.set(sessionId, entries)
+    const navigation = this.navigation.get(sessionId)
+    if (navigation !== undefined && navigation.index >= entries.length) this.navigation.delete(sessionId)
   }
 
   /** Move backward through a session's submitted inputs, starting from the current draft. */
@@ -88,13 +85,6 @@ export class PromptHistory {
   isNavigating(sessionId: string): boolean {
     return this.navigation.has(sessionId)
   }
-
-  private recordEntry(sessionId: string, draft: string): void {
-    if (draft.trim() === '') return
-    const history = this.entries.get(sessionId) ?? []
-    if (history.at(-1) !== draft) history.push(draft)
-    this.entries.set(sessionId, history)
-  }
 }
 
 function composerTextarea(target: EventTarget | null): HTMLTextAreaElement | undefined {
@@ -131,12 +121,7 @@ function hydrateHistory(ctx: ClientContext, history: PromptHistory, sessionId: s
     const text = textFromNode(node)
     return text === undefined ? [] : [text]
   })
-  history.hydrate(sessionId, drafts)
-}
-
-function hasOpenCandidateMenu(textarea: HTMLTextAreaElement): boolean {
-  const card = textarea.closest('[data-composer-card]')
-  return card !== null && card.querySelector('[role="listbox"]') !== null
+  history.sync(sessionId, drafts)
 }
 
 function restoreDraft(ctx: ClientContext, sessionId: string, textarea: HTMLTextAreaElement, draft: string): void {
@@ -149,9 +134,13 @@ function restoreDraft(ctx: ClientContext, sessionId: string, textarea: HTMLTextA
   })
 }
 
-function isUnmodifiedArrow(event: KeyboardEvent): event is KeyboardEvent & { key: 'ArrowUp' | 'ArrowDown' } {
+function isHistoryArrow(event: KeyboardEvent): event is KeyboardEvent & { key: 'ArrowUp' | 'ArrowDown' } {
   return (event.key === 'ArrowUp' || event.key === 'ArrowDown')
     && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+    && !event.isComposing
+    // keyCode 229 is the legacy IME signal used by the standard composer.
+    // oxlint-disable-next-line typescript/no-deprecated
+    && event.keyCode !== 229
 }
 
 function isHistoryEntryPoint(textarea: HTMLTextAreaElement, key: 'ArrowUp' | 'ArrowDown'): boolean {
@@ -159,19 +148,6 @@ function isHistoryEntryPoint(textarea: HTMLTextAreaElement, key: 'ArrowUp' | 'Ar
   return key === 'ArrowUp'
     ? textarea.selectionStart === 0
     : textarea.selectionEnd === textarea.value.length
-}
-
-function isHistorySubmission(event: KeyboardEvent, textarea: HTMLTextAreaElement): boolean {
-  return event.key === 'Enter'
-    && !event.repeat
-    && !event.shiftKey
-    && !event.isComposing
-    // keyCode 229 is the legacy IME signal used by the upstream composer.
-    // oxlint-disable-next-line typescript/no-deprecated
-    && event.keyCode !== 229
-    && !textarea.disabled
-    && !textarea.readOnly
-    && !hasOpenCandidateMenu(textarea)
 }
 
 /** Install desktop-only submitted-input navigation for the standard DSH composer. */
@@ -187,12 +163,8 @@ export function installPromptHistory(ctx: ClientContext, documentRoot: Document 
     const textarea = composerTextarea(event.target)
     const sessionId = currentSessionId(ctx)
     if (textarea === undefined || sessionId === undefined) return
-    if (isHistorySubmission(event, textarea)) {
-      hydrateHistory(ctx, history, sessionId)
-      history.record(sessionId, textarea.value)
-      return
-    }
-    if (!isUnmodifiedArrow(event) || textarea.disabled || textarea.readOnly || hasOpenCandidateMenu(textarea)) return
+    // The standard composer owns candidate-menu arrows and marks them handled.
+    if (event.defaultPrevented || !isHistoryArrow(event) || textarea.disabled || textarea.readOnly) return
     if (!history.isNavigating(sessionId) && !isHistoryEntryPoint(textarea, event.key)) return
     hydrateHistory(ctx, history, sessionId)
     const draft = event.key === 'ArrowUp'
@@ -202,32 +174,12 @@ export function installPromptHistory(ctx: ClientContext, documentRoot: Document 
     event.preventDefault()
     restoreDraft(ctx, sessionId, textarea, draft)
   }
-  const onClick = (event: MouseEvent): void => {
-    const target = event.target instanceof Element ? event.target.closest('button') : null
-    if (target === null) return
-    const card = target.closest('[data-composer-card]')
-    if (card === null) return
-    const textarea = card.querySelector<HTMLTextAreaElement>('textarea')
-    if (textarea === null || textarea.disabled || textarea.readOnly || textarea.value.trim() === '') return
-    const buttons = card.querySelectorAll('button:not(:disabled)')
-    if (buttons[buttons.length - 1] !== target) return
-    const submitted = textarea.value
-    queueMicrotask(() => {
-      if (textarea.value !== '') return
-      const sessionId = currentSessionId(ctx)
-      if (sessionId !== undefined) {
-        hydrateHistory(ctx, history, sessionId)
-        history.record(sessionId, submitted)
-      }
-    })
-  }
 
   documentRoot.addEventListener('input', onInput)
-  documentRoot.addEventListener('keydown', onKeyDown, true)
-  documentRoot.addEventListener('click', onClick)
+  // Bubble after the standard React composer has arbitrated its key.
+  documentRoot.addEventListener('keydown', onKeyDown)
   return () => {
     documentRoot.removeEventListener('input', onInput)
-    documentRoot.removeEventListener('keydown', onKeyDown, true)
-    documentRoot.removeEventListener('click', onClick)
+    documentRoot.removeEventListener('keydown', onKeyDown)
   }
 }

@@ -53,7 +53,7 @@ Linux 只支持兼容模式。其托盘模式命令会被禁用，advanced 值�
 
 desktop Client module 会校验模式与平台 marker，随后在兼容模式下不产生任何呈现替换。它不提供或替换 `layout` service，不注册 `root` 或 `sidebar` occupant，也不改动 conversation surface。Desktop 自有的启动健康报告、本地文件夹拖放和已提交输入历史都属于能力 effect；兼容模式仍会保留被选 profile 自身的 layout、sidebar 与 conversation 组合，普通 `desktop` 与 `web` profile 因而会原样保留官方 row。
 
-每个会话会从已加载的已提交提示词和斜杠命令行重建历史，并追加当前桌面应用运行期间发送的输入。光标位于输入框起始位置时按 `↑` 可取回较早的记录；处于历史导航时按 `↓` 会向后移动，并在越过最新记录后恢复进入导航前的草稿。打开的 `@` 和 `/` 候选菜单继续独占方向键。桌面客户端不会持久化另一种独立的历史格式。
+每个会话会从已加载且已接受的提示词与斜杠命令行生成历史；被拒绝的提交不会进入历史。光标位于输入框起始位置时按 `↑` 可取回较早的记录；处于历史导航时按 `↓` 会向后移动，并在越过最新记录后恢复进入导航前的草稿。打开的 `@` 和 `/` 候选菜单继续独占方向键。桌面客户端不会持久化另一种独立的历史格式。
 
 Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在 `app-boot` 完成并审计整个 profile 后创建窗口，因此首个 renderer manifest 会包含所有已激活的官方、desktop 与第三方 client plugin，同时插件自身不会在 Loader entry 内等待整棵 Loader tree。
 
