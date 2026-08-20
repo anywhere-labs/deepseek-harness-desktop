@@ -180,7 +180,7 @@ describe('published package surface', () => {
     }
   })
 
-  it('marks the upstream Workspace browser as the desktop folder-drop target', () => {
+  it('patches the upstream Workspace browser with desktop drop and pin behavior', () => {
     const patchPath = './patches/dsh-client-ui-workspace@0.1.0-rc.7.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
       '@deepseek-ai/dsh-client-ui-workspace@npm:0.1.0-rc.7': expect.stringContaining(patchPath),
@@ -191,8 +191,17 @@ describe('published package surface', () => {
       'node_modules/@deepseek-ai/dsh-client-ui-workspace/lib/client.js',
       packageRoot,
     ), 'utf8')
-    expect(patch).toContain('data-dsh-workspace-drop-target')
-    expect(installedClient).toContain('data-dsh-workspace-drop-target')
+    for (const marker of [
+      'data-dsh-workspace-drop-target',
+      'pinnedWorkspaceIds',
+      'toggleWorkspacePin',
+      'workspaceDragMove',
+      'menu.pinWorkspace',
+      'menu.unpinWorkspace',
+    ]) {
+      expect(patch).toContain(marker)
+      expect(installedClient).toContain(marker)
+    }
   })
 
   it('builds public Host plugins and their private native bootstraps', () => {
