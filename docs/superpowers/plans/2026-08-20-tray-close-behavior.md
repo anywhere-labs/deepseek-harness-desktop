@@ -40,7 +40,7 @@
 - Create: `dsh-plugin-desktop/src/close-behavior.ts`
 - Test: `dsh-plugin-desktop/tests/close-behavior.spec.ts`
 
-- [ ] **Step 1: 在 runtime.ts 增加类型**
+- [x] **Step 1: 在 runtime.ts 增加类型**
 
 在 `dsh-plugin-desktop/src/runtime.ts` 顶部附近（`DesktopShellSpec` 定义之前）新增：
 
@@ -49,7 +49,7 @@
 export type DesktopCloseBehavior = 'tray' | 'quit'
 ```
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 创建 `dsh-plugin-desktop/tests/close-behavior.spec.ts`：
 
@@ -78,7 +78,7 @@ describe('resolveCloseAction', () => {
 })
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 在 `dsh-plugin-desktop/` 下运行：
 
@@ -88,7 +88,7 @@ corepack yarn vitest run tests/close-behavior.spec.ts
 
 Expected: FAIL，报 `Cannot find module '../src/close-behavior.ts'` 或 `resolveCloseAction is not defined`。
 
-- [ ] **Step 4: 实现最小模块**
+- [x] **Step 4: 实现最小模块**
 
 创建 `dsh-plugin-desktop/src/close-behavior.ts`：
 
@@ -112,7 +112,7 @@ export function resolveCloseAction(options: {
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 ```bash
 corepack yarn vitest run tests/close-behavior.spec.ts
@@ -120,7 +120,7 @@ corepack yarn vitest run tests/close-behavior.spec.ts
 
 Expected: PASS，4 个用例。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add dsh-plugin-desktop/src/runtime.ts dsh-plugin-desktop/src/close-behavior.ts dsh-plugin-desktop/tests/close-behavior.spec.ts
@@ -135,7 +135,7 @@ git commit -m "feat(desktop): decide window close action through a pure function
 - Create: `dsh-plugin-desktop/src/tray-availability.ts`
 - Test: `dsh-plugin-desktop/tests/tray-availability.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `dsh-plugin-desktop/tests/tray-availability.spec.ts`：
 
@@ -277,7 +277,7 @@ describe('isTrayAvailable', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 ```bash
 corepack yarn vitest run tests/tray-availability.spec.ts
@@ -285,7 +285,7 @@ corepack yarn vitest run tests/tray-availability.spec.ts
 
 Expected: FAIL，报 `Cannot find module '../src/tray-availability.ts'`。
 
-- [ ] **Step 3: 实现模块**
+- [x] **Step 3: 实现模块**
 
 创建 `dsh-plugin-desktop/src/tray-availability.ts`：
 
@@ -369,7 +369,7 @@ export async function isTrayAvailable(
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 corepack yarn vitest run tests/tray-availability.spec.ts
@@ -377,7 +377,7 @@ corepack yarn vitest run tests/tray-availability.spec.ts
 
 Expected: PASS，7 个用例。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add dsh-plugin-desktop/src/tray-availability.ts dsh-plugin-desktop/tests/tray-availability.spec.ts
@@ -396,7 +396,7 @@ git commit -m "feat(desktop): probe Linux StatusNotifier availability for the tr
 - Modify: `dsh-plugin-desktop/tests/window-options.spec.ts`（`spec` mock 补 `readCloseBehavior: () => 'tray'`）
 - Test: `dsh-plugin-desktop/tests/settings-schema.spec.ts`
 
-- [ ] **Step 1: runtime.ts 增加规格字段**
+- [x] **Step 1: runtime.ts 增加规格字段**
 
 在 `dsh-plugin-desktop/src/runtime.ts` 的 `DesktopShellSpec` 中，紧跟 `readThemeSource(): DesktopThemeSource` 行之后增加：
 
@@ -405,7 +405,7 @@ git commit -m "feat(desktop): probe Linux StatusNotifier availability for the tr
   readCloseBehavior(): DesktopCloseBehavior
 ```
 
-- [ ] **Step 2: index.ts 增加设置字段并接线**
+- [x] **Step 2: index.ts 增加设置字段并接线**
 
 打开 `dsh-plugin-desktop/src/index.ts`：
 
@@ -461,7 +461,7 @@ export interface DesktopSettings {
       },
 ```
 
-- [ ] **Step 3: 新增 schema 默认值测试**
+- [x] **Step 3: 新增 schema 默认值测试**
 
 创建 `dsh-plugin-desktop/tests/settings-schema.spec.ts`。注意：schemastery 3.18.1 的 schema 是**可调用形式** `schema(value)`，没有 `.parse`；用可调用形式加 `as DesktopSettings` 断言以满足必填字段输入类型：
 
@@ -482,7 +482,7 @@ describe('DesktopSettingsSchema', () => {
 })
 ```
 
-- [ ] **Step 4: 更新 plugin.spec.ts**
+- [x] **Step 4: 更新 plugin.spec.ts**
 
 打开 `dsh-plugin-desktop/tests/plugin.spec.ts`，做这些修改：
 
@@ -506,7 +506,7 @@ describe('DesktopSettingsSchema', () => {
 
 4. `settings.get` mock 现在返回 `closeBehavior: 'tray'`，解析后的 `DesktopSettings` 也包含该字段。需要把 plugin.spec 中任何对解析后设置的精确实 `toEqual`（约第 163 行）以及 `notify(next, prev)` 的 `DesktopSettings` 字面量（约 8 个字面量）补上 `closeBehavior: 'tray'`，否则运行期与 typecheck 不过。
 
-- [ ] **Step 4b: 补全既有 DesktopShellSpec 测试字面量**
+- [x] **Step 4b: 补全既有 DesktopShellSpec 测试字面量**
 
 `DesktopShellSpec.readCloseBehavior` 是必填字段，需要给两个构造完整 `DesktopShellSpec` 字面量的既有测试各加一行：
 - `dsh-plugin-desktop/tests/electron-runtime.spec.ts`（`spec` mock，`readThemeSource: vi.fn(() => 'system' as const)` 之后）：
@@ -514,7 +514,7 @@ describe('DesktopSettingsSchema', () => {
 - `dsh-plugin-desktop/tests/window-options.spec.ts`（`spec` mock，`readThemeSource: () => 'system'` 之后）：
   `readCloseBehavior: () => 'tray',`
 
-- [ ] **Step 5: 运行测试与类型检查**
+- [x] **Step 5: 运行测试与类型检查**
 
 ```bash
 corepack yarn workspace dsh-plugin-desktop vitest run tests/plugin.spec.ts tests/settings-schema.spec.ts
@@ -523,7 +523,7 @@ cd /home/admins/PycharmProjects/deepseek-harness-desktop && corepack yarn worksp
 
 Expected: 两个测试文件 PASS；typecheck 无错误。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add dsh-plugin-desktop/src/runtime.ts dsh-plugin-desktop/src/index.ts dsh-plugin-desktop/tests/plugin.spec.ts dsh-plugin-desktop/tests/settings-schema.spec.ts dsh-plugin-desktop/tests/electron-runtime.spec.ts dsh-plugin-desktop/tests/window-options.spec.ts
@@ -539,7 +539,7 @@ git commit -m "feat(desktop): add configurable close behavior setting and thread
 - Modify: `dsh-plugin-desktop/src/electron-runtime.ts`
 - Modify: `dsh-plugin-desktop/tests/electron-runtime.spec.ts`
 
-- [ ] **Step 1: electron-shell-generation.ts 增加选项字段**
+- [x] **Step 1: electron-shell-generation.ts 增加选项字段**
 
 打开 `dsh-plugin-desktop/src/electron-shell-generation.ts`：
 
@@ -564,7 +564,7 @@ import { isTrayAvailable } from './tray-availability.ts'
   readonly notifyTrayUnavailable: () => void
 ```
 
-- [ ] **Step 2: 重写 close 处理器与托盘挂载**
+- [x] **Step 2: 重写 close 处理器与托盘挂载**
 
 在 `ElectronShellGeneration` 类中：
 
@@ -668,7 +668,7 @@ import { isTrayAvailable } from './tray-availability.ts'
     tray?.destroy()
 ```
 
-- [ ] **Step 3: electron-runtime.ts 透传回调 + 降级通知**
+- [x] **Step 3: electron-runtime.ts 透传回调 + 降级通知**
 
 打开 `dsh-plugin-desktop/src/electron-runtime.ts`：
 
@@ -700,7 +700,7 @@ import { isTrayAvailable } from './tray-availability.ts'
   }
 ```
 
-- [ ] **Step 4: 更新 electron-runtime.spec.ts mock 与新增测试**
+- [x] **Step 4: 更新 electron-runtime.spec.ts mock 与新增测试**
 
 打开 `dsh-plugin-desktop/tests/electron-runtime.spec.ts`：
 
@@ -840,7 +840,7 @@ const childProcess = vi.hoisted(() => {
 
 注意：`spec` 是模块级共享对象，三个新测试都依赖 `spec.readCloseBehavior` 默认 `'tray'`；显式退出测试用 `mockReturnValueOnce` 避免污染后续用例。`beforeEach` 里的 `vi.clearAllMocks()` 会清空调用记录但保留工厂默认实现。
 
-- [ ] **Step 5: 运行测试与类型检查**
+- [x] **Step 5: 运行测试与类型检查**
 
 ```bash
 corepack yarn workspace dsh-plugin-desktop vitest run tests/electron-runtime.spec.ts
@@ -849,7 +849,7 @@ cd /home/admins/PycharmProjects/deepseek-harness-desktop && corepack yarn worksp
 
 Expected: electron-runtime.spec.ts 全部通过（含新增 3 个用例与原有用例）；typecheck 无错误。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add dsh-plugin-desktop/src/electron-shell-generation.ts dsh-plugin-desktop/src/electron-runtime.ts dsh-plugin-desktop/tests/electron-runtime.spec.ts
@@ -863,7 +863,7 @@ git commit -m "feat(desktop): hide, quit, or degrade on window close from tray a
 **Files:**
 - Modify: `dsh-plugin-desktop/package.json`
 
-- [ ] **Step 1: 增加 appindicator 依赖**
+- [x] **Step 1: 增加 appindicator 依赖**
 
 打开 `dsh-plugin-desktop/package.json`，在 `build.linux` 对象的 `"syncDesktopName": true,` 之后增加一行：
 
@@ -871,7 +871,7 @@ git commit -m "feat(desktop): hide, quit, or degrade on window close from tray a
     "depends": ["libayatana-appindicator3-1"],
 ```
 
-- [ ] **Step 2: 验证 JSON 合法**
+- [x] **Step 2: 验证 JSON 合法**
 
 ```bash
 python3 -c "import json; json.load(open('dsh-plugin-desktop/package.json')); print('ok')"
@@ -879,7 +879,7 @@ python3 -c "import json; json.load(open('dsh-plugin-desktop/package.json')); pri
 
 Expected: `ok`。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add dsh-plugin-desktop/package.json
@@ -894,7 +894,7 @@ git commit -m "build(desktop): declare libayatana-appindicator for the Linux tra
 - Modify: `docs/faq.md`
 - Modify: `docs/faq.en.md`
 
-- [ ] **Step 1: 中文 FAQ 增加条目**
+- [x] **Step 1: 中文 FAQ 增加条目**
 
 在 `docs/faq.md` 的 `## 应用如何更新？` 段落之后、`## 在哪里下载和报告问题？` 之前插入：
 
@@ -906,7 +906,7 @@ Linux 下点击窗口关闭按钮默认把应用收起到系统托盘，进程�
 如果托盘不可用，关闭窗口会直接退出应用（并提示一次），避免窗口消失后进程仍在后台运行却无法重新打开。你可以在设置中把"关闭按钮行为"改为"退出"，或改回"最小化到托盘"。
 ```
 
-- [ ] **Step 2: 英文 FAQ 增加条目**
+- [x] **Step 2: 英文 FAQ 增加条目**
 
 在 `docs/faq.en.md` 对应位置（"应用如何更新？" 之后）插入：
 
@@ -918,7 +918,7 @@ On Linux, clicking the window close button hides the app to the system tray by d
 When the tray is unavailable, closing the window exits the app directly (with a one-time notice) so the window does not vanish while a background process stays impossible to reopen. You can set the "close button behavior" to "exit" or back to "minimize to tray" in settings.
 ```
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add docs/faq.md docs/faq.en.md
@@ -931,7 +931,7 @@ git commit -m "docs: explain Linux tray availability and close behavior"
 
 **Files:** 无（只读验证）
 
-- [ ] **Step 1: 运行桌面包全量单测**
+- [x] **Step 1: 运行桌面包全量单测**
 
 ```bash
 cd /home/admins/PycharmProjects/deepseek-harness-desktop && corepack yarn workspace dsh-plugin-desktop test
@@ -939,7 +939,7 @@ cd /home/admins/PycharmProjects/deepseek-harness-desktop && corepack yarn worksp
 
 Expected: 全部测试通过。
 
-- [ ] **Step 2: 运行类型检查**
+- [x] **Step 2: 运行类型检查**
 
 ```bash
 corepack yarn typecheck
@@ -947,7 +947,7 @@ corepack yarn typecheck
 
 Expected: 无错误（含 dsh-community-market 的 typecheck）。
 
-- [ ] **Step 3: 运行完整 headless 门禁**
+- [x] **Step 3: 运行完整 headless 门禁**
 
 ```bash
 corepack yarn check
