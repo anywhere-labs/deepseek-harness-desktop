@@ -652,3 +652,16 @@ Expected:
 **Placeholder 扫描**：无 TBD/TODO；每个代码步骤都含完整代码。
 
 **类型一致性**：`DesktopCloseBehavior`（runtime.ts:18，`'tray'|'quit'`）在 store/组件/注册模块/测试中统一；`CLOSE_BEHAVIOR_SETTINGS_NS = 'settings.desktop'` 在 Task 2 合并、Task 5 使用、测试断言统一；`createCloseBehaviorRowStore` 返回 `EngineStoreHandle<CloseBehaviorRowState, CloseBehaviorRowActions>`，注入面 `BoundActions<typeof store>` 与测试的 actions 类型一致。
+
+---
+
+## 执行偏差记录（2026-08-21，实现期间按仓库实际约束修正）
+
+以下偏差均在实现/门禁/冒烟期间发现并落地，计划原文不构成当前代码的唯一依据：
+
+1. **Task 1 命名空间共享（运行时值导入 → type-only）**：`settings-namespaces.ts` 初版值导入 `settingsNamespace()` from `@deepseek-ai/dsh-settings`。客户端 Loader 的模块表不注册该包，打包后在渲染进程 `require("@deepseek-ai/dsh-settings")` 报「missed the module table」，导致 client 模块 import 失败、渲染器不启动。修正为 `import type { SettingsNamespace }` + `'dsh-desktop' as SettingsNamespace`（值相同，客户端 bundle 不再 require 该包）。
+2. **Task 3 行 store（defineStore 不可 node 加载 → 纯状态抽取）**：`@deepseek-ai/dsh-client-runtime/client` 是包在 DSH module loader 里的浏览器 bundle，桌面 node vitest 无法值加载。抽出纯状态模块 `close-behavior-settings-state.ts`（`CLOSE_BEHAVIOR_ROW_INITIAL_STATE` + `adoptCloseBehaviorRowState`，仅 type import），store 为薄 `defineStore` 胶水；单测只测纯状态。
+3. **Task 4/7 样式（CSS module → 纯字符串注入）**：桌面 tsdown 的 `css-guard` 拒绝 CSS module import（`@tsdown/css` 未装，客户端样式约定为纯字符串 `<style>` 注入）。`CloseBehaviorRow` 改用 `ROW_STYLES` + `installRowStyles()`（`data-plugin-css` 守卫，镜像 `styles.ts` 的 `installAdvancedStyles`），删除 `.module.css`。
+4. **Task 5 注册逻辑（store 工厂依赖注入）**：`registerCloseBehaviorRow(ctx, createStore)` 接收 store 工厂参数（而非内部创建），使模块避免运行时导入客户端 bundle、可 node 单测。
+5. **Task 6 接入 apply（client-environment.spec 需桩）**：接线把 primitives/runtime 浏览器模块拉进 `client-environment.spec.ts` 的导入图，按 Task 5 既有模式补两个 `vi.mock` 桩（该 spec 不跑设置行路径）。
+6. **Task 8 冒烟定位运行时缺陷并修复**：首次打包后渲染进程因 `@deepseek-ai/dsh-settings` 运行时 require 而 boot 失败（见第 1 条），修复后重打、重冒烟确认 `renderer.boot.completed` `rendererStatus: healthy`、无注入错误。
