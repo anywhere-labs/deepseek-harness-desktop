@@ -8,7 +8,7 @@ import {
 } from './close-behavior-settings-state.ts'
 
 /** Declared action shape giving the exported factory a stable return type. */
-type CloseBehaviorRowActions = {
+export type CloseBehaviorRowActions = {
   sync: (draft: CloseBehaviorRowState, value: CloseBehaviorRowState['value'], revision: number) => void
 }
 
