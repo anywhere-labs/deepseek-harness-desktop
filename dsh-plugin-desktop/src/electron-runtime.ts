@@ -104,6 +104,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private scheduled: DesktopShellSpec | undefined
   private mountTask: Promise<void> | undefined
   private quitting = false
+  private trayUnavailableNotified = false
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
@@ -223,6 +224,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         preloadPath: desktopPreloadPath(),
         isQuitting: () => this.quitting,
         buildTrayTemplate: () => this.buildTrayTemplate(spec),
+        readCloseBehavior: () => spec.readCloseBehavior(),
+        requestQuit: code => spec.requestQuit(code),
+        notifyTrayUnavailable: () => this.notifyTrayUnavailable(),
         stopRendererBootMonitoring: () => { this.stopRendererBootMonitoring() },
         abortRendererBootMonitoring: cause => { this.rendererHealthGate?.stop(cause) },
         failRendererBoot: error => { this.failRendererBoot('renderer-failed', error) },
@@ -469,6 +473,16 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         this.logError(`dsh-plugin-desktop: tray command failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       })
     }
+  }
+
+  /** Explain once per session why closing exits instead of hiding to the tray. */
+  private notifyTrayUnavailable(): void {
+    if (this.trayUnavailableNotified) return
+    this.trayUnavailableNotified = true
+    this.showNotification({
+      title: 'System Tray Unavailable',
+      body: 'This desktop does not expose a system tray, so closing the window exits DSH Desktop. Install the AppIndicator extension to enable tray mode.',
+    })
   }
 
   private showNotification(notification: DesktopNotification): void {

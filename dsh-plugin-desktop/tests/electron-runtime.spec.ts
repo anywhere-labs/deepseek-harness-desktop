@@ -14,7 +14,15 @@ const updater = vi.hoisted(() => ({
 const childProcess = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void
   const listeners = new Map<string, Listener[]>()
+  const stdoutListeners = new Map<string, Listener[]>()
+  let watcherPresent = true
   const child = {
+    stdout: {
+      on: vi.fn((event: string, listener: Listener) => {
+        stdoutListeners.set(event, [...(stdoutListeners.get(event) ?? []), listener])
+        return child.stdout
+      }),
+    },
     once: vi.fn((event: string, listener: Listener) => {
       listeners.set(event, [...(listeners.get(event) ?? []), listener])
       return child
@@ -24,6 +32,7 @@ const childProcess = vi.hoisted(() => {
       return child
     }),
     unref: vi.fn(),
+    kill: vi.fn(),
   }
   return {
     child,
@@ -32,8 +41,28 @@ const childProcess = vi.hoisted(() => {
       listeners.delete(event)
       for (const listener of current) listener(...args)
     },
-    reset() { listeners.clear() },
-    spawn: vi.fn(() => child),
+    reset() {
+      listeners.clear()
+      stdoutListeners.clear()
+      watcherPresent = true
+    },
+    setWatcherPresent(present: boolean) { watcherPresent = present },
+    spawn: vi.fn((_command: string, args: string[]) => {
+      // Auto-settle the StatusNotifier probe so mounts never hang on the bus.
+      if (args.includes('org.freedesktop.DBus.ListNames')) {
+        queueMicrotask(() => {
+          if (watcherPresent) {
+            for (const listener of [...(stdoutListeners.get('data') ?? [])]) {
+              listener(Buffer.from('  string "org.kde.StatusNotifierWatcher"\n'))
+            }
+          }
+          const close = [...(listeners.get('close') ?? [])]
+          listeners.delete('close')
+          for (const listener of close) listener(0)
+        })
+      }
+      return child
+    }),
   }
 })
 
@@ -235,7 +264,7 @@ const spec: DesktopShellSpec = {
   readLocalePreference: vi.fn(() => undefined),
   readThemeSource: vi.fn(() => 'system' as const),
   readCloseBehavior: vi.fn(() => 'tray' as const),
-  requestQuit: () => {},
+  requestQuit: vi.fn(),
   requestModeChange: vi.fn(async () => {}),
 }
 
@@ -377,6 +406,71 @@ describe('Electron desktop runtime', () => {
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Advanced Mode', enabled: false }),
     ]))
+
+    await release()
+  })
+
+  it('hides the window on close when the tray is available and close behavior is tray', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    expect(electron.trays).toHaveLength(1)
+    const closeListener = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1]
+    expect(closeListener).toEqual(expect.any(Function))
+    const event = { preventDefault: vi.fn() }
+    closeListener(event)
+    expect(event.preventDefault).toHaveBeenCalledOnce()
+    expect(electron.browserWindows[0]?.hide).toHaveBeenCalledOnce()
+    expect(spec.requestQuit).not.toHaveBeenCalled()
+
+    await release()
+  })
+
+  it('quits through the shutdown path when close behavior is explicit quit', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    vi.mocked(spec.readCloseBehavior).mockReturnValueOnce('quit')
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    const closeListener = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1]
+    closeListener({ preventDefault: vi.fn() })
+
+    expect(spec.requestQuit).toHaveBeenCalledWith(0)
+    expect(electron.browserWindows[0]?.hide).not.toHaveBeenCalled()
+
+    await release()
+  })
+
+  it('quits and notifies once when tray mode is selected but the tray is unavailable', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    childProcess.setWatcherPresent(false)
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    // The Tray is still constructed to test creation, then destroyed once the
+    // Linux watcher probe reports no host.
+    expect(electron.trays).toHaveLength(1)
+    expect(electron.trays[0]?.destroy).toHaveBeenCalledOnce()
+    expect(electron.trays[0]?.setToolTip).not.toHaveBeenCalled()
+    const closeListener = electron.browserWindowOn.mock.calls.find(([event]) => event === 'close')?.[1]
+    closeListener({ preventDefault: vi.fn() })
+    closeListener({ preventDefault: vi.fn() })
+
+    expect(spec.requestQuit).toHaveBeenCalledTimes(2)
+    expect(electron.notifications).toHaveLength(1)
+    expect(electron.notifications[0]?.options).toEqual(expect.objectContaining({
+      title: 'System Tray Unavailable',
+    }))
 
     await release()
   })

@@ -11,7 +11,9 @@ import {
 } from 'electron'
 import { formatDesktopExitCode } from './desktop-logger.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
-import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
+import type { DesktopCloseBehavior, DesktopNotification, DesktopShellSpec } from './runtime.ts'
+import { resolveCloseAction } from './close-behavior.ts'
+import { isTrayAvailable } from './tray-availability.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
 
@@ -36,6 +38,9 @@ export interface ElectronShellGenerationOptions {
   readonly preloadPath: string
   readonly isQuitting: () => boolean
   readonly buildTrayTemplate: () => Electron.MenuItemConstructorOptions[]
+  readonly readCloseBehavior: () => DesktopCloseBehavior
+  readonly requestQuit: (code: number) => void
+  readonly notifyTrayUnavailable: () => void
   readonly stopRendererBootMonitoring: () => void
   readonly abortRendererBootMonitoring: (cause: unknown) => void
   readonly failRendererBoot: (error: string) => void
@@ -46,6 +51,7 @@ export interface ElectronShellGenerationOptions {
 export class ElectronShellGeneration {
   private window: BrowserWindow | undefined
   private tray: Tray | undefined
+  private trayAvailable = false
   private mounted = false
   private released = false
   private attentionCount = 0
@@ -74,9 +80,20 @@ export class ElectronShellGeneration {
     const show = (): void => { this.show() }
     const clearAttention = (): void => { this.clearAttention() }
     const close = (event: Electron.Event): void => {
-      if (this.options.isQuitting()) return
+      const closeBehavior = this.options.readCloseBehavior()
+      const action = resolveCloseAction({
+        isQuitting: this.options.isQuitting(),
+        closeBehavior,
+        trayAvailable: this.trayAvailable,
+      })
+      if (action === 'allow') return
       event.preventDefault()
-      window.hide()
+      if (action === 'hide') {
+        window.hide()
+        return
+      }
+      if (closeBehavior === 'tray') this.options.notifyTrayUnavailable()
+      this.options.requestQuit(0)
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
     const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
@@ -158,7 +175,6 @@ export class ElectronShellGeneration {
       return { action: 'deny' }
     })
     window.once('ready-to-show', show)
-    let tray: Tray | undefined
     this.cleanupListeners = () => {
       app.off('activate', show)
       window.off('close', close)
@@ -170,16 +186,12 @@ export class ElectronShellGeneration {
       window.webContents.off('will-redirect', redirect)
       window.webContents.off('render-process-gone', rendererGone)
       window.webContents.off('did-fail-load', loadFailed)
-      tray?.off('click', show)
+      this.tray?.off('click', show)
     }
 
     try {
       await window.loadURL(spec.url)
-      tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
-      this.tray = tray
-      tray.setToolTip(spec.productName)
-      this.refreshTrayMenu()
-      tray.on('click', show)
+      this.trayAvailable = await this.mountTray(show)
       beforeInteractive?.()
       this.mounted = true
     } catch (cause) {
@@ -196,6 +208,31 @@ export class ElectronShellGeneration {
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()
+  }
+
+  /** Create the native tray, probing Linux availability; returns whether it is displayed. */
+  private async mountTray(show: () => void): Promise<boolean> {
+    const { platform, spec } = this.options
+    let tray: Tray | undefined
+    try {
+      tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
+    } catch (cause) {
+      this.options.logError(
+        `dsh-plugin-desktop: failed to create system tray: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    }
+    const available = await isTrayAvailable(platform.platform, tray !== undefined)
+    if (!available) {
+      tray?.destroy()
+      return false
+    }
+    if (tray !== undefined) {
+      this.tray = tray
+      tray.setToolTip(spec.productName)
+      this.refreshTrayMenu()
+      tray.on('click', show)
+    }
+    return true
   }
 
   notifyAttention(notification: DesktopNotification): void {
@@ -236,12 +273,12 @@ export class ElectronShellGeneration {
     const window = this.window
     const tray = this.tray
     this.clearAttention()
+    this.cleanupListeners?.()
+    this.cleanupListeners = undefined
     this.window = undefined
     this.tray = undefined
     if (window === undefined) return
 
-    this.cleanupListeners?.()
-    this.cleanupListeners = undefined
     tray?.destroy()
     if (!window.isDestroyed()) window.destroy()
   }
