@@ -719,6 +719,14 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         },
       },
       { type: 'separator' },
+      {
+        label: desktopTrayLabel(this.locale, 'restart'),
+        click: () => {
+          void this.requestRestart().catch((cause: unknown) => {
+            this.logError(`dsh-plugin-desktop: failed to restart: ${cause instanceof Error ? cause.message : String(cause)}`)
+          })
+        },
+      },
       { label: desktopTrayLabel(this.locale, 'quit'), click: () => { spec.requestQuit(0) } },
     )
     return template

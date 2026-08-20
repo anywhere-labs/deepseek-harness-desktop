@@ -597,6 +597,7 @@ describe('Electron desktop runtime', () => {
       .toEqual(expect.arrayContaining([
         '打开 DSH Desktop',
         '切换到高级模式',
+        '重新启动 DSH Desktop',
         '退出',
       ]))
 
@@ -606,6 +607,7 @@ describe('Electron desktop runtime', () => {
       .toEqual(expect.arrayContaining([
         'Open DSH Desktop',
         'Switch to Advanced Mode',
+        'Restart DSH Desktop',
         'Quit',
       ]))
 
@@ -616,6 +618,7 @@ describe('Electron desktop runtime', () => {
       .toEqual(expect.arrayContaining([
         '打开 DSH Desktop',
         '切换到高级模式',
+        '重新启动 DSH Desktop',
         '退出',
       ]))
 
@@ -952,6 +955,35 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
+  it('restarts from the tray and logs asynchronous restart failures', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const restart = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('restart unavailable'))
+    const logger = { error: vi.fn(), errorCause: vi.fn() }
+    const runtime = new ElectronDesktopRuntime(restart, undefined, logger)
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+    const items = electron.menuTemplates.at(-1) as Array<{ label?: string, click?: () => void }>
+    const restartIndex = items.findIndex(item => item.label === 'Restart DSH Desktop')
+    const quitIndex = items.findIndex(item => item.label === 'Quit')
+    expect(restartIndex).toBe(quitIndex - 1)
+
+    items[restartIndex]?.click?.()
+    await vi.waitFor(() => { expect(restart).toHaveBeenCalledTimes(1) })
+    items[restartIndex]?.click?.()
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith(
+        'dsh-plugin-desktop: failed to restart: restart unavailable',
+      )
+    })
+    expect(restart).toHaveBeenCalledTimes(2)
+
+    await release()
+  })
+
   it('rebuilds ordered effect-scoped tray contributions without replacing native commands', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -986,6 +1018,7 @@ describe('Electron desktop runtime', () => {
       'Earlier Tool', 'Later Tool', undefined,
       'Check for Updates…', undefined,
       'Switch to Advanced Mode', undefined,
+      'Restart DSH Desktop',
       'Quit',
     ])
     expect(electron.menuTemplates.at(-1)).toEqual(expect.arrayContaining([
