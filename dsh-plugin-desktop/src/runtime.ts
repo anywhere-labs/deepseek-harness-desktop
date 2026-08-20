@@ -136,6 +136,8 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
   readLocalePreference(): DesktopLocale | undefined
   /** Read the authoritative built-in theme preference after Host boot settles. */
   readThemeSource(): DesktopThemeSource
+  /** Read the close-button behavior selected in desktop settings. */
+  readCloseBehavior(): DesktopCloseBehavior
   /** Request Cordis teardown followed by native application exit. */
   requestQuit(code: number): void
   /** Persist another mode through the registered desktop settings scope. */

@@ -234,6 +234,7 @@ const spec: DesktopShellSpec = {
   },
   readLocalePreference: vi.fn(() => undefined),
   readThemeSource: vi.fn(() => 'system' as const),
+  readCloseBehavior: vi.fn(() => 'tray' as const),
   requestQuit: () => {},
   requestModeChange: vi.fn(async () => {}),
 }

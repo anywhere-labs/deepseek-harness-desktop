@@ -101,6 +101,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     get: vi.fn((namespace: unknown) => {
       if (String(namespace) === 'ui-theme') return { preference: themePreference }
       if (String(namespace) === 'locale') return { preference: localePreference }
+      if (String(namespace) === 'dsh-desktop') return { mode: config.mode, closeBehavior: 'tray' }
       return undefined
     }),
     register: vi.fn(() => ({
@@ -160,7 +161,7 @@ describe('desktop Host plugin', () => {
   it('defaults to compatibility mode and validates both schemas', () => {
     expect(Config({} as DesktopConfig)).toEqual(config)
     expect(Config({ mode: 'advanced' } as DesktopConfig)).toEqual({ ...config, mode: 'advanced' })
-    expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', port: 0, logLevel: 'info' })
+    expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', port: 0, logLevel: 'info', closeBehavior: 'tray' })
     expect(() => DesktopSettingsSchema({ port: -1 } as DesktopSettings)).toThrow()
     expect(() => DesktopSettingsSchema({ port: 1.5 } as DesktopSettings)).toThrow()
     expect(() => DesktopSettingsSchema({ port: 65_536 } as DesktopSettings)).toThrow()
@@ -213,7 +214,7 @@ describe('desktop Host plugin', () => {
     expect(inject).toContain('settings')
     expect(inject).not.toContain('loader')
     const register = vi.mocked(harness.ctx.settings.register)
-    expect(register.mock.calls[0]?.[2]).toEqual(expect.objectContaining({ applies: 'restart' }))
+    expect(register.mock.calls[0]?.[2]).toEqual(expect.objectContaining({ applies: 'live' }))
     expect(register.mock.calls[0]?.[2]).not.toHaveProperty('base')
     expect(loaderAwait).not.toHaveBeenCalled()
     expect(harness.shell()).toEqual(expect.objectContaining({
@@ -222,11 +223,13 @@ describe('desktop Host plugin', () => {
       productName: 'DSH Desktop',
       windowTitle: 'DeepSeek Harness Desktop',
       readThemeSource: expect.any(Function),
+      readCloseBehavior: expect.any(Function),
     }))
     expect(harness.shell()?.iconPath.endsWith(join('build', 'app-icon-mac.png'))).toBe(true)
     expect(harness.shell()?.trayIcons.templatePath.endsWith(join('build', 'tray-iconTemplate.png'))).toBe(true)
     expect(harness.shell()?.trayIcons.bluePath.endsWith(join('build', 'tray-icon-blue.png'))).toBe(true)
     expect(harness.shell()?.readThemeSource()).toBe('system')
+    expect(harness.shell()?.readCloseBehavior()).toBe('tray')
     harness.notifyTheme('dark')
     expect(harness.setThemeSource).not.toHaveBeenCalled()
 
@@ -333,15 +336,15 @@ describe('desktop Host plugin', () => {
     apply(harness.ctx, config)
 
     await harness.notify(
-      { mode: 'compatibility', port: 0, logLevel: 'info' },
-      { mode: 'compatibility', port: 0, logLevel: 'info' },
+      { mode: 'compatibility', port: 0, logLevel: 'info', closeBehavior: 'tray' },
+      { mode: 'compatibility', port: 0, logLevel: 'info', closeBehavior: 'tray' },
     )
     expect(harness.restart).not.toHaveBeenCalled()
 
     harness.restart.mockImplementation(() => new Promise<void>(() => {}))
     await harness.notify(
-      { mode: 'advanced', port: 0, logLevel: 'info' },
-      { mode: 'compatibility', port: 0, logLevel: 'info' },
+      { mode: 'advanced', port: 0, logLevel: 'info', closeBehavior: 'tray' },
+      { mode: 'compatibility', port: 0, logLevel: 'info', closeBehavior: 'tray' },
     )
     await vi.runAllTimersAsync()
     expect(harness.restart).toHaveBeenCalledOnce()
@@ -353,15 +356,15 @@ describe('desktop Host plugin', () => {
     apply(harness.ctx, config)
 
     await harness.notify(
-      { mode: 'compatibility', port: 0, logLevel: 'debug' },
-      { mode: 'compatibility', port: 0, logLevel: 'info' },
+      { mode: 'compatibility', port: 0, logLevel: 'debug', closeBehavior: 'tray' },
+      { mode: 'compatibility', port: 0, logLevel: 'info', closeBehavior: 'tray' },
     )
     expect(harness.restart).not.toHaveBeenCalled()
 
     harness.restart.mockImplementation(() => new Promise<void>(() => {}))
     await harness.notify(
-      { mode: 'compatibility', port: 43_189, logLevel: 'debug' },
-      { mode: 'compatibility', port: 0, logLevel: 'debug' },
+      { mode: 'compatibility', port: 43_189, logLevel: 'debug', closeBehavior: 'tray' },
+      { mode: 'compatibility', port: 0, logLevel: 'debug', closeBehavior: 'tray' },
     )
     await vi.runAllTimersAsync()
     expect(harness.restart).toHaveBeenCalledOnce()

@@ -26,7 +26,7 @@ import {
   handleDesktopDirectoryPickerRequest,
   handleDesktopDirectoryValidationRequest,
 } from './directory-picker-route.ts'
-import type { DesktopShellMode } from './runtime.ts'
+import type { DesktopCloseBehavior, DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 
 /** Stable Cordis plugin name. */
@@ -50,6 +50,8 @@ export interface DesktopSettings {
   port: number
   /** Log verbosity threshold applied to the file logger. */
   logLevel: 'debug' | 'info' | 'warn' | 'error'
+  /** Close-button behavior: hide to the tray or exit the process. */
+  closeBehavior: DesktopCloseBehavior
 }
 
 /** Schema registered with the standard settings service. */
@@ -57,6 +59,7 @@ export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
   mode: z.union(['compatibility', 'advanced'] as const).default('compatibility'),
   port: z.number().step(1).min(0).max(65_535).default(0),
   logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info'),
+  closeBehavior: z.union(['tray', 'quit'] as const).default('tray'),
 })
 
 /** Native window configuration. */
@@ -139,7 +142,7 @@ export function apply(ctx: Context, config: Config): void {
     DESKTOP_SETTINGS_NAMESPACE,
     DesktopSettingsSchema,
     {
-      applies: 'restart',
+      applies: 'live',
       validate: (value) => {
         if (value.mode === 'advanced' && runtime.platform === 'linux') {
           throw new Error('dsh-plugin-desktop: advanced shell mode is supported on macOS and Windows')
@@ -243,6 +246,9 @@ export function apply(ctx: Context, config: Config): void {
           throw new Error('dsh-plugin-desktop: advanced shell requires the ui-theme settings namespace')
         }
         return theme.preference
+      },
+      readCloseBehavior: () => {
+        return (ctx.settings.get(DESKTOP_SETTINGS_NAMESPACE) as DesktopSettings).closeBehavior
       },
       requestQuit: appExit,
       requestModeChange: async mode => settings.update({ mode }),

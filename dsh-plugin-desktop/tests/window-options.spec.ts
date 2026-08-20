@@ -24,6 +24,7 @@ const spec: DesktopShellSpec = {
   },
   readLocalePreference: () => undefined,
   readThemeSource: () => 'system',
+  readCloseBehavior: () => 'tray',
   requestQuit: () => {},
   requestModeChange: async () => {},
 }
