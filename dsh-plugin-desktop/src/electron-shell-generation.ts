@@ -92,7 +92,11 @@ export class ElectronShellGeneration {
         window.hide()
         return
       }
-      if (closeBehavior === 'tray') this.options.notifyTrayUnavailable()
+      // The tray-unavailable notice names the Linux AppIndicator extension;
+      // keep it Linux-only so a rare Windows/macOS tray failure never shows it.
+      if (closeBehavior === 'tray' && platform.platform === 'linux') {
+        this.options.notifyTrayUnavailable()
+      }
       this.options.requestQuit(0)
     }
     const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
