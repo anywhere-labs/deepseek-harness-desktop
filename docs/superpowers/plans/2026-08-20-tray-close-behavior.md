@@ -391,7 +391,9 @@ git commit -m "feat(desktop): probe Linux StatusNotifier availability for the tr
 **Files:**
 - Modify: `dsh-plugin-desktop/src/runtime.ts`（`DesktopShellSpec.readCloseBehavior`）
 - Modify: `dsh-plugin-desktop/src/index.ts`（schema 字段、`applies: 'live'`、`readCloseBehavior`）
-- Modify: `dsh-plugin-desktop/tests/plugin.spec.ts`（`applies` 断言、harness `settings.get`、`shell()` 断言）
+- Modify: `dsh-plugin-desktop/tests/plugin.spec.ts`（`applies` 断言、harness `settings.get`、`shell()` 断言、`notify` 字面量补 `closeBehavior`）
+- Modify: `dsh-plugin-desktop/tests/electron-runtime.spec.ts`（`spec` mock 补 `readCloseBehavior: vi.fn(() => 'tray' as const)`）
+- Modify: `dsh-plugin-desktop/tests/window-options.spec.ts`（`spec` mock 补 `readCloseBehavior: () => 'tray'`）
 - Test: `dsh-plugin-desktop/tests/settings-schema.spec.ts`
 
 - [ ] **Step 1: runtime.ts 增加规格字段**
@@ -461,20 +463,20 @@ export interface DesktopSettings {
 
 - [ ] **Step 3: 新增 schema 默认值测试**
 
-创建 `dsh-plugin-desktop/tests/settings-schema.spec.ts`：
+创建 `dsh-plugin-desktop/tests/settings-schema.spec.ts`。注意：schemastery 3.18.1 的 schema 是**可调用形式** `schema(value)`，没有 `.parse`；用可调用形式加 `as DesktopSettings` 断言以满足必填字段输入类型：
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { DesktopSettingsSchema } from '../src/index.ts'
+import { DesktopSettings, DesktopSettingsSchema } from '../src/index.ts'
 
 describe('DesktopSettingsSchema', () => {
   it('defaults the close behavior to tray mode', () => {
-    const settings = DesktopSettingsSchema.parse({})
+    const settings = DesktopSettingsSchema({} as DesktopSettings)
     expect(settings.closeBehavior).toBe('tray')
   })
 
   it('accepts an explicit quit close behavior', () => {
-    const settings = DesktopSettingsSchema.parse({ closeBehavior: 'quit' })
+    const settings = DesktopSettingsSchema({ closeBehavior: 'quit' } as DesktopSettings)
     expect(settings.closeBehavior).toBe('quit')
   })
 })
@@ -482,7 +484,7 @@ describe('DesktopSettingsSchema', () => {
 
 - [ ] **Step 4: 更新 plugin.spec.ts**
 
-打开 `dsh-plugin-desktop/tests/plugin.spec.ts`，做三处修改：
+打开 `dsh-plugin-desktop/tests/plugin.spec.ts`，做这些修改：
 
 1. `createHarness` 的 `settings.get`（第 101-105 行附近）在 `locale` 分支之后、`return undefined` 之前增加：
 
@@ -502,6 +504,16 @@ describe('DesktopSettingsSchema', () => {
     expect(harness.shell()?.readCloseBehavior()).toBe('tray')
 ```
 
+4. `settings.get` mock 现在返回 `closeBehavior: 'tray'`，解析后的 `DesktopSettings` 也包含该字段。需要把 plugin.spec 中任何对解析后设置的精确实 `toEqual`（约第 163 行）以及 `notify(next, prev)` 的 `DesktopSettings` 字面量（约 8 个字面量）补上 `closeBehavior: 'tray'`，否则运行期与 typecheck 不过。
+
+- [ ] **Step 4b: 补全既有 DesktopShellSpec 测试字面量**
+
+`DesktopShellSpec.readCloseBehavior` 是必填字段，需要给两个构造完整 `DesktopShellSpec` 字面量的既有测试各加一行：
+- `dsh-plugin-desktop/tests/electron-runtime.spec.ts`（`spec` mock，`readThemeSource: vi.fn(() => 'system' as const)` 之后）：
+  `readCloseBehavior: vi.fn(() => 'tray' as const),`
+- `dsh-plugin-desktop/tests/window-options.spec.ts`（`spec` mock，`readThemeSource: () => 'system'` 之后）：
+  `readCloseBehavior: () => 'tray',`
+
 - [ ] **Step 5: 运行测试与类型检查**
 
 ```bash
@@ -514,7 +526,7 @@ Expected: 两个测试文件 PASS；typecheck 无错误。
 - [ ] **Step 6: 提交**
 
 ```bash
-git add dsh-plugin-desktop/src/runtime.ts dsh-plugin-desktop/src/index.ts dsh-plugin-desktop/tests/plugin.spec.ts dsh-plugin-desktop/tests/settings-schema.spec.ts
+git add dsh-plugin-desktop/src/runtime.ts dsh-plugin-desktop/src/index.ts dsh-plugin-desktop/tests/plugin.spec.ts dsh-plugin-desktop/tests/settings-schema.spec.ts dsh-plugin-desktop/tests/electron-runtime.spec.ts dsh-plugin-desktop/tests/window-options.spec.ts
 git commit -m "feat(desktop): add configurable close behavior setting and thread it to the shell spec"
 ```
 
@@ -574,7 +586,11 @@ import { isTrayAvailable } from './tray-availability.ts'
         window.hide()
         return
       }
-      if (closeBehavior === 'tray') this.options.notifyTrayUnavailable()
+      // The tray-unavailable notice names the Linux AppIndicator extension;
+      // keep it Linux-only so a rare Windows/macOS tray failure never shows it.
+      if (closeBehavior === 'tray' && platform.platform === 'linux') {
+        this.options.notifyTrayUnavailable()
+      }
       this.options.requestQuit(0)
     }
 ```
