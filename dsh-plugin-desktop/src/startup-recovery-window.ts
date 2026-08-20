@@ -55,7 +55,7 @@ export interface DesktopStartupRecoveryWindowOptions {
   readonly locale: DesktopLocale
   readonly failureStage: DesktopStartupFailureStage
   readonly failureDetail: string
-  readonly exportDiagnostics: () => Promise<string>
+  readonly exportDiagnostics: (signal: AbortSignal) => Promise<string>
 }
 
 export interface DesktopStartupRecoveryConfigurationPaths {
@@ -447,6 +447,7 @@ export class DesktopStartupRecoveryWindow {
   private diagnostics: RecoveryDiagnosticsState = { status: 'saving' }
   private diagnosticPath: string | undefined
   private diagnosticTask: Promise<string> | undefined
+  private readonly diagnosticAbort = new AbortController()
   private confirmation: RecoveryConfirmation | undefined
   private notice: RecoveryNotice | undefined
   private busy = false
@@ -643,7 +644,7 @@ export class DesktopStartupRecoveryWindow {
     this.diagnostics = { status: 'saving' }
     await this.render()
     try {
-      const path = await this.options.exportDiagnostics()
+      const path = await this.options.exportDiagnostics(this.diagnosticAbort.signal)
       this.diagnosticPath = path
       this.diagnostics = { status: 'saved', filename: basename(path) }
       await this.render()
@@ -682,6 +683,7 @@ export class DesktopStartupRecoveryWindow {
   private finish(result: RecoveryWindowResult): void {
     if (this.settled) return
     this.settled = true
+    this.diagnosticAbort.abort(new DOMException('Recovery window closed.', 'AbortError'))
     const window = this.window
     this.window = undefined
     if (window !== undefined && !window.isDestroyed()) window.destroy()

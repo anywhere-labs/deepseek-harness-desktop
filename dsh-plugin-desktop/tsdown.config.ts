@@ -15,6 +15,7 @@ export default defineConfig([
       pnpm: 'src/pnpm.ts',
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
+      notifications: 'src/notifications.ts',
       'diagnostic-export-worker': 'src/diagnostic-export-worker.ts',
       runtime: 'src/runtime.ts',
       'electron-runtime': 'src/electron-runtime.ts',

@@ -54,4 +54,20 @@ describe('desktop workspace folder drop', () => {
       .rejects.toThrow('could not read this folder path')
     expect(actions.create).not.toHaveBeenCalled()
   })
+
+  it('rejects a workspace when desktop validation denies its volume', async () => {
+    const actions: WorkspaceFolderDropActions = {
+      create: vi.fn(),
+      startSession: vi.fn(),
+      validateDirectory: vi.fn(async () => false),
+    }
+
+    await expect(adoptWorkspaceFolder(
+      { name: 'repo' } as File,
+      { getPathForFile: () => 'E:\\repo' },
+      actions,
+    )).rejects.toThrow('DSH Desktop rejected this workspace location')
+    expect(actions.validateDirectory).toHaveBeenCalledWith('E:\\repo')
+    expect(actions.create).not.toHaveBeenCalled()
+  })
 })

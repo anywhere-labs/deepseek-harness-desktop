@@ -185,7 +185,11 @@ try {
     || hostServiceProbe.pnpm?.serviceName !== 'desktopPnpm'
     || hostServiceProbe.pnpm.lookupRun !== 'function'
     || hostServiceProbe.pnpm.run !== 'function'
-    || hostServiceProbe.pnpm.runPlugin !== 'function') {
+    || hostServiceProbe.pnpm.runPlugin !== 'function'
+    || hostServiceProbe.pnpm.installPlugin !== 'function'
+    || hostServiceProbe.pnpm.recoveredInstallReceiptIds !== 'function'
+    || hostServiceProbe.pnpm.acknowledgeRecoveredInstall !== 'function'
+    || hostServiceProbe.pnpm.rollbackPluginInstall !== 'function') {
     throw new Error(
       `profile-local Host service plugin produced an unexpected probe: ${JSON.stringify(hostServiceProbe)}`,
     )

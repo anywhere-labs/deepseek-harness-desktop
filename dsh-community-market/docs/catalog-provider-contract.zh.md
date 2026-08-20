@@ -2,7 +2,7 @@
 
 [English](catalog-provider-contract.md)
 
-状态：**已实现的公开 v1 契约。** 带版本的 Schema、生成类型、严格校验、来源持久化、受限网络与媒体边界、标准 HTTP adapter、经过审核的 DSH 1024Store 与仅浏览的 dshfind adapter、完整本地索引，以及可加载的 Host/Client 入口均已在 DSH Desktop 中实现并通过测试。本文档和 fixture 是 `manifestVersion` 与 `schemaVersion` `1.x` 的公开互操作契约。
+状态：**已实现的公开 v1 契约。** 带版本的 Schema、生成类型、严格校验、来源持久化、受限网络与媒体边界、标准 HTTP adapter、经过审核的 DSH 1024Store 与 dshfind adapter、完整本地索引，以及可加载的 Host/Client 入口均已在 DSH Desktop 中实现并通过测试。本文档和 fixture 是 `manifestVersion` 与 `schemaVersion` `1.x` 的公开互操作契约。
 
 ## 决策摘要
 
@@ -12,7 +12,7 @@
 - 目录生态是开放的：任何个人、社区或服务都可以发布符合规范的来源，任何用户都可以登记其 manifest URL。标准接入不需要修改 Market 代码，也不需要先获得合作批准。
 - 已有公开 API 无法直接输出标准 page 结构的 provider，可以提出经过审核的 adapter 合作接入。合作只会增加本地、经过测试的 Market 代码，绝不允许 provider 下发可执行 adapter 代码。
 - DSH 1024Store 是当前与本项目合作的目录提供方之一。市场已包含经过审核的内置 adapter；这个 adapter 不会自动选择 1024Store，也不会在当前来源失败时用它兜底。
-- dshfind 是另一个可选合作提供方。它经过审查的 adapter 当前仅用于浏览，不会被默认选择、优先排序、推荐或用作兜底。
+- dshfind 是另一个可选合作提供方。它经过审查的 adapter 只接受无歧义的结构化 npm 证据作为结构安装候选；其他条目仍然只能浏览。它不会被默认选择、优先排序、推荐或用作兜底。
 - 某个来源出现在内置选项中或受到 adapter 支持，不代表 Anywhere Labs 推荐、审核或背书该来源及其收录的插件。
 - 所有 provider 必须先转换成同一个标准化模型，数据才能到达市场界面或安装边界。
 
@@ -233,7 +233,7 @@ Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝
 
 dshfind 文档说明匿名配额为每分钟 30 次、突发 10 次，而当前目录以每页 100 条读取时需要超过 30 个 page。因此 adapter 会使用低于已公布持续速率的固定串行间隔，并把较慢的首次同步表现为来源加载状态，不能通过并发绕过 provider 限制。限流 response 会使整轮扫描失败，用户可以通过普通来源“重试”重新开始。完成的本地索引仍遵循普通有界 cache；明确刷新会启动一轮新的、一致的完整扫描。
 
-dshfind response 可能包含 `install.cmd`、`install.kind`、`install.pkg_name`、`install.npm_published` 与 `install.probed_at`，但当前没有提供精确稳定 npm 版本或同等 `repository_backlink` 证据。这些是不可信 provider claim，不是执行权限。Adapter 会在标准化前丢弃 `install.cmd`，不展示、不执行，也不从中解析 package/版本，并且不会为 dshfind 输出 `package` 或 `latestVersion`。因此所有 dshfind 条目都只能浏览，不能进入**可安装**或 Host 重建的手动提示。
+dshfind response 可能包含 `install.cmd`、其他安装 claim 和 `install.methods`。命令文本与普通 claim 都不是执行权限：adapter 会在标准化前丢弃 `install.cmd`，不展示、不执行，也绝不从中解析 package 身份。只有 `install.methods` 恰好包含一个不同目标，并且其 `kind` 为 `npm`、`verification` 为 `verified`、`code` 为 `repository_backlink`、`requiresBuildAllowance` 为 false、`spec` 是有界合法 npm 名称、`revision` 是有界精确稳定版本，而且 `spec` 与已提供的 `install.pkg_name` 一致时，adapter 才会输出 `package` 与 `latestVersion`。同一目标的重复副本不会造成歧义；出现多个不同目标时会 fail closed。缺少这些证据的条目仍然只能浏览。符合条件的结果也只是不可执行的规范化身份，不代表安全审核或安装授权；preview 与执行阶段仍会独立复核官方 npm metadata、规范仓库、integrity、lifecycle script、runtime、bundle 和当前 profile 状态。
 
 Adapter 可以标准化有界纯文本身份、描述、标签/分类、更新时间，以及规范、无凭据的 `https://github.com/owner/repository` 链接。当前 API 没有插件图标或 README 字段。任何 owner 头像 fallback 都必须标记为 `publisher-avatar` 并通过 Host 媒体边界解析；adapter 不获取或渲染远程 README 内容。dshfind 的分数、等级、`official`/精选标记、风险标记和安装结论仍是 provider 自有运营声明，绝不会成为 Anywhere Labs 的安全审核、推荐或验证信号。
 
@@ -345,7 +345,7 @@ Provider 与 adapter 作者可以直接使用对应的[最小来源 manifest](ex
 
 - [x] 标准 adapter 与受审 provider adapter 共用一个受限 HTTP client。
 - [x] 实现标准 GET `/v1/plugins`、精确 query 序列化、完整 cursor 扫描和本地完整索引。
-- [x] 提供经过审核的可选 DSH 1024Store 与仅浏览 dshfind adapter。
+- [x] 提供经过审核的可选 DSH 1024Store 与 dshfind adapter，并对结构安装证据 fail closed。
 - [x] 实施取消、deadline、有界 cache、强制刷新、Schema 有界网络分页和每页最多 50 条的本地 UI 分页。
 - [x] 在标准化前校验不可信 wire 数据，并再次校验每份标准化 snapshot。
 - [x] 在扫描、本地筛选、分页、cache、详情和安装确认中始终保留 provenance。

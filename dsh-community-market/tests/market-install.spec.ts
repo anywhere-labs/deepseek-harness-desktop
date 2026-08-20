@@ -242,9 +242,13 @@ function recoverableRunner(
   let pendingPackageName: string | undefined
   return {
     ...implementation,
-    async runPluginInstall(args, dir, recovery, signal) {
-      pendingPackageName = recovery.packageName
-      return implementation.runPlugin(args, dir, signal)
+    async installPlugin(request) {
+      pendingPackageName = request.recovery.packageName
+      return implementation.runPlugin([
+        'add',
+        ...(request.pnpmOptions ?? []),
+        `${request.recovery.packageName}@${request.recovery.packageVersion}`,
+      ], request.invokingDir, request.signal)
     },
     async recoveredInstallReceiptIds() { return [] },
     async acknowledgeRecoveredInstall() {},

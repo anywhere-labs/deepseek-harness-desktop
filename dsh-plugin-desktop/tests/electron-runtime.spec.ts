@@ -107,7 +107,9 @@ const electron = vi.hoisted(() => {
     }
 
     readonly isDestroyed = vi.fn(() => false)
+    readonly isFocused = vi.fn(() => false)
     readonly isMinimized = vi.fn(() => false)
+    readonly flashFrame = vi.fn()
     readonly restore = vi.fn()
     readonly show = vi.fn()
     readonly hide = vi.fn()
@@ -164,6 +166,7 @@ const electron = vi.hoisted(() => {
       }),
       getVersion: vi.fn(() => '43.4.0'),
       isPackaged: false,
+      setBadgeCount: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
     },
@@ -462,7 +465,7 @@ describe('Electron desktop runtime', () => {
     const logger = { error: vi.fn(), errorCause: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot, logger)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
 
     const gone = electron.browserWindows[0]?.webContents.on.mock.calls
@@ -470,6 +473,7 @@ describe('Electron desktop runtime', () => {
     expect(gone).toEqual(expect.any(Function))
     gone({}, { reason: 'crashed', exitCode: -1073741819 })
     runtime.reportRendererBoot({ status: 'healthy' })
+    await rendererBoot
 
     expect(runtime.rendererBootFailureReason).toBe('renderer-failed')
     expect(onRendererBoot).toHaveBeenCalledOnce()
@@ -488,7 +492,7 @@ describe('Electron desktop runtime', () => {
     const onRendererBoot = vi.fn(() => true)
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
 
     const failed = electron.browserWindows[0]?.webContents.on.mock.calls
@@ -497,6 +501,7 @@ describe('Electron desktop runtime', () => {
     failed({}, -105, 'NAME_NOT_RESOLVED', 'http://127.0.0.1/subresource', false)
     expect(onRendererBoot).not.toHaveBeenCalled()
     failed({}, -102, 'CONNECTION_REFUSED', spec.url, true)
+    await rendererBoot
 
     expect(runtime.rendererBootFailureReason).toBe('renderer-failed')
     expect(onRendererBoot).toHaveBeenCalledWith({
@@ -514,10 +519,11 @@ describe('Electron desktop runtime', () => {
     const onRendererBoot = vi.fn(() => true)
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
 
     await vi.advanceTimersByTimeAsync(RENDERER_BOOT_TIMEOUT_MS)
+    await rendererBoot
 
     expect(runtime.rendererBootFailureReason).toBe('renderer-timeout')
     expect(onRendererBoot).toHaveBeenCalledWith({
@@ -529,15 +535,43 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
+  it('rejects healthy Renderer evidence when the process exits before native mount completes', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    let finishLoad!: () => void
+    electron.loadURL.mockImplementationOnce(() => new Promise<void>((resolve) => { finishLoad = resolve }))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const commitHealthy = vi.fn(async () => {})
+    const runtime = new ElectronDesktopRuntime(async () => {}, () => true)
+    const release = runtime.schedule(spec)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy })
+    const mounted = runtime.mountScheduled()
+    await vi.waitFor(() => { expect(electron.loadURL).toHaveBeenCalledOnce() })
+
+    runtime.reportRendererBoot({ status: 'healthy' })
+    const gone = electron.browserWindows[0]?.webContents.on.mock.calls
+      .find(([event]) => event === 'render-process-gone')?.[1]
+    gone({}, { reason: 'crashed', exitCode: 9 })
+    finishLoad()
+
+    await mounted
+    await expect(rendererBoot).resolves.toMatchObject({
+      report: { status: 'failed', error: expect.stringContaining('renderer process gone') },
+      failureReason: 'renderer-failed',
+    })
+    expect(commitHealthy).not.toHaveBeenCalled()
+    await release()
+  })
+
   it('does not reinterpret a renderer crash after healthy boot as install failure', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
     runtime.reportRendererBoot({ status: 'healthy' })
+    await rendererBoot
 
     const gone = electron.browserWindows[0]?.webContents.on.mock.calls
       .find(([event]) => event === 'render-process-gone')?.[1]
@@ -779,6 +813,58 @@ describe('Electron desktop runtime', () => {
     expect(window?.hide).toHaveBeenCalledOnce()
 
     await release()
+  })
+
+  it('shows privacy-safe macOS attention only while unfocused and clears it on notification click', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    const window = electron.browserWindows[0]
+    runtime.notifyAttention({ title: 'Turn Completed', body: 'A direct user turn has finished.' })
+    runtime.notifyAttention({ title: 'Background Job Completed', body: 'A background job has finished.' })
+
+    expect(electron.app.setBadgeCount.mock.calls).toEqual([[1], [2]])
+    expect(electron.notifications).toHaveLength(2)
+    expect(electron.notifications[0]?.options).toEqual({
+      title: 'Turn Completed',
+      body: 'A direct user turn has finished.',
+    })
+    const click = electron.notifications[0]?.once.mock.calls.find(([event]) => event === 'click')?.[1]
+    expect(click).toEqual(expect.any(Function))
+    click()
+    expect(electron.app.setBadgeCount).toHaveBeenLastCalledWith(0)
+    expect(window?.show).toHaveBeenCalledOnce()
+    expect(window?.focus).toHaveBeenCalledOnce()
+
+    window?.isFocused.mockReturnValue(true)
+    runtime.notifyAttention({ title: 'Ignored', body: 'Focused window' })
+    expect(electron.notifications).toHaveLength(2)
+
+    await release()
+  })
+
+  it('flashes the Windows taskbar and clears attention on focus and release', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    const window = electron.browserWindows[0]
+    const focus = electron.browserWindowOn.mock.calls.find(([event]) => event === 'focus')?.[1]
+    runtime.notifyAttention({ title: 'Turn Completed', body: 'A direct user turn has finished.' })
+    expect(window?.flashFrame).toHaveBeenLastCalledWith(true)
+    expect(focus).toEqual(expect.any(Function))
+    focus()
+    expect(window?.flashFrame).toHaveBeenLastCalledWith(false)
+
+    runtime.notifyAttention({ title: 'Background Job Failed', body: 'A background job needs attention.' })
+    await release()
+    expect(window?.flashFrame).toHaveBeenLastCalledWith(false)
+    expect(electron.browserWindowOff).toHaveBeenCalledWith('focus', expect.any(Function))
   })
 
   it('releases the window and tray when post-load startup wiring fails', async () => {
@@ -1127,6 +1213,7 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     const report = {
       status: 'failed' as const,
       plugins: ['dsh-vision-router'],
@@ -1134,6 +1221,7 @@ describe('Electron desktop runtime', () => {
     }
 
     runtime.reportRendererBoot(report)
+    await rendererBoot
     await vi.waitFor(() => { expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce() })
     runtime.reportRendererBoot({ status: 'healthy' })
 
@@ -1156,12 +1244,14 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const logger = { error: vi.fn(), errorCause: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, () => {}, logger)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
     runtime.reportRendererBoot({
       status: 'failed',
       plugins: ['dsh-vision-router'],
       error: 'failed to apply loader entry 07140b35 (dsh-vision-router): keyed slot "settings.plugin.item" requires options.key',
     })
+    await rendererBoot
 
     expect(logger.error).toHaveBeenCalledWith(
       'dsh-plugin-desktop: renderer boot failed (plugins: dsh-vision-router): '
@@ -1174,11 +1264,16 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const release = runtime.schedule(spec)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
+    await runtime.mountScheduled()
 
     runtime.reportRendererBoot({ status: 'healthy' })
+    await rendererBoot
 
     expect(onRendererBoot).toHaveBeenCalledWith({ status: 'healthy' })
     expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
+    await release()
   })
 
   it('opens the active profile terminal from plugin recovery', async () => {
@@ -1190,6 +1285,7 @@ describe('Electron desktop runtime', () => {
     try {
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
       const runtime = new ElectronDesktopRuntime(async () => {})
+      const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
       runtime.configureTerminal({
         profileName: 'desktop',
         profileDir: 'C:\\Users\\Example\\.dsh\\profiles\\desktop',
@@ -1197,6 +1293,7 @@ describe('Electron desktop runtime', () => {
       })
 
       runtime.reportRendererBoot({ status: 'failed', plugins: ['dsh-vision-router'] })
+      await rendererBoot
       await vi.waitFor(() => { expect(terminal.open).toHaveBeenCalledOnce() })
 
       expect(terminal.open).toHaveBeenCalledWith(expect.objectContaining({
@@ -1214,8 +1311,10 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async () => {})
     const runtime = new ElectronDesktopRuntime(restart)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
     runtime.reportRendererBoot({ status: 'failed', plugins: ['dsh-vision-router'] })
+    await rendererBoot
     await vi.waitFor(() => { expect(restart).toHaveBeenCalledOnce() })
   })
 
@@ -1551,8 +1650,12 @@ describe('Electron desktop runtime', () => {
       mode: 'advanced',
       readThemeSource: () => 'dark',
     })
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
-    await expect(runtime.mountScheduled()).rejects.toThrow('renderer unavailable')
+    await expect(Promise.all([
+      runtime.mountScheduled(),
+      rendererBoot,
+    ])).rejects.toThrow('renderer unavailable')
     expect(electron.nativeTheme.themeSource).toBe('dark')
     await expect(release()).rejects.toThrow('renderer unavailable')
     expect(electron.nativeTheme.themeSource).toBe('light')

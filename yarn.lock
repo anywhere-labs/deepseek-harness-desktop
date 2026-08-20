@@ -843,7 +843,7 @@ __metadata:
 
 "@deepseek-ai/dsh-app-boot@patch:@deepseek-ai/dsh-app-boot@npm%3A0.1.0-rc.7#./patches/dsh-app-boot@0.1.0-rc.7.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.0-rc.7
-  resolution: "@deepseek-ai/dsh-app-boot@patch:@deepseek-ai/dsh-app-boot@npm%3A0.1.0-rc.7#./patches/dsh-app-boot@0.1.0-rc.7.patch::version=0.1.0-rc.7&hash=ce5802&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-app-boot@patch:@deepseek-ai/dsh-app-boot@npm%3A0.1.0-rc.7#./patches/dsh-app-boot@0.1.0-rc.7.patch::version=0.1.0-rc.7&hash=d4ccf8&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     js-yaml: "npm:^4.2.0"
   peerDependencies:

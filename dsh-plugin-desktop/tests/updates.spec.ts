@@ -401,6 +401,19 @@ describe('desktop update Host plugin', () => {
     expect(downloading.warnings).toEqual([])
   })
 
+  it('releases one update generation once and does not restart background polling', async () => {
+    vi.useFakeTimers()
+    const request = vi.fn(async () => versionResponse('2.0.0'))
+    const harness = await createHarness({ request })
+
+    await harness.dispose()
+    await harness.dispose()
+    await vi.advanceTimersByTimeAsync(testConfig.initialDelayMs + testConfig.intervalMs)
+
+    expect(request).not.toHaveBeenCalled()
+    expect(harness.registrationDispose).toHaveBeenCalledOnce()
+  })
+
   it('does not wait for an open manual result dialog during disposal', async () => {
     let closeDialog!: () => void
     const dialog = new Promise<void>(resolve => { closeDialog = resolve })

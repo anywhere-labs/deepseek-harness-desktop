@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { DiagnosticExportWorkerResult } from './diagnostic-export-worker.ts'
+import { desktopLifecycleEvidencePath } from './lifecycle-events.ts'
 
 /** Bound both worker memory and the amount of potentially sensitive log history exported. */
 export const MAX_DIAGNOSTIC_EVIDENCE_BYTES = 50 * 1024 * 1024
@@ -20,6 +21,10 @@ export interface DiagnosticExportOptions {
   readonly crashDumpsDir?: string
   /** Active-run marker used to identify a launch that did not shut down cleanly. */
   readonly runStatePath?: string
+  /** Current-run lifecycle JSONL written by the Electron launcher. */
+  readonly lifecycleEvidencePath?: string
+  /** Cancels the short-lived worker when its owning UI or process operation ends. */
+  readonly signal?: AbortSignal
 }
 
 export interface DesktopDiagnosticExportOptions {
@@ -27,6 +32,7 @@ export interface DesktopDiagnosticExportOptions {
   /** Exact Electron Crashpad directory; defaults to the conventional user-data location. */
   readonly crashDumpsDir?: string
   readonly maxEvidenceBytes?: number
+  readonly signal?: AbortSignal
 }
 
 function workerEntryUrl(): URL {
@@ -38,6 +44,7 @@ function workerEntryUrl(): URL {
 export function waitForDiagnosticExportWorker(
   worker: Worker,
   timeoutMs: number = DIAGNOSTIC_EXPORT_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -46,8 +53,15 @@ export function waitForDiagnosticExportWorker(
       if (settled) return
       settled = true
       if (timeout !== undefined) clearTimeout(timeout)
+      signal?.removeEventListener('abort', abort)
       if (terminate) void worker.terminate().catch(() => {})
       complete()
+    }
+    const abort = (): void => {
+      settle(
+        () => reject(new DOMException('Diagnostic export was cancelled.', 'AbortError')),
+        true,
+      )
     }
     timeout = setTimeout(() => {
       settle(
@@ -70,6 +84,8 @@ export function waitForDiagnosticExportWorker(
         false,
       )
     })
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted === true) abort()
   })
 }
 
@@ -96,10 +112,11 @@ export function exportDiagnosticsZip(
       maxEvidenceBytes,
       ...(options.crashDumpsDir === undefined ? {} : { crashDumpsDir: options.crashDumpsDir }),
       ...(options.runStatePath === undefined ? {} : { runStatePath: options.runStatePath }),
+      ...(options.lifecycleEvidencePath === undefined ? {} : { lifecycleEvidencePath: options.lifecycleEvidencePath }),
     },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
   })
-  return waitForDiagnosticExportWorker(worker)
+  return waitForDiagnosticExportWorker(worker, DIAGNOSTIC_EXPORT_TIMEOUT_MS, options.signal)
 }
 
 /** Export diagnostics directly from Desktop user data without booting Host, profiles, or a window. */
@@ -113,6 +130,8 @@ export function exportDesktopDiagnostics(
     appVersion: options.appVersion,
     crashDumpsDir: options.crashDumpsDir ?? join(userDataDir, 'Crashpad'),
     runStatePath: join(userDataDir, 'crash-evidence', 'active-run.json'),
+    lifecycleEvidencePath: desktopLifecycleEvidencePath(userDataDir),
     ...(options.maxEvidenceBytes === undefined ? {} : { maxEvidenceBytes: options.maxEvidenceBytes }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
 }

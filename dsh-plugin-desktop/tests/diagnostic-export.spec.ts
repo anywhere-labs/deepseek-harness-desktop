@@ -18,8 +18,39 @@ import {
   exportDiagnosticsZip,
   waitForDiagnosticExportWorker,
 } from '../src/diagnostic-export.ts'
+import {
+  createDesktopLifecycleRecorder,
+  DESKTOP_LIFECYCLE_EVIDENCE_ENTRY,
+  DESKTOP_LIFECYCLE_SUMMARY_ENTRY,
+  desktopLifecycleEvidencePath,
+} from '../src/lifecycle-events.ts'
 
 const APP_VERSION = '2.0.1-test'
+
+function writeLifecycleEvidence(userDataDir: string): string {
+  let tick = 0
+  const ids = ['zip-run', 'zip-operation']
+  const recorder = createDesktopLifecycleRecorder({
+    userDataDir,
+    appVersion: APP_VERSION,
+    platform: process.platform,
+    arch: process.arch,
+    logger: { error() {}, errorCause() {} },
+    now: () => new Date('2026-08-19T00:00:00.000Z'),
+    monotonicNow: () => {
+      tick += 10
+      return tick
+    },
+    randomId: () => ids.shift() ?? 'zip-extra',
+  })
+  recorder.startStartup('electron-ready')
+  recorder.transitionStartupStage('renderer-startup')
+  recorder.startRendererBoot()
+  recorder.finishRendererBoot({ status: 'healthy' })
+  recorder.transitionStartupStage('health-commit')
+  recorder.completeStartup('health-commit', { status: 'healthy' })
+  return desktopLifecycleEvidencePath(userDataDir)
+}
 
 describe('exportDiagnosticsZip', () => {
   it('terminates a diagnostic Worker that does not respond before its deadline', async () => {
@@ -29,6 +60,22 @@ describe('exportDiagnosticsZip', () => {
     try {
       await expect(waitForDiagnosticExportWorker(worker, 25))
         .rejects.toThrow('diagnostic export worker timed out after 25ms')
+      await expect(exited).resolves.toEqual(expect.any(Array))
+    } finally {
+      await worker.terminate()
+    }
+  })
+
+  it('terminates a diagnostic Worker when its owning operation is cancelled', async () => {
+    const worker = new Worker('setInterval(() => {}, 1_000)', { eval: true })
+    const exited = once(worker, 'exit')
+    const controller = new AbortController()
+
+    try {
+      const pending = waitForDiagnosticExportWorker(worker, 60_000, controller.signal)
+      controller.abort()
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
       await expect(exited).resolves.toEqual(expect.any(Array))
     } finally {
       await worker.terminate()
@@ -63,6 +110,125 @@ describe('exportDiagnosticsZip', () => {
     expect(zip.readAsText('crash-evidence/active-run.json')).toBe('{"version":"2.0.1"}\n')
     expect(zip.readAsText('system-info.txt')).toContain('included-active-run-marker: true')
     expect(existsSync(join(root, 'logs'))).toBe(true)
+  })
+
+  it('includes lifecycle JSONL and a correlated summary in the diagnostic archive', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-lifecycle-'))
+    const logs = join(root, 'logs')
+    mkdirSync(logs)
+    writeFileSync(join(logs, 'dsh-2026-08-16.log'), 'after startup\n')
+    const lifecycleEvidencePath = writeLifecycleEvidence(root)
+
+    const out = await exportDiagnosticsZip(logs, root, {
+      appVersion: APP_VERSION,
+      lifecycleEvidencePath,
+    })
+
+    const zip = new AdmZip(out)
+    const names = zip.getEntries().map(entry => entry.entryName)
+    expect(names).toContain(DESKTOP_LIFECYCLE_EVIDENCE_ENTRY)
+    expect(names).toContain(DESKTOP_LIFECYCLE_SUMMARY_ENTRY)
+    expect(zip.readAsText(DESKTOP_LIFECYCLE_EVIDENCE_ENTRY)).toContain('"runId":"zip-run"')
+    expect(JSON.parse(zip.readAsText(DESKTOP_LIFECYCLE_SUMMARY_ENTRY))).toEqual(expect.objectContaining({
+      runId: 'zip-run',
+      operationId: 'zip-operation',
+      finalOutcome: 'completed',
+      rendererStatus: 'healthy',
+    }))
+    expect(zip.readAsText('system-info.txt')).toContain('included-lifecycle-evidence: true')
+    expect(zip.readAsText('system-info.txt')).toContain('included-lifecycle-summary: true')
+  })
+
+  it('shares one byte cap across lifecycle evidence, lifecycle summary, and logs', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-lifecycle-limit-'))
+    const logs = join(root, 'logs')
+    const lifecycleDir = join(root, 'lifecycle-events')
+    mkdirSync(logs)
+    mkdirSync(lifecycleDir)
+    writeFileSync(join(logs, 'dsh-2026-08-16.log'), 'seven77')
+    writeFileSync(join(lifecycleDir, 'startup.jsonl'), 'bad\n')
+
+    const out = await exportDiagnosticsZip(logs, root, {
+      appVersion: APP_VERSION,
+      lifecycleEvidencePath: join(lifecycleDir, 'startup.jsonl'),
+      maxEvidenceBytes: 10,
+    })
+
+    const zip = new AdmZip(out)
+    const names = zip.getEntries().map(entry => entry.entryName)
+    expect(names).toContain(DESKTOP_LIFECYCLE_EVIDENCE_ENTRY)
+    expect(names).not.toContain(DESKTOP_LIFECYCLE_SUMMARY_ENTRY)
+    expect(names).not.toContain('dsh-2026-08-16.log')
+    expect(zip.readAsText('system-info.txt')).toContain('included-lifecycle-evidence: true')
+    expect(zip.readAsText('system-info.txt')).toContain('omitted-lifecycle-summary: true')
+    expect(zip.readAsText('system-info.txt')).toContain('omitted-log-files: 1')
+  })
+
+  it('skips a linked lifecycle evidence file without failing the diagnostic export', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-lifecycle-file-link-'))
+    const logs = join(root, 'logs')
+    const target = join(root, 'target.jsonl')
+    const lifecycleDir = join(root, 'lifecycle-events')
+    mkdirSync(logs)
+    mkdirSync(lifecycleDir)
+    writeFileSync(join(logs, 'dsh-2026-08-16.log'), 'owned\n')
+    writeFileSync(target, 'bad\n')
+    symlinkSync(target, join(lifecycleDir, 'startup.jsonl'), 'file')
+
+    const out = await exportDiagnosticsZip(logs, root, {
+      appVersion: APP_VERSION,
+      lifecycleEvidencePath: join(lifecycleDir, 'startup.jsonl'),
+    })
+
+    const zip = new AdmZip(out)
+    const names = zip.getEntries().map(entry => entry.entryName)
+    expect(names).not.toContain(DESKTOP_LIFECYCLE_EVIDENCE_ENTRY)
+    expect(names).not.toContain(DESKTOP_LIFECYCLE_SUMMARY_ENTRY)
+    expect(zip.readAsText('system-info.txt')).toContain('included-lifecycle-evidence: false')
+  })
+
+  it('skips lifecycle evidence reached through a linked parent directory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-lifecycle-parent-link-'))
+    const logs = join(root, 'logs')
+    const target = join(root, 'target')
+    const lifecycleDir = join(root, 'lifecycle-events')
+    mkdirSync(logs)
+    mkdirSync(target)
+    writeFileSync(join(logs, 'dsh-2026-08-16.log'), 'owned\n')
+    writeFileSync(join(target, 'startup.jsonl'), 'bad\n')
+    symlinkSync(target, lifecycleDir, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const out = await exportDiagnosticsZip(logs, root, {
+      appVersion: APP_VERSION,
+      lifecycleEvidencePath: join(lifecycleDir, 'startup.jsonl'),
+    })
+
+    const zip = new AdmZip(out)
+    const names = zip.getEntries().map(entry => entry.entryName)
+    expect(names).not.toContain(DESKTOP_LIFECYCLE_EVIDENCE_ENTRY)
+    expect(names).not.toContain(DESKTOP_LIFECYCLE_SUMMARY_ENTRY)
+    expect(zip.readAsText('system-info.txt')).toContain('included-lifecycle-evidence: false')
+  })
+
+  it('allows evidence when user data is reached through a linked ancestor', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-user-data-link-'))
+    const target = join(root, 'target')
+    const linkedAncestor = join(root, 'linked')
+    const userData = join(linkedAncestor, 'user-data')
+    const logs = join(userData, 'logs')
+    mkdirSync(join(target, 'user-data', 'logs'), { recursive: true })
+    symlinkSync(target, linkedAncestor, process.platform === 'win32' ? 'junction' : 'dir')
+    writeFileSync(join(logs, 'dsh-2026-08-16.log'), 'owned\n')
+    const lifecycleEvidencePath = writeLifecycleEvidence(userData)
+
+    const out = await exportDiagnosticsZip(logs, userData, {
+      appVersion: APP_VERSION,
+      lifecycleEvidencePath,
+    })
+
+    const zip = new AdmZip(out)
+    expect(zip.readAsText(DESKTOP_LIFECYCLE_EVIDENCE_ENTRY)).toContain('"runId":"zip-run"')
+    expect(zip.readAsText('system-info.txt')).toContain('included-lifecycle-evidence: true')
   })
 
   it('includes local Crashpad minidumps but excludes unrelated crash files', async () => {

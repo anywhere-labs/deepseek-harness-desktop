@@ -31,6 +31,12 @@ import type {
   DesktopUpdateAdapter,
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
+import {
+  DesktopRendererHealthGate,
+  type DesktopRendererHealthGateOptions,
+  type RendererHealthFailureReason,
+  type RendererHealthVerdict,
+} from './renderer-health.ts'
 import type { DesktopLogger } from './desktop-logger.ts'
 import { exportDesktopDiagnostics } from './diagnostic-export.ts'
 import {
@@ -48,10 +54,9 @@ import {
 } from './update-download.ts'
 import type { UpdateCheckResult } from './update-checker.ts'
 import {
-  evaluateWindowsWorkspaceVolume,
-  formatWindowsVolumeConcern,
   type WindowsVolumeQuery,
 } from './windows-volume-diagnostics.ts'
+import { ElectronWorkspaceAdmission } from './workspace-admission.ts'
 
 /** Return the presentation mode opposite the active generation. */
 export function nextDesktopShellMode(mode: DesktopShellSpec['mode']): DesktopShellSpec['mode'] {
@@ -88,9 +93,6 @@ const PRODUCT_VERSION = desktopProductVersion()
 /** Main-process deadline for one Renderer generation to settle its client Loader. */
 export const RENDERER_BOOT_TIMEOUT_MS = 30_000
 
-/** Failure class used by startup recovery to distinguish a hung Renderer. */
-export type RendererBootFailureReason = 'renderer-failed' | 'renderer-timeout'
-
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
   readonly platform: DesktopPlatform
@@ -105,22 +107,30 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
-  private directoryPickTask: Promise<string | null> | undefined
+  private readonly workspaceAdmission: ElectronWorkspaceAdmission
   private updateCleanupTask: Promise<void> | undefined
-  private rendererBootReported = false
-  private rendererBootMonitoring = false
-  private rendererBootTimer: NodeJS.Timeout | undefined
-  private bootFailureReason: RendererBootFailureReason | undefined
+  private rendererHealthGate: DesktopRendererHealthGate | undefined
 
   constructor(
     private readonly restart: () => Promise<void>,
     private readonly onRendererBoot: (report: RendererBootReport) => boolean | void = () => {},
     private readonly logger: DesktopLogger | undefined = undefined,
-    private readonly workspaceVolumeQuery: WindowsVolumeQuery | undefined = undefined,
+    workspaceVolumeQuery: WindowsVolumeQuery | undefined = undefined,
   ) {
     this.platformStrategy = electronPlatformStrategy()
     this.platform = this.platformStrategy.platform
     const platformStrategy = this.platformStrategy
+    this.workspaceAdmission = new ElectronWorkspaceAdmission({
+      platform: this.platform,
+      canPickDirectory: platformStrategy.canPickDirectory,
+      locale: () => this.currentLocale,
+      showOpenDialog: async options => this.generation === undefined
+        ? await dialog.showOpenDialog(options)
+        : await this.generation.showOpenDialog(options),
+      showMessageBox: async options => await dialog.showMessageBox(options),
+      logError: message => { this.logError(message) },
+      ...(workspaceVolumeQuery === undefined ? {} : { volumeQuery: workspaceVolumeQuery }),
+    })
     this.updates = {
       get isPackaged() { return app.isPackaged },
       get canDownload() { return app.isPackaged && platformStrategy.updateDownloadPlatform !== undefined },
@@ -146,33 +156,29 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** Terminal failure class for the first Renderer boot report, when it failed. */
-  get rendererBootFailureReason(): RendererBootFailureReason | undefined {
-    return this.bootFailureReason
+  get rendererBootFailureReason(): RendererHealthFailureReason | undefined {
+    return this.rendererHealthGate?.failureReason
   }
 
-  /** Arm one main-process deadline immediately before the native shell starts loading. */
-  beginRendererBootMonitoring(timeoutMs: number = RENDERER_BOOT_TIMEOUT_MS): void {
-    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-      throw new Error('dsh-plugin-desktop: renderer boot timeout must be a positive integer')
-    }
-    if (this.rendererBootReported || this.rendererBootMonitoring) {
+  /** Arm the health gate immediately before the native shell starts loading. */
+  beginRendererBootMonitoring(
+    options: DesktopRendererHealthGateOptions,
+    timeoutMs: number = RENDERER_BOOT_TIMEOUT_MS,
+  ): Promise<RendererHealthVerdict> {
+    if (this.rendererHealthGate !== undefined) {
       throw new Error('dsh-plugin-desktop: renderer boot monitoring already started')
     }
-    this.rendererBootMonitoring = true
-    this.rendererBootTimer = setTimeout(() => {
-      this.failRendererBoot(
-        'renderer-timeout',
-        `The Renderer did not report boot health within ${String(timeoutMs)}ms.`,
-      )
-    }, timeoutMs)
-    this.rendererBootTimer.unref()
+    const gate = new DesktopRendererHealthGate(options)
+    this.rendererHealthGate = gate
+    return gate.begin(timeoutMs).then((verdict) => {
+      this.handleRendererBootVerdict(verdict.report)
+      return verdict
+    })
   }
 
   /** Stop a pending deadline while startup is being torn down for another failure. */
   stopRendererBootMonitoring(): void {
-    this.rendererBootMonitoring = false
-    if (this.rendererBootTimer !== undefined) clearTimeout(this.rendererBootTimer)
-    this.rendererBootTimer = undefined
+    this.rendererHealthGate?.stop()
   }
 
   /** @inheritdoc */
@@ -218,11 +224,13 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         isQuitting: () => this.quitting,
         buildTrayTemplate: () => this.buildTrayTemplate(spec),
         stopRendererBootMonitoring: () => { this.stopRendererBootMonitoring() },
+        abortRendererBootMonitoring: cause => { this.rendererHealthGate?.stop(cause) },
         failRendererBoot: error => { this.failRendererBoot('renderer-failed', error) },
         logError: message => { this.logError(message) },
       })
       this.generation = generation
       this.mountTask = generation.mount(beforeInteractive).then(() => {
+        this.rendererHealthGate?.acceptNativeMount()
         void this.offerUpdateArtifactCleanup().catch((cause: unknown) => {
           this.logError(`dsh-plugin-desktop: failed to resolve update installer cleanup: ${cause instanceof Error ? cause.message : String(cause)}`)
         })
@@ -240,74 +248,18 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** @inheritdoc */
-  async pickDirectory(): Promise<string | null> {
-    if (!this.platformStrategy.canPickDirectory) {
-      throw new Error(`dsh-plugin-desktop: native workspace picker is unavailable on ${this.platform}`)
-    }
-    if (this.directoryPickTask !== undefined) return await this.directoryPickTask
-    const task = this.showDirectoryPicker()
-    this.directoryPickTask = task
-    try {
-      return await task
-    } finally {
-      if (this.directoryPickTask === task) this.directoryPickTask = undefined
-    }
+  notifyAttention(notification: DesktopNotification): void {
+    this.generation?.notifyAttention(notification)
   }
 
-  private async showDirectoryPicker(): Promise<string | null> {
-    const options: Electron.OpenDialogOptions = {
-      title: this.currentLocale === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
-      properties: ['openDirectory', 'dontAddToRecent'],
-    }
-    const result = this.generation === undefined
-      ? await dialog.showOpenDialog(options)
-      : await this.generation.showOpenDialog(options)
-    return result.canceled ? null : result.filePaths[0] ?? null
+  /** @inheritdoc */
+  async pickDirectory(): Promise<string | null> {
+    return await this.workspaceAdmission.pickDirectory()
   }
 
   /** @inheritdoc */
   async validateDirectory(path: string): Promise<boolean> {
-    const decision = evaluateWindowsWorkspaceVolume(this.platform, path, this.workspaceVolumeQuery)
-    if (decision.action === 'allow') return true
-
-    this.logError(`dsh-plugin-desktop: unsafe workspace volume: ${formatWindowsVolumeConcern(decision.concern)}`)
-    const zh = this.currentLocale === 'zh'
-    if (decision.action === 'confirm') {
-      const result = await dialog.showMessageBox({
-        type: 'warning',
-        title: zh ? '外接工作区' : 'Removable Workspace',
-        message: zh
-          ? '这个工作区位于可移除的 NTFS/ReFS 磁盘上。'
-          : 'This workspace is on a removable NTFS/ReFS drive.',
-        detail: zh
-          ? `使用过程中拔出磁盘会导致命令或插件操作失败。请保持磁盘连接。\n\n${path}`
-          : `Disconnecting the drive while DSH Desktop is running can break commands or plugin operations. Keep it connected.\n\n${path}`,
-        buttons: zh ? ['使用此文件夹', '选择其他文件夹'] : ['Use This Folder', 'Choose Another Folder'],
-        defaultId: 1,
-        cancelId: 1,
-        noLink: true,
-      })
-      const accepted = result.response === 0
-      this.logError(`dsh-plugin-desktop: workspace volume decision=${accepted ? 'confirmed' : 'cancelled'} path=${path}`)
-      return accepted
-    }
-
-    await dialog.showMessageBox({
-      type: 'error',
-      title: zh ? '不支持的工作区存储' : 'Unsupported Workspace Storage',
-      message: zh
-        ? `${decision.concern.fileSystem ?? '当前文件系统'} 不能安全用作 DSH Desktop 工作区。`
-        : `${decision.concern.fileSystem ?? 'This filesystem'} cannot safely host a DSH Desktop workspace.`,
-      detail: zh
-        ? `请选择本地 NTFS 或 ReFS 磁盘上的文件夹。exFAT、FAT32、网络盘和无法检测的磁盘不会被保存为工作区。\n\n${path}`
-        : `Choose a folder on a local NTFS or ReFS volume. exFAT, FAT32, network drives, and uninspectable volumes are not persisted as workspaces.\n\n${path}`,
-      buttons: [zh ? '选择其他文件夹' : 'Choose Another Folder'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    })
-    this.logError(`dsh-plugin-desktop: workspace volume decision=blocked path=${path}`)
-    return false
+    return await this.workspaceAdmission.validateDirectory(path)
   }
 
   /** @inheritdoc */
@@ -407,10 +359,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** @inheritdoc */
   reportRendererBoot(report: RendererBootReport): void {
-    if (this.rendererBootReported) return
-    this.rendererBootReported = true
-    this.stopRendererBootMonitoring()
-    if (report.status === 'failed') this.bootFailureReason ??= 'renderer-failed'
+    this.rendererHealthGate?.report(report)
+  }
+
+  private handleRendererBootVerdict(report: RendererBootReport): void {
     if (report.status === 'failed') {
       const plugins = report.plugins.length === 0 ? 'Unknown client plugin' : report.plugins.join(', ')
       const error = report.error === undefined ? 'The client Loader did not provide an error message.' : report.error
@@ -459,10 +411,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     this.stopRendererBootMonitoring()
   }
 
-  private failRendererBoot(reason: RendererBootFailureReason, error: string): void {
-    if (!this.rendererBootMonitoring || this.rendererBootReported) return
-    this.bootFailureReason = reason
-    this.reportRendererBoot({ status: 'failed', plugins: [], error })
+  private failRendererBoot(reason: RendererHealthFailureReason, error: string): void {
+    this.rendererHealthGate?.fail(reason, error)
   }
 
   private async showRendererBootRecovery(report: Extract<RendererBootReport, { status: 'failed' }>): Promise<void> {

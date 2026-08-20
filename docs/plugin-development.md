@@ -21,11 +21,18 @@ Desktop 另外提供两个公开的 Host service：
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
+import { randomUUID } from 'node:crypto'
 import type {} from 'dsh-plugin-desktop/profile-service'
 import type { DesktopPnpmHandle } from 'dsh-plugin-desktop/pnpm'
 
 export const name = 'example-desktop-plugin'
 export const inject = ['desktopProfiles', 'desktopPnpm']
+
+declare function persistPendingReceipt(recovery: {
+  readonly packageName: string
+  readonly packageVersion: string
+  readonly receiptId: string
+}): Promise<void>
 
 export function apply(ctx: Context): void {
   ctx.logger.info(`profile: ${ctx.desktopProfiles.current.name}`)
@@ -33,10 +40,16 @@ export function apply(ctx: Context): void {
 
   // 将这个函数连接到插件界面的明确用户操作。
   async function installExample(): Promise<void> {
-    active = ctx.desktopPnpm.runPlugin(
-      ['add', 'example-plugin'],
-      process.cwd(),
-    )
+    const recovery = {
+      packageName: 'example-plugin',
+      packageVersion: '1.0.0',
+      receiptId: randomUUID(),
+    }
+    await persistPendingReceipt(recovery)
+    active = await ctx.desktopPnpm.installPlugin({
+      invokingDir: process.cwd(),
+      recovery,
+    })
     await active.done
   }
 
@@ -49,7 +62,7 @@ export function apply(ctx: Context): void {
 }
 ```
 
-实际项目应该把 package operation 放在明确的用户动作中，校验目标来源，读取 stdout/stderr，设置自己的 timeout，并同时检查 `exitCode` 和 `signal`。一个 generation 同时只允许一个 `desktopPnpm` package operation；插件卸载时必须取消并等待它结束。
+实际项目应该把 package operation 放在明确的用户动作中，校验目标来源，在安装前持久保存 recovery receipt，在启动时 reconcile 已恢复的 receipt id，读取 stdout/stderr，设置自己的 timeout，并同时检查 `exitCode` 和 `signal`。一个 generation 同时只允许一个 `desktopPnpm` package operation；插件卸载时必须取消并等待它结束。
 
 ## 兼容 Desktop 和普通 DSH
 
@@ -77,14 +90,19 @@ export function apply(ctx: Context, config: { profile?: string }): void {
 
 普通 DSH 的 fallback 仍然是插件自己的权威实现。不要从 `process.argv`、`ctx.baseUrl`、settings 或 `$DSH_HOME` 推断 Desktop profile；在 Desktop 中以 `desktopProfiles.current` 为准。
 
-## `run()` 和 `runPlugin()` 的区别
+## `run()`、`runPlugin()` 和 `installPlugin()` 的区别
 
 `desktopPnpm.run(args)` 是低层 pnpm operation，cwd 是当前 profile。它不保证 DSH 的 profile 初始化、调用方相对 `file:`/`link:` source 锚定或 `dsh.profile.bundles` reconcile。
 
-`desktopPnpm.runPlugin(args, invokingDir)` 执行打包的 `dsh plugin --profile <active>`，保留上游插件管理语义。安装、卸载、更新和依赖修复应使用它，例如：
+`desktopPnpm.runPlugin(args, invokingDir)` 为非安装 mutation 执行打包的 `dsh plugin --profile <active>`，并保留上游插件管理语义。它会拒绝 `add`。`installPlugin(request)` 是可恢复安装路径：它从 receipt metadata 生成精确 package 目标，并拥有 profile 快照/WAL 生命周期。
 
 ```ts
-desktopPnpm.runPlugin(['add', target], invokingDir, signal)
+await desktopPnpm.installPlugin({
+  invokingDir,
+  pnpmOptions: ['--save-exact'],
+  recovery: { packageName, packageVersion, receiptId },
+  signal,
+})
 desktopPnpm.runPlugin(['remove', packageName], invokingDir, signal)
 desktopPnpm.runPlugin(['update'], invokingDir, signal)
 desktopPnpm.runPlugin(['install', '--no-frozen-lockfile'], invokingDir, signal)
