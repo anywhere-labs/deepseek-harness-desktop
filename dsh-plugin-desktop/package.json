@@ -240,14 +240,14 @@
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
-    "electron": "43.4.0"
+    "electron": "43.4.1"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.0",
     "@types/react": "^18",
-    "electron": "43.4.0",
+    "electron": "43.4.1",
     "electron-builder": "26.15.7",
     "sharp": "0.35.3",
     "tsdown": "0.22.2",
@@ -353,7 +353,9 @@
     "deb": {
       "afterInstall": "build/linux/after-install.tpl",
       "afterRemove": "build/linux/after-remove.tpl",
-      "depends": ["libayatana-appindicator3-1"]
+      "depends": [
+        "libayatana-appindicator3-1"
+      ]
     },
     "rpm": {
       "afterInstall": "build/linux/after-install.tpl",
