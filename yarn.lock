@@ -4052,7 +4052,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@electron/asar@npm:3.4.1, @electron/asar@npm:^3.3.1":
+"@electron/asar@npm:3.4.1":
   version: 3.4.1
   resolution: "@electron/asar@npm:3.4.1"
   dependencies:
@@ -4062,6 +4062,21 @@ __metadata:
   bin:
     asar: bin/asar.js
   checksum: 10c0/9df7983125faaa29c266e4beec6ceb205e139ede0e8fb81dde84c73ac8114388a99aad21379412a972163d8879ca959621f4e4896214bf8d296ba217e7cf8170
+  languageName: node
+  linkType: hard
+
+"@electron/asar@npm:^4.0.0":
+  version: 4.2.1
+  resolution: "@electron/asar@npm:4.2.1"
+  dependencies:
+    glob: "npm:^13.0.2"
+    minimatch: "npm:^10.0.1"
+  dependenciesMeta:
+    electron:
+      built: true
+  bin:
+    asar: bin/asar.mjs
+  checksum: 10c0/2212c82161ab0a6c8e63d7bb7f433c727235dd17a3d47bdba810c698fbd39a81ac97cbac22acc273d2639f94d1c27339d6861ce8dbee1ef70efc5c74aad5e317
   languageName: node
   linkType: hard
 
@@ -4162,18 +4177,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@electron/universal@npm:2.0.3":
-  version: 2.0.3
-  resolution: "@electron/universal@npm:2.0.3"
+"@electron/universal@npm:3.0.6":
+  version: 3.0.6
+  resolution: "@electron/universal@npm:3.0.6"
   dependencies:
-    "@electron/asar": "npm:^3.3.1"
-    "@malept/cross-spawn-promise": "npm:^2.0.0"
+    "@electron/asar": "npm:^4.0.0"
     debug: "npm:^4.3.1"
-    dir-compare: "npm:^4.2.0"
-    fs-extra: "npm:^11.1.1"
-    minimatch: "npm:^9.0.3"
     plist: "npm:^3.1.0"
-  checksum: 10c0/346b23298d4f175dc50d9b91277d8e4c30017215e1a78c985ce917cd793fc0600084d62a84f485229d781ddfeb5829b6c1125c0bda131ddb9146522d305e92aa
+  checksum: 10c0/517a4c0b1dff7a67afc5994770c9aeffc2e4dc5ff5e8cd20c9d7e21107852e0b1199d405cfc408dc6aa93d4f967e5066df1928851b2e2013a24155c120103e59
   languageName: node
   linkType: hard
 
@@ -6378,7 +6389,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"brace-expansion@npm:^2.0.1, brace-expansion@npm:^2.0.2":
+"brace-expansion@npm:^2.0.1":
   version: 2.1.4
   resolution: "brace-expansion@npm:2.1.4"
   dependencies:
@@ -6938,16 +6949,6 @@ __metadata:
   version: 9.0.0
   resolution: "diff@npm:9.0.0"
   checksum: 10c0/a971cc88f66071a33bd3942db2f51b57d484e9856265ae45cf44fb28ab2fde91f132d9c26d8be0fb6082d2be94d29e1295c1adb251b7461935d6a2dd304cd161
-  languageName: node
-  linkType: hard
-
-"dir-compare@npm:^4.2.0":
-  version: 4.2.0
-  resolution: "dir-compare@npm:4.2.0"
-  dependencies:
-    minimatch: "npm:^3.0.5"
-    p-limit: "npm:^3.1.0 "
-  checksum: 10c0/615c6f6804095f912d98d49f9b56798ceebbc83612d660b7faa6bdb4894d978c02cfa1a30853a7319a269141e4f2a2034d4988a1985b58382614a3942f94e5b2
   languageName: node
   linkType: hard
 
@@ -7727,17 +7728,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fs-extra@npm:^11.1.1":
-  version: 11.4.0
-  resolution: "fs-extra@npm:11.4.0"
-  dependencies:
-    graceful-fs: "npm:^4.2.0"
-    jsonfile: "npm:^6.0.1"
-    universalify: "npm:^2.0.0"
-  checksum: 10c0/1e311eca820a12d3d795f2043dcd5628d017f4d21e634f3f9ef314ae68bee9979758262fb9cb35ffa6f26454c3fffe8b15558733e91e8fc729b07b10bb98d8b6
-  languageName: node
-  linkType: hard
-
 "fs-extra@npm:^8.1.0":
   version: 8.1.0
   resolution: "fs-extra@npm:8.1.0"
@@ -7876,6 +7866,17 @@ __metadata:
   dependencies:
     resolve-pkg-maps: "npm:^1.0.0"
   checksum: 10c0/fd96e2a7d872703d8c5d7ed5d5d884a4e33f6cd9f012aa68a3c7aae700b84b502e41c06641a3d0667b1e8c8f7d497857dd6d3bba3987d2e5f59d95e49fb6e3b9
+  languageName: node
+  linkType: hard
+
+"glob@npm:^13.0.2":
+  version: 13.0.6
+  resolution: "glob@npm:13.0.6"
+  dependencies:
+    minimatch: "npm:^10.2.2"
+    minipass: "npm:^7.1.3"
+    path-scurry: "npm:^2.0.2"
+  checksum: 10c0/269c236f11a9b50357fe7a8c6aadac667e01deb5242b19c84975628f05f4438d8ee1354bb62c5d6c10f37fd59911b54d7799730633a2786660d8c69f1d18120a
   languageName: node
   linkType: hard
 
@@ -8720,7 +8721,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lru-cache@npm:^11.3.5":
+"lru-cache@npm:^11.0.0, lru-cache@npm:^11.3.5":
   version: 11.5.2
   resolution: "lru-cache@npm:11.5.2"
   checksum: 10c0/ece1ad731f5b655e85d67047d04bfc13823dc77aa61c5454924a9869ba600a0104e39cc33d726021feef812bc347ca34a5608a5eb1972a5dd0870b7ecd42c3f2
@@ -9374,7 +9375,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:^10.2.5":
+"minimatch@npm:^10.0.1, minimatch@npm:^10.2.2, minimatch@npm:^10.2.5":
   version: 10.2.6
   resolution: "minimatch@npm:10.2.6"
   dependencies:
@@ -9383,7 +9384,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:^3.0.4, minimatch@npm:^3.0.5, minimatch@npm:^3.1.1":
+"minimatch@npm:^3.0.4, minimatch@npm:^3.1.1":
   version: 3.1.5
   resolution: "minimatch@npm:3.1.5"
   dependencies:
@@ -9401,15 +9402,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:^9.0.3":
-  version: 9.0.9
-  resolution: "minimatch@npm:9.0.9"
-  dependencies:
-    brace-expansion: "npm:^2.0.2"
-  checksum: 10c0/0b6a58530dbb00361745aa6c8cffaba4c90f551afe7c734830bd95fd88ebf469dd7355a027824ea1d09e37181cfeb0a797fb17df60c15ac174303ac110eb7e86
-  languageName: node
-  linkType: hard
-
 "minimist@npm:^1.2.5, minimist@npm:^1.2.6, minimist@npm:^1.2.8":
   version: 1.2.8
   resolution: "minimist@npm:1.2.8"
@@ -9417,7 +9409,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minipass@npm:^7.0.4, minipass@npm:^7.1.2":
+"minipass@npm:^7.0.4, minipass@npm:^7.1.2, minipass@npm:^7.1.3":
   version: 7.1.3
   resolution: "minipass@npm:7.1.3"
   checksum: 10c0/539da88daca16533211ea5a9ee98dc62ff5742f531f54640dd34429e621955e91cc280a91a776026264b7f9f6735947629f920944e9c1558369e8bf22eb33fbb
@@ -9776,15 +9768,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"p-limit@npm:^3.1.0 ":
-  version: 3.1.0
-  resolution: "p-limit@npm:3.1.0"
-  dependencies:
-    yocto-queue: "npm:^0.1.0"
-  checksum: 10c0/9db675949dbdc9c3763c89e748d0ef8bdad0afbb24d49ceaf4c46c02c77d30db4e0652ed36d0a0a7a95154335fab810d95c86153105bb73b3a90448e2bb14e1a
-  languageName: node
-  linkType: hard
-
 "p-retry@npm:^4.6.2":
   version: 4.6.2
   resolution: "p-retry@npm:4.6.2"
@@ -9829,6 +9812,16 @@ __metadata:
   version: 3.1.1
   resolution: "path-key@npm:3.1.1"
   checksum: 10c0/748c43efd5a569c039d7a00a03b58eecd1d75f3999f5a28303d75f521288df4823bc057d8784eb72358b2895a05f29a070bc9f1f17d28226cc4e62494cc58c4c
+  languageName: node
+  linkType: hard
+
+"path-scurry@npm:^2.0.2":
+  version: 2.0.2
+  resolution: "path-scurry@npm:2.0.2"
+  dependencies:
+    lru-cache: "npm:^11.0.0"
+    minipass: "npm:^7.1.2"
+  checksum: 10c0/b35ad37cf6557a87fd057121ce2be7695380c9138d93e87ae928609da259ea0a170fac6f3ef1eb3ece8a068e8b7f2f3adf5bb2374cf4d4a57fe484954fcc9482
   languageName: node
   linkType: hard
 
@@ -11709,13 +11702,6 @@ __metadata:
     y18n: "npm:^5.0.5"
     yargs-parser: "npm:^21.1.1"
   checksum: 10c0/7a28572f7e785a57886e34fdbddb9b28756dec552e1453d5f6e7cdd00ad8721a4e8c4321d33683f5e61cacb36ad43258adbb48396b71ec4ed14abee0fc0d0c1f
-  languageName: node
-  linkType: hard
-
-"yocto-queue@npm:^0.1.0":
-  version: 0.1.0
-  resolution: "yocto-queue@npm:0.1.0"
-  checksum: 10c0/dceb44c28578b31641e13695d200d34ec4ab3966a5729814d5445b194933c096b7ced71494ce53a0e8820685d1d010df8b2422e5bf2cdea7e469d97ffbea306f
   languageName: node
   linkType: hard
 
