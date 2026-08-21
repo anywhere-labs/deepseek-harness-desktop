@@ -101,7 +101,9 @@ describe('Desktop profile health checkpoint', () => {
       expect.stringContaining('.tmp'),
       expect.stringContaining('.staging'),
     ]))
-    expect(lstatSync(join(target.checkpoint.snapshotDirectory, 'manifest.json')).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') {
+      expect(lstatSync(join(target.checkpoint.snapshotDirectory, 'manifest.json')).mode & 0o777).toBe(0o600)
+    }
   })
 
   it('restores drift, removes files absent from the healthy image, and marks one failed generation', () => {
