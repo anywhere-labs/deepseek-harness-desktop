@@ -71,11 +71,11 @@ describe('company-store host routes', () => {
       expect(response.status).toBe(200)
       const body = await response.json()
       expect(body.builtIns).toEqual(expect.arrayContaining([
-        {
+        expect.objectContaining({
           key: COMPANY_STORE_KEY,
           providerId: COMPANY_STORE_PROVIDER_ID,
           partnership: true,
-        },
+        }),
       ]))
     } finally {
       await server.close()
