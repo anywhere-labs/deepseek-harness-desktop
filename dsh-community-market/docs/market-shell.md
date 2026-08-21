@@ -66,6 +66,8 @@ The standard adapter serializes only fields declared in the source manifest's `q
 
 [dshfind](https://dshfind.com) is another optional cooperating source with a reviewed built-in adapter. It is not selected by default, preferred, recommended, or used as a fallback. Its listings, scores, grades, `official`/featured labels, risk labels, and installation probes remain provider claims rather than Anywhere Labs trust decisions.
 
+**Company Store** is an optional partner built-in (`company-store`) that reuses the reviewed 1024Store-style adapter factory against a company catalog apex. It is not default, preferred, or a fallback when `dsh-1024store` fails. When selected, the Market chrome shows the disclaimer `公司目录，收录≠安全审核` (EN: listing means inclusion only — not a security audit).
+
 The published normative contract is the [catalog provider contract](catalog-provider-contract.md), with machine-readable schemas for the source manifest, query, untrusted provider page, and Host-normalized response. Remote fields are display data, not executable instructions. Text is rendered as text, never as raw HTML.
 
 ## Complete local index and cache
