@@ -76,3 +76,5 @@ export const adapters = new Map<string, CatalogAdapter>([
   [dshfindAdapter.adapterId, dshfindAdapter],
   [companyStoreAdapter.adapterId, companyStoreAdapter],
 ])
+
+export const catalogAdapters = adapters
