@@ -70,7 +70,7 @@ export const BUILT_IN_PROVIDERS: readonly BuiltInProviderDefinition[] = [
   },
 ]
 
-export const catalogAdapters = new Map<string, CatalogAdapter>([
+export const adapters = new Map<string, CatalogAdapter>([
   [standardHttpAdapter.adapterId, standardHttpAdapter],
   [dsh1024StoreAdapter.adapterId, dsh1024StoreAdapter],
   [dshfindAdapter.adapterId, dshfindAdapter],
