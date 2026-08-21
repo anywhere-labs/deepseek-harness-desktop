@@ -366,6 +366,23 @@ describe('published package surface', () => {
     expect(main).not.toContain('disposeDshRuntime')
   })
 
+  it('injects profile creation into the generation-scoped Host service without selecting it', () => {
+    const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const profileImport = main.indexOf('createDesktopWebProfile,')
+    const profileService = main.indexOf('await hostCtx.plugin(DesktopProfileService, {')
+    const create = main.indexOf('create: name => createDesktopWebProfile(homeDir, name),', profileService)
+    const list = main.indexOf('list: () => listDesktopProfiles(homeDir),', profileService)
+    const persist = main.indexOf('persistSelection: name => { selectDesktopProfile(selectionStatePath, homeDir, name) },', profileService)
+    const restart = main.indexOf('requestRestart: () => runtime.requestRestart(),', profileService)
+
+    expect(profileImport).toBeGreaterThanOrEqual(0)
+    expect(profileService).toBeGreaterThan(profileImport)
+    expect(create).toBeGreaterThan(profileService)
+    expect(list).toBeGreaterThan(create)
+    expect(persist).toBeGreaterThan(list)
+    expect(restart).toBeGreaterThan(persist)
+  })
+
   it('wires local crash evidence before Electron becomes ready', () => {
     const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
     const startCrashReporter = main.indexOf('startDesktopCrashReporting(crashReporter')

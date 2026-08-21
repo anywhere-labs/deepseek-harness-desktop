@@ -51,6 +51,7 @@ import {
 } from './install-recovery.ts'
 import {
   beginDesktopProfileStartup,
+  createDesktopWebProfile,
   listDesktopProfiles,
   readDesktopProfileState,
   selectDesktopProfile,
@@ -570,6 +571,7 @@ async function start(): Promise<void> {
             name: activeProfileName,
             dir: prepared.profile.dir,
           },
+          create: name => createDesktopWebProfile(homeDir, name),
           list: () => listDesktopProfiles(homeDir),
           persistSelection: name => { selectDesktopProfile(selectionStatePath, homeDir, name) },
           requestRestart: () => runtime.requestRestart(),
