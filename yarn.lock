@@ -1752,7 +1752,7 @@ __metadata:
 
 "@deepseek-ai/dsh-client-ui-workspace@patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.1-rc.1#./patches/dsh-client-ui-workspace@0.1.1-rc.1.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.1-rc.1
-  resolution: "@deepseek-ai/dsh-client-ui-workspace@patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.1-rc.1#./patches/dsh-client-ui-workspace@0.1.1-rc.1.patch::version=0.1.1-rc.1&hash=02107b&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-client-ui-workspace@patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.1-rc.1#./patches/dsh-client-ui-workspace@0.1.1-rc.1.patch::version=0.1.1-rc.1&hash=8456c6&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     clsx: "npm:^2.0.0"
   peerDependencies:
@@ -1763,7 +1763,7 @@ __metadata:
     "@deepseek-ai/dsh-client-ui-conversation": ^0.1.1-rc.1
     "@deepseek-ai/dsh-client-ui-sidebar": ^0.1.1-rc.1
     "@deepseek-ai/dsh-invariants": ^0.1.1-rc.1
-  checksum: 10c0/4afd371d2bc57413adf2cbd18cc8bc0806f24deb8600340eba35e07400bff88ec320d0b0eede30a321f3cc128ace1cea3bb2e5232dbed332f611f6c2aed9a304
+  checksum: 10c0/ca8eddf9679476b5cee614db06b65ae6620d1b5539c4295c28da805de35c791437ea0df5c59c043ba493bd7f978c67ac2ca93a9e596a1ecc00d3bdb30c450e6d
   languageName: node
   linkType: hard
 

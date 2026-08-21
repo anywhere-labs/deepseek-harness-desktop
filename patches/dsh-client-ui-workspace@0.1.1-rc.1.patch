@@ -1,8 +1,78 @@
 diff --git a/lib/client.js b/lib/client.js
-index 7ca5fd3..7922a98 100644
+index 7ca5fd3d02cdcc27c05daa23af5879101eb3c97b..e87f842b22643198e1de9ac309fb2f69562c3670 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -1854 +1854,2 @@ window.__ModuleLoader__.load({
--				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
-+				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
+@@ -697,6 +697,7 @@ window.__ModuleLoader__.load({
+ 			const statuses = sessionStatuses(node, t);
+ 			const showStatus = statuses[0].state !== "done" || row.completed;
+ 			const [menuOpen, setMenuOpen] = (0, react.useState)(false);
++			const [contextMenuPoint, setContextMenuPoint] = (0, react.useState)(null);
+ 			const sessionMenuItems = [
+ 				{
+ 					id: "rename",
+@@ -719,9 +720,22 @@ window.__ModuleLoader__.load({
+ 					className: clsx(Rows_module_css_default.sessionRow, selected && Rows_module_css_default.selected, menuOpen && Rows_module_css_default.menuOpen, flat && !showStatus && Rows_module_css_default.flatSessionRowWithoutStatus, drag?.marker === "before" && Rows_module_css_default.dropBefore, drag?.marker === "after" && Rows_module_css_default.dropAfter),
+ 					role: "treeitem",
+ 					"aria-selected": selected,
++					"data-dsh-session-context-menu": row.blank ? void 0 : "",
+ 					onClick: () => {
+ 						onOpen(node.id);
+ 					},
++					onContextMenu: (e) => {
++						const bridge = window.__DSH_DESKTOP_SESSION_CONTEXT_MENU__;
++						if (bridge === void 0) {
++							e.preventDefault();
++							e.stopPropagation();
++							return;
++						}
++						const point = bridge(e, row.blank);
++						if (point === void 0) return;
++						setContextMenuPoint(point);
++						setMenuOpen(true);
++					},
+ 					draggable: drag !== void 0,
+ 					onDragStart: drag === void 0 ? void 0 : (e) => {
+ 						e.dataTransfer.effectAllowed = "move";
+@@ -759,6 +773,7 @@ window.__ModuleLoader__.load({
+ 								open: menuOpen,
+ 								onClose: () => {
+ 									setMenuOpen(false);
++									setContextMenuPoint(null);
+ 								},
+ 								items: sessionMenuItems,
+ 								onSelect: (id) => {
+@@ -768,13 +783,25 @@ window.__ModuleLoader__.load({
+ 									if (id === "archive") onArchive(node.id);
+ 								},
+ 								portal: true,
+-								closeOnPointerLeave: true,
++								closeOnPointerLeave: contextMenuPoint === null,
++								getAnchorRect: contextMenuPoint === null ? void 0 : () => ({
++									left: contextMenuPoint.x,
++									right: contextMenuPoint.x,
++									top: contextMenuPoint.y,
++									bottom: contextMenuPoint.y,
++									width: 0,
++									height: 0,
++									x: contextMenuPoint.x,
++									y: contextMenuPoint.y,
++									toJSON: () => ({})
++								}),
+ 								anchor: (0, react_jsx_runtime.jsx)("button", {
+ 									type: "button",
+ 									className: Rows_module_css_default.iconButton,
+ 									"aria-label": t("actions.session.aria", { name: title }),
+ 									onClick: (e) => {
+ 										e.stopPropagation();
++										setContextMenuPoint(null);
+ 										setMenuOpen((v) => !v);
+ 									},
+ 									children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconEllipsisOutline16, {})
+@@ -1852,6 +1879,7 @@ window.__ModuleLoader__.load({
+ 			};
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+ 				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
 +				"data-dsh-workspace-drop-target": "",
+ 				children: [
+ 					(0, react_jsx_runtime.jsxs)("div", {
+ 						className: WorkspaceBrowser_module_css_default.sectionHeader,

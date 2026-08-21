@@ -21,6 +21,10 @@ Switching profiles does not silently copy plugins from the old profile into the 
 
 Changing mode restarts the application; it does not hot-swap root slots or native materials in a live renderer. Linux provides compatibility mode only.
 
+## Session context menu
+
+Right-click a nonblank session in the sidebar to **Rename**, **Fork session**, or **Archive session**. The menu opens at the pointer and closes with `Esc` or an outside click. The blank New Session placeholder has no context menu, and the existing `…` action button continues to expose the same commands.
+
 ## Local Web port
 
 Desktop lets the operating system choose a random local Web port by default (`dsh-desktop.port: 0`), which avoids collisions with other services. Browser `localStorage` is isolated by origin, so UI plugins that store settings there need a fixed port to read the same settings after Desktop restarts:
