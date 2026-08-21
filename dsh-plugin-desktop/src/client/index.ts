@@ -12,13 +12,10 @@ import { parseDesktopClientEnvironment } from './environment.ts'
 import { installWorkspaceFolderDrop } from './workspace-folder-drop.ts'
 import { en, zh, type DesktopLocaleKey } from './locales.ts'
 import { CommandPalette } from './CommandPalette.tsx'
-import { HomeMigrationTab } from './HomeMigrationTab.tsx'
-import { LocalModelsTab } from './LocalModelsTab.tsx'
+import { DesktopWorkbenchHub } from './DesktopWorkbenchHub.tsx'
 import { McpSettingsTab } from './McpSettingsTab.tsx'
-import { RemoteAccessTab } from './RemoteAccessTab.tsx'
 import { DESKTOP_MCP_SETTINGS_KEY, type DesktopMcpSettings } from '../mcp-settings.ts'
 import { DESKTOP_WORKBENCH_SETTINGS_KEY, type DesktopWorkbenchSettings } from '../workbench-settings.ts'
-import { WorkerPackTab } from './WorkerPackTab.tsx'
 import { installWorkerStyles } from './worker-styles.ts'
 
 const DESKTOP_CLIENT_LOCALE_NS = 'dsh-desktop'
@@ -87,7 +84,12 @@ export function apply(ctx: ClientContext): void {
       order: 15,
       label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('workerTab'),
       locale: DESKTOP_CLIENT_LOCALE_NS,
-    }, WorkerPackTab))
+      inject: () => ({
+        scope: settingsCtx.settingsScope.bind<DesktopWorkbenchSettings>({
+          namespace: DESKTOP_WORKBENCH_SETTINGS_KEY,
+        }) as SettingsScope<DesktopWorkbenchSettings>,
+      }),
+    }, DesktopWorkbenchHub))
     settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
       name: 'settings.plugins.tab',
       id: 'desktop-mcp',
@@ -100,42 +102,6 @@ export function apply(ctx: ClientContext): void {
         }) as SettingsScope<DesktopMcpSettings>,
       }),
     }, McpSettingsTab))
-    settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
-      name: 'settings.plugins.tab',
-      id: 'desktop-local-models',
-      order: 40,
-      label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('modelsTab'),
-      locale: DESKTOP_CLIENT_LOCALE_NS,
-      inject: () => ({
-        scope: settingsCtx.settingsScope.bind<DesktopWorkbenchSettings>({
-          namespace: DESKTOP_WORKBENCH_SETTINGS_KEY,
-        }) as SettingsScope<DesktopWorkbenchSettings>,
-      }),
-    }, LocalModelsTab))
-    settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
-      name: 'settings.plugins.tab',
-      id: 'desktop-home-migration',
-      order: 50,
-      label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('homeTab'),
-      locale: DESKTOP_CLIENT_LOCALE_NS,
-      inject: () => ({
-        scope: settingsCtx.settingsScope.bind<DesktopWorkbenchSettings>({
-          namespace: DESKTOP_WORKBENCH_SETTINGS_KEY,
-        }) as SettingsScope<DesktopWorkbenchSettings>,
-      }),
-    }, HomeMigrationTab))
-    settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
-      name: 'settings.plugins.tab',
-      id: 'desktop-remote-access',
-      order: 60,
-      label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('remoteTab'),
-      locale: DESKTOP_CLIENT_LOCALE_NS,
-      inject: () => ({
-        scope: settingsCtx.settingsScope.bind<DesktopWorkbenchSettings>({
-          namespace: DESKTOP_WORKBENCH_SETTINGS_KEY,
-        }) as SettingsScope<DesktopWorkbenchSettings>,
-      }),
-    }, RemoteAccessTab))
     settingsCtx.slots.inject('shell.overlay', () => settingsCtx.slots.register({
       name: 'shell.overlay',
       id: 'desktop-command-palette',

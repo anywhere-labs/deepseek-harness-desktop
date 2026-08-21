@@ -16,7 +16,7 @@ export type HomeMigrationTabProps = PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'dsh-desktop'>
   & InjectFace<HomeMigrationTabInjected>
 
-export function HomeMigrationTab({ scope, t }: HomeMigrationTabProps): ReactNode {
+export function HomeMigrationTab({ scope, t }: Pick<HomeMigrationTabProps, 'scope' | 't'>): ReactNode {
   const snapshot = useSyncExternalStore(listener => scope.subscribe(listener), () => scope.getSnapshot())
   const [source, setSource] = useState(snapshot.value?.home.lastSource ?? '')
   const [preview, setPreview] = useState<HomeMigrationPreviewView | undefined>(undefined)

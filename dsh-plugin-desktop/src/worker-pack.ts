@@ -93,6 +93,12 @@ export function workerPackCatalogSelected(
   ))
 }
 
+/** Top-level Plugins tabs registered by the desktop client. */
+export const DESKTOP_PLUGIN_SETTINGS_TAB_IDS = ['desktop-worker-pack', 'desktop-mcp'] as const
+
+/** Workbench pages that share the Worker pack tab instead of adding more top tabs. */
+export const DESKTOP_WORKBENCH_PAGE_IDS = ['pack', 'models', 'home', 'remote'] as const
+
 /** User-initiated install groups on the Worker pack tab. */
 export type WorkerPackInstallKind = 'workspace' | 'office-im' | 'later'
 

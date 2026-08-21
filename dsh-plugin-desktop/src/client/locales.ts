@@ -1,5 +1,6 @@
 export const zh = {
   workerTab: '工作套件',
+  workbenchNav: '工作台页面',
   workerTitle: '工作套件',
   workerBody: 'AI Buddy 默认使用 Code 预设，并推荐一组工作区插件。推荐只是起点：不会开机自动装，点「一键安装」后才会写入当前 profile，重启后下次启动会自动加载。推荐不是白名单，也不会挡住社区插件。目录收录和这里的推荐都不是安全审核。',
   presetTitle: '默认 Agent 预设',
@@ -109,6 +110,7 @@ export const zh = {
 
 export const en = {
   workerTab: 'Worker pack',
+  workbenchNav: 'Workbench pages',
   workerTitle: 'Worker pack',
   workerBody: 'AI Buddy defaults to the Code agent preset and recommends workspace plugins. Recommendations are a starting point: nothing installs at launch. One-click install writes the current profile; after a restart those plugins load on the next startup. They are not an allowlist and do not block community plugins. Catalog listing and these recommendations are not a security review.',
   presetTitle: 'Default agent preset',
