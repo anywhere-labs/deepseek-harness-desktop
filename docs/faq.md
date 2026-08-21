@@ -36,11 +36,11 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 可以。AI Buddy 使用官方 Harness 插件体系。日常安装优先打开 **设置 > 插件** 中的**插件市场**标签，或使用侧边栏入口；也可以从托盘打开 AI Buddy Terminal，运行 `dsh plugin add`、`dsh plugin remove` 和 `dsh plugin update`。命令和市场操作默认作用于当前激活的 profile，插件变更后需要重启 Desktop。目录收录不等于安全审核。
 
-想要更接近 Codex 的工作台时，打开 **设置 > 插件 > 工作套件**：默认 Agent 预设是 Code。推荐的工作区插件可以一键安装，或单独安装；不会开机自动装。办公 IM 的起点是钉钉官方 Stream（`dsh-dingtalk-channel`）和企业微信官方智能机器人（`dsh-wecom`）；这是推荐，不是白名单，其他社区通道仍可安装。窄屏可以把 `dsh-web-mobile` 当作后续可选推荐。不会预置密钥。外部 MCP 服务器在 **MCP** 标签里用官方客户端配置，不会预置令牌。本机模型、数据目录和远程入口在工作套件页内切换。远程入口默认关闭，不会做像素流。
+想要更接近 Codex 的工作台时，打开 **设置 > 插件 > 工作套件**：默认 Agent 预设是 Code。本机模型、数据目录和远程入口在工作套件页内切换。推荐的工作区插件在 **内部市场** 可以一键安装，或单独安装；那是精选推荐，不是独家商店，也不会开机自动装。办公 IM 的起点是钉钉官方 Stream（`dsh-dingtalk-channel`）和企业微信官方智能机器人（`dsh-wecom`）；这是推荐，不是白名单，其他社区通道仍可安装。窄屏可以把 `dsh-web-mobile` 当作后续可选推荐。不会预置密钥。外部 MCP 服务器在 **MCP** 标签里用官方客户端配置，不会预置令牌。远程入口默认关闭，不会做像素流。
 
 ## 有官方钉钉和企业微信吗？
 
-没有内置通道，也不会挡住社区插件。工作套件把钉钉官方 Stream（`dsh-dingtalk-channel`，企业内部应用的 Client ID + Secret，无需公网回调）和企业微信官方智能机器人（`dsh-wecom`，Bot ID + Secret）当作起点。飞书、聚合通道和其他社区插件仍可从插件市场或 `dsh plugin add` 安装。装完后把凭证写进插件配置或本机凭据服务，然后重启 AI Buddy。
+没有内置通道，也不会挡住社区插件。内部市场把钉钉官方 Stream（`dsh-dingtalk-channel`，企业内部应用的 Client ID + Secret，无需公网回调）和企业微信官方智能机器人（`dsh-wecom`，Bot ID + Secret）当作起点。飞书、聚合通道和其他社区插件仍可从插件市场或 `dsh plugin add` 安装。装完后把凭证写进插件配置或本机凭据服务，然后重启 AI Buddy。
 
 ## Desktop profile 和已有 web profile 会自动同步吗？
 

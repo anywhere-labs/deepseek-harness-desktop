@@ -11,6 +11,42 @@ h2 + p + [role="tablist"] [role="tab"] {
   flex: 0 0 auto;
   white-space: nowrap;
 }
+.dshInternalMarketHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.dshInternalMarketGlyphWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  color: var(--dsw-alias-label-secondary);
+}
+.dshInternalMarketGlyph {
+  display: block;
+}
+.dshInternalMarketHeaderTitle {
+  min-width: 0;
+  flex: 1;
+}
+.dshInternalMarketHeaderTitle h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+.dshInternalMarketHeaderTitle p {
+  margin: 3px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
 .dshWorkerHub {
   display: flex;
   flex-direction: column;
