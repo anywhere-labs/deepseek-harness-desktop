@@ -66,6 +66,8 @@ DSH Community Market 以开放方式与各种插件数据源合作。任何人�
 
 [dshfind](https://dshfind.com) 是另一个通过经审查内置 adapter 接入的可选合作来源。它不会被默认选择、优先排序、推荐或用作兜底。它的目录收录、分数、等级、`official`/精选标记、风险标记和安装探测仍是 provider claim，不是 Anywhere Labs 作出的信任判断。
 
+**公司插件目录**（`company-store`）是可选的合作内置来源，复用经审查的 1024Store 风格 adapter factory，对接公司目录 apex。它不是默认、优先来源，也不会在 `dsh-1024store` 失败时作为兜底。选中后 Market 界面会显示免责声明：`公司目录，收录≠安全审核`。
+
 已发布的规范合同是[目录提供方合同](catalog-provider-contract.zh.md)，其中包含来源 manifest、query、不可信 provider page 和 Host 标准化响应的机器可读 Schema。远程字段只是展示数据，不是可执行指令；文本只能按文本渲染，不能作为原始 HTML。
 
 ## 完整本地索引与 cache
