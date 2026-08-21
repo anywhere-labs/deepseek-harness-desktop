@@ -75,7 +75,7 @@ export default defineConfig([
       '@deepseek-ai/cordis',
       '@deepseek-ai/dsh-client-runtime/client',
       '@deepseek-ai/dsh-client-ui-slots',
-      '@deepseek-ai/dsh-client-web-react',
+      '@deepseek-ai/dsh-client-ui-renderer',
       '@deepseek-ai/dsh-client-ui-primitives',
     ],
     noExternal: (id: string) => id.startsWith('@deepseek-ai/') ? undefined : true,

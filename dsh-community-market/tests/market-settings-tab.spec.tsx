@@ -623,7 +623,7 @@ describe('MarketSettingsTab', () => {
       previewId: 'opaque-retry-install-preview',
     })
     vi.mocked(executeMarketOperation)
-      .mockRejectedValueOnce(new Error('install failed'))
+      .mockRejectedValueOnce(new Error('The package manager failed after changing the active profile, so the partial installation was rolled back.'))
       .mockResolvedValueOnce({
         action: 'install',
         receipt,
@@ -640,7 +640,9 @@ describe('MarketSettingsTab', () => {
       'opaque-retry-install-preview',
       expect.any(AbortSignal),
     ))
-    expect((await screen.findByRole('alert')).textContent).toContain(en.executeError)
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The package manager failed after changing the active profile, so the partial installation was rolled back.',
+    )
     expect(within(screen.getByRole('dialog', { name: en.confirmInstallTitle }))
       .getByRole('button', { name: en.confirmInstall })).toBeTruthy()
 
@@ -708,7 +710,7 @@ describe('MarketSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: en.installable }))
     fireEvent.click(await screen.findByRole('button', { name: `${en.install}: ${item.displayName}` }))
 
-    expect(await screen.findByText(en.previewError)).toBeTruthy()
+    expect(await screen.findByText('not a standard plugin')).toBeTruthy()
     const details = screen.getByRole('link', { name: en.verificationDetails }) as HTMLAnchorElement
     expect(details.href).toBe(
       'https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/install-and-uninstall.md',

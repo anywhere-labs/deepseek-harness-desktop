@@ -23,6 +23,7 @@
 # A desktop launch has no terminal operator waiting for the Web readiness line.
 - id: web-runtime
   config:
+    openBrowser: false
     printUrl: false
     surfaceContext: true
     trustedHosts: []

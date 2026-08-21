@@ -95,6 +95,7 @@ const electron = vi.hoisted(() => {
   const browserWindowOn = vi.fn()
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
+  const applicationMenuTemplates: unknown[][] = []
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
   let zoomLevel = 0
@@ -188,6 +189,7 @@ const electron = vi.hoisted(() => {
     app: {
       dock: { setIcon: vi.fn() },
       getLocale: vi.fn(() => 'en-US'),
+      getPreferredSystemLanguages: vi.fn(() => ['en-US']),
       getPath: vi.fn((name: string) => {
         if (name === 'crashDumps') return '/tmp/dsh-desktop-user-data/Crashpad'
         if (name === 'downloads') return '/tmp/Downloads'
@@ -200,6 +202,7 @@ const electron = vi.hoisted(() => {
       off: vi.fn(),
     },
     appIcon,
+    applicationMenuTemplates,
     blueIcon,
     BrowserWindow,
     browserWindowOptions,
@@ -211,9 +214,15 @@ const electron = vi.hoisted(() => {
     dialog,
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
-        menuTemplates.push(template)
-        return {}
+        const first = template[0] as { label?: unknown, submenu?: unknown } | undefined
+        if (first?.label === 'DSH Desktop' && Array.isArray(first.submenu)) {
+          applicationMenuTemplates.push(template)
+        } else {
+          menuTemplates.push(template)
+        }
+        return { template }
       }),
+      setApplicationMenu: vi.fn(),
     },
     menuTemplates,
     nativeImage: { createFromPath },
@@ -275,6 +284,7 @@ describe('Electron desktop runtime', () => {
     electron.browserWindowThemeSources.length = 0
     electron.browserWindows.length = 0
     electron.trays.length = 0
+    electron.applicationMenuTemplates.length = 0
     electron.menuTemplates.length = 0
     electron.notifications.length = 0
     childProcess.reset()
@@ -293,6 +303,7 @@ describe('Electron desktop runtime', () => {
     diagnostics.export.mockReset()
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
+    electron.app.getPreferredSystemLanguages.mockReturnValue(['en-US'])
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
     electron.dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
@@ -308,6 +319,7 @@ describe('Electron desktop runtime', () => {
 
   it('uses the native macOS frame, Dock icon, and template tray image', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    electron.app.getPreferredSystemLanguages.mockReturnValue(['zh-Hans-CN', 'en-US'])
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     const release = runtime.schedule(spec)
@@ -350,6 +362,12 @@ describe('Electron desktop runtime', () => {
     expect(electron.nativeTheme.themeSource).toBe('system')
     expect(electron.browserWindows[0]?.removeMenu).not.toHaveBeenCalled()
     expect(electron.app.dock.setIcon).toHaveBeenCalledWith(electron.appIcon)
+    expect(electron.applicationMenuTemplates[0]?.map(item => (item as { label?: string }).label)).toEqual([
+      'DSH Desktop', '文件', '编辑', '显示', '窗口',
+    ])
+    expect(electron.Menu.setApplicationMenu).toHaveBeenCalledWith({
+      template: electron.applicationMenuTemplates[0],
+    })
     expect(electron.templateIcon.setTemplateImage).toHaveBeenCalledWith(true)
     expect(electron.trays[0]?.image).toBe(electron.templateIcon)
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
@@ -382,6 +400,7 @@ describe('Electron desktop runtime', () => {
     expect(electron.browserWindows[0]?.accessibleTitle).toBe('DeepSeek Harness Desktop')
     expect(electron.browserWindows[0]?.removeMenu).toHaveBeenCalledOnce()
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
+    expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(electron.trays[0]?.image).toBe(electron.blueIcon)
     expect(electron.templateIcon.setTemplateImage).not.toHaveBeenCalled()
 
@@ -402,6 +421,7 @@ describe('Electron desktop runtime', () => {
     expect(runtime.updates.canDownload).toBe(false)
     await expect(runtime.pickDirectory()).rejects.toThrow('native workspace picker is unavailable on linux')
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
+    expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(electron.browserWindows[0]?.removeMenu).not.toHaveBeenCalled()
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Advanced Mode', enabled: false }),
@@ -1161,7 +1181,7 @@ describe('Electron desktop runtime', () => {
         appExecutable: process.execPath,
         electronVersion: '43.4.0',
         profileName: 'desktop',
-        productVersion: '2.0.1',
+        productVersion: '2.0.2',
         profileDir: expect.stringMatching(/profiles[\\/]+desktop$/u),
         homeDir: expect.stringContaining('dsh-desktop-user-data'),
         installRecoveryStatePath: expect.stringMatching(/[\\/]plugin-install-recovery[\\/]state\.json$/u),
@@ -1198,7 +1218,7 @@ describe('Electron desktop runtime', () => {
     expect(diagnostics.export).toHaveBeenCalledWith(
       expect.stringContaining('dsh-desktop-user-data'),
       expect.objectContaining({
-        appVersion: '2.0.1',
+        appVersion: '2.0.2',
         crashDumpsDir: expect.stringMatching(/[\\/]Crashpad$/u),
       }),
     )
@@ -1458,7 +1478,7 @@ describe('Electron desktop runtime', () => {
     expect(runtime.updates).toMatchObject({
       isPackaged: false,
       canDownload: false,
-      currentVersion: '2.0.1',
+      currentVersion: '2.0.2',
       statePath: join('/tmp/dsh-desktop-user-data', 'updates', 'state.json'),
     })
     electron.app.isPackaged = true

@@ -273,7 +273,7 @@ describe('npm registry verification', () => {
         version,
         repository: { type: 'git', url: 'git+https://github.com/example/dsh-plugin-safe.git' },
         scripts: { test: 'vitest' },
-        dependencies: { '@deepseek-ai/dsh-agent': '^0.1.0-rc.7' },
+        dependencies: { '@deepseek-ai/dsh-agent': '^0.1.0-rc.8' },
         peerDependencies: { '@deepseek-ai/cordis': '^4.0.1' },
         engines: { node: '>=22.19.0' },
         dist: { integrity, tarball },

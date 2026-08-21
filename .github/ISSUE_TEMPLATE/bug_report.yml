@@ -78,7 +78,7 @@ body:
     attributes:
       label: DSH runtime version / DSH 运行时版本
       description: If a separate CLI is installed, run `dsh --version` / 如另装了 CLI，可运行 `dsh --version`
-      placeholder: "For example: 0.1.0-rc.7; or Unknown / 不知道"
+      placeholder: "For example: 0.1.0-rc.8; or Unknown / 不知道"
     validations:
       required: true
 

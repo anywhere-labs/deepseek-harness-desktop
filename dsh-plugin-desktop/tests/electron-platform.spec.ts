@@ -6,11 +6,17 @@ const electron = vi.hoisted(() => ({
     dock: {
       setIcon: vi.fn(),
     },
+    getPreferredSystemLanguages: vi.fn(() => ['en-US']),
+  },
+  Menu: {
+    buildFromTemplate: vi.fn((template: unknown) => template),
+    setApplicationMenu: vi.fn(),
   },
 }))
 
 vi.mock('electron', () => ({
   app: electron.app,
+  Menu: electron.Menu,
 }))
 
 function createWindow(): {
@@ -26,6 +32,8 @@ function createWindow(): {
 describe('electronPlatformStrategy', () => {
   beforeEach(() => {
     electron.app.dock.setIcon.mockClear()
+    electron.Menu.buildFromTemplate.mockClear()
+    electron.Menu.setApplicationMenu.mockClear()
   })
 
   it('selects the Windows adapter and configures native window chrome', () => {
@@ -38,16 +46,17 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.canPickDirectory).toBe(true)
     expect(strategy.canToggleShellMode).toBe(true)
 
-    strategy.configureApplication(icon)
+    strategy.configureApplication(icon, 'DSH Desktop')
     strategy.configureWindow(window as never)
     strategy.refreshThemeMaterial(window as never)
 
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
+    expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(window.removeMenu).toHaveBeenCalledTimes(1)
     expect(window.setBackgroundMaterial).toHaveBeenCalledWith('mica')
   })
 
-  it('selects the macOS adapter and updates the dock icon only', () => {
+  it('selects the macOS adapter and configures its native application chrome', () => {
     const strategy = electronPlatformStrategy('darwin')
     const window = createWindow()
     const icon = {} as Parameters<typeof strategy.configureApplication>[0]
@@ -57,11 +66,13 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.canPickDirectory).toBe(false)
     expect(strategy.canToggleShellMode).toBe(true)
 
-    strategy.configureApplication(icon)
+    strategy.configureApplication(icon, 'DSH Desktop')
     strategy.configureWindow(window as never)
     strategy.refreshThemeMaterial(window as never)
 
     expect(electron.app.dock.setIcon).toHaveBeenCalledWith(icon)
+    expect(electron.Menu.buildFromTemplate).toHaveBeenCalledTimes(1)
+    expect(electron.Menu.setApplicationMenu).toHaveBeenCalledTimes(1)
     expect(window.removeMenu).not.toHaveBeenCalled()
     expect(window.setBackgroundMaterial).not.toHaveBeenCalled()
   })
@@ -75,11 +86,12 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.canPickDirectory).toBe(false)
     expect(strategy.canToggleShellMode).toBe(false)
 
-    strategy.configureApplication({} as never)
+    strategy.configureApplication({} as never, 'DSH Desktop')
     strategy.configureWindow(window as never)
     strategy.refreshThemeMaterial(window as never)
 
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
+    expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(window.removeMenu).not.toHaveBeenCalled()
     expect(window.setBackgroundMaterial).not.toHaveBeenCalled()
   })

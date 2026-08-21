@@ -106,7 +106,7 @@ flowchart LR
     MacAdapter[macOS adapter]
     LinuxAdapter[Linux adapter]
     WindowsFacts[目录、更新、菜单与 Mica]
-    MacFacts[更新、Dock 图标与 Shell 模式]
+    MacFacts[更新、Dock 图标、本地化菜单与 Shell 模式]
     LinuxFacts[明确不支持的能力]
     LocalChecks[Window options 与 terminal 保留局部构造检查]
 
@@ -164,7 +164,7 @@ sequenceDiagram
 `electronPlatformStrategy()` 在 runtime 构造时只选择一个 adapter。每个 adapter 提供平台身份，声明目录选择、Shell 模式和更新下载能力，并拥有原生呈现操作：
 
 - Windows 移除应用菜单，并在主题变化后恢复 Mica。
-- macOS 配置 Dock 图标。
+- macOS 配置 Dock 图标与本地化应用菜单。
 - Linux 明确声明不支持高级 Shell 与更新下载能力，而不会伪装成支持。
 
 Shell generation 使用这个 interface，不再对 `process.platform` 分支。Runtime 使用同一个已选 adapter 做能力检查与更新行为，使平台策略与原生 implementation 保持在同一个 seam。这里有三个具体 adapter，因此它是真实 seam，而不是假设性抽象。

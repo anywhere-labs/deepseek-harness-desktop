@@ -121,6 +121,12 @@ function isDesktopUnavailable(cause: unknown): boolean {
     && (cause as { status?: unknown }).status === 503
 }
 
+function operationErrorMessage(cause: unknown, fallback: string): string {
+  return cause instanceof Error && cause.message.trim().length > 0
+    ? cause.message
+    : fallback
+}
+
 function catalogFailureMessage(
   cause: unknown,
   source: MarketSourceView,
@@ -708,11 +714,11 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
         setInstallationsError(t('desktopUnavailable'))
         setOperationError(t('desktopUnavailable'))
       } else {
-        setOperationError(t(requestValue.action === 'install'
+        setOperationError(operationErrorMessage(cause, t(requestValue.action === 'install'
           ? 'previewError'
           : requestValue.action === 'uninstall'
             ? 'uninstallPreviewError'
-            : requestValue.action === 'disable' ? 'disablePreviewError' : 'enablePreviewError'))
+            : requestValue.action === 'disable' ? 'disablePreviewError' : 'enablePreviewError')))
       }
     } finally {
       if (operationRequest.current === request) {
@@ -894,7 +900,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
         setInstallationsError(t('desktopUnavailable'))
         setOperationError(t('desktopUnavailable'))
       } else {
-        setOperationError(t('executeError'))
+        setOperationError(operationErrorMessage(cause, t('executeError')))
       }
     } finally {
       if (operationRequest.current === request) {

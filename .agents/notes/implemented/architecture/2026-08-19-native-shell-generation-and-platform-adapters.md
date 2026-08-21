@@ -106,7 +106,7 @@ flowchart LR
     MacAdapter[macOS adapter]
     LinuxAdapter[Linux adapter]
     WindowsFacts[Picker, update, menu, and Mica]
-    MacFacts[Update, Dock icon, and shell mode]
+    MacFacts[Update, Dock icon, localized menu, and shell mode]
     LinuxFacts[Explicit unsupported capabilities]
     LocalChecks[Window options and terminal keep local construction checks]
 
@@ -164,7 +164,7 @@ This module is deep because a small `mount` / `show` / `refresh` / `release` int
 `electronPlatformStrategy()` selects exactly one adapter at runtime construction. Each adapter provides a platform identity, declares directory-picking, shell-mode, and update-download capabilities, and owns native presentation operations:
 
 - Windows removes the application menu and restores Mica after theme changes.
-- macOS configures the Dock icon.
+- macOS configures the Dock icon and localized application menu.
 - Linux declares unsupported advanced-shell and update-download capabilities without pretending to provide them.
 
 The shell generation consumes this interface without branching on `process.platform`. The runtime uses the same selected adapter for capability checks and update behavior, so platform policy and native implementation remain at one seam. With three concrete adapters, this is a real seam rather than a hypothetical abstraction.
