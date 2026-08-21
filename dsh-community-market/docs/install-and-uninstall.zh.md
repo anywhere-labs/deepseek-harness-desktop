@@ -42,7 +42,7 @@
 - npm 的仓库身份与目录中的标准化仓库一致，存在 subdirectory 时也必须一致；
 - 该版本没有 deprecated 标记；
 - 目标 package manifest 没有定义 `preinstall`、`install`、`postinstall` 或 `prepare`；
-- 它声明的 DSH/Cordis dependency 与基于 DSH `0.1.0-rc.7` 的 Desktop runtime 兼容，并且声明的 Node engine 接受 Desktop 内置的 Node.js runtime；
+- 它声明的 DSH/Cordis dependency 与基于 DSH `0.1.1-rc.2` 的 Desktop runtime 兼容，并且声明的 Node engine 接受 Desktop 内置的 Node.js runtime；
 - npm 提供官方 HTTPS tarball 和合法 SHA-512 integrity；以及
 - package 声明安全的 DSH bundle patch，受管操作结束后，该文件确实存在于安装 package 内且没有越出 package 目录。
 
@@ -70,7 +70,7 @@ Add 成功后，Desktop 会封存白名单文件的结果 hash，并保留一条
 - 版本范围、`latest` 等 tag 和 prerelease 版本；
 - provider 安装命令、shell 片段、HTML、脚本和任何可执行 adapter 数据；
 - deprecated 目标，或包含上述四种 lifecycle script 之一的目标 package；
-- 与当前 DSH rc.7、Cordis 或内置 Node.js runtime 不兼容的 package；
+- 与当前 DSH rc.2、Cordis 或内置 Node.js runtime 不兼容的 package；
 - 缺少必要 npm integrity 或 DSH bundle 证据的 package；以及
 - Desktop 与 Market 产品 package 本身。
 

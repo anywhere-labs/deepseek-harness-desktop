@@ -133,6 +133,59 @@ describe('desktop lifecycle events', () => {
     expect(logger.error).not.toHaveBeenCalled()
   })
 
+  it('keeps a newer recorder generation isolated from a delayed older recorder', () => {
+    const userDataDir = tempUserData('dsh-lifecycle-generation-')
+    const olderLogger = createLogger()
+    const olderIds = ['older-run', 'older-operation']
+    const older = createDesktopLifecycleRecorder({
+      userDataDir,
+      appVersion: '2.0.1-test',
+      platform: 'win32',
+      arch: 'x64',
+      logger: olderLogger,
+      now: () => FIXED_NOW,
+      randomId: () => olderIds.shift() ?? 'older-extra',
+    })
+    older.startStartup('electron-ready')
+
+    const newerLogger = createLogger()
+    const newerIds = ['newer-run', 'newer-operation']
+    const newer = createDesktopLifecycleRecorder({
+      userDataDir,
+      appVersion: '2.0.1-test',
+      platform: 'win32',
+      arch: 'x64',
+      logger: newerLogger,
+      now: () => FIXED_NOW,
+      randomId: () => newerIds.shift() ?? 'newer-extra',
+    })
+    newer.startStartup('runtime-bootstrap')
+
+    older.failStartup('electron-ready', 'startup-failed')
+    newer.completeStartup('runtime-bootstrap', { status: 'healthy' })
+
+    const evidencePath = desktopLifecycleEvidencePath(userDataDir)
+    const events = readEvents(userDataDir)
+    expect(events.map(event => event.runId)).toEqual(Array.from({ length: events.length }, () => 'newer-run'))
+    expect(events.map(event => event.operationId)).toEqual(Array.from({ length: events.length }, () => 'newer-operation'))
+    expect(events.map(event => event.eventName)).toEqual([
+      'startup.run.started',
+      'startup.stage.started',
+      'startup.stage.completed',
+      'startup.run.completed',
+    ])
+    const summary = JSON.parse(summarizeDesktopLifecycleEvidence(readFileSync(evidencePath))?.toString('utf8') ?? '') as DesktopLifecycleSummary
+    expect(summary).toMatchObject({
+      eventCount: 4,
+      parseErrorCount: 0,
+      runId: 'newer-run',
+      operationId: 'newer-operation',
+      finalOutcome: 'completed',
+    })
+    expect(olderLogger.error).toHaveBeenCalledWith(expect.stringContaining('failed to persist lifecycle evidence'))
+    expect(newerLogger.error).not.toHaveBeenCalled()
+  })
+
   it('records renderer start separately from terminal healthy, failed, and timeout outcomes', () => {
     const healthyDir = tempUserData('dsh-lifecycle-healthy-')
     const healthy = createDesktopLifecycleRecorder({
@@ -267,9 +320,18 @@ describe('desktop lifecycle events', () => {
 
     const evidence = readFileSync(evidencePath, 'utf8')
     expect(Buffer.byteLength(evidence)).toBeLessThanOrEqual(MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES)
-    for (const line of evidence.split('\n').filter(item => item.length > 0)) {
+    const retainedEvents = evidence.split('\n').filter(item => item.length > 0)
+    expect(JSON.parse(retainedEvents[0] ?? '{}')).toMatchObject({
+      runId: 'cap-run',
+      operationId: 'cap-op',
+      eventName: 'startup.run.started',
+    })
+    for (const line of retainedEvents) {
       expect(Buffer.byteLength(line) + 1).toBeLessThanOrEqual(MAX_DESKTOP_LIFECYCLE_EVENT_BYTES)
-      expect(() => { parseDesktopLifecycleEvent(JSON.parse(line) as unknown) }).not.toThrow()
+      expect(parseDesktopLifecycleEvent(JSON.parse(line) as unknown)).toMatchObject({
+        runId: 'cap-run',
+        operationId: 'cap-op',
+      })
     }
   })
 

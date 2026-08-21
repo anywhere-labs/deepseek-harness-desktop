@@ -16,7 +16,7 @@
 - 执行前展示 Host 已复核的精确 npm package/版本和当前 profile；
 - 不执行目录响应中的命令字符串、脚本或 HTML；provider 命令会被丢弃，Host 重建的手动命令也必须保持有界、只用于展示，并且绝不会发送给 Desktop action；
 - Market 安装只通过 Desktop 受管的可恢复安装能力；普通 package 操作不能对 `plugin add` 使用未保护路径；
-- 只有通过独立 registry、仓库、integrity、bundle、deprecated、lifecycle script、DSH rc.7 和内置 Node.js 检查的精确稳定 npm 目标才能继续；
+- 只有通过独立 registry、仓库、integrity、bundle、deprecated、lifecycle script、DSH rc.2 和内置 Node.js 检查的精确稳定 npm 目标才能继续；
 - 预览与读取可取消；确认被接受后，串行 mutation 由 Host 持有，UI 断连只会丢失响应；当前 profile 变化或一次性 preview 无效时必须拒绝；
 - 卸载只接管当前 profile 中 package 与 bundle 仍然精确匹配的合法 Market receipt，且不依赖目录来源继续存在；
 - 打开 DSH 终端只能使用严格的空 body 操作，不携带命令、路径或 profile，也不会粘贴或执行界面展示的手动提示；

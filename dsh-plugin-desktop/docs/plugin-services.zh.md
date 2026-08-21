@@ -88,6 +88,30 @@ interface DesktopPnpm {
     invokingDir: string,
     signal?: AbortSignal,
   ): DesktopPnpmHandle
+  /** @deprecated 请使用 installPlugin()。 */
+  runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: {
+      readonly packageName: string
+      readonly packageVersion: string
+      readonly receiptId: string
+    },
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle>
+  installPlugin(request: {
+    readonly pnpmOptions?: readonly string[]
+    readonly invokingDir: string
+    readonly recovery: {
+      readonly packageName: string
+      readonly packageVersion: string
+      readonly receiptId: string
+    }
+    readonly signal?: AbortSignal
+  }): Promise<DesktopPnpmHandle>
+  recoveredInstallReceiptIds(): Promise<readonly string[]>
+  acknowledgeRecoveredInstall(receiptId: string): Promise<void>
+  rollbackPluginInstall(receiptId: string): Promise<boolean>
 }
 
 interface DesktopPnpmHandle {
@@ -101,23 +125,28 @@ interface DesktopPnpmHandle {
 }
 ```
 
-实际 stream 类型是 Node 的 `Readable`。两个方法都会校验非空且不含 NUL 的 argv；`runPlugin()` 还要求 `invokingDir` 是不含 NUL 的绝对路径。
+实际 stream 类型是 Node 的 `Readable`。Command 方法会校验非空且不含 NUL 的 argv；plugin operation 还要求 `invokingDir` 是不含 NUL 的绝对路径。
 
 | 方法 | 进程与 working directory | 受支持用途 |
 | --- | --- | --- |
 | `run(args, signal?)` | 直接执行已打包 pnpm JavaScript entry，以激活 profile 目录为 `cwd`。 | 调用方明确不需要 DSH 插件 reconcile 的低层 pnpm 工作。 |
-| `runPlugin(args, invokingDir, signal?)` | 以调用方绝对目录为 CLI `cwd`，执行已打包 `dsh plugin --profile <active> ...`；上游 DSH 会为 pnpm 进入 profile。 | 插件 add、remove、update、collection 修复或 dependency 修复。 |
+| `runPlugin(args, invokingDir, signal?)` | 以调用方绝对目录为 CLI `cwd`，执行已打包 `dsh plugin --profile <active> ...`；上游 DSH 会为 pnpm 进入 profile。 | 插件 remove、update、collection 修复或 dependency 修复。它会拒绝 `add`。 |
+| `runPluginInstall(args, invokingDir, recovery, signal?)` | 仅当 v2.0.1 `add` 形式中的唯一精确目标与恢复 receipt 一致时接受调用，随后委托给 `installPlugin()`。 | 为已发布插件管理器保留的废弃兼容入口；新集成不得使用。 |
+| `installPlugin(request)` | 先快照 profile，生成精确 `name@version` 目标，再执行强制的 `dsh plugin ... add`；`done` settle 前会封存或恢复快照。 | Desktop 唯一受支持的插件安装路径。 |
 
 `run()` 不是 `runPlugin()` 的短写。直接 pnpm 不承诺首次 profile 初始化、调用方相对 `file:` 或 `link:` source 锚定，也不承诺成功后的 `dsh.profile.bundles` reconcile。插件管理器若使用错误方法，package 可能已经出现在 dependency 中，却没有加入 Loader layer stack。
 
-`runPlugin()` 会保留普通 DSH CLI 对这些行为的权威性。它的 `args` 是 `dsh plugin --profile <active>` 之后转发给 pnpm 的参数，例如：
+`runPlugin()` 会保留普通 DSH CLI 对非安装 mutation 的权威性。它的 `args` 是 `dsh plugin --profile <active>` 之后的参数，例如：
 
 ```ts
-['add', 'example-plugin']
 ['remove', 'example-plugin']
 ['update']
 ['install', '--no-frozen-lockfile']
 ```
+
+`installPlugin()` 拥有可恢复的 `add` 生命周期。调用方提供 pnpm flag、绝对调用目录和持久 receipt 身份。Desktop 会生成精确的 `${packageName}@${packageVersion}` 目标，在 spawn 前快照 profile manifest 与 lockfile，命令失败后恢复，成功后封存安装后图像。`receiptId` 把调用方的持久 receipt ledger 与 Desktop WAL 关联起来。启动回滚后，必须先删除精确 receipt，然后才调用 `acknowledgeRecoveredInstall(receiptId)`；确认操作是幂等的。`rollbackPluginInstall(receiptId)` 仅适用于当前 generation 中匹配的 transaction。
+
+`runPluginInstall()` 仅为避免破坏 v2.0.1 插件管理器而保留。它只接受 `['add', ...flags, exactTarget]`，其中 `exactTarget` 必须精确等于 `${recovery.packageName}@${recovery.packageVersion}`，中间参数必须全部是 flag。命令、目标不符，存在额外位置参数，或参数格式错误时，都会在启动进程前拒绝。
 
 Service 在每个 generation 同时最多启动一个 package operation；已有 operation 活跃时再次调用会同步抛错。它只暴露输出，不选择 progress UI，也没有内置 timeout。Consumer 拥有 deadline、读取两个 stream、报告 progress、在需要时调用 `cancel()` 或 abort signal、等待 `done`，并同时检查 `exitCode` 与 `signal`。
 
@@ -143,6 +172,7 @@ Service 在每个 generation 同时最多启动一个 package operation；已有
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
+import { randomUUID } from 'node:crypto'
 import type {} from 'dsh-plugin-desktop/profile-service'
 import type { DesktopPnpmHandle } from 'dsh-plugin-desktop/pnpm'
 
@@ -152,6 +182,11 @@ export const inject = ['desktopProfiles', 'desktopPnpm']
 declare function registerInstallAction(
   callback: (target: string) => Promise<void>,
 ): () => void
+declare function persistPendingReceipt(recovery: {
+  readonly packageName: string
+  readonly packageVersion: string
+  readonly receiptId: string
+}): Promise<void>
 
 export function apply(ctx: Context): void {
   ctx.logger.info(`active Desktop profile: ${ctx.desktopProfiles.current.name}`)
@@ -160,7 +195,17 @@ export function apply(ctx: Context): void {
     const disposeAction = registerInstallAction(async (target) => {
       // 先校验 target；该 callback 表示显式用户操作。
       const signal = AbortSignal.timeout(5 * 60_000)
-      const operation = ctx.desktopPnpm.runPlugin(['add', target], process.cwd(), signal)
+      const recovery = {
+        packageName: target,
+        packageVersion: '1.0.0',
+        receiptId: randomUUID(),
+      }
+      await persistPendingReceipt(recovery)
+      const operation = await ctx.desktopPnpm.installPlugin({
+        invokingDir: process.cwd(),
+        recovery,
+        signal,
+      })
       active = operation
       operation.stdout.setEncoding('utf8')
       operation.stderr.setEncoding('utf8')
@@ -245,7 +290,7 @@ Type-only import 会从 JavaScript 中消除。跨环境 package 可以把 `dsh-
 
 ## 最小可运行测试插件
 
-仓库在 [`tests/fixtures/desktop-host-services-smoke-plugin`](../tests/fixtures/desktop-host-services-smoke-plugin/) 中提供了一个只有两个文件的 profile-local fixture。它的 entry 声明 `inject = ['desktopProfiles', 'desktopPnpm']`，读取 `desktopProfiles.current`，并确认 `desktopPnpm.run()` 与 `runPlugin()` 可用。它只把结果发布为测试 probe，绝不会执行 pnpm 或修改 profile。
+仓库在 [`tests/fixtures/desktop-host-services-smoke-plugin`](../tests/fixtures/desktop-host-services-smoke-plugin/) 中提供了一个只有两个文件的 profile-local fixture。它的 entry 声明 `inject = ['desktopProfiles', 'desktopPnpm']`，读取 `desktopProfiles.current`，并确认 command 与可恢复安装生命周期方法可用。它只把结果发布为测试 probe，绝不会执行 pnpm 或修改 profile。
 
 完整 Profile Loader smoke 会把该 package 复制到临时 profile 的 `node_modules`，以普通 bare-package Loader entry 加载，并在 probe 没有返回激活 profile 或两个 package-manager 方法时失败。运行命令：
 
@@ -260,7 +305,7 @@ yarn workspace dsh-plugin-desktop verify:profile
 
 1. 只有显式用户或管理员操作才能启动 package mutation。
 2. 把 `desktopProfiles.current` 当作单 generation snapshot；不能跨重启保留 service。
-3. 所有用于修改 DSH 插件或修复其 dependency tree 的 operation 都使用 `runPlugin()`。
+3. `add` 使用 `installPlugin()`；remove、update 和 dependency repair 使用 `runPlugin()`。
 4. 传入绝对调用方目录，使相对 package spec 保留用户意图。
 5. 为面向用户的 deadline 提供 `AbortSignal`，并保留 handle 以便显式 cancellation。
 6. 持续读取 stdout 与 stderr；状态 endpoint 保存的内存历史必须有界。
@@ -276,7 +321,7 @@ yarn workspace dsh-plugin-desktop verify:profile
 因此 DSH Desktop 不会预装或依赖该版本。未来兼容 release 必须：
 
 - 使用 `desktopProfiles.current` 作为 Desktop 权威身份；
-- 对 add、remove、update、collection cleanup 与 dependency repair 等待并调用 `desktopPnpm.runPlugin()`；
+- add 使用 `desktopPnpm.installPlugin()`，remove、update、collection cleanup 与 dependency repair 使用 `runPlugin()`；
 - 从返回 stream 生成 progress，并通过 `AbortSignal` 拥有自己的 timeout；
 - Desktop service 在普通 DSH 中不存在时，保留现有 config/argv/CLI 路径；
 - 不把 Desktop service 作为跨环境 package 的顶层 required injection。

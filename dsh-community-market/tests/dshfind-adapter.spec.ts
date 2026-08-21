@@ -265,3 +265,78 @@ describe('dshfind adapter', () => {
     expect(getJson).toHaveBeenCalledOnce()
   })
 })
+
+describe('dshfind install target normalization', () => {
+  const reviewedMethod = {
+    kind: 'npm',
+    verification: 'verified',
+    code: 'repository_backlink',
+    requiresBuildAllowance: false,
+    spec: 'dsh-plugin-0',
+    revision: '1.2.3',
+  }
+  const baseInstall = {
+    cmd: 'provider command text',
+    kind: 'npm',
+    pkg_name: 'dsh-plugin-0',
+    npm_published: true,
+  }
+
+  async function scanInstall(install: unknown) {
+    const adapter = createDshfindAdapter({ interPageDelayMs: 0 })
+    const http: CatalogHttpClient = {
+      getJson: vi.fn(async url => ({
+        value: rawPage([{ ...rawItem(0), install }], 1, 1),
+        finalUrl: url,
+      })),
+    }
+    const snapshots = await adapter.scanCatalog!({}, {
+      source: source(),
+      signal: new AbortController().signal,
+      http,
+      media: { register: vi.fn() },
+    })
+    return snapshots.flatMap(snapshot => snapshot.items)
+  }
+
+  it('exposes one reviewed exact npm target without exposing the provider command', async () => {
+    const items = await scanInstall({
+      ...baseInstall,
+      methods: [reviewedMethod, { ...reviewedMethod }],
+    })
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: 'owner/plugin-0',
+      repository: { url: 'https://github.com/owner/plugin-0' },
+      package: { registry: 'npm', name: 'dsh-plugin-0' },
+      latestVersion: '1.2.3',
+    })
+    expect(JSON.stringify(items)).not.toContain('provider command text')
+  })
+
+  it.each([
+    ['missing methods', baseInstall],
+    ['a non-object install', 'npm install dsh-plugin-0'],
+    ['an unverified method', { ...baseInstall, methods: [{ ...reviewedMethod, verification: 'unverified' }] }],
+    ['a wrong verification code', { ...baseInstall, methods: [{ ...reviewedMethod, code: 'unlinked_package' }] }],
+    ['a build allowance requirement', { ...baseInstall, methods: [{ ...reviewedMethod, requiresBuildAllowance: true }] }],
+    ['a prerelease version', { ...baseInstall, methods: [{ ...reviewedMethod, revision: '1.2.4-rc.1' }] }],
+    ['a mutable tag instead of a version', { ...baseInstall, methods: [{ ...reviewedMethod, revision: 'latest' }] }],
+    ['an invalid package name', { ...baseInstall, methods: [{ ...reviewedMethod, spec: 'Not A Package!' }] }],
+    ['an overlong package name', { ...baseInstall, pkg_name: undefined, methods: [{ ...reviewedMethod, spec: `dsh-${'a'.repeat(211)}` }] }],
+    ['an overlong version', { ...baseInstall, methods: [{ ...reviewedMethod, revision: `${'1'.repeat(63)}.2.3` }] }],
+    ['a spec disagreeing with pkg_name', { ...baseInstall, methods: [{ ...reviewedMethod, spec: 'other-package' }] }],
+    ['ambiguous reviewed targets', {
+      ...baseInstall,
+      pkg_name: undefined,
+      methods: [reviewedMethod, { ...reviewedMethod, spec: 'another-package', revision: '2.0.0' }],
+    }],
+  ] as const)('does not expose an install identity for %s', async (_label, install) => {
+    const items = await scanInstall(install)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).not.toHaveProperty('package')
+    expect(items[0]).not.toHaveProperty('latestVersion')
+  })
+})

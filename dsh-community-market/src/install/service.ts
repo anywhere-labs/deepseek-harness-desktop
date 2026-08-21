@@ -25,7 +25,7 @@ const MAX_CANDIDATES = 10_000
 const MAX_RECEIPTS = 512
 const LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'] as const
 const BLOCKED_PRODUCT_PACKAGES = new Set(['dsh-plugin-desktop', 'dsh-community-market'])
-const DSH_RUNTIME_VERSION = '0.1.0-rc.7'
+const DSH_RUNTIME_VERSION = '0.1.1-rc.2'
 const CORDIS_RUNTIME_VERSION = '4.0.1'
 const NODE_RUNTIME_VERSION = '24.18.1'
 
@@ -54,16 +54,16 @@ export interface MarketDesktopPnpm {
     invokingDir: string,
     signal?: AbortSignal,
   ): MarketDesktopPnpmHandle
-  runPluginInstall(
-    args: readonly string[],
-    invokingDir: string,
-    recovery: {
+  installPlugin(request: {
+    readonly pnpmOptions?: readonly string[]
+    readonly invokingDir: string
+    readonly recovery: {
       readonly packageName: string
       readonly packageVersion: string
       readonly receiptId: string
-    },
-    signal?: AbortSignal,
-  ): Promise<MarketDesktopPnpmHandle>
+    }
+    readonly signal?: AbortSignal
+  }): Promise<MarketDesktopPnpmHandle>
   recoveredInstallReceiptIds(): Promise<readonly string[]>
   acknowledgeRecoveredInstall(receiptId: string): Promise<void>
   rollbackPluginInstall(receiptId: string): Promise<boolean>
@@ -850,7 +850,7 @@ export class MarketInstallService {
       }
       try {
         await this.runPlugin(
-          this.installArgs(candidate.packageName, candidate.version),
+          this.installOptions(candidate.packageName),
           profile,
           operationSignal,
           true,
@@ -1162,7 +1162,12 @@ export class MarketInstallService {
     try {
       handle = installRecovery === undefined
         ? this.pnpm.runPlugin(args, profile.dir, combinedSignal)
-        : await this.pnpm.runPluginInstall(args, profile.dir, installRecovery, combinedSignal)
+        : await this.pnpm.installPlugin({
+            pnpmOptions: args,
+            invokingDir: profile.dir,
+            recovery: installRecovery,
+            signal: combinedSignal,
+          })
     }
     catch { throw new MarketInstallError('operation-failed', 'The desktop package manager could not start.') }
     handle.stdout.resume()
@@ -1182,14 +1187,12 @@ export class MarketInstallService {
     }
   }
 
-  private installArgs(packageName: string, version: string): readonly string[] {
+  private installOptions(packageName: string): readonly string[] {
     const scope = packageName.startsWith('@') ? packageName.split('/', 1)[0] : undefined
     return [
-      'add',
       '--save-exact',
       `--registry=${NPM_REGISTRY}`,
       ...(scope === undefined ? [] : [`--${scope}:registry=${NPM_REGISTRY}`]),
-      `${packageName}@${version}`,
     ]
   }
 

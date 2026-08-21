@@ -1,8 +1,8 @@
 diff --git a/lib/client.js b/lib/client.js
-index 88da094ba773c260d687e428f8888c4433d31d9f..c6836c58e465ce8f2c1cbb47550c8c81b88f5522 100644
+index 3d67601..f3181c7 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -24,7 +24,7 @@ window.__ModuleLoader__.load({
+@@ -24,13 +24,13 @@ window.__ModuleLoader__.load({
  		}
  		//#endregion
  		//#region \0dsh-css:/home/runner/work/deepseek-harness/deepseek-harness/packages/client/ui-directory-picker-browse/src/client/DirectoryBrowser.module.css.mjs
@@ -11,21 +11,21 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..c6836c58e465ce8f2c1cbb47550c8c81
  		const tagId = "@deepseek-ai/dsh-client-ui-directory-picker-browse/DirectoryBrowser.module.css";
  		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
  			const tag = document.createElement("style");
-@@ -31,5 +31,5 @@ window.__ModuleLoader__.load({
  			tag.dataset.plugin = "@deepseek-ai/dsh-client-ui-directory-picker-browse";
  			tag.dataset.pluginCss = tagId;
 -			tag.textContent = css;
 +			tag.textContent = css + ".ZuhsRW_nativePickerButton{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2)}";
  			document.head.appendChild(tag);
  		}
-@@ -36,6 +36,7 @@ window.__ModuleLoader__.load({
  		var DirectoryBrowser_module_css_default = {
- 			"createActions": "ZuhsRW_createActions",
- 			"footerBar": "ZuhsRW_footerBar",
+@@ -51,6 +51,7 @@ window.__ModuleLoader__.load({
+ 			"crumbTrail": "ZuhsRW_crumbTrail",
+ 			"dialog": "ZuhsRW_dialog",
+ 			"divider": "ZuhsRW_divider",
 +			"nativePickerButton": "ZuhsRW_nativePickerButton",
- 			"crumbBar": "ZuhsRW_crumbBar",
- 			"pathInput": "ZuhsRW_pathInput",
- 			"title": "ZuhsRW_title",
+ 			"editorScope": "ZuhsRW_editorScope",
+ 			"error": "ZuhsRW_error",
+ 			"footerAction": "ZuhsRW_footerAction",
 @@ -279,7 +280,7 @@ window.__ModuleLoader__.load({
  		* @param props - owner-controlled browser props.
  		* @returns the dialog element (null while closed, via Modal).
@@ -106,9 +106,7 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..c6836c58e465ce8f2c1cbb47550c8c81
  								(0, react_jsx_runtime.jsxs)("button", {
  									type: "button",
  									className: clsx(DirectoryBrowser_module_css_default.showHiddenToggle, showHidden && DirectoryBrowser_module_css_default.showHiddenToggleActive),
-@@ -857,9 +900,9 @@ window.__ModuleLoader__.load({
- 									variant: "primary",
- 									className: clsx(DirectoryBrowser_module_css_default.footerAction),
+@@ -859,7 +902,7 @@ window.__ModuleLoader__.load({
  									disabled: targetPath === null || loading || parentInert || draftPending,
  									/* v8 ignore next -- narrowing guard: Open disables while no target exists. */
  									onClick: () => {
@@ -164,7 +162,7 @@ index 88da094ba773c260d687e428f8888c4433d31d9f..c6836c58e465ce8f2c1cbb47550c8c81
  			});
  			ctx.slots.inject("conversation.hero.workspace.directoryFlow", () => ctx.slots.inject("sidebar.workspaces.directoryFlow", function* () {
 diff --git a/lib/types/client/DirectoryBrowser.d.ts b/lib/types/client/DirectoryBrowser.d.ts
-index 51fcc428ab687d2703c8befdcf312469b047ccc4..cb0f64dd32ea45231f841da4abdffb15e8b049e2 100644
+index 51fcc42..1f2024b 100644
 --- a/lib/types/client/DirectoryBrowser.d.ts
 +++ b/lib/types/client/DirectoryBrowser.d.ts
 @@ -8,6 +8,10 @@ export interface DirectoryBrowserProps {
@@ -185,8 +183,9 @@ index 51fcc428ab687d2703c8befdcf312469b047ccc4..cb0f64dd32ea45231f841da4abdffb15
 -export declare function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
 +export declare function DirectoryBrowser({ open, listDirectory, createDirectory, pickNativeDirectory, validateDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps): import("react").JSX.Element | null;
  //# sourceMappingURL=DirectoryBrowser.d.ts.map
+\ No newline at end of file
 diff --git a/lib/types/client/flow.d.ts b/lib/types/client/flow.d.ts
-index 689bb216f133826c2d4d4454645d643c81b48847..501956872a051724097baba7f75b565303fc102f 100644
+index 689bb21..b6c9a07 100644
 --- a/lib/types/client/flow.d.ts
 +++ b/lib/types/client/flow.d.ts
 @@ -8,6 +8,10 @@ export interface BrowseFlowInjected {

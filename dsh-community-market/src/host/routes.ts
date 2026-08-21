@@ -9,6 +9,7 @@ import { parseCatalogSnapshot, parseCatalogSource, validateLocalSourceRecords } 
 import type { CatalogHttpClient } from '../contracts/types.js'
 import type {
   MarketBuiltInProvider,
+  MarketCatalogErrorCode,
   MarketCatalogMetadata,
   MarketCatalogResponse,
   MarketInstallationView,
@@ -17,7 +18,9 @@ import type {
   MarketSourceMutation,
   MarketStateResponse,
 } from '../api-types.js'
+import { CatalogContractError } from '../contracts/errors.js'
 import {
+  CatalogNetworkError,
   createCachedCatalogHttpClient,
   createRestrictedHttpClient,
   restrictedHttpClient,
@@ -129,6 +132,22 @@ function sendInstallError(res: ServerResponse, cause: unknown): void {
             : cause.code === 'operation-failed' ? 502
               : 500
   sendJson(res, status, { error: cause.message, code: cause.code })
+}
+
+function sendCatalogFailure(res: ServerResponse, cause: unknown): void {
+  let code: MarketCatalogErrorCode = 'catalog-unavailable'
+  if (cause instanceof CatalogNetworkError && cause.code === 'timeout') code = 'catalog-timeout'
+  else if (
+    cause instanceof CatalogNetworkError && cause.code === 'response'
+    || cause instanceof CatalogContractError
+  ) code = 'catalog-invalid-response'
+  const status = code === 'catalog-timeout' ? 504 : 502
+  const error = code === 'catalog-timeout'
+    ? 'catalog request timed out'
+    : code === 'catalog-invalid-response'
+      ? 'catalog response was invalid'
+      : 'catalog source unavailable'
+  sendJson(res, status, { error, code })
 }
 
 function catalogMetadata(index: CatalogFullIndex): MarketCatalogMetadata {
@@ -890,6 +909,12 @@ export function registerMarketRoutes(
               sourceRecordId: sourceRecordIds[0]!,
               ...(cursors.length === 0 ? {} : { cursor: cursors[0]! }),
             }
+        const activeSource = scope === undefined
+          ? undefined
+          : (await service.listSources()).find(source => (
+              source.enabled && source.sourceRecordId === scope.sourceRecordId
+            ))
+        if (scope !== undefined && activeSource === undefined) throw new Error('catalog source is not active')
         const localeKey = locale ?? ''
         const previewSourceRecordId = q === undefined
           && categories.length === 0
@@ -904,22 +929,26 @@ export function registerMarketRoutes(
           : catalogPreviewKey(previewSourceRecordId, localeKey)
         if (force) refreshPreviewKey = previewKey
         if (!force && previewKey !== undefined && !servedCatalogPreviews.has(previewKey)) {
-          const sources = await service.listSources()
-          const source = sources.find(value => value.sourceRecordId === previewSourceRecordId && value.enabled)
-          const cached = source === undefined
+          const cached = activeSource === undefined
             ? undefined
-            : cachedCatalogResponse(settingsScope.get().catalogCache, source, localeKey)
+            : cachedCatalogResponse(settingsScope.get().catalogCache, activeSource, localeKey)
           if (cached !== undefined) {
             servedCatalogPreviews.add(previewKey)
             if (!signal.aborted && !res.destroyed) sendJson(res, 200, cached)
             return
           }
         }
-        const index = await service.scanCatalog(signal, {
-          force,
-          ...(locale === null || locale === '' ? {} : { locale }),
-          ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
-        })
+        let index: CatalogFullIndex | undefined
+        try {
+          index = await service.scanCatalog(signal, {
+            force,
+            ...(locale === null || locale === '' ? {} : { locale }),
+            ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
+          })
+        } catch (cause) {
+          if (!signal.aborted && !res.destroyed) sendCatalogFailure(res, cause)
+          return
+        }
         signal.throwIfAborted()
         const response = buildCatalogResponse(index, query, scope)
         if (!signal.aborted && !res.destroyed) sendJson(res, 200, response)

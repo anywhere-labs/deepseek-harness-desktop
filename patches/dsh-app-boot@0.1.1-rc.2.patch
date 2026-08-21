@@ -1,0 +1,12 @@
+diff --git a/lib/index.js b/lib/index.js
+index 66a9068..e1c9463 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -838,6 +838,7 @@ function parsePatchList(binName, file, content, label) {
+ 	} catch (error) {
+ 		throw new Error(`${binName}: failed to parse ${label} ${file}: ${String(error)}`);
+ 	}
++	if (parsed === void 0 || parsed === null) return [];
+ 	if (!Array.isArray(parsed)) throw new Error(`${binName}: ${label} ${file} must be a top-level YAML array of loader patch entries`);
+ 	parsed.forEach((entry, index) => {
+ 		if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw new Error(`${binName}: ${label} entry ${index + 1} in ${file} must be a mapping (a loader patch entry)`);

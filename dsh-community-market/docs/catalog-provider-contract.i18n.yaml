@@ -1,4 +1,4 @@
 # Bilingual-pair consistency record. Both languages carry equal authority.
 # Update both files and record their Git blob hashes after editing either side.
-catalog-provider-contract.md: e8fa9cb9ace1f16f1de607cce778c69b01c8c391
-catalog-provider-contract.zh.md: 48eb0fff781022df657f461e9deb0dccceeb1e16
+catalog-provider-contract.md: 911fe43c3156847d6dbdf7f6c99d9cec04638399
+catalog-provider-contract.zh.md: 23d736f56e290ad3ae8fd3556ccff1efb6e7a23d

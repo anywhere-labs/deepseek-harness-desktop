@@ -46,7 +46,6 @@ const STATE_DIRECTORY_MODE = 0o700
 const EXECUTABLE_FILE_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600
 const WINDOWS_SHELL_COMMANDS = ['pwsh.exe', 'powershell.exe', 'cmd.exe'] as const
-const WINDOWS_TERMINAL_COMMAND = 'wt.exe'
 const ELECTRON_HEADERS_URL = 'https://electronjs.org/headers'
 
 /** Platforms with a native terminal launch contract owned by DSH Desktop. */
@@ -551,12 +550,6 @@ function defaultWindowsExecutableResolver(
     if (comSpec !== undefined) candidates.push(comSpec)
     if (systemRoot !== undefined) candidates.push(win32.join(systemRoot, 'System32', 'cmd.exe'))
   }
-  if (command.toLowerCase() === WINDOWS_TERMINAL_COMMAND) {
-    const localAppData = windowsEnvironmentValue(environment, 'LocalAppData')
-    if (localAppData !== undefined) {
-      candidates.push(win32.join(localAppData, 'Microsoft', 'WindowsApps', WINDOWS_TERMINAL_COMMAND))
-    }
-  }
   const inheritedPath = windowsEnvironmentValue(environment, PATH)
   if (inheritedPath !== undefined) {
     for (const rawDir of inheritedPath.split(';')) {
@@ -575,26 +568,9 @@ interface ResolvedWindowsShell {
 /** Resolve the preferred Windows Terminal host, preserving an explicit adapter. */
 function resolveWindowsTerminal(
   options: DesktopTerminalOptions,
-  environment: Readonly<NodeJS.ProcessEnv>,
+  _environment: Readonly<NodeJS.ProcessEnv>,
 ): WindowsTerminalLauncher | undefined {
-  if (options.windowsTerminal !== undefined) return options.windowsTerminal
-  const exists = options.windowsExecutableExists ?? existsSync
-  const resolveExecutable = options.windowsExecutableResolver ?? defaultWindowsExecutableResolver
-  const executable = resolveExecutable(WINDOWS_TERMINAL_COMMAND, environment, exists)
-  if (executable === undefined) return undefined
-  assertScriptValue('wt.exe executable', executable)
-  return {
-    executable,
-    arguments: [
-      '--window',
-      'new',
-      'new-tab',
-      '--title',
-      'DSH Desktop',
-      '--startingDirectory',
-      options.profileDir,
-    ],
-  }
+  return options.windowsTerminal
 }
 
 /** Select PowerShell 7, Windows PowerShell, or the built-in command prompt. */

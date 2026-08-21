@@ -11,13 +11,14 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import {
   DesktopInstallRecoveryStore,
-  type BeginDesktopInstallRecoveryInput,
 } from './install-recovery.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const ELECTRON_HEADERS_URL = 'https://electronjs.org/headers'
 const TERMINATION_GRACE_MS = 3_000
+const NPM_PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
+const NPM_EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
 
 /** Launcher-resolved values used by the active desktop pnpm generation. */
 export interface DesktopPnpmBootstrap {
@@ -45,6 +46,8 @@ export interface DesktopPnpmBootstrap {
   readonly installRecoveryStatePath: string
   /** Opaque identity shared by every install surface in this Electron generation. */
   readonly generationId: string
+  /** Whether the selected Market provider may use the non-WAL external install boundary. */
+  readonly externalMarketInstallEnabled: boolean
 }
 
 /** Exit facts for one desktop-owned package-manager operation. */
@@ -65,6 +68,50 @@ export interface DesktopPnpmHandle {
   readonly done: Promise<DesktopPnpmOutcome>
   /** Begin termination of the complete operation process tree. */
   cancel(): void
+}
+
+/** Receipt identity tied to one recoverable plugin installation. */
+export interface DesktopPluginInstallRecovery {
+  readonly packageName: string
+  readonly packageVersion: string
+  /** Host-generated before installation so every crash window can reconcile the receipt. */
+  readonly receiptId: string
+}
+
+/** Complete request for one Desktop-owned, recoverable plugin installation. */
+export interface DesktopPluginInstallRequest {
+  /** pnpm flags after the enforced `add` command and before the exact generated target. */
+  readonly pnpmOptions?: readonly string[]
+  /** Absolute caller directory used to anchor relative package specifications. */
+  readonly invokingDir: string
+  readonly recovery: DesktopPluginInstallRecovery
+  readonly signal?: AbortSignal
+}
+
+/** Public package-operation interface for one immutable Desktop profile generation. */
+export interface DesktopPnpm {
+  run(args: readonly string[], signal?: AbortSignal): DesktopPnpmHandle
+  runPlugin(args: readonly string[], invokingDir: string, signal?: AbortSignal): DesktopPnpmHandle
+  /**
+   * Run the dsh-market add operation without its per-install WAL.
+   * The launcher enables this boundary only for the selected dsh-market provider.
+   */
+  runExternalMarketPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    signal?: AbortSignal,
+  ): DesktopPnpmHandle
+  /** @deprecated Use `installPlugin()` so Desktop constructs the exact package target. */
+  runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: DesktopPluginInstallRecovery,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle>
+  installPlugin(request: DesktopPluginInstallRequest): Promise<DesktopPnpmHandle>
+  recoveredInstallReceiptIds(): Promise<readonly string[]>
+  acknowledgeRecoveredInstall(receiptId: string): Promise<void>
+  rollbackPluginInstall(receiptId: string): Promise<boolean>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -108,9 +155,35 @@ function validatedArgs(args: readonly string[]): string[] {
   return [...args]
 }
 
+/** Validate the narrow dsh-market command shape before it crosses the process boundary. */
+function validateExternalMarketInstallArgs(args: readonly string[]): string[] {
+  const resolvedArgs = validatedArgs(args)
+  if (resolvedArgs[0] !== 'add' || resolvedArgs.length < 2) {
+    throw new Error(`${BIN_NAME}: external Market plugin install requires add with one exact npm package target`)
+  }
+  const targets = resolvedArgs.slice(1).filter(argument => !argument.startsWith('-'))
+  const target = targets[0]
+  if (targets.length !== 1 || target === undefined) {
+    throw new Error(`${BIN_NAME}: external Market plugin install accepts exactly one npm package target and flag options`)
+  }
+  const at = target.lastIndexOf('@')
+  const packageName = at > 0 ? target.slice(0, at) : ''
+  const packageVersion = at > 0 ? target.slice(at + 1) : ''
+  if (
+    !NPM_PACKAGE_NAME_PATTERN.test(packageName)
+    || !NPM_EXACT_VERSION_PATTERN.test(packageVersion)
+  ) {
+    throw new Error(`${BIN_NAME}: external Market plugin install requires an exact npm package target`)
+  }
+  return resolvedArgs
+}
+
 /** Validate the immutable launcher values once, before the service is published. */
 function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
   assertDesktopProfileName(bootstrap.activeProfileName)
+  if (typeof bootstrap.externalMarketInstallEnabled !== 'boolean') {
+    throw new Error(`${BIN_NAME}: external Market install capability must be a boolean`)
+  }
   for (const [label, value] of [
     ['active profile directory', bootstrap.activeProfileDir],
     ['Harness home', bootstrap.homeDir],
@@ -130,8 +203,8 @@ function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
   }
 }
 
-/** Host service providing one managed pnpm operation at a time. */
-export class DesktopPnpm extends Service {
+/** Cordis adapter implementing the public Desktop package-operation interface. */
+class DesktopPnpmService extends Service implements DesktopPnpm {
   private active: ActiveOperation | undefined
   private installPreparationActive = false
   private closed = false
@@ -198,6 +271,9 @@ export class DesktopPnpm extends Service {
   ): DesktopPnpmHandle {
     const resolvedArgs = validatedArgs(args)
     if (resolvedArgs[0] === 'add') {
+      if (this.bootstrap.externalMarketInstallEnabled) {
+        return this.runExternalMarketPluginInstall(resolvedArgs, invokingDir, signal)
+      }
       throw new Error(`${BIN_NAME}: plugin add must use the recoverable install boundary`)
     }
     assertAbsolutePath('plugin invoking directory', invokingDir)
@@ -216,30 +292,75 @@ export class DesktopPnpm extends Service {
     })
   }
 
+  /** Run one dsh-market install without creating a per-install recovery WAL. */
+  runExternalMarketPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    signal?: AbortSignal,
+  ): DesktopPnpmHandle {
+    if (!this.bootstrap.externalMarketInstallEnabled) {
+      throw new Error(`${BIN_NAME}: external Market plugin install is unavailable for the selected Market provider`)
+    }
+    const resolvedArgs = validateExternalMarketInstallArgs(args)
+    assertAbsolutePath('plugin invoking directory', invokingDir)
+    return this.start({
+      argv: [
+        this.bootstrap.appExecutable,
+        '--expose-internals',
+        this.bootstrap.dshBootstrapPath,
+        'plugin',
+        '--profile',
+        this.bootstrap.activeProfileName,
+        ...resolvedArgs,
+      ],
+      cwd: invokingDir,
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  /** Preserve the v2.0.1 install surface without allowing callers to choose another target. */
+  async runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: DesktopPluginInstallRecovery,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle> {
+    const resolvedArgs = validatedArgs(args)
+    const expectedTarget = `${recovery.packageName}@${recovery.packageVersion}`
+    if (
+      resolvedArgs[0] !== 'add'
+      || resolvedArgs.at(-1) !== expectedTarget
+      || resolvedArgs.slice(1, -1).some(argument => !argument.startsWith('-'))
+    ) {
+      throw new Error(`${BIN_NAME}: recoverable plugin install requires the exact receipt target`)
+    }
+    return await this.installPlugin({
+      pnpmOptions: resolvedArgs.slice(1, -1),
+      invokingDir,
+      recovery,
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
   /**
    * Snapshot the active profile before running one `dsh plugin add` operation.
    * The returned handle seals the post-install image before `done` resolves.
    */
-  async runPluginInstall(
-    args: readonly string[],
-    invokingDir: string,
-    recovery: BeginDesktopInstallRecoveryInput,
-    signal?: AbortSignal,
-  ): Promise<DesktopPnpmHandle> {
-    const resolvedArgs = validatedArgs(args)
-    if (resolvedArgs[0] !== 'add') {
-      throw new Error(`${BIN_NAME}: recoverable plugin install requires the add command`)
+  async installPlugin(request: DesktopPluginInstallRequest): Promise<DesktopPnpmHandle> {
+    const resolvedOptions = request.pnpmOptions === undefined ? [] : [...request.pnpmOptions]
+    if (resolvedOptions.some(argument => argument.includes('\0'))) {
+      throw new Error(`${BIN_NAME}: desktop pnpm arguments must not contain NUL`)
     }
-    assertAbsolutePath('plugin invoking directory', invokingDir)
+    assertAbsolutePath('plugin invoking directory', request.invokingDir)
     if (this.closed) throw new Error(`${BIN_NAME}: desktop pnpm generation is closed`)
     if (this.active !== undefined || this.installPreparationActive) {
       throw new Error(`${BIN_NAME}: another desktop pnpm operation is already running`)
     }
-    signal?.throwIfAborted()
+    request.signal?.throwIfAborted()
     this.installPreparationActive = true
     let transaction: Awaited<ReturnType<DesktopInstallRecoveryStore['begin']>> | undefined
     try {
-      transaction = await this.installRecovery.begin(recovery)
+      transaction = await this.installRecovery.begin(request.recovery)
       const handle = this.start({
         argv: [
           this.bootstrap.appExecutable,
@@ -248,12 +369,14 @@ export class DesktopPnpm extends Service {
           'plugin',
           '--profile',
           this.bootstrap.activeProfileName,
-          ...resolvedArgs,
+          'add',
+          ...resolvedOptions,
+          `${request.recovery.packageName}@${request.recovery.packageVersion}`,
         ],
-        cwd: invokingDir,
+        cwd: request.invokingDir,
         recoveryTransactionId: transaction.transactionId,
         allowInstallPreparation: true,
-        ...(signal === undefined ? {} : { signal }),
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
       })
       this.installPreparationActive = false
       return handle
@@ -404,5 +527,5 @@ export const inject = ['desktopPnpmBootstrap', 'subprocess']
  * @param ctx - Host context carrying launcher bootstrap values and subprocess ownership.
  */
 export function apply(ctx: Context): void {
-  new DesktopPnpm(ctx, ctx.desktopPnpmBootstrap)
+  new DesktopPnpmService(ctx, ctx.desktopPnpmBootstrap)
 }

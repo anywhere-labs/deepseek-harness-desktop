@@ -66,6 +66,22 @@ describe('exportDiagnosticsZip', () => {
     }
   })
 
+  it('terminates a diagnostic Worker when its owning operation is cancelled', async () => {
+    const worker = new Worker('setInterval(() => {}, 1_000)', { eval: true })
+    const exited = once(worker, 'exit')
+    const controller = new AbortController()
+
+    try {
+      const pending = waitForDiagnosticExportWorker(worker, 60_000, controller.signal)
+      controller.abort()
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      await expect(exited).resolves.toEqual(expect.any(Array))
+    } finally {
+      await worker.terminate()
+    }
+  })
+
   it('produces a zip containing the log files and system info', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-dx-'))
     writeFileSync(join(dir, 'dsh-2026-08-16.log'), 'hello\n')

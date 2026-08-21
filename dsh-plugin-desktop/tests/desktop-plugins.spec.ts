@@ -99,6 +99,13 @@ function bootstrap(root: string, now?: () => number): DesktopPluginsBootstrap {
   }
 }
 
+function bootstrapWithRecovery(root: string): DesktopPluginsBootstrap {
+  return {
+    ...bootstrap(root),
+    recoveryStatePath: join(root, 'desktop-private', 'startup-recovery', 'state.json'),
+  }
+}
+
 async function createHarness(options: DesktopPluginsBootstrap): Promise<Harness> {
   const ctx = new Context()
   const fiber = ctx.plugin(DesktopPluginsService, options)
@@ -228,6 +235,31 @@ describe('desktop direct bundle management', () => {
       version: 1,
       profiles: [],
     })
+    await harness.dispose()
+  })
+
+  it('shows recovery-only disables and enables them in the recovery scope', async () => {
+    const root = temporaryRoot()
+    const options = bootstrapWithRecovery(root)
+    installBundle(options.homeDir, 'third-party-plugin')
+    addBundle(options.homeDir, 'third-party-plugin')
+    mkdirSync(dirname(options.recoveryStatePath!), { recursive: true })
+    writeFileSync(options.recoveryStatePath!, JSON.stringify({
+      version: 1,
+      profiles: [{ profileName: 'desktop', disabledBundles: ['third-party-plugin'] }],
+    }) + '\n')
+    const harness = await createHarness(options)
+    const disabled = harness.service.list().find(item => item.packageName === 'third-party-plugin')
+    if (disabled === undefined) throw new Error('missing recovery-disabled target')
+    expect(disabled.status).toBe('disabled')
+
+    await harness.service.executeEnable(harness.service.previewEnable(disabled.bundleId).previewId)
+    expect(JSON.parse(readFileSync(options.recoveryStatePath!, 'utf8'))).toEqual({
+      version: 1,
+      profiles: [],
+    })
+    expect(harness.service.list().find(item => item.packageName === 'third-party-plugin')?.status)
+      .toBe('active')
     await harness.dispose()
   })
 

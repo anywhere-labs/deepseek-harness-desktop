@@ -3,7 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { DesktopProfileSummary } from './profile-manager.ts'
 import type {} from './profile-service.ts'
-import type {} from './runtime.ts'
+import type { DesktopTraySubmenuItem } from './runtime.ts'
 import { desktopTrayLabel } from './tray-locale.ts'
 
 /** Stable Cordis plugin name. */
@@ -32,16 +32,29 @@ export function apply(ctx: Context): void {
       order: 10,
       label: () => desktopTrayLabel(ctx.desktopRuntime.locale, 'profile', ctx.desktopProfiles.current.name),
       invoke: () => {},
-      submenu: () => ctx.desktopProfiles.list().map(profile => ({
-        label: () => profileLabel(profile, ctx.desktopRuntime.locale),
-        type: 'radio',
-        checked: () => profile.name === ctx.desktopProfiles.current.name,
-        enabled: () => selectable(profile),
-        invoke: async () => {
-          if (profile.name === ctx.desktopProfiles.current.name) return
-          await ctx.desktopProfiles.select(profile.name)
+      submenu: (): DesktopTraySubmenuItem[] => [
+        ...ctx.desktopProfiles.list().map(profile => ({
+          label: () => profileLabel(profile, ctx.desktopRuntime.locale),
+          type: 'radio' as const,
+          checked: () => profile.name === ctx.desktopProfiles.current.name,
+          enabled: () => selectable(profile),
+          invoke: async () => {
+            if (profile.name === ctx.desktopProfiles.current.name) return
+            await ctx.desktopProfiles.select(profile.name)
+          },
+        })),
+        {
+          label: () => desktopTrayLabel(ctx.desktopRuntime.locale, 'addProfile'),
+          invoke: () => {
+            ctx.desktopRuntime.openProfileCreateWindow({
+              onSubmit: async name => {
+                ctx.desktopProfiles.create(name)
+                await ctx.desktopProfiles.select(name)
+              },
+            })
+          },
         },
-      })),
+      ],
     })
     return () => { registration.dispose() }
   }, 'dsh-plugin-desktop: native profile selector')

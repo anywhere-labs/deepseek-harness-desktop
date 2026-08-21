@@ -42,7 +42,7 @@ The built-in managed installation boundary supports only an npm package when all
 - npm's repository identity matches the normalized catalog repository, including a subdirectory when present;
 - the version is not marked deprecated;
 - the target package manifest does not define `preinstall`, `install`, `postinstall`, or `prepare`;
-- its declared DSH/Cordis dependencies are compatible with the Desktop runtime based on DSH `0.1.0-rc.7`, and its declared Node engine accepts the bundled Node.js runtime;
+- its declared DSH/Cordis dependencies are compatible with the Desktop runtime based on DSH `0.1.1-rc.2`, and its declared Node engine accepts the bundled Node.js runtime;
 - npm supplies an official HTTPS tarball with a valid SHA-512 integrity value; and
 - the package declares a safe DSH bundle patch, which is present and contained inside the installed package after the managed operation.
 
@@ -70,7 +70,7 @@ The built-in managed installer rejects:
 - version ranges, tags such as `latest`, and prerelease versions;
 - provider install commands, shell snippets, HTML, scripts, and executable adapter data;
 - deprecated targets or a target package with one of the four lifecycle scripts listed above;
-- packages incompatible with the current DSH rc.7, Cordis, or bundled Node.js runtime;
+- packages incompatible with the current DSH rc.2, Cordis, or bundled Node.js runtime;
 - packages without the required npm integrity and DSH bundle evidence; and
 - the Desktop and Market product packages themselves.
 

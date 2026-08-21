@@ -1,0 +1,153 @@
+diff --git a/lib/dsh-cli.js b/lib/dsh-cli.js
+index 2bdfb2a1acc678c3e995e4f70ccba8ce95bc24b8..6d15dbfcc1dd40f9e6cef06cac1b59881e4c885b 100644
+--- a/lib/dsh-cli.js
++++ b/lib/dsh-cli.js
+@@ -7,6 +7,6 @@
+  * the agent's sandboxed executor and denies writes to the profile directory.
+  */
+ import { spawn } from 'node:child_process';
+ import { existsSync } from 'node:fs';
+ import { homedir } from 'node:os';
+ import { dirname, isAbsolute, join, resolve } from 'node:path';
+@@ -14,6 +15,7 @@ import { logEvent } from './log.js';
+ import { createProgressTracker } from './ndjson.js';
+ import { pluginArgsFor } from './pnpm-compat.js';
+ import { profileDir } from './profile.js';
++import { fetchNpmLatest } from './updates.js';
+ // 15 min default (slow networks + git installs), overridable for CI/tests.
+ // (#6 by @qichuang321.)
+ /**
+@@ -548,6 +550,25 @@ export function runDshPlugin(profile, pluginArgs) {
+  * market runner. There is no runtime import or dependency on Desktop: the
+  * Host supplies this public service only when the package is mounted there.
+  */
++const DESKTOP_NPM_NAME_RE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
++const DESKTOP_EXACT_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
++async function desktopInstallIdentity(target) {
++    const at = target.lastIndexOf('@');
++    const exactName = at > 0 ? target.slice(0, at) : target;
++    const exactVersion = at > 0 ? target.slice(at + 1) : undefined;
++    if (!DESKTOP_NPM_NAME_RE.test(exactName))
++        return null;
++    const packageVersion = exactVersion === undefined || exactVersion === 'latest'
++        ? await fetchNpmLatest(exactName)
++        : exactVersion;
++    if (packageVersion === null || !DESKTOP_EXACT_VERSION_RE.test(packageVersion))
++        return null;
++    return {
++        packageName: exactName,
++        packageVersion,
++        target: `${exactName}@${packageVersion}`,
++    };
++}
+ export function createDesktopPluginRuntime(service, activeProfileDir, invokingDir = process.cwd(), timeoutMs = INSTALL_TIMEOUT_MS) {
+     if (!isAbsolute(activeProfileDir) || activeProfileDir.includes('\0')) {
+         throw new Error('dsh-market: Desktop profile directory must be an absolute path without NUL');
+@@ -575,7 +596,21 @@ export function createDesktopPluginRuntime(service, activeProfileDir, invokingDi
+         const abort = new AbortController();
+         let handle;
+         try {
+-            handle = service.runPlugin(prepared.args, invokingDir, abort.signal);
++            if (prepared.args[0] === 'add') {
++                const identity = await desktopInstallIdentity(prepared.target);
++                if (identity === null) {
++                    throw new Error('dsh-market: DSH Desktop managed installation requires an npm package with an exact published version');
++                }
++                const packageTargets = prepared.args.slice(1).filter(argument => !argument.startsWith('-'));
++                if (packageTargets.length !== 1 || packageTargets[0] !== prepared.target) {
++                    throw new Error('dsh-market: DSH Desktop managed installation accepts exactly one npm package target');
++                }
++                const options = prepared.args.slice(1).filter(argument => argument.startsWith('-'));
++                handle = service.runExternalMarketPluginInstall(['add', ...options, identity.target], invokingDir, abort.signal);
++            }
++            else {
++                handle = service.runPlugin(prepared.args, invokingDir, abort.signal);
++            }
+         }
+         catch (error) {
+             const message = error instanceof Error ? error.message : String(error);
+diff --git a/lib/types/dsh-cli.d.ts b/lib/types/dsh-cli.d.ts
+index 9e3ba5e405ec80f8efd5513e220d9ea9a9046ae5..a9a6f858bbdec88b0c415cc841054f57e30d275c 100644
+--- a/lib/types/dsh-cli.d.ts
++++ b/lib/types/dsh-cli.d.ts
+@@ -131,6 +131,7 @@ export interface DesktopPnpmLike {
+         }>;
+         cancel(): void;
+     };
++    runExternalMarketPluginInstall(args: readonly string[], invokingDir: string, signal?: AbortSignal): ReturnType<DesktopPnpmLike['runPlugin']>;
+ }
+ /** Desktop runtime also owns cleanup of any operation started by this fiber. */
+ export interface DesktopPluginRuntime extends PluginCommandRuntime {
+diff --git a/src/dsh-cli.ts b/src/dsh-cli.ts
+index 0cc2535e43e371e72700301e783694e0b7c2e4c7..b0f09a897428af80791cc88e9088f2c50bdcf6cb 100644
+--- a/src/dsh-cli.ts
++++ b/src/dsh-cli.ts
+@@ -10,4 +10,4 @@
+ import { spawn } from 'node:child_process'
+ import type { ChildProcess, SpawnOptions } from 'node:child_process'
+ import { existsSync } from 'node:fs'
+ import { homedir } from 'node:os'
+@@ -17,3 +18,4 @@ import { logEvent } from './log.ts'
+ import { createProgressTracker, type ProgressPhase } from './ndjson.ts'
+ import { pluginArgsFor } from './pnpm-compat.ts'
+ import { profileDir } from './profile.ts'
++import { fetchNpmLatest } from './updates.ts'
+@@ -252,4 +254,32 @@ export interface DesktopPnpmLike {
+     }>
+     cancel(): void
+   }
++  runExternalMarketPluginInstall(
++    args: readonly string[],
++    invokingDir: string,
++    signal?: AbortSignal,
++  ): ReturnType<DesktopPnpmLike['runPlugin']>
++}
++
++const DESKTOP_NPM_NAME_RE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
++const DESKTOP_EXACT_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
++
++async function desktopInstallIdentity(target: string): Promise<{
++  packageName: string
++  packageVersion: string
++  target: string
++} | null> {
++  const at = target.lastIndexOf('@')
++  const exactName = at > 0 ? target.slice(0, at) : target
++  const exactVersion = at > 0 ? target.slice(at + 1) : undefined
++  if (!DESKTOP_NPM_NAME_RE.test(exactName)) return null
++  const packageVersion = exactVersion === undefined || exactVersion === 'latest'
++    ? await fetchNpmLatest(exactName)
++    : exactVersion
++  if (packageVersion === null || !DESKTOP_EXACT_VERSION_RE.test(packageVersion)) return null
++  return {
++    packageName: exactName,
++    packageVersion,
++    target: `${exactName}@${packageVersion}`,
++  }
+ }
+@@ -685,7 +720,24 @@ export function createDesktopPluginRuntime(
+     const abort = new AbortController()
+     let handle: ReturnType<DesktopPnpmLike['runPlugin']>
+     try {
+-      handle = service.runPlugin(prepared.args, invokingDir, abort.signal)
++      if (prepared.args[0] === 'add') {
++        const identity = await desktopInstallIdentity(prepared.target)
++        if (identity === null) {
++          throw new Error('dsh-market: DSH Desktop managed installation requires an npm package with an exact published version')
++        }
++        const packageTargets = prepared.args.slice(1).filter(argument => !argument.startsWith('-'))
++        if (packageTargets.length !== 1 || packageTargets[0] !== prepared.target) {
++          throw new Error('dsh-market: DSH Desktop managed installation accepts exactly one npm package target')
++        }
++        const options = prepared.args.slice(1).filter(argument => argument.startsWith('-'))
++        handle = service.runExternalMarketPluginInstall(
++          ['add', ...options, identity.target],
++          invokingDir,
++          abort.signal,
++        )
++      } else {
++        handle = service.runPlugin(prepared.args, invokingDir, abort.signal)
++      }
+     } catch (error) {
+       const message = error instanceof Error ? error.message : String(error)
+       const busy = /another desktop pnpm operation is already running/i.test(message)

@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import type { UpdateCheckResult, UpdateRequest } from './update-checker.ts'
+import type { ProfileCreateWindowOptions } from './profile-create-window.ts'
 
 /** Electron platforms supported by the DSH Desktop native adapter. */
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux'
@@ -186,6 +187,9 @@ export interface DesktopRuntime {
 
   /** Open the desktop operating system's native workspace-folder chooser. */
   pickDirectory(): Promise<string | null>
+
+  /** Open the isolated native Profile creator, focusing an existing instance. */
+  openProfileCreateWindow(options: Omit<ProfileCreateWindowOptions, 'locale'>): void
 
   /** Confirm that one renderer-selected workspace is safe to persist. */
   validateDirectory(path: string): Promise<boolean>

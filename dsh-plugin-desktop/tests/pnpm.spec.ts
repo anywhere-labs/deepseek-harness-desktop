@@ -82,6 +82,7 @@ function bootstrap(root = '/desktop runtime'): DesktopPnpmBootstrap {
     dshBootstrapPath: join(root, 'app.asar', 'lib', 'desktop-cli.js'),
     installRecoveryStatePath: join(root, 'plugin-install-recovery', 'state.json'),
     generationId: 'test-generation-0001',
+    externalMarketInstallEnabled: false,
   }
 }
 
@@ -191,6 +192,71 @@ describe('desktop pnpm Host service', () => {
     await harness.dispose()
   })
 
+  it('allows an unpatched dsh-market runtime to add through the external boundary', async () => {
+    const child = controlledSubprocess()
+    const harness = await createHarness([child], { ...bootstrap(), externalMarketInstallEnabled: true })
+    const operation = harness.service.runPlugin(
+      ['add', 'dshmarket@1.18.0', '--reporter=ndjson'],
+      '/workspace/dsh-market',
+    )
+
+    expect(harness.spawn.mock.calls[0]?.[0].argv).toContain('dshmarket@1.18.0')
+    finish(child)
+    await operation.done
+    await harness.dispose()
+  })
+
+  it('runs the selected dsh-market install without creating a per-install WAL', async () => {
+    const child = controlledSubprocess()
+    const selectedBootstrap = { ...bootstrap(), externalMarketInstallEnabled: true }
+    const harness = await createHarness([child], selectedBootstrap)
+    const operation = harness.service.runExternalMarketPluginInstall(
+      ['add', '--reporter=ndjson', '@scope/example-plugin@1.2.3'],
+      '/workspace/dsh-market',
+    )
+
+    expect(harness.spawn.mock.calls[0]?.[0].argv).toEqual([
+      selectedBootstrap.appExecutable,
+      '--expose-internals',
+      selectedBootstrap.dshBootstrapPath,
+      'plugin',
+      '--profile',
+      selectedBootstrap.activeProfileName,
+      'add',
+      '--reporter=ndjson',
+      '@scope/example-plugin@1.2.3',
+    ])
+    expect(harness.spawn.mock.calls[0]?.[0].cwd).toBe('/workspace/dsh-market')
+    expect(existsSync(selectedBootstrap.installRecoveryStatePath)).toBe(false)
+
+    finish(child)
+    await operation.done
+    await harness.dispose()
+  })
+
+  it('rejects the external Market boundary unless dsh-market is selected', async () => {
+    const harness = await createHarness([])
+    expect(() => harness.service.runExternalMarketPluginInstall(
+      ['add', 'example-plugin@1.0.0'],
+      '/workspace',
+    )).toThrow('unavailable for the selected Market provider')
+    await harness.dispose()
+  })
+
+  it('accepts only add with one exact npm target and flag options for dsh-market', async () => {
+    const harness = await createHarness([], { ...bootstrap(), externalMarketInstallEnabled: true })
+    for (const args of [
+      ['remove', 'example-plugin@1.0.0'],
+      ['add', 'example-plugin'],
+      ['add', 'example-plugin@latest'],
+      ['add', 'example-plugin@1.0.0', 'other-plugin@1.0.0'],
+      ['add', '--registry', 'https://registry.example', 'example-plugin@1.0.0'],
+    ]) {
+      expect(() => harness.service.runExternalMarketPluginInstall(args, '/workspace')).toThrow()
+    }
+    await harness.dispose()
+  })
+
   it('reserves the operation gate, snapshots, and seals a recoverable plugin install', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-pnpm-recovery-'))
     const selectedBootstrap = bootstrap(root)
@@ -201,15 +267,15 @@ describe('desktop pnpm Host service', () => {
       writeFileSync(manifestPath, JSON.stringify({ dependencies: {} }))
       const harness = await createHarness([child], selectedBootstrap)
 
-      const pending = harness.service.runPluginInstall(
-        ['add', '--save-exact', 'example-plugin@1.0.0'],
-        '/workspace',
-        {
+      const pending = harness.service.installPlugin({
+        pnpmOptions: ['--save-exact'],
+        invokingDir: '/workspace',
+        recovery: {
           packageName: 'example-plugin',
           packageVersion: '1.0.0',
           receiptId: 'receipt:test-install-0001',
         },
-      )
+      })
       expect(() => harness.service.runPlugin(['remove', 'other-plugin'], '/workspace')).toThrow(
         'another desktop pnpm operation is already running',
       )
@@ -218,7 +284,17 @@ describe('desktop pnpm Host service', () => {
       finish(child)
       await expect(operation.done).resolves.toEqual({ exitCode: 0, signal: null })
 
-      expect(harness.spawn.mock.calls[0]?.[0].argv).toContain('example-plugin@1.0.0')
+      expect(harness.spawn.mock.calls[0]?.[0].argv).toEqual([
+        selectedBootstrap.appExecutable,
+        '--expose-internals',
+        selectedBootstrap.dshBootstrapPath,
+        'plugin',
+        '--profile',
+        selectedBootstrap.activeProfileName,
+        'add',
+        '--save-exact',
+        'example-plugin@1.0.0',
+      ])
       expect(JSON.parse(readFileSync(selectedBootstrap.installRecoveryStatePath, 'utf8'))).toMatchObject({
         packageName: 'example-plugin',
         packageVersion: '1.0.0',
@@ -241,15 +317,14 @@ describe('desktop pnpm Host service', () => {
       mkdirSync(selectedBootstrap.activeProfileDir, { recursive: true })
       writeFileSync(manifestPath, originalManifest)
       const harness = await createHarness([child], selectedBootstrap)
-      const operation = await harness.service.runPluginInstall(
-        ['add', 'broken-plugin@1.0.0'],
-        '/workspace',
-        {
+      const operation = await harness.service.installPlugin({
+        invokingDir: '/workspace',
+        recovery: {
           packageName: 'broken-plugin',
           packageVersion: '1.0.0',
           receiptId: 'receipt:test-install-failure-0001',
         },
-      )
+      })
       writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'broken-plugin': '1.0.0' } }))
       finish(child, { exitCode: 1, signal: null })
 
@@ -260,6 +335,66 @@ describe('desktop pnpm Host service', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('keeps the v2.0.1 recoverable install interface for an exact receipt target', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-pnpm-legacy-install-'))
+    const selectedBootstrap = bootstrap(root)
+    const child = controlledSubprocess()
+    try {
+      mkdirSync(selectedBootstrap.activeProfileDir, { recursive: true })
+      writeFileSync(join(selectedBootstrap.activeProfileDir, 'package.json'), '{}\n')
+      const harness = await createHarness([child], selectedBootstrap)
+
+      const operation = await harness.service.runPluginInstall(
+        ['add', '--save-exact', 'legacy-plugin@1.2.3'],
+        '/workspace',
+        {
+          packageName: 'legacy-plugin',
+          packageVersion: '1.2.3',
+          receiptId: 'receipt:legacy-install-0001',
+        },
+      )
+
+      expect(harness.spawn.mock.calls[0]?.[0].argv).toEqual([
+        selectedBootstrap.appExecutable,
+        '--expose-internals',
+        selectedBootstrap.dshBootstrapPath,
+        'plugin',
+        '--profile',
+        selectedBootstrap.activeProfileName,
+        'add',
+        '--save-exact',
+        'legacy-plugin@1.2.3',
+      ])
+      finish(child)
+      await operation.done
+      await harness.dispose()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects legacy recoverable installs that do not match the receipt target', async () => {
+    const harness = await createHarness([])
+    const recovery = {
+      packageName: 'legacy-plugin',
+      packageVersion: '1.2.3',
+      receiptId: 'receipt:legacy-install-invalid-0001',
+    }
+
+    await expect(harness.service.runPluginInstall(
+      ['add', 'other-plugin@1.2.3'],
+      '/workspace',
+      recovery,
+    )).rejects.toThrow('requires the exact receipt target')
+    await expect(harness.service.runPluginInstall(
+      ['add', 'extra-plugin@1.0.0', 'legacy-plugin@1.2.3'],
+      '/workspace',
+      recovery,
+    )).rejects.toThrow('requires the exact receipt target')
+    expect(harness.spawn).not.toHaveBeenCalled()
+    await harness.dispose()
   })
 
   it('validates operation arguments and the plugin invocation directory before spawning', async () => {
@@ -276,6 +411,15 @@ describe('desktop pnpm Host service', () => {
     expect(() => harness.service.runPlugin(['add', 'plugin'], '/workspace')).toThrow(
       'plugin add must use the recoverable install boundary',
     )
+    await expect(harness.service.installPlugin({
+      pnpmOptions: ['--registry=https://registry.example\0.invalid'],
+      invokingDir: '/workspace',
+      recovery: {
+        packageName: 'plugin',
+        packageVersion: '1.0.0',
+        receiptId: 'receipt:test-empty-install',
+      },
+    })).rejects.toThrow('arguments must not contain NUL')
     expect(harness.spawn).not.toHaveBeenCalled()
     await harness.dispose()
   })

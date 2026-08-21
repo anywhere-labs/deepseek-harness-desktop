@@ -41,6 +41,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          node --test scripts/bilingual-docs.test.mjs
+          node scripts/verify-bilingual-docs.mjs
+          node --test scripts/market-dependency-direction.test.mjs
+          node scripts/verify-market-dependency-direction.mjs
           if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
             product=true
           else
@@ -85,7 +89,7 @@ jobs:
 
   # Windows-only logic and unsigned NSIS/portable builds on a real Windows runner:
   # updates, window options, pwsh sandbox, volume diagnostics, and packaging.
-  # The shared gate runs once; both artifacts reuse its build output.
+  # The package gate runs once; both artifacts reuse its build output.
   desktop-windows:
     needs: changes
     if: needs.changes.outputs.product == 'true'
@@ -107,7 +111,7 @@ jobs:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
-      - run: yarn check
+      - run: yarn workspace dsh-plugin-desktop check:win-package
       - name: Build Windows installer
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
@@ -143,7 +147,7 @@ jobs:
           path: ${{ steps.yarn-cache.outputs.dir }}
           key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
       - run: yarn install --immutable
-      - run: yarn check
+      - run: yarn workspace dsh-plugin-desktop check:mac-package
       - name: Build macOS smoke artifact
         env:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'

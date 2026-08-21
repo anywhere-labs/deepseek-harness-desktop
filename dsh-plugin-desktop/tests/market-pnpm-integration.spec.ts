@@ -43,6 +43,7 @@ function bootstrap(root: string, profileDir: string): DesktopPnpmBootstrap {
     dshBootstrapPath: join(root, 'app.asar', 'lib', 'desktop-cli.js'),
     installRecoveryStatePath: join(root, 'plugin-install-recovery', 'state.json'),
     generationId: 'market-integration-generation-0001',
+    externalMarketInstallEnabled: false,
   }
 }
 

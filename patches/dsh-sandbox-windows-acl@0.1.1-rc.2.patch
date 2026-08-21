@@ -1,0 +1,24 @@
+diff --git a/lib/types-CNjZgO4h.js b/lib/types-CNjZgO4h.js
+index 3a737a6..a954f1a 100644
+--- a/lib/types-CNjZgO4h.js
++++ b/lib/types-CNjZgO4h.js
+@@ -854,7 +854,8 @@ function spawnSandboxed(api, token, options) {
+ 	const startupInfo = allocStartupInfo();
+ 	encodeStartupInfo(startupInfo, {
+ 		cb: 104,
+-		dwFlags: 256,
++		dwFlags: 257,
++		wShowWindow: 0,
+ 		hStdInput: stdIn.read,
+ 		hStdOutput: stdOut.write,
+ 		hStdError: stdErr.write
+@@ -991,7 +992,8 @@ function spawnSandboxedInherited(api, token, options) {
+ 	const startupInfo = allocStartupInfo();
+ 	encodeStartupInfo(startupInfo, {
+ 		cb: 104,
+-		dwFlags: 256,
++		dwFlags: 257,
++		wShowWindow: 0,
+ 		hStdInput: stdIn,
+ 		hStdOutput: stdOut,
+ 		hStdError: stdErr

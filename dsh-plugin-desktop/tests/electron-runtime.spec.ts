@@ -66,6 +66,7 @@ const electron = vi.hoisted(() => {
   const browserWindowOn = vi.fn()
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
+  const applicationMenuTemplates: unknown[][] = []
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
   let zoomLevel = 0
@@ -88,6 +89,7 @@ const electron = vi.hoisted(() => {
     setTemplateImage: vi.fn(),
   }
   const webContents = {
+    executeJavaScript: vi.fn(async (_code: string, _userGesture?: boolean) => null as string | null),
     getZoomLevel: vi.fn(() => zoomLevel),
     on: vi.fn(),
     off: vi.fn(),
@@ -108,6 +110,7 @@ const electron = vi.hoisted(() => {
 
     readonly isDestroyed = vi.fn(() => false)
     readonly isFocused = vi.fn(() => false)
+    readonly isVisible = vi.fn(() => false)
     readonly isMinimized = vi.fn(() => false)
     readonly flashFrame = vi.fn()
     readonly restore = vi.fn()
@@ -159,6 +162,7 @@ const electron = vi.hoisted(() => {
     app: {
       dock: { setIcon: vi.fn() },
       getLocale: vi.fn(() => 'en-US'),
+      getPreferredSystemLanguages: vi.fn(() => ['en-US']),
       getPath: vi.fn((name: string) => {
         if (name === 'crashDumps') return '/tmp/dsh-desktop-user-data/Crashpad'
         if (name === 'downloads') return '/tmp/Downloads'
@@ -166,11 +170,14 @@ const electron = vi.hoisted(() => {
       }),
       getVersion: vi.fn(() => '43.4.0'),
       isPackaged: false,
+      isHidden: vi.fn(() => false),
+      show: vi.fn(),
       setBadgeCount: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
     },
     appIcon,
+    applicationMenuTemplates,
     blueIcon,
     BrowserWindow,
     browserWindowOptions,
@@ -182,9 +189,15 @@ const electron = vi.hoisted(() => {
     dialog,
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
-        menuTemplates.push(template)
-        return {}
+        const first = template[0] as { label?: unknown, submenu?: unknown } | undefined
+        if (first?.label === 'DSH Desktop' && Array.isArray(first.submenu)) {
+          applicationMenuTemplates.push(template)
+        } else {
+          menuTemplates.push(template)
+        }
+        return { template }
       }),
+      setApplicationMenu: vi.fn(),
     },
     menuTemplates,
     nativeImage: { createFromPath },
@@ -245,6 +258,7 @@ describe('Electron desktop runtime', () => {
     electron.browserWindowThemeSources.length = 0
     electron.browserWindows.length = 0
     electron.trays.length = 0
+    electron.applicationMenuTemplates.length = 0
     electron.menuTemplates.length = 0
     electron.notifications.length = 0
     childProcess.reset()
@@ -263,6 +277,7 @@ describe('Electron desktop runtime', () => {
     diagnostics.export.mockReset()
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
+    electron.app.getPreferredSystemLanguages.mockReturnValue(['en-US'])
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
     electron.dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
@@ -278,6 +293,7 @@ describe('Electron desktop runtime', () => {
 
   it('uses the native macOS frame, Dock icon, and template tray image', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    electron.app.getPreferredSystemLanguages.mockReturnValue(['zh-Hans-CN', 'en-US'])
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const runtime = new ElectronDesktopRuntime(async () => {})
     const release = runtime.schedule(spec)
@@ -320,6 +336,12 @@ describe('Electron desktop runtime', () => {
     expect(electron.nativeTheme.themeSource).toBe('system')
     expect(electron.browserWindows[0]?.removeMenu).not.toHaveBeenCalled()
     expect(electron.app.dock.setIcon).toHaveBeenCalledWith(electron.appIcon)
+    expect(electron.applicationMenuTemplates[0]?.map(item => (item as { label?: string }).label)).toEqual([
+      'DSH Desktop', '文件', '编辑', '显示', '窗口',
+    ])
+    expect(electron.Menu.setApplicationMenu).toHaveBeenCalledWith({
+      template: electron.applicationMenuTemplates[0],
+    })
     expect(electron.templateIcon.setTemplateImage).toHaveBeenCalledWith(true)
     expect(electron.trays[0]?.image).toBe(electron.templateIcon)
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
@@ -352,6 +374,7 @@ describe('Electron desktop runtime', () => {
     expect(electron.browserWindows[0]?.accessibleTitle).toBe('DeepSeek Harness Desktop')
     expect(electron.browserWindows[0]?.removeMenu).toHaveBeenCalledOnce()
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
+    expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(electron.trays[0]?.image).toBe(electron.blueIcon)
     expect(electron.templateIcon.setTemplateImage).not.toHaveBeenCalled()
 
@@ -372,6 +395,7 @@ describe('Electron desktop runtime', () => {
     expect(runtime.updates.canDownload).toBe(false)
     await expect(runtime.pickDirectory()).rejects.toThrow('native workspace picker is unavailable on linux')
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
+    expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(electron.browserWindows[0]?.removeMenu).not.toHaveBeenCalled()
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Switch to Advanced Mode', enabled: false }),
@@ -465,7 +489,7 @@ describe('Electron desktop runtime', () => {
     const logger = { error: vi.fn(), errorCause: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot, logger)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
 
     const gone = electron.browserWindows[0]?.webContents.on.mock.calls
@@ -473,6 +497,7 @@ describe('Electron desktop runtime', () => {
     expect(gone).toEqual(expect.any(Function))
     gone({}, { reason: 'crashed', exitCode: -1073741819 })
     runtime.reportRendererBoot({ status: 'healthy' })
+    await rendererBoot
 
     expect(runtime.rendererBootFailureReason).toBe('renderer-failed')
     expect(onRendererBoot).toHaveBeenCalledOnce()
@@ -491,7 +516,7 @@ describe('Electron desktop runtime', () => {
     const onRendererBoot = vi.fn(() => true)
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
 
     const failed = electron.browserWindows[0]?.webContents.on.mock.calls
@@ -500,6 +525,7 @@ describe('Electron desktop runtime', () => {
     failed({}, -105, 'NAME_NOT_RESOLVED', 'http://127.0.0.1/subresource', false)
     expect(onRendererBoot).not.toHaveBeenCalled()
     failed({}, -102, 'CONNECTION_REFUSED', spec.url, true)
+    await rendererBoot
 
     expect(runtime.rendererBootFailureReason).toBe('renderer-failed')
     expect(onRendererBoot).toHaveBeenCalledWith({
@@ -517,10 +543,11 @@ describe('Electron desktop runtime', () => {
     const onRendererBoot = vi.fn(() => true)
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
 
     await vi.advanceTimersByTimeAsync(RENDERER_BOOT_TIMEOUT_MS)
+    await rendererBoot
 
     expect(runtime.rendererBootFailureReason).toBe('renderer-timeout')
     expect(onRendererBoot).toHaveBeenCalledWith({
@@ -532,15 +559,43 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
+  it('rejects healthy Renderer evidence when the process exits before native mount completes', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    let finishLoad!: () => void
+    electron.loadURL.mockImplementationOnce(() => new Promise<void>((resolve) => { finishLoad = resolve }))
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const commitHealthy = vi.fn(async () => {})
+    const runtime = new ElectronDesktopRuntime(async () => {}, () => true)
+    const release = runtime.schedule(spec)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy })
+    const mounted = runtime.mountScheduled()
+    await vi.waitFor(() => { expect(electron.loadURL).toHaveBeenCalledOnce() })
+
+    runtime.reportRendererBoot({ status: 'healthy' })
+    const gone = electron.browserWindows[0]?.webContents.on.mock.calls
+      .find(([event]) => event === 'render-process-gone')?.[1]
+    gone({}, { reason: 'crashed', exitCode: 9 })
+    finishLoad()
+
+    await mounted
+    await expect(rendererBoot).resolves.toMatchObject({
+      report: { status: 'failed', error: expect.stringContaining('renderer process gone') },
+      failureReason: 'renderer-failed',
+    })
+    expect(commitHealthy).not.toHaveBeenCalled()
+    await release()
+  })
+
   it('does not reinterpret a renderer crash after healthy boot as install failure', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
     const release = runtime.schedule(spec)
-    runtime.beginRendererBootMonitoring()
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     await runtime.mountScheduled()
     runtime.reportRendererBoot({ status: 'healthy' })
+    await rendererBoot
 
     const gone = electron.browserWindows[0]?.webContents.on.mock.calls
       .find(([event]) => event === 'render-process-gone')?.[1]
@@ -836,6 +891,37 @@ describe('Electron desktop runtime', () => {
     expect(electron.browserWindowOff).toHaveBeenCalledWith('focus', expect.any(Function))
   })
 
+  it('restores a hidden macOS application before revealing its window without stealing focus when already visible', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+
+    const window = electron.browserWindows[0]
+    const activate = electron.app.on.mock.calls.find(([event]) => event === 'activate')?.[1]
+    const didBecomeActive = electron.app.on.mock.calls.find(([event]) => event === 'did-become-active')?.[1]
+    expect(activate).toEqual(expect.any(Function))
+    expect(didBecomeActive).toEqual(expect.any(Function))
+
+    electron.app.isHidden.mockReturnValue(true)
+    window?.isVisible.mockReturnValue(false)
+    didBecomeActive()
+    expect(electron.app.show).toHaveBeenCalledOnce()
+    expect(electron.app.show.mock.invocationCallOrder[0]).toBeLessThan(window?.show.mock.invocationCallOrder[0] ?? Infinity)
+    expect(window?.focus).toHaveBeenCalledOnce()
+
+    electron.app.isHidden.mockReturnValue(false)
+    window?.isVisible.mockReturnValue(true)
+    const focusCount = window?.focus.mock.calls.length ?? 0
+    activate()
+    expect(window?.focus).toHaveBeenCalledTimes(focusCount)
+
+    await release()
+    expect(electron.app.off).toHaveBeenCalledWith('did-become-active', expect.any(Function))
+  })
+
   it('releases the window and tray when post-load startup wiring fails', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -1009,6 +1095,14 @@ describe('Electron desktop runtime', () => {
     profile?.submenu?.[0]?.click?.()
     await vi.waitFor(() => { expect(invoke).toHaveBeenCalledOnce() })
 
+    const application = (electron.applicationMenuTemplates.at(-1) as Array<{
+      label?: string
+      submenu?: Array<{ label?: string, submenu?: unknown }>
+    }>).find(item => item.label === 'DSH Desktop')
+    expect(application?.submenu).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Profile: desktop' }),
+    ]))
+
     await release()
   })
 
@@ -1035,7 +1129,7 @@ describe('Electron desktop runtime', () => {
         appExecutable: process.execPath,
         electronVersion: '43.4.0',
         profileName: 'desktop',
-        productVersion: '2.0.1',
+        productVersion: '2.0.2',
         profileDir: expect.stringMatching(/profiles[\\/]+desktop$/u),
         homeDir: expect.stringContaining('dsh-desktop-user-data'),
         installRecoveryStatePath: expect.stringMatching(/[\\/]plugin-install-recovery[\\/]state\.json$/u),
@@ -1072,7 +1166,7 @@ describe('Electron desktop runtime', () => {
     expect(diagnostics.export).toHaveBeenCalledWith(
       expect.stringContaining('dsh-desktop-user-data'),
       expect.objectContaining({
-        appVersion: '2.0.1',
+        appVersion: '2.0.2',
         crashDumpsDir: expect.stringMatching(/[\\/]Crashpad$/u),
       }),
     )
@@ -1182,6 +1276,7 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
     const report = {
       status: 'failed' as const,
       plugins: ['dsh-vision-router'],
@@ -1189,6 +1284,7 @@ describe('Electron desktop runtime', () => {
     }
 
     runtime.reportRendererBoot(report)
+    await rendererBoot
     await vi.waitFor(() => { expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce() })
     runtime.reportRendererBoot({ status: 'healthy' })
 
@@ -1211,12 +1307,14 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const logger = { error: vi.fn(), errorCause: vi.fn() }
     const runtime = new ElectronDesktopRuntime(async () => {}, () => {}, logger)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
     runtime.reportRendererBoot({
       status: 'failed',
       plugins: ['dsh-vision-router'],
       error: 'failed to apply loader entry 07140b35 (dsh-vision-router): keyed slot "settings.plugin.item" requires options.key',
     })
+    await rendererBoot
 
     expect(logger.error).toHaveBeenCalledWith(
       'dsh-plugin-desktop: renderer boot failed (plugins: dsh-vision-router): '
@@ -1229,11 +1327,16 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const onRendererBoot = vi.fn()
     const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const release = runtime.schedule(spec)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
+    await runtime.mountScheduled()
 
     runtime.reportRendererBoot({ status: 'healthy' })
+    await rendererBoot
 
     expect(onRendererBoot).toHaveBeenCalledWith({ status: 'healthy' })
     expect(electron.dialog.showMessageBox).not.toHaveBeenCalled()
+    await release()
   })
 
   it('opens the active profile terminal from plugin recovery', async () => {
@@ -1245,6 +1348,7 @@ describe('Electron desktop runtime', () => {
     try {
       const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
       const runtime = new ElectronDesktopRuntime(async () => {})
+      const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
       runtime.configureTerminal({
         profileName: 'desktop',
         profileDir: 'C:\\Users\\Example\\.dsh\\profiles\\desktop',
@@ -1252,6 +1356,7 @@ describe('Electron desktop runtime', () => {
       })
 
       runtime.reportRendererBoot({ status: 'failed', plugins: ['dsh-vision-router'] })
+      await rendererBoot
       await vi.waitFor(() => { expect(terminal.open).toHaveBeenCalledOnce() })
 
       expect(terminal.open).toHaveBeenCalledWith(expect.objectContaining({
@@ -1269,8 +1374,10 @@ describe('Electron desktop runtime', () => {
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
     const restart = vi.fn(async () => {})
     const runtime = new ElectronDesktopRuntime(restart)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
     runtime.reportRendererBoot({ status: 'failed', plugins: ['dsh-vision-router'] })
+    await rendererBoot
     await vi.waitFor(() => { expect(restart).toHaveBeenCalledOnce() })
   })
 
@@ -1287,7 +1394,7 @@ describe('Electron desktop runtime', () => {
     expect(runtime.updates).toMatchObject({
       isPackaged: false,
       canDownload: false,
-      currentVersion: '2.0.1',
+      currentVersion: '2.0.2',
       statePath: join('/tmp/dsh-desktop-user-data', 'updates', 'state.json'),
     })
     electron.app.isPackaged = true
@@ -1606,8 +1713,12 @@ describe('Electron desktop runtime', () => {
       mode: 'advanced',
       readThemeSource: () => 'dark',
     })
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
 
-    await expect(runtime.mountScheduled()).rejects.toThrow('renderer unavailable')
+    await expect(Promise.all([
+      runtime.mountScheduled(),
+      rendererBoot,
+    ])).rejects.toThrow('renderer unavailable')
     expect(electron.nativeTheme.themeSource).toBe('dark')
     await expect(release()).rejects.toThrow('renderer unavailable')
     expect(electron.nativeTheme.themeSource).toBe('light')

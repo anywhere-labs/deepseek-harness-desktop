@@ -112,12 +112,14 @@ describe('Desktop startup recovery document', () => {
     expect(html).not.toContain('dsh-recovery://preview-retry')
     expect(html).not.toContain('dsh-recovery://confirm-')
     expect(html).not.toContain('dsh-recovery://open-profile-patch')
+    expect(html).not.toContain('dsh-recovery://open-settings-document')
   })
 
   it('offers only fixed profile configuration targets when main provides them', () => {
     const html = renderDesktopStartupRecoveryHtml(viewModel({ configurationAvailable: true }))
 
     expect(html).toContain('手动编辑配置')
+    expect(html).toContain('dsh-recovery://open-settings-document')
     expect(html).toContain('dsh-recovery://open-profile-patch')
     expect(html).toContain('dsh-recovery://open-profile-manifest')
     expect(html).toContain('dsh-recovery://open-profile-directory')
@@ -166,7 +168,7 @@ describe('Desktop startup recovery document', () => {
 })
 
 describe('Desktop startup recovery diagnostics export', () => {
-  function recoveryWindow(exportDiagnostics: () => Promise<string>): DesktopStartupRecoveryWindow {
+  function recoveryWindow(exportDiagnostics: (signal: AbortSignal) => Promise<string>): DesktopStartupRecoveryWindow {
     return new DesktopStartupRecoveryWindow({
       locale: 'zh',
       failureStage: 'profile-composition',
@@ -179,6 +181,10 @@ describe('Desktop startup recovery diagnostics export', () => {
     return (window as unknown as {
       handleAction: (action: { readonly action: string }) => Promise<void>
     }).handleAction.bind(window)
+  }
+
+  function finish(window: DesktopStartupRecoveryWindow, result: 'restart' | 'quit'): void {
+    (window as unknown as { finish: (value: 'restart' | 'quit') => void }).finish(result)
   }
 
   function deferred<T>(): {
@@ -232,6 +238,27 @@ describe('Desktop startup recovery diagnostics export', () => {
     await vi.waitFor(() => expect(exportDiagnostics).toHaveBeenCalledTimes(2))
     secondTask.resolve('C:\\Temp\\diagnostics-retry.zip')
     await retry
+  })
+
+  it('cancels the in-flight export when the recovery window generation ends', async () => {
+    let exportSignal: AbortSignal | undefined
+    const exportDiagnostics = vi.fn(async (signal: AbortSignal) => {
+      exportSignal = signal
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          reject(new DOMException('cancelled', 'AbortError'))
+        }, { once: true })
+      })
+      return 'unreachable.zip'
+    })
+    const window = recoveryWindow(exportDiagnostics)
+    const pending = handleAction(window)({ action: 'export-diagnostics' })
+    await vi.waitFor(() => expect(exportDiagnostics).toHaveBeenCalledOnce())
+
+    finish(window, 'restart')
+
+    await pending
+    expect(exportSignal?.aborted).toBe(true)
   })
 })
 
@@ -311,6 +338,7 @@ describe('Desktop startup recovery action parser', () => {
       'home',
       'export-diagnostics',
       'show-diagnostics',
+      'open-settings-document',
       'open-profile-patch',
       'open-profile-manifest',
       'open-profile-directory',

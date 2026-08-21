@@ -9,6 +9,9 @@ describe('desktop profiles Host plugin', () => {
     let trayItem: DesktopTrayItem | undefined
     let disposeEffect: (() => void) | undefined
     const events: string[] = []
+    const openProfileCreateWindow = vi.fn((options: { onSubmit: (name: string) => void | Promise<void> }) => {
+      void options.onSubmit('new profile')
+    })
     const disposeRegistration = vi.fn()
     let locale: DesktopRuntime['locale'] = 'en'
     const runtime = {
@@ -17,16 +20,20 @@ describe('desktop profiles Host plugin', () => {
         trayItem = item
         return { refresh: () => {}, dispose: disposeRegistration }
       },
+      openProfileCreateWindow,
       requestRestart: vi.fn(async () => { events.push('unexpected restart') }),
     } as unknown as DesktopRuntime
     const profiles: DesktopProfiles = {
       current: { name: 'desktop', dir: '/profiles/desktop' },
+      create: vi.fn(),
       list: () => [
         { name: 'desktop', dir: '/profiles/desktop', exists: true, bundles: [], webCapable: true },
         { name: '工作 profile', dir: '/profiles/work', exists: true, bundles: [], webCapable: true },
         { name: 'headless', dir: '/profiles/headless', exists: true, bundles: [], webCapable: false },
       ],
       select: async selected => { events.push(`select:${selected}`) },
+      canDelete: () => false,
+      delete: async () => {},
     }
     const ctx = {
       desktopRuntime: runtime,
@@ -52,6 +59,7 @@ describe('desktop profiles Host plugin', () => {
       { label: 'desktop', checked: true, enabled: true },
       { label: '工作 profile', checked: false, enabled: true },
       { label: 'headless (Unavailable for Desktop)', checked: false, enabled: false },
+      { label: 'Add Profile…', checked: undefined, enabled: undefined },
     ])
 
     locale = 'zh'
@@ -59,7 +67,9 @@ describe('desktop profiles Host plugin', () => {
     expect(trayItem?.submenu?.()[2]?.label()).toBe('headless（不可用于桌面端）')
 
     await commands[1]?.invoke()
-    expect(events).toEqual(['select:工作 profile'])
+    await commands[3]?.invoke()
+    expect(events).toEqual(['select:工作 profile', 'select:new profile'])
+    expect(openProfileCreateWindow).toHaveBeenCalledOnce()
     expect(runtime.requestRestart).not.toHaveBeenCalled()
     disposeEffect?.()
     expect(disposeRegistration).toHaveBeenCalledOnce()

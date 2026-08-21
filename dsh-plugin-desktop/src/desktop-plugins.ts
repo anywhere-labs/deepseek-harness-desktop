@@ -147,6 +147,7 @@ interface DesktopPluginPreviewRecord {
   readonly action: 'disable' | 'enable'
   readonly profileName: string
   readonly packageName: string
+  readonly statePath?: string
   readonly expiresAt: number
 }
 
@@ -158,6 +159,8 @@ export interface DesktopPluginsBootstrap {
   readonly homeDir: string
   /** Desktop-private state file outside the user's profile manifests. */
   readonly statePath: string
+  /** Optional independent startup-recovery disable state. */
+  readonly recoveryStatePath?: string
   /** Package manifest inside this exact Desktop installation. */
   readonly installAnchor: string
   /** Injectable clock used only by focused tests. */
@@ -357,6 +360,30 @@ export function readDesktopDisabledBundles(
   return new Set(profile?.disabledBundles ?? [])
 }
 
+/** Remove only the Desktop disable markers belonging to one deleted profile. */
+export async function clearDesktopProfilePluginState(
+  statePath: string,
+  profileName: string,
+): Promise<void> {
+  assertDesktopProfileName(profileName)
+  if (!isAbsolute(statePath) || statePath.includes('\0')) {
+    throw new Error(`${BIN_NAME}: plugin-management state path must be absolute and contain no NUL`)
+  }
+  await ensurePrivateStateDirectory(statePath)
+  await withFileLock(statePath, async () => {
+    const state = readState(statePath)
+    if (!state.profiles.some(profile => profile.profileName === profileName)) return
+    const next = parseState({
+      version: STATE_VERSION,
+      profiles: state.profiles.filter(profile => profile.profileName !== profileName),
+    })
+    await writeFileAtomic(statePath, renderState(next), {
+      mode: STATE_FILE_MODE,
+      dirMode: STATE_DIRECTORY_MODE,
+    })
+  })
+}
+
 /**
  * Read the active profile's direct bundle declarations without resolving or
  * parsing any bundle patch. This remains available when a bundle itself is
@@ -364,8 +391,14 @@ export function readDesktopDisabledBundles(
  */
 export function readDesktopProfileBundleInventory(
   bootstrap: DesktopPluginStateBootstrap,
+  additionalStatePath?: string,
 ): readonly DesktopProfileManifestBundle[] {
-  const disabled = readDesktopDisabledBundles(bootstrap.statePath, bootstrap.profileName)
+  const disabled = new Set(readDesktopDisabledBundles(bootstrap.statePath, bootstrap.profileName))
+  if (additionalStatePath !== undefined) {
+    for (const packageName of readDesktopDisabledBundles(additionalStatePath, bootstrap.profileName)) {
+      disabled.add(packageName)
+    }
+  }
   const seen = new Set<string>()
   const bundles: DesktopProfileManifestBundle[] = []
   for (const packageName of readDesktopProfileBundleNames(bootstrap)) {
@@ -570,6 +603,10 @@ function assertBootstrap(bootstrap: DesktopPluginsBootstrap): void {
       throw new Error(`${BIN_NAME}: desktop plugins ${label} must be an absolute path without NUL`)
     }
   }
+  if (bootstrap.recoveryStatePath !== undefined
+    && (!isAbsolute(bootstrap.recoveryStatePath) || bootstrap.recoveryStatePath.includes('\0'))) {
+    throw new Error(`${BIN_NAME}: desktop plugins recovery state path must be an absolute path without NUL`)
+  }
 }
 
 /** Generation-scoped direct bundle inventory with two-phase persistent state changes. */
@@ -596,7 +633,7 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
 
   list(): readonly DesktopPluginBundle[] {
     this.assertActive()
-    return readDesktopProfileBundleInventory(this.bootstrap).map(item => ({
+    return readDesktopProfileBundleInventory(this.bootstrap, this.bootstrap.recoveryStatePath).map(item => ({
       ...item,
       bundleId: this.bundleId(item.packageName),
     }))
@@ -612,7 +649,13 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
 
   disabledPackageNames(): readonly string[] {
     this.assertActive()
-    return [...readDesktopDisabledBundles(this.bootstrap.statePath, this.bootstrap.profileName)]
+    const disabled = new Set(readDesktopDisabledBundles(this.bootstrap.statePath, this.bootstrap.profileName))
+    if (this.bootstrap.recoveryStatePath !== undefined) {
+      for (const packageName of readDesktopDisabledBundles(this.bootstrap.recoveryStatePath, this.bootstrap.profileName)) {
+        disabled.add(packageName)
+      }
+    }
+    return [...disabled].sort(stableCompare)
   }
 
   previewDisable(bundleId: string): DesktopPluginDisablePreview {
@@ -672,7 +715,7 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
     if (target.status === 'active') {
       throw new DesktopPluginsError('already-active', 'This Desktop bundle is already active.')
     }
-    const preview = this.mintPreview('enable', target.packageName)
+    const preview = this.mintPreview('enable', target.packageName, this.disabledStatePath(target.packageName))
     return {
       previewId: preview.previewId,
       profileName: preview.profileName,
@@ -719,6 +762,7 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
   private mintPreview(
     action: DesktopPluginPreviewRecord['action'],
     packageName: string,
+    statePath?: string,
   ): DesktopPluginPreviewRecord {
     this.prunePreviews()
     if (this.previews.size >= MAX_PREVIEWS) {
@@ -731,6 +775,7 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
       action,
       profileName: this.bootstrap.profileName,
       packageName,
+      ...(statePath === undefined ? {} : { statePath }),
       expiresAt: this.now() + PREVIEW_TTL_MS,
     }
     this.previews.set(previewId, preview)
@@ -772,7 +817,7 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
         throw new DesktopPluginsError('already-active', 'This Desktop bundle is already active.')
       }
       return await enableDesktopProfileBundle(
-        this.bootstrap,
+        { ...this.bootstrap, ...(preview.statePath === undefined ? {} : { statePath: preview.statePath }) },
         preview.packageName,
         () => { this.assertActive() },
       )
@@ -783,6 +828,17 @@ export class DesktopPluginsService extends Service implements DesktopPlugins {
         'Unable to persist the Desktop plugin change.',
       )
     }
+  }
+
+  private disabledStatePath(packageName: string): string | undefined {
+    if (readDesktopDisabledBundles(this.bootstrap.statePath, this.bootstrap.profileName).has(packageName)) {
+      return this.bootstrap.statePath
+    }
+    if (this.bootstrap.recoveryStatePath !== undefined
+      && readDesktopDisabledBundles(this.bootstrap.recoveryStatePath, this.bootstrap.profileName).has(packageName)) {
+      return this.bootstrap.recoveryStatePath
+    }
+    return undefined
   }
 
   private prunePreviews(): void {

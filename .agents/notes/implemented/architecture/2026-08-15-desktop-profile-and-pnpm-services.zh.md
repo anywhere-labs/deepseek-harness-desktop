@@ -28,17 +28,17 @@ Launcher 会在 Loader entry 挂载前提供不可变 bootstrap fact。两个普
 
 Provider 会使用已签名 application executable 启动内置 pnpm 与 DSH entry。只属于 child 的 environment 会提供当前 DSH home、私有 Electron-backed Node helper、CI 模式，以及安装 native dependency 所需的 Electron ABI 值。参数以 argv 而不是 shell 文本跨越进程边界，因此 Windows 不依赖 consumer 自己发现或直接启动 `.cmd` shim。
 
-### `run()` 与 `runPlugin()`
+### `run()`、`runPlugin()` 与 `installPlugin()`
 
 `run(args, signal?)` 会以当前 profile 目录为 working directory 直接执行内置 pnpm。它是低层 package-manager operation，不承诺 profile 初始化、调用方相对 source 锚定或 DSH bundle reconcile，不能被当作插件管理 API。
 
-`runPlugin(args, invokingDir, signal?)` 会以 `invokingDir` 作为 CLI working directory，启动内置的 `dsh plugin --profile <active>` 命令。Profile 之后的参数是 `add`、`remove`、`update`，或恢复时的 `install --no-frozen-lockfile` 等 pnpm 参数。上游 CLI 仍负责锚定相对 `file:` 与 `link:` spec、进入 profile 目录运行 pnpm、在适用时初始化缺失 profile，以及在 mutation 成功后 reconcile `dsh.profile.bundles`。
+`runPlugin(args, invokingDir, signal?)` 会以 `invokingDir` 作为 CLI working directory，为 `remove`、`update` 或恢复时的 `install --no-frozen-lockfile` 等非安装 mutation 启动内置 `dsh plugin --profile <active>`。它会拒绝 `add`。上游 CLI 仍负责进入 profile 目录运行 pnpm，并在 mutation 成功后 reconcile `dsh.profile.bundles`。
 
-因此插件管理器必须使用 `runPlugin()`。它们拥有面向用户的 deadline 与 progress model、消费流式输出、在 timeout 时 abort 并等待 `done`；service 则拥有 executable 选择、child environment、单 operation gate、process-tree 终止，以及不接受 consumer 自行传入 profile 参数的激活 profile 选择。
+插件管理器使用 `installPlugin(request)` 执行 `add`。这个 deep interface 把精确 package name/version 与 recovery receipt 绑定，spawn 前快照 profile，并在完成前封存或恢复快照。其他 plugin mutation 使用 `runPlugin()`。Consumer 拥有面向用户的 deadline 与 progress model；module 拥有 executable 选择、child environment、单 operation gate、process-tree 终止和不接受 consumer 自行传入 profile 的激活 profile。
 
 ## 第三方兼容与 dshmarket
 
-支持 Desktop 的可选 consumer 会在普通必需 Host service 可用后，动态解析 `desktopProfiles` 与 `desktopPnpm`。当两者都存在时，不可变 service 身份优先于 config 或 argv 猜测，插件 mutation 使用 `runPlugin()`；当两者都不存在时，consumer 保留原有 config/argv 与 DSH CLI 路径，使同一个 package 继续在普通 Web profile 中工作。跨环境插件不能把 Desktop service 声明为必需 Cordis injection。
+支持 Desktop 的可选 consumer 会在普通必需 Host service 可用后，动态解析 `desktopProfiles` 与 `desktopPnpm`。当两者都存在时，不可变 service 身份优先于 config 或 argv 猜测；安装使用 `installPlugin()`，其他 plugin mutation 使用 `runPlugin()`。当两者都不存在时，consumer 保留原有 config/argv 与 DSH CLI 路径，使同一个 package 继续在普通 Web profile 中工作。跨环境插件不能把 Desktop service 声明为必需 Cordis injection。
 
 `dshmarket@1.2.3` 尚未实现该 adapter。它会按 `config.profile`、launcher argv、`web` 的顺序解析目标，然后绑定启动 `dsh plugin` 的私有 child-process 代码；其 package exports 没有 runner 或 route injection seam。Desktop patch 可以提供 profile 名称，PATH shim 也可以让旧命令变得可发现，但两者都不能让该版本消费正式 service。真正集成需要后续 dshmarket release 或持续维护的源码 patch；Desktop 不会 fork 它的 routes。
 

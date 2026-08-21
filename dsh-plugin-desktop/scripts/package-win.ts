@@ -141,7 +141,7 @@ export function packageWindowsArtifact(
       cleanEnvironment,
     )
   } else {
-    options.log('Skipping the Windows package preflight; the CI shared gate already passed.')
+    options.log('Skipping the Windows package preflight; the package gate already passed.')
   }
   options.run(
     options.nodeExecutable,

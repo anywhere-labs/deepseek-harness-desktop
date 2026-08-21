@@ -116,7 +116,7 @@ export function packageMacSmoke(options: MacSmokePackageOptions = defaultOptions
       cleanEnvironment,
     )
   } else {
-    options.log('Skipping the macOS package preflight; the CI shared gate already passed.')
+    options.log('Skipping the macOS package preflight; the package gate already passed.')
   }
   options.resetOutput()
   options.prepareRuntime()

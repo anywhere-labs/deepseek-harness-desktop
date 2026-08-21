@@ -1,5 +1,6 @@
-import { app } from 'electron'
-import type { BrowserWindow, NativeImage } from 'electron'
+import { app, Menu } from 'electron'
+import type { BrowserWindow, MenuItemConstructorOptions, NativeImage } from 'electron'
+import { macApplicationMenuTemplate, nativeMenuLocale } from './native-menu.ts'
 import type { DesktopPlatform } from './runtime.ts'
 import type { DesktopDownloadPlatform } from './update-download.ts'
 
@@ -9,7 +10,12 @@ export interface ElectronPlatformStrategy {
   readonly updateDownloadPlatform: DesktopDownloadPlatform | undefined
   readonly canPickDirectory: boolean
   readonly canToggleShellMode: boolean
-  configureApplication(icon: NativeImage): void
+  configureApplication(
+    icon: NativeImage,
+    productName: string,
+    applicationMenuItems?: readonly MenuItemConstructorOptions[],
+  ): void
+  refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[]): void
   configureWindow(window: BrowserWindow): void
   refreshThemeMaterial(window: BrowserWindow): void
 }
@@ -20,7 +26,13 @@ class WindowsPlatformStrategy implements ElectronPlatformStrategy {
   readonly canPickDirectory = true
   readonly canToggleShellMode = true
 
-  configureApplication(_icon: NativeImage): void {}
+  configureApplication(
+    _icon: NativeImage,
+    _productName: string,
+    _applicationMenuItems: readonly MenuItemConstructorOptions[] = [],
+  ): void {}
+
+  refreshApplicationMenu(_applicationMenuItems: readonly MenuItemConstructorOptions[]): void {}
 
   configureWindow(window: BrowserWindow): void {
     window.removeMenu()
@@ -37,8 +49,27 @@ class MacPlatformStrategy implements ElectronPlatformStrategy {
   readonly canPickDirectory = false
   readonly canToggleShellMode = true
 
-  configureApplication(icon: NativeImage): void {
+  private applicationName: string | undefined
+
+  configureApplication(
+    icon: NativeImage,
+    productName: string,
+    applicationMenuItems: readonly MenuItemConstructorOptions[] = [],
+  ): void {
     app.dock?.setIcon(icon)
+    this.applicationName = productName
+    this.refreshApplicationMenu(applicationMenuItems)
+  }
+
+  refreshApplicationMenu(applicationMenuItems: readonly MenuItemConstructorOptions[]): void {
+    const applicationName = this.applicationName
+    if (applicationName === undefined) return
+    const locale = nativeMenuLocale(app.getPreferredSystemLanguages())
+    Menu.setApplicationMenu(Menu.buildFromTemplate(macApplicationMenuTemplate(
+      applicationName,
+      locale,
+      applicationMenuItems,
+    )))
   }
 
   configureWindow(_window: BrowserWindow): void {}
@@ -52,7 +83,13 @@ class LinuxPlatformStrategy implements ElectronPlatformStrategy {
   readonly canPickDirectory = false
   readonly canToggleShellMode = false
 
-  configureApplication(_icon: NativeImage): void {}
+  configureApplication(
+    _icon: NativeImage,
+    _productName: string,
+    _applicationMenuItems: readonly MenuItemConstructorOptions[] = [],
+  ): void {}
+
+  refreshApplicationMenu(_applicationMenuItems: readonly MenuItemConstructorOptions[]): void {}
 
   configureWindow(_window: BrowserWindow): void {}
 

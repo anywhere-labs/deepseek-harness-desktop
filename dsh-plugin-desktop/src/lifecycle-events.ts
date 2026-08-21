@@ -5,12 +5,12 @@ import {
   constants,
   existsSync,
   fstatSync,
+  ftruncateSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   unlinkSync,
-  writeFileSync,
   writeSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -254,6 +254,7 @@ export class DesktopLifecycleRecorder {
   private readonly now: () => Date
   private readonly monotonicNow: () => number
   private readonly startTime: number
+  private generationLine: Buffer | undefined
   private currentStage: DesktopStartupFailureStage | undefined
   private currentStageStartedAt: number | undefined
   private rendererStartedAt: number | undefined
@@ -275,11 +276,6 @@ export class DesktopLifecycleRecorder {
 
   startStartup(initialStage: DesktopStartupFailureStage): void {
     if (this.currentStage !== undefined) return
-    this.record('startup.run.started', {
-      appVersion: safeLine(this.options.appVersion),
-      platform: safeLine(this.options.platform),
-      arch: safeLine(this.options.arch),
-    })
     this.currentStage = initialStage
     this.currentStageStartedAt = this.monotonicNow()
     this.recordStartupStage(initialStage, 'started')
@@ -385,22 +381,38 @@ export class DesktopLifecycleRecorder {
     stageId?: DesktopStartupFailureStage,
   ): void {
     try {
-      const event = parseDesktopLifecycleEvent({
-        schemaVersion: DESKTOP_LIFECYCLE_SCHEMA_VERSION,
-        timestamp: this.now().toISOString(),
-        monotonicMs: this.durationFrom(this.startTime) ?? 0,
-        ...(durationMs === undefined ? {} : { durationMs }),
-        runId: this.runId,
-        operationId: this.operationId,
-        eventName,
-        ...(stageId === undefined ? {} : { stageId }),
-        details,
-      })
-      this.writeEvent(event)
+      this.writeEvent(this.createEvent(eventName, details, durationMs, stageId))
     } catch (cause) {
       this.evidenceUnavailable = true
       this.reportFailure(cause)
     }
+  }
+
+  private createEvent(
+    eventName: DesktopLifecycleEventName,
+    details: DesktopLifecycleDetails,
+    durationMs?: number,
+    stageId?: DesktopStartupFailureStage,
+  ): DesktopLifecycleEvent {
+    return parseDesktopLifecycleEvent({
+      schemaVersion: DESKTOP_LIFECYCLE_SCHEMA_VERSION,
+      timestamp: this.now().toISOString(),
+      monotonicMs: this.durationFrom(this.startTime) ?? 0,
+      ...(durationMs === undefined ? {} : { durationMs }),
+      runId: this.runId,
+      operationId: this.operationId,
+      eventName,
+      ...(stageId === undefined ? {} : { stageId }),
+      details,
+    })
+  }
+
+  private renderEvent(event: DesktopLifecycleEvent): Buffer {
+    const line = Buffer.from(`${JSON.stringify(event)}\n`)
+    if (line.byteLength > MAX_DESKTOP_LIFECYCLE_EVENT_BYTES) {
+      throw new Error('lifecycle event is too large')
+    }
+    return line
   }
 
   private durationFrom(startedAt: number | undefined): number | undefined {
@@ -411,6 +423,11 @@ export class DesktopLifecycleRecorder {
 
   private prepareFreshEvidence(): void {
     try {
+      const generationLine = this.renderEvent(this.createEvent('startup.run.started', {
+        appVersion: safeLine(this.options.appVersion),
+        platform: safeLine(this.options.platform),
+        arch: safeLine(this.options.arch),
+      }))
       const directory = dirname(this.evidencePath)
       mkdirSync(directory, { recursive: true, mode: PRIVATE_DIRECTORY_MODE })
       const directoryStats = lstatSync(directory)
@@ -426,7 +443,14 @@ export class DesktopLifecycleRecorder {
         unlinkSync(this.evidencePath)
       }
       const descriptor = openSync(this.evidencePath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | noFollowFlag(), PRIVATE_FILE_MODE)
-      closeSync(descriptor)
+      try {
+        if (writeSync(descriptor, generationLine) !== generationLine.byteLength) {
+          throw new Error('lifecycle evidence generation write was incomplete')
+        }
+      } finally {
+        closeSync(descriptor)
+      }
+      this.generationLine = generationLine
       try { chmodSync(this.evidencePath, PRIVATE_FILE_MODE) } catch {}
     } catch (cause) {
       this.evidenceUnavailable = true
@@ -436,61 +460,70 @@ export class DesktopLifecycleRecorder {
 
   private writeEvent(event: DesktopLifecycleEvent): void {
     if (this.evidenceUnavailable) return
-    const line = `${JSON.stringify(event)}\n`
-    const lineBytes = Buffer.byteLength(line)
-    if (lineBytes > MAX_DESKTOP_LIFECYCLE_EVENT_BYTES) throw new Error('lifecycle event is too large')
-    const existingBytes = this.evidenceSize()
-    if (existingBytes + lineBytes <= MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES) {
+    const generationLine = this.requireGenerationLine()
+    const line = this.renderEvent(event)
+    const existing = this.readOwned()
+    if (existing.byteLength + line.byteLength <= MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES) {
       this.appendOwned(line)
       return
     }
-    const keepBytes = Math.max(0, MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES - lineBytes)
-    const existing = this.readOwned()
-    const tail = keepBytes === 0 ? Buffer.alloc(0) : existing.subarray(Math.max(0, existing.byteLength - keepBytes))
+    const keepBytes = Math.max(0, MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES - generationLine.byteLength - line.byteLength)
+    const priorEvents = existing.subarray(generationLine.byteLength)
+    const tail = keepBytes === 0 ? Buffer.alloc(0) : priorEvents.subarray(Math.max(0, priorEvents.byteLength - keepBytes))
     const firstNewline = tail.indexOf(0x0a)
     const retained = firstNewline === -1 ? Buffer.alloc(0) : tail.subarray(firstNewline + 1)
-    this.replaceOwned(Buffer.concat([retained, Buffer.from(line)]))
-  }
-
-  private evidenceSize(): number {
-    const stats = lstatSync(this.evidencePath)
-    if (stats.isSymbolicLink() || !stats.isFile() || stats.nlink > 1) {
-      throw new Error('lifecycle evidence file is invalid')
-    }
-    return stats.size
+    this.replaceOwned(Buffer.concat([generationLine, retained, line]))
   }
 
   private readOwned(): Buffer {
     const descriptor = openSync(this.evidencePath, constants.O_RDONLY | noFollowFlag())
     try {
-      const stats = fstatSync(descriptor)
-      if (!stats.isFile() || stats.nlink > 1) throw new Error('lifecycle evidence file is invalid')
-      return readFileSync(descriptor)
+      return this.readOwnedDescriptor(descriptor)
     } finally {
       closeSync(descriptor)
     }
   }
 
-  private appendOwned(line: string): void {
-    const descriptor = openSync(this.evidencePath, constants.O_WRONLY | constants.O_APPEND | noFollowFlag())
+  private readOwnedDescriptor(descriptor: number): Buffer {
+    const stats = fstatSync(descriptor)
+    if (!stats.isFile() || stats.nlink > 1) throw new Error('lifecycle evidence file is invalid')
+    const content = readFileSync(descriptor)
+    const generationLine = this.requireGenerationLine()
+    if (content.byteLength < generationLine.byteLength
+      || !content.subarray(0, generationLine.byteLength).equals(generationLine)) {
+      throw new Error('lifecycle evidence belongs to another recorder')
+    }
+    return content
+  }
+
+  private appendOwned(line: Buffer): void {
+    const descriptor = openSync(this.evidencePath, constants.O_RDWR | constants.O_APPEND | noFollowFlag())
     try {
-      const stats = fstatSync(descriptor)
-      if (!stats.isFile() || stats.nlink > 1) throw new Error('lifecycle evidence file is invalid')
-      writeSync(descriptor, line)
+      this.readOwnedDescriptor(descriptor)
+      if (writeSync(descriptor, line) !== line.byteLength) {
+        throw new Error('lifecycle evidence append was incomplete')
+      }
     } finally {
       closeSync(descriptor)
     }
   }
 
   private replaceOwned(content: Buffer): void {
-    const descriptor = openSync(this.evidencePath, constants.O_WRONLY | constants.O_TRUNC | noFollowFlag())
+    const descriptor = openSync(this.evidencePath, constants.O_RDWR | noFollowFlag())
     try {
-      const stats = fstatSync(descriptor)
-      if (!stats.isFile() || stats.nlink > 1) throw new Error('lifecycle evidence file is invalid')
-      writeFileSync(descriptor, content)
+      this.readOwnedDescriptor(descriptor)
+      ftruncateSync(descriptor)
+      if (writeSync(descriptor, content, 0, content.byteLength, 0) !== content.byteLength) {
+        throw new Error('lifecycle evidence replacement was incomplete')
+      }
     } finally {
       closeSync(descriptor)
     }
+  }
+
+  private requireGenerationLine(): Buffer {
+    if (this.generationLine === undefined) throw new Error('lifecycle evidence generation is unavailable')
+    return this.generationLine
   }
 
   private reportFailure(cause: unknown): void {

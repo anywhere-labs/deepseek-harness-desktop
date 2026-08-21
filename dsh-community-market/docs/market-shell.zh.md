@@ -81,7 +81,7 @@ Host 会先针对已选来源和当前 locale 完成一次全量标准化扫描�
 Market 界面包含四个视图：
 
 - **发现**对当前已选来源完整本地索引中的全部标准化条目进行分页。点击卡片会立即打开统一操作弹窗；Host 会让合格条目进入受管 preview，否则弹窗保持为详情。
-- **可安装**从已选来源的完整索引中以 fail-closed 方式生成。条目必须具有经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，同时排除产品 blocklist 中的 package。只要已选目录仍然包含条目，已经安装、已有 receipt、处于禁用状态或后来已卸载的 package 都会继续显示。这里的卡片使用同一个弹窗。结构候选身份不等于 npm 复核、本地操作许可、代码审核或推荐。由于 dshfind 当前没有提供精确稳定的 npm 版本，它的所有条目都只在**发现**中浏览。
+- **可安装**从已选来源的完整索引中以 fail-closed 方式生成。条目必须具有经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，同时排除产品 blocklist 中的 package。只要已选目录仍然包含条目，已经安装、已有 receipt、处于禁用状态或后来已卸载的 package 都会继续显示。这里的卡片使用同一个弹窗。结构候选身份不等于 npm 复核、本地操作许可、代码审核或推荐。dshfind 条目只有通过唯一、无歧义且经过复核的结构化 npm method 才会进入这一子集；缺少该证据的条目仍然只能在**发现**中浏览。
 - **已安装**会核对当前 profile 的 Host 清单与合法 Market receipt，绝不会根据目录猜测安装状态。
 - **来源**管理已保存来源和唯一的当前选择。
 
@@ -110,7 +110,7 @@ Market 界面包含四个视图：
 - 短时确认的过期时间；以及
 - 插件会以用户权限作为本地代码运行、而且该复核不等于代码审计的提示。
 
-目录中的 `install` 字段、文档命令、provider 命令和任意字符串都会失去执行授权，绝不会被执行，也不会作为 Host 手动提示展示。当标准化条目具有精确稳定的 npm 身份时，Host 可以另行重建一条有界、只用于展示的命令。该文本可能与仓库文档中的命令不同，会明确标为未完成全部验证，而且绝不会发送给 package manager 或 Desktop action。dshfind adapter 会明确丢弃 `install.cmd`，绝不解析或转发它。内置受管安装器会拒绝 GitHub 与其他仓库安装目标、range、tag、prerelease、deprecated 版本、目标 manifest 中包含 `preinstall`、`install`、`postinstall` 或 `prepare` 的 package、与内置 DSH `0.1.0-rc.7`/Cordis/Node.js runtime 不兼容的 package、仓库身份不匹配的 package，以及缺少官方 npm SHA-512/tarball 或有效 DSH bundle 证据的 package。
+目录中的 `install` 字段、文档命令、provider 命令和任意字符串都会失去执行授权，绝不会被执行，也不会作为 Host 手动提示展示。当标准化条目具有精确稳定的 npm 身份时，Host 可以另行重建一条有界、只用于展示的命令。该文本可能与仓库文档中的命令不同，会明确标为未完成全部验证，而且绝不会发送给 package manager 或 Desktop action。dshfind adapter 会明确丢弃 `install.cmd`，绝不解析或转发它。内置受管安装器会拒绝 GitHub 与其他仓库安装目标、range、tag、prerelease、deprecated 版本、目标 manifest 中包含 `preinstall`、`install`、`postinstall` 或 `prepare` 的 package、与内置 DSH `0.1.1-rc.2`/Cordis/Node.js runtime 不兼容的 package、仓库身份不匹配的 package，以及缺少官方 npm SHA-512/tarball 或有效 DSH bundle 证据的 package。
 
 Preview 会针对这一个 package 完整检查 npm registry、规范仓库、deprecated 状态、lifecycle script、runtime、integrity、tarball、DSH bundle 和当前 profile，并用一次性不透明 preview 绑定已验证事实。用户确认后、真正修改前，执行阶段会立即重新获取或检查可变的 registry、候选和 profile 证据；候选、当前 profile、tarball、integrity 或 bundle 路径发生变化时会拒绝执行。受管操作中，renderer 只提交不透明身份，绝不会提交 package-manager spec 或命令。
 

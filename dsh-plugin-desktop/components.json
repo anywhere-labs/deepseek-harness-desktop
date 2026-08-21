@@ -1,0 +1,25 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "preset": "b27GcrRo",
+  "style": "base-rhea",
+  "rsc": false,
+  "tailwind": {
+    "config": "",
+    "css": "src/native-ui/shared/theme.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "font": "Inter",
+  "radius": "default",
+  "tsx": true,
+  "aliases": {
+    "components": "@/components",
+    "ui": "@/components/ui",
+    "shared": "@/shared",
+    "lib": "@/lib"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle"
+}

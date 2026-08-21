@@ -352,6 +352,49 @@ describe('1024Store adapter', () => {
     expect(second.page).toEqual({ total: 2 })
   })
 
+  it('does not silently treat a truncated 1024Store response as the complete catalog', async () => {
+    const packages = Array.from({ length: 51 }, (_, index) => ({
+      ...rawCatalog.packages[0]!,
+      id: `anywhere-labs/plugin-${index}`,
+      name: `plugin-${index}`,
+      url: `https://github.com/anywhere-labs/plugin-${index}`,
+    }))
+    const http: CatalogHttpClient = {
+      getJson: vi.fn(async () => ({
+        value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 7635 }, packages },
+        finalUrl: 'https://deepseek1024.com/api/v1/plugins',
+      })),
+    }
+
+    const snapshot = await dsh1024StoreAdapter.fetch(
+      { limit: 100 },
+      { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
+    )
+
+    expect(snapshot.items).toHaveLength(50)
+    expect(snapshot.page).toEqual({ nextCursor: '50', total: 7635 })
+  })
+
+  it('fails a complete 1024Store scan when provider metadata says more items exist', async () => {
+    const packages = Array.from({ length: 51 }, (_, index) => ({
+      ...rawCatalog.packages[0]!,
+      id: `anywhere-labs/plugin-${index}`,
+      name: `plugin-${index}`,
+      url: `https://github.com/anywhere-labs/plugin-${index}`,
+    }))
+    const http: CatalogHttpClient = {
+      getJson: vi.fn(async () => ({
+        value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 7635 }, packages },
+        finalUrl: 'https://deepseek1024.com/api/v1/plugins',
+      })),
+    }
+
+    await expect(dsh1024StoreAdapter.scanCatalog!(
+      { limit: 100 },
+      { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
+    )).rejects.toThrow(/provider total/u)
+  })
+
   it('keeps the reviewed 1024Store adapter page size fixed at 50', async () => {
     const packages = Array.from({ length: 51 }, (_, index) => ({
       ...rawCatalog.packages[0]!,
@@ -630,6 +673,31 @@ describe('standard source registration trust boundary', () => {
 })
 
 describe('catalog Host route pagination boundary', () => {
+  it.each([
+    ['timeout', 504, 'catalog-timeout'],
+    ['response', 502, 'catalog-invalid-response'],
+    ['http', 502, 'catalog-unavailable'],
+  ] as const)('returns a bounded %s failure code for catalog diagnostics', async (networkCode, status, code) => {
+    const scanCatalog = vi.spyOn(DefaultCatalogService.prototype, 'scanCatalog')
+      .mockRejectedValue(new CatalogNetworkError(networkCode))
+    try {
+      const response = await requestMarketCatalog(
+        [source()],
+        `${marketRoutes.catalog}?sourceRecordId=${source().sourceRecordId}`,
+      )
+
+      expect(response.statusCode).toBe(status)
+      expect(response.body).toEqual({
+        error: networkCode === 'timeout'
+          ? 'catalog request timed out'
+          : networkCode === 'response' ? 'catalog response was invalid' : 'catalog source unavailable',
+        code,
+      })
+    } finally {
+      scanCatalog.mockRestore()
+    }
+  })
+
   it('uses the Host limit of 50 and preserves repeated category parameters', async () => {
     const index = catalogIndex()
     const scanCatalog = vi.spyOn(DefaultCatalogService.prototype, 'scanCatalog').mockResolvedValue(index)

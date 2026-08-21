@@ -77,6 +77,28 @@ describe('desktop profile service', () => {
     expect(list).toHaveBeenCalledTimes(2)
   })
 
+  it('creates a profile through the launcher without selecting it', async () => {
+    const create = vi.fn(() => WORK)
+    const persistSelection = vi.fn()
+    const requestRestart = vi.fn()
+    const mounted = await mount(createBootstrap({ create, persistSelection, requestRestart }))
+
+    expect(mounted.service.create('work')).toEqual(WORK)
+    expect(create).toHaveBeenCalledWith('work')
+    expect(mounted.service.current.name).toBe('desktop')
+    expect(persistSelection).not.toHaveBeenCalled()
+    expect(requestRestart).not.toHaveBeenCalled()
+  })
+
+  it('rejects profile creation through a retained service after disposal', async () => {
+    const create = vi.fn(() => WORK)
+    const mounted = await mount(createBootstrap({ create }))
+    await mounted.dispose()
+
+    expect(() => mounted.service.create('work')).toThrow('desktopProfiles service disposed')
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('does nothing when the current profile is selected', async () => {
     const persistSelection = vi.fn()
     const requestRestart = vi.fn()
@@ -96,6 +118,16 @@ describe('desktop profile service', () => {
 
     await expect(service.select('work')).resolves.toBeUndefined()
     expect(events).toEqual(['persist:work', 'restart'])
+  })
+
+  it('treats an accepted restart as successful when teardown disposes the old service', async () => {
+    let dispose!: () => Promise<unknown>
+    const requestRestart = vi.fn(async () => { await dispose() })
+    const mounted = await mount(createBootstrap({ requestRestart }))
+    dispose = mounted.dispose
+
+    await expect(mounted.service.select('work')).resolves.toBeUndefined()
+    expect(requestRestart).toHaveBeenCalledOnce()
   })
 
   it('does not restart after persistence fails and permits a later valid selection', async () => {

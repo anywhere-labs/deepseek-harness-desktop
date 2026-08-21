@@ -242,9 +242,13 @@ function recoverableRunner(
   let pendingPackageName: string | undefined
   return {
     ...implementation,
-    async runPluginInstall(args, dir, recovery, signal) {
-      pendingPackageName = recovery.packageName
-      return implementation.runPlugin(args, dir, signal)
+    async installPlugin(request) {
+      pendingPackageName = request.recovery.packageName
+      return implementation.runPlugin([
+        'add',
+        ...(request.pnpmOptions ?? []),
+        `${request.recovery.packageName}@${request.recovery.packageVersion}`,
+      ], request.invokingDir, request.signal)
     },
     async recoveredInstallReceiptIds() { return [] },
     async acknowledgeRecoveredInstall() {},
@@ -269,7 +273,7 @@ describe('npm registry verification', () => {
         version,
         repository: { type: 'git', url: 'git+https://github.com/example/dsh-plugin-safe.git' },
         scripts: { test: 'vitest' },
-        dependencies: { '@deepseek-ai/dsh-agent': '^0.1.0-rc.7' },
+        dependencies: { '@deepseek-ai/dsh-agent': '^0.1.1-rc.2' },
         peerDependencies: { '@deepseek-ai/cordis': '^4.0.1' },
         engines: { node: '>=22.19.0' },
         dist: { integrity, tarball },

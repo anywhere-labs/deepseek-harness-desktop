@@ -283,6 +283,25 @@ describe('packaged desktop runtime verification', () => {
     )
   })
 
+  it('fails loud when schemastery is absent from app.asar.unpacked', () => {
+    const runtimeContext = context('/build', 'win32')
+    const unpackedRoot = resolvePackagedUnpackedRoot(runtimeContext)
+    const specifier = '@deepseek-ai/schemastery/package.json'
+    const resolvePackage = vi.fn<PackageResolver>((requested) => {
+      if (requested === specifier) throw new Error('missing package')
+      return completePackageResolver(unpackedRoot)(requested)
+    })
+
+    expect(() => verifyPackagedRuntime(
+      runtimeContext,
+      () => completeArchiveEntries(),
+      () => true,
+      resolvePackage,
+    )).toThrow(
+      `packaged runtime at ${unpackedRoot} cannot resolve required package export ${specifier}`,
+    )
+  })
+
   it('fails loud when a required package export escapes app.asar.unpacked', () => {
     const runtimeContext = context('/build', 'win32')
     const unpackedRoot = resolvePackagedUnpackedRoot(runtimeContext)
