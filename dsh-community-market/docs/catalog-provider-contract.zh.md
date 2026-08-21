@@ -191,7 +191,7 @@ Host 标准化 query 默认值和 provider 默认值是两个概念。合法 con
 
 Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝不能把一个来源的 cursor 发送给另一个来源，也不能在 wire query 改变后复用。
 
-当前 Desktop 产品会先完整扫描已选来源。对于标准来源，Host 只发送 `cursor`、`limit` 和 locale 偏好等来源支持的扫描字段，跟随 `page.nextCursor` 直到结束，并使用来源的有效 page limit，而不是把 50 当成网络上限。扫描不会把用户搜索文本或已选分类发给 provider。经过审核的 1024Store adapter 则通过一次请求下载完整 registry，并输出每块最多 100 条的标准化分块。
+当前 Desktop 产品会先完整扫描已选来源。对于标准来源，Host 只发送 `cursor`、`limit` 和 locale 偏好等来源支持的扫描字段，跟随 `page.nextCursor` 直到结束，并使用来源的有效 page limit，而不是把 50 当成网络上限。扫描不会把用户搜索文本或已选分类发给 provider。经过审核的 1024Store adapter 会用一次请求读取公开 registry，索引当前发布页（线上 API 目前返回首页切片和 `catalogTotal`，而不是完整 dump），并输出每块最多 100 条的标准化分块。之后的用户搜索可以把 provider 的 `q` 参数发出去，以便解析首页切片之外的包。
 
 搜索、排序、多分类 OR 筛选、分类枚举和分页随后都在完整本地索引上运行。目录 response 中的分类选项覆盖索引中存在的全部分类，每个 UI 可见页面最多包含 50 条匹配结果。**加载更多**只推进 Host 拥有的本地 cursor，不会再次发送带筛选的 provider 请求。
 
@@ -204,7 +204,7 @@ Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝
 - 同一时间最多只有一条已保存来源记录被选择，并且只有该来源会收到目录请求。
 - 已选来源拥有自己的 timeout、cancellation、完整索引 cache、本地 cursor、loading state 和 error state。
 - 标准来源网络 page 遵守有效请求值或声明的 `defaultLimit`，Schema 安全上限为 100；本地可见页面最多包含 50 条。
-- 1024Store adapter 用一次请求取得 registry，把完整结果标准化成有界分块，再提供相同的本地 50 条 UI page。
+- 1024Store adapter 用一次请求取得当前发布的 registry 页，把可到达的条目标准化成有界分块，再提供相同的本地 50 条 UI page。搜索可以额外请求一页 provider `q` 结果，但不会替换已缓存的首页切片。
 - 可选目录 metadata 会报告完整扫描完成时间（`scannedAt`）、cache 截止时间（`expiresAt`）、可选且整次扫描一致的来源 revision（`providerRevision`），以及索引是新扫描还是复用（`cacheStatus`）。
 - 失败只归属于已选来源，并提供重试；Host 绝不退回或暗中请求另一个已保存来源。
 - 明确刷新会使当前索引失效，并绕过目录 HTTP cache 后重新建立。切换或删除已选来源会取消 in-flight 工作并清空浏览会话，不需要重启 DSH。
@@ -220,7 +220,7 @@ Provider cursor 只属于一个已选来源和一个有效 wire query。Host 绝
 - 把其分类和插件元数据映射成标准化快照；
 - 只把 provider item `id` 当作来源内部身份，并从经过校验的 repository URL 推导规范 GitHub 仓库与 publisher 身份，避免仓库改名或转移后继续指向旧名称；
 - 由于当前 1024Store 数据集没有直接插件图标，仅把 GitHub owner/avatar 候选作为经过审核的 fallback，通过 Host 媒体边界解析，并将结果标为 `role: "publisher-avatar"`；
-- 把完整下载的 registry 标准化为每块最多 100 条的 Schema 有界分块，再由 Host 通过自己的 cursor 和**加载更多**提供每页最多 50 条的本地结果；
+- 把可到达的已下载 registry 页标准化为每块最多 100 条的 Schema 有界分块，再由 Host 通过自己的 cursor 和**加载更多**提供每页最多 50 条的本地结果；
 - 注入并校验 DSH 1024Store 的 provenance 和来源声明；
 - 永远不把远程 command 文本或安装提示当作可执行输入；
 - Provider 不可用或数据非法时，把当前已选来源报告为不可用，绝不退回另一个已保存来源。
@@ -383,7 +383,7 @@ Provider 与 adapter 作者可以直接使用对应的[最小来源 manifest](ex
 | Query | 标准 response 超过有效请求值，或来源不支持 `limit` 时超过声明的 `defaultLimit` | 在更新 cache 或 UI 前拒绝 response |
 | Query | 标准来源在有效 manifest limit 内合法返回 51–100 个条目 | 接受 response；50 只是当前 UI 默认值，不是全局 contract 上限 |
 | 完整索引 | 标准来源返回多个 cursor page | 每个 page 只校验一次；本地搜索与多分类 OR 筛选可以找到首个网络 page 之后的条目 |
-| 完整索引 | 1024Store 有超过 100 个合法条目 | 一次 registry 请求被标准化为每块最多 100 条的分块；query 交互不会重新请求 |
+| 完整索引 | 1024Store 首页切片有超过 100 个合法条目 | 一次 registry 请求被标准化为每块最多 100 条的分块；搜索可以追加一页 provider `q` 结果 |
 | 分页 | 完整本地索引有超过 50 个匹配条目 | 首个可见 page 包含 50 条；**加载更多**通过 Host 自有本地 cursor 继续，不发送带筛选的 provider 请求 |
 | 刷新 | 完整索引已被 cache，随后用户明确刷新 | Cache read 报告复用；刷新绕过目录 HTTP cache 并替换完整索引 |
 | Schema | 合法 manifest、query、provider-page 和 snapshot fixture | 接受并 round-trip，不丢失已定义数据 |

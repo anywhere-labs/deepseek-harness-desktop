@@ -191,7 +191,7 @@ The normalized Host query default and the provider default are separate. A valid
 
 A provider cursor is scoped to one selected source and one effective wire query. The Host never sends a cursor from one source to another or reuses it after that wire query changes.
 
-The current Desktop product first scans the complete selected source. For a standard source, the Host sends only supported scan fields such as `cursor`, `limit`, and locale preference, follows `page.nextCursor` until exhaustion, and uses the source's effective page limit rather than treating 50 as a network cap. It does not send the user's search text or selected categories during this scan. The reviewed 1024Store adapter instead downloads its full registry in one request and emits normalized chunks of at most 100 items.
+The current Desktop product first scans the complete selected source. For a standard source, the Host sends only supported scan fields such as `cursor`, `limit`, and locale preference, follows `page.nextCursor` until exhaustion, and uses the source's effective page limit rather than treating 50 as a network cap. It does not send the user's search text or selected categories during this scan. The reviewed 1024Store adapter reads the public registry in one request, indexes the published page (the live API currently returns a homepage slice plus `catalogTotal`, not a full dump), and emits normalized chunks of at most 100 items. A later user search may send the provider's `q` parameter so packages outside that slice remain resolvable.
 
 Search, sorting, multi-category OR filtering, category enumeration, and pagination then run over the complete local index. The catalog response's category choices cover all categories present in that index, and each visible UI page contains at most 50 matching items. **Load more** advances a Host-owned local cursor; it does not send another filtered provider request.
 
@@ -204,7 +204,7 @@ Saved sources remain independent, but the product reads only the selected one:
 - At most one saved source record is selected, and only that source receives catalog requests.
 - The selected source has its own timeout, cancellation, complete-index cache, local cursor, loading state, and error state.
 - Standard-source network pages follow the effective requested limit or declared `defaultLimit`, through the safety maximum of 100; visible local pages contain at most 50 items.
-- The 1024Store adapter obtains the registry with one request, normalizes the full result in bounded chunks, and exposes the same local 50-item UI pages.
+- The 1024Store adapter obtains the published registry page with one request, normalizes the reachable items in bounded chunks, and exposes the same local 50-item UI pages. A search may add one provider `q` page without replacing the cached homepage slice.
 - Optional catalog metadata reports when the complete scan finished (`scannedAt`), when its cache expires (`expiresAt`), an optional consistent source revision (`providerRevision`), and whether the index was freshly scanned or reused (`cacheStatus`).
 - A failure stays attached to the selected source and offers Retry; the Host never falls back to or silently requests another saved source.
 - Explicit refresh invalidates the current index and bypasses the catalog HTTP cache before rebuilding it. Switching or removing the selected source cancels its in-flight work and clears the browsing session without restarting DSH.
@@ -220,7 +220,7 @@ The canonical item identity is the pair `{ sourceRecordId, itemId }`. Two regist
 - maps its categories and plugin metadata into the normalized snapshot;
 - treats the provider item `id` only as source-local identity and derives canonical GitHub repository and publisher identity from the validated repository URL, so repository renames or transfers do not silently point at the old name;
 - because the current 1024Store dataset has no direct plugin icon, derives a GitHub owner/avatar candidate only as a reviewed fallback, resolves it through the Host media boundary, and labels the result `role: "publisher-avatar"`;
-- normalizes the complete downloaded registry into Schema-bounded chunks of at most 100 items, then lets the Host expose local pages of at most 50 through its own cursor and **Load more**;
+- normalizes the reachable downloaded registry page into Schema-bounded chunks of at most 100 items, then lets the Host expose local pages of at most 50 through its own cursor and **Load more**;
 - injects and validates DSH 1024Store provenance and attribution;
 - never treats remote command text or install hints as executable input;
 - reports the selected source as unavailable when the provider fails or returns invalid data, without falling back to another saved source.
@@ -383,7 +383,7 @@ The current automated contract, adapter, Host, Client, media, and installation s
 | Query | Standard response exceeds the effective requested limit, or its declared `defaultLimit` when `limit` is unsupported | Response rejected before cache or UI update |
 | Query | Standard source validly returns 51–100 items within its effective manifest limit | Response accepted; 50 is only the current UI default, not a global contract cap |
 | Full index | Standard source returns several cursor pages | Every page is validated once; local search and multi-category OR filtering can find items beyond the first network page |
-| Full index | 1024Store has more than 100 valid entries | One registry request is normalized into chunks of at most 100; no query interaction refetches it |
+| Full index | 1024Store homepage slice has more than 100 valid entries | One registry request is normalized into chunks of at most 100; a search may add a provider `q` page |
 | Pagination | Complete local index has more than 50 matching entries | First visible page contains 50; **Load more** advances through the Host-owned local cursor without a filtered provider request |
 | Refresh | A completed index is cached, then explicitly refreshed | Cached reads report reuse; refresh bypasses the catalog HTTP cache and replaces the complete index |
 | Schema | Valid manifest, query, provider-page, and snapshot fixtures | Accepted and round-trip without losing defined data |

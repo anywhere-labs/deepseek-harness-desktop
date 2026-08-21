@@ -945,6 +945,9 @@ export function registerMarketRoutes(
             ...(locale === null || locale === '' ? {} : { locale }),
             ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
           })
+          if (index !== undefined) {
+            index = await service.mergeProviderSearch(index, query, signal)
+          }
         } catch (cause) {
           if (!signal.aborted && !res.destroyed) sendCatalogFailure(res, cause)
           return
