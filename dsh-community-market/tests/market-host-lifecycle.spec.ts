@@ -132,6 +132,7 @@ describe('community market Host capability lifecycle', () => {
     })
 
     harness.provide('desktopActions', {
+      openTerminalSupported: true,
       openTerminal: vi.fn(),
       requestRestart: vi.fn(async () => {}),
     })
@@ -145,6 +146,22 @@ describe('community market Host capability lifecycle', () => {
 
     harness.remove('desktopPnpm')
     await expect(harness.request(marketRoutes.installable)).resolves.toMatchObject({ status: 503 })
+
+    harness.dispose()
+  })
+
+  it('does not advertise opening the terminal when the desktop capability lacks platform support', async () => {
+    const harness = createHarness()
+    apply(harness.context as never)
+
+    harness.provide('desktopActions', {
+      openTerminalSupported: false,
+      openTerminal: vi.fn(),
+      requestRestart: vi.fn(async () => {}),
+    })
+    await expect(harness.request(marketRoutes.state)).resolves.toMatchObject({
+      body: { desktopActions: { openTerminal: false } },
+    })
 
     harness.dispose()
   })

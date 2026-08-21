@@ -486,6 +486,8 @@ export interface MarketInstallServiceProvider {
 }
 
 export interface MarketDesktopActions {
+  /** Whether the packaged terminal can be opened on the current platform. */
+  readonly openTerminalSupported: boolean
   openTerminal(): void
   requestRestart(): Promise<void>
 }
@@ -856,7 +858,7 @@ export function registerMarketRoutes(
           sources: await service.listSources(),
           builtIns: viewBuiltIns(),
           desktopActions: {
-            openTerminal: desktopActions !== undefined,
+            openTerminal: desktopActions !== undefined && desktopActions.openTerminalSupported,
             requestRestart: desktopActions !== undefined
               && (installProvider?.get() !== undefined || desktopPluginsProvider?.get() !== undefined),
           },
@@ -1044,6 +1046,10 @@ export function registerMarketRoutes(
         const actions = desktopActionsProvider.get()
         if (actions === undefined) {
           sendJson(res, 503, { error: 'desktop actions are unavailable' })
+          return
+        }
+        if (!actions.openTerminalSupported) {
+          sendJson(res, 503, { error: 'opening DSH Terminal is unsupported on this platform' })
           return
         }
         const controller = new AbortController()
