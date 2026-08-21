@@ -233,6 +233,10 @@ describe('desktop profile composition', {
     })
     expect(rows.find(row => row.id === 'agent-presets')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-agent-presets',
+      config: expect.objectContaining({ default: 'code' }),
+    }))
+    expect(rows.find(row => row.id === 'desktop-mcp')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/mcp',
     }))
     expect(rows.map(row => row.id)).not.toContain('desktop-windows-agent-presets')
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
@@ -407,6 +411,7 @@ describe('desktop profile composition', {
     }))
     expect(rows.find(row => row.id === 'desktop-windows-agent-presets')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/windows-agent-presets',
+      config: expect.objectContaining({ default: 'code' }),
     }))
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',

@@ -53,6 +53,13 @@ describe('Windows agent preset guard', () => {
     ])
   })
 
+  it('keeps the desktop code default on Windows', async () => {
+    const presets = createRoster('code')
+
+    expect(presets.defaultId).toBe('code')
+    await expect(presets.resolve()).resolves.toMatchObject({ id: 'code' })
+  })
+
   it('falls back to standard when minimal was saved as the default', async () => {
     const presets = createRoster(WINDOWS_UNSUPPORTED_PRESET)
 

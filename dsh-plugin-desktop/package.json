@@ -71,6 +71,10 @@
       "types": "./lib/types/updates.d.ts",
       "default": "./lib/updates.js"
     },
+    "./mcp": {
+      "types": "./lib/types/mcp.d.ts",
+      "default": "./lib/mcp.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -95,6 +99,8 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-theme"
       ],
       "platform": "web"
@@ -187,6 +193,7 @@
     "@deepseek-ai/dsh-launch-environment": "0.1.1-rc.1",
     "@deepseek-ai/dsh-llm": "0.1.1-rc.1",
     "@deepseek-ai/dsh-llm-retry": "0.1.1-rc.1",
+    "@deepseek-ai/dsh-mcp-client": "0.1.1-rc.1",
     "@deepseek-ai/dsh-message-feedback": "0.1.1-rc.1",
     "@deepseek-ai/dsh-output-retention": "0.1.1-rc.1",
     "@deepseek-ai/dsh-permission-presets": "0.1.1-rc.1",

@@ -36,6 +36,8 @@ The Desktop Host, profiles, and DSH home live on the local machine. Whether cont
 
 Yes. AI Buddy uses the official Harness plugin system. For everyday installs, open the **Plugin market** tab under **Settings > Plugins**, or use the sidebar launcher. You can also open AI Buddy Terminal from the tray and run `dsh plugin add`, `dsh plugin remove`, or `dsh plugin update`. Both the market and these commands default to the active profile, and Desktop must be restarted after plugin changes. Catalog inclusion is not a security review.
 
+For a closer workbench setup, open **Settings > Plugins > Worker pack**: the default agent preset is Code, and the recommended workspace plugins install from the market. Configure external MCP servers on the **MCP** tab with the official client; no tokens are shipped.
+
 ## Does the Desktop profile automatically sync with an existing web profile?
 
 No plugins are copied automatically. Each profile has its own bundle and dependency composition. After switching profiles, default plugin commands target the active profile; `--profile <name>` can always select one explicitly.
