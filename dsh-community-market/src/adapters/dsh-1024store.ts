@@ -79,6 +79,14 @@ function completeCatalogQuery(query: CatalogQuery): boolean {
     && (query.capability === undefined || query.capability.length === 0)
 }
 
+/** Public 1024Store registry URL. `q` is the provider's documented search field. */
+export function dsh1024StoreRegistryUrl(query: Pick<CatalogQuery, 'q'> = {}): string {
+  if (query.q === undefined) return DSH_1024STORE_ENDPOINT
+  const url = new URL(DSH_1024STORE_ENDPOINT)
+  url.searchParams.set('q', query.q)
+  return url.href
+}
+
 function providerTotal(meta: Dsh1024StoreMeta, receivedPackages: number): number | undefined {
   const total = meta.total
   if (total === undefined) return undefined
@@ -329,8 +337,14 @@ function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: s
     ? new Date(generatedAt).toISOString()
     : undefined
   const providerRevision = plainText(meta.revision, 160, '') || undefined
-  const total = completeCatalogQuery(query)
-    ? providerTotal(meta, raw.packages.length) ?? candidates.length
+  const advertised = completeCatalogQuery(query)
+    ? providerTotal(meta, raw.packages.length)
+    : undefined
+  // The live registry publishes a homepage slice (packages.length < meta.total)
+  // and optional `q` search pages. Advertise only the reachable candidate count
+  // so Host scan completeness does not demand the unpublished remainder.
+  const total = advertised !== undefined && advertised <= candidates.length
+    ? advertised
     : candidates.length
   return parseCatalogSnapshot({
     schemaVersion: '1.0.0',
@@ -406,8 +420,12 @@ function buildCatalogScanSnapshots(
     ? new Date(generatedAt).toISOString()
     : undefined
   const providerRevision = plainText(meta.revision, 160, '') || undefined
-  const total = providerTotal(meta, raw.packages.length) ?? items.length
-  if (total !== items.length) throw new Error('1024Store scan did not reach the provider total')
+  // Validate advertised totals (unsafe integers, >10_000, smaller than the
+  // received page) without requiring a full-catalog dump. The public API now
+  // returns a homepage slice plus `catalogTotal`, so failing the scan here
+  // made Plugin market and one-click install return HTTP 502.
+  providerTotal(meta, raw.packages.length)
+  const total = items.length
   const fetchedAt = new Date().toISOString()
   const snapshots: CatalogSnapshot[] = []
   for (let offset = 0; offset < items.length; offset += 100) {
@@ -453,7 +471,7 @@ export const dsh1024StoreAdapter: CatalogAdapter = {
     const query = { ...queryValue, limit: Math.min(queryValue.limit ?? 50, 50) }
     const expectedOrigin = new URL(DSH_1024STORE_ENDPOINT).origin
     const response = await context.http.getJson(
-      DSH_1024STORE_ENDPOINT,
+      dsh1024StoreRegistryUrl(query),
       context.signal,
       { allowedOrigin: expectedOrigin },
     )
@@ -466,7 +484,7 @@ export const dsh1024StoreAdapter: CatalogAdapter = {
   async scanCatalog(query, context) {
     const expectedOrigin = new URL(DSH_1024STORE_ENDPOINT).origin
     const response = await context.http.getJson(
-      DSH_1024STORE_ENDPOINT,
+      dsh1024StoreRegistryUrl(query),
       context.signal,
       { allowedOrigin: expectedOrigin },
     )

@@ -352,7 +352,7 @@ describe('1024Store adapter', () => {
     expect(second.page).toEqual({ total: 2 })
   })
 
-  it('does not silently treat a truncated 1024Store response as the complete catalog', async () => {
+  it('pages a published 1024Store homepage slice without advertising the unpublished remainder', async () => {
     const packages = Array.from({ length: 51 }, (_, index) => ({
       ...rawCatalog.packages[0]!,
       id: `anywhere-labs/plugin-${index}`,
@@ -372,10 +372,10 @@ describe('1024Store adapter', () => {
     )
 
     expect(snapshot.items).toHaveLength(50)
-    expect(snapshot.page).toEqual({ nextCursor: '50', total: 7635 })
+    expect(snapshot.page).toEqual({ nextCursor: '50', total: 51 })
   })
 
-  it('fails a complete 1024Store scan when provider metadata says more items exist', async () => {
+  it('indexes a published 1024Store homepage slice when meta.total is larger', async () => {
     const packages = Array.from({ length: 51 }, (_, index) => ({
       ...rawCatalog.packages[0]!,
       id: `anywhere-labs/plugin-${index}`,
@@ -384,15 +384,49 @@ describe('1024Store adapter', () => {
     }))
     const http: CatalogHttpClient = {
       getJson: vi.fn(async () => ({
-        value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 7635 }, packages },
+        value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 7635, catalogTotal: 7635 }, packages },
         finalUrl: 'https://deepseek1024.com/api/v1/plugins',
       })),
     }
 
-    await expect(dsh1024StoreAdapter.scanCatalog!(
+    const snapshots = await dsh1024StoreAdapter.scanCatalog!(
       { limit: 100 },
       { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
-    )).rejects.toThrow(/provider total/u)
+    )
+    const items = snapshots.flatMap(snapshot => snapshot.items)
+
+    expect(http.getJson).toHaveBeenCalledWith(
+      'https://deepseek1024.com/api/v1/plugins',
+      expect.any(AbortSignal),
+      { allowedOrigin: 'https://deepseek1024.com' },
+    )
+    expect(items).toHaveLength(51)
+    expect(snapshots.every(snapshot => snapshot.page.total === 51)).toBe(true)
+  })
+
+  it('forwards q to the 1024Store registry search page', async () => {
+    const http: CatalogHttpClient = {
+      getJson: vi.fn(async () => ({
+        value: rawCatalog,
+        finalUrl: 'https://deepseek1024.com/api/v1/plugins?q=dsh-wecom',
+      })),
+    }
+
+    await dsh1024StoreAdapter.fetch(
+      { q: 'dsh-wecom' },
+      { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
+    )
+    await dsh1024StoreAdapter.scanCatalog!(
+      { q: 'dsh-wecom' },
+      { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
+    )
+
+    expect(http.getJson).toHaveBeenCalledTimes(2)
+    expect(http.getJson).toHaveBeenCalledWith(
+      'https://deepseek1024.com/api/v1/plugins?q=dsh-wecom',
+      expect.any(AbortSignal),
+      { allowedOrigin: 'https://deepseek1024.com' },
+    )
   })
 
   it('keeps the reviewed 1024Store adapter page size fixed at 50', async () => {
@@ -1020,6 +1054,62 @@ describe('catalog active-source reads', () => {
     expect(getJson).toHaveBeenCalledOnce()
     expect(results).toHaveLength(1)
     expect(results[0]?.snapshot?.items).toHaveLength(1)
+  })
+
+  it('merges a 1024Store provider search page into the cached homepage slice', async () => {
+    const homepage = {
+      ...rawCatalog.packages[0]!,
+      id: 'example/homepage-plugin',
+      name: 'homepage-plugin',
+      url: 'https://github.com/example/homepage-plugin',
+    }
+    const searched = {
+      ...rawCatalog.packages[0]!,
+      id: 'TtTRz/dsh-wecom',
+      name: 'dsh-wecom',
+      url: 'https://github.com/TtTRz/dsh-wecom',
+      installMethods: [{
+        kind: 'npm',
+        spec: 'dsh-wecom',
+        verification: 'verified',
+        code: 'repository_backlink',
+        requiresBuildAllowance: false,
+        revision: '1.2.3',
+      }],
+    }
+    const getJson = vi.fn(async (url: string) => {
+      if (url.includes('q=dsh-wecom')) {
+        return {
+          value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 1 }, packages: [searched] },
+          finalUrl: url,
+        }
+      }
+      return {
+        value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 9011 }, packages: [homepage] },
+        finalUrl: 'https://deepseek1024.com/api/v1/plugins',
+      }
+    })
+    const store = new MemoryCatalogSourceStore()
+    await store.save([source()])
+    const service = new DefaultCatalogService(store, { getJson })
+    const results = await service.fetch({ q: 'dsh-wecom' }, new AbortController().signal)
+    const items = results.flatMap(result => result.snapshot?.items ?? [])
+
+    expect(getJson).toHaveBeenCalledWith(
+      'https://deepseek1024.com/api/v1/plugins',
+      expect.any(AbortSignal),
+      expect.anything(),
+    )
+    expect(getJson).toHaveBeenCalledWith(
+      'https://deepseek1024.com/api/v1/plugins?q=dsh-wecom',
+      expect.any(AbortSignal),
+      expect.anything(),
+    )
+    expect(items.map(item => item.id)).toEqual(['TtTRz/dsh-wecom'])
+    expect(items[0]).toMatchObject({
+      package: { registry: 'npm', name: 'dsh-wecom' },
+      latestVersion: '1.2.3',
+    })
   })
 
   it('reuses only an unexpired complete index and reports explicit cache status', async () => {
