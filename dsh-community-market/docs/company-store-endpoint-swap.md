@@ -64,8 +64,12 @@ Store-side checklist + secrets-gated deploy (sibling repo):
 ## CI note (this fork)
 
 GitHub Actions lists workflow `CI` as `active`, but the Actions API still shows
-**0 workflow runs** and `workflow_dispatch` returns **403** for this integration.
-Only Cursor Bugbot / Approval Agent check-suite jobs appear on PR #19. An org/repo
-owner must enable or approve Actions for
-`hopefullstack-collab/deepseek-harness-desktop` before `ci.yml` can gate the PR —
-this cannot be fixed from a write-limited agent token.
+**0 workflow runs** and `workflow_dispatch` / permissions APIs return **403** for
+this integration. Only Cursor Bugbot / Approval Agent check-suite jobs appear on
+PR #19.
+
+**Owner must enable Actions** — step-by-step:
+[`company-store-ci-note.md`](./company-store-ci-note.md).
+
+Until a green `CI` run appears, local `yarn vitest run` after assemble/wiring/docs
+is the automated evidence for this PR.
