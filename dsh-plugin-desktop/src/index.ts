@@ -50,6 +50,11 @@ import {
 } from './desktop-settings-route.ts'
 import type {} from './desktop-settings-controller.ts'
 import { desktopBootRecoveryInjections } from './desktop-boot-recovery.ts'
+import {
+  registerResponseLanguage,
+  RESPONSE_LANGUAGE_SETTINGS_NAMESPACE,
+  ResponseLanguageSettingsSchema,
+} from './response-language.ts'
 import type { DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 import { DESKTOP_DEFAULT_WEB_PORT } from './desktop-port.ts'
@@ -170,6 +175,16 @@ export function apply(ctx: Context, config: Config): void {
       },
     },
   )
+  const responseLanguageSettings = ctx.settings.register(
+    RESPONSE_LANGUAGE_SETTINGS_NAMESPACE,
+    ResponseLanguageSettingsSchema,
+  )
+  ctx.inject(['systemPrompt'], promptCtx => {
+    registerResponseLanguage(
+      promptCtx,
+      () => responseLanguageSettings.get().responseLanguage,
+    )
+  })
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   ctx.on('webserver/index-inject', table => {
     table.push(...desktopBootRecoveryInjections())

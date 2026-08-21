@@ -18,6 +18,11 @@ export interface DesktopShellSettings {
   readonly logLevel: 'debug' | 'info' | 'warn' | 'error'
 }
 
+/** Browser view of the Host `dsh-desktop-agent` settings namespace. */
+export interface DesktopAgentSettings {
+  readonly responseLanguage: 'auto' | 'zh' | 'en'
+}
+
 /** Browser view of the Host `dsh-desktop-notifications` settings namespace. */
 export interface DesktopNotificationSettings {
   readonly enabled: boolean
@@ -34,6 +39,7 @@ export interface DesktopSettingsSectionInjected {
   readonly initialMode: DesktopShellSettings['mode']
   readonly desktopSettings: SettingsScope<DesktopShellSettings>
   readonly notificationSettings: SettingsScope<DesktopNotificationSettings>
+  readonly agentSettings: SettingsScope<DesktopAgentSettings>
 }
 
 /** Renderer-composed props for the official settings section entry. */
@@ -43,7 +49,7 @@ export type DesktopSettingsSectionProps =
   & InjectFace<DesktopSettingsSectionInjected>
 
 type Translate = DesktopSettingsSectionProps['t']
-type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-market' | 'mode' | 'notification'
+type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-market' | 'mode' | 'response-language' | 'notification'
 type RestartState = 'none' | 'restarting' | 'required'
 
 function useScope<T>(scope: SettingsScope<T>) {
@@ -162,6 +168,16 @@ const MARKET_OPTIONS: readonly {
   { id: 'dsh-market', title: 'dshMarket', body: 'dshMarketBody' },
 ]
 
+const RESPONSE_LANGUAGE_OPTIONS: readonly {
+  id: DesktopAgentSettings['responseLanguage']
+  title: DesktopSettingsLocaleKey
+  body: DesktopSettingsLocaleKey
+}[] = [
+  { id: 'auto', title: 'responseLanguageAuto', body: 'responseLanguageAutoBody' },
+  { id: 'zh', title: 'responseLanguageChinese', body: 'responseLanguageChineseBody' },
+  { id: 'en', title: 'responseLanguageEnglish', body: 'responseLanguageEnglishBody' },
+]
+
 const COMMUNITY_MARKET_URL = 'https://github.com/anywhere-labs/deepseek-harness-desktop/tree/master/dsh-community-market'
 const DSH_MARKET_URL = 'https://github.com/dsh-market/dsh-market'
 const AWESOME_DSH_PLUGIN_URL = 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin'
@@ -194,9 +210,11 @@ export function DesktopSettingsSection({
   initialMode,
   desktopSettings,
   notificationSettings,
+  agentSettings,
 }: DesktopSettingsSectionProps) {
   const desktop = useScope(desktopSettings)
   const notifications = useScope(notificationSettings)
+  const agent = useScope(agentSettings)
   const [view, setView] = useState<DesktopSettingsView>()
   const [profileName, setProfileName] = useState('')
   const [busy, setBusy] = useState<BusyOperation | undefined>('load')
@@ -240,7 +258,9 @@ export function DesktopSettingsSection({
   const requestRestart = (): void => { setRestart('restarting') }
   const settingsWritable = desktop.status === 'ready' && desktop.writable
   const notificationsWritable = notifications.status === 'ready' && notifications.writable
+  const agentWritable = agent.status === 'ready' && agent.writable
   const mode = desktop.value?.mode ?? initialMode
+  const responseLanguage = agent.value?.responseLanguage ?? 'auto'
   const notificationValue = notifications.value ?? {
     enabled: true,
     notifyOnTurnCompletion: true,
@@ -293,6 +313,10 @@ export function DesktopSettingsSection({
 
   const setNotification = (field: keyof DesktopNotificationSettings, checked: boolean): void => {
     void run('notification', async () => { await notificationSettings.set(field, checked) })
+  }
+
+  const setResponseLanguage = (next: DesktopAgentSettings['responseLanguage']): void => {
+    void run('response-language', async () => { await agentSettings.set('responseLanguage', next) })
   }
 
   return (
@@ -453,6 +477,27 @@ export function DesktopSettingsSection({
             action={() => { setMode('advanced') }}
             status={mode === 'advanced' ? t('selected') : undefined}
           />
+        </div>
+      </section>
+
+      <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-response-language-title">
+        <div>
+          <h3 id="dsh-desktop-response-language-title">{t('responseLanguageTitle')}</h3>
+          <p className="dshDesktopSettingsGroupIntro">{t('responseLanguageIntro')}</p>
+        </div>
+        {agent.status === 'unavailable' && <p className="dshDesktopSettingsNotice">{t('readOnly')}</p>}
+        <div className="dshDesktopSettingsList" role="radiogroup" aria-labelledby="dsh-desktop-response-language-title">
+          {RESPONSE_LANGUAGE_OPTIONS.map(option => (
+            <Choice
+              key={option.id}
+              title={t(option.title)}
+              body={t(option.body)}
+              selected={responseLanguage === option.id}
+              disabled={!agentWritable || busy !== undefined}
+              action={() => { setResponseLanguage(option.id) }}
+              status={responseLanguage === option.id ? t('selected') : undefined}
+            />
+          ))}
         </div>
       </section>
 
