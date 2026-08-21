@@ -1,1 +1,0 @@
-@file:///tmp/cursor-mcp-inbox/create_or_update_file.json
