@@ -13,6 +13,8 @@ const hooks = vi.hoisted(() => ({
       'dsh-plugin-desktop/profile': '/current/dsh-plugin-desktop/lib/profile.js',
       'dsh-plugin-desktop/client': '/current/dsh-plugin-desktop/lib/client.js',
       '@deepseek-ai/dsh-web-app': '/current/node_modules/@deepseek-ai/dsh-web-app/lib/index.js',
+      'dshmarket': '/current/node_modules/dshmarket/lib/index.js',
+      'dsh-community-market': '/current/node_modules/dsh-community-market/lib/index.js',
     }
     const resolved = exports[specifier]
     if (resolved !== undefined) return resolved
@@ -134,6 +136,21 @@ describe('installProfilePackageResolver', () => {
     })
     expect(nextResolve).not.toHaveBeenCalled()
     expect(hooks.desktopResolve).toHaveBeenCalledWith('@deepseek-ai/dsh-web-app')
+  })
+
+  it.each([
+    ['dshmarket', 'file:///current/node_modules/dshmarket/lib/index.js'],
+    ['dsh-community-market', 'file:///current/node_modules/dsh-community-market/lib/index.js'],
+  ])('resolves Desktop-owned provider %s without consulting the profile', (specifier, url) => {
+    installProfilePackageResolver('file:///C:/Users/test/profile/package.json')
+    const nextResolve = vi.fn()
+
+    expect(hooks.resolve?.(
+      specifier,
+      { parentURL: import.meta.resolve('@deepseek-ai/cordis-plugin-loader') },
+      nextResolve,
+    )).toEqual({ shortCircuit: true, url })
+    expect(nextResolve).not.toHaveBeenCalled()
   })
 
   it('fails closed when the current Desktop lacks an upstream package export', () => {

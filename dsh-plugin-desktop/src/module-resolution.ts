@@ -7,6 +7,7 @@ const LOADER_ENTRY_URL = import.meta.resolve('@deepseek-ai/cordis-plugin-loader'
 const DESKTOP_ENTRY_URL = new URL('../lib/index.js', import.meta.url).href
 const DESKTOP_PACKAGE_NAME = 'dsh-plugin-desktop'
 const UPSTREAM_PACKAGE_SCOPE = '@deepseek-ai/'
+const DESKTOP_PROVIDER_PACKAGES = new Set(['dsh-community-market', 'dshmarket'])
 const DESKTOP_REQUIRE = createRequire(DESKTOP_ENTRY_URL)
 
 /** Return whether a Loader request needs Node package resolution. */
@@ -19,7 +20,8 @@ function resolveDesktopSpecifier(specifier: string): string | undefined {
   const isDesktopPackage =
     specifier === DESKTOP_PACKAGE_NAME || specifier.startsWith(`${DESKTOP_PACKAGE_NAME}/`)
   const isUpstreamPackage = specifier.startsWith(UPSTREAM_PACKAGE_SCOPE)
-  if (!isDesktopPackage && !isUpstreamPackage) return
+  const isDesktopProvider = DESKTOP_PROVIDER_PACKAGES.has(specifier)
+  if (!isDesktopPackage && !isUpstreamPackage && !isDesktopProvider) return
   const resolved = DESKTOP_REQUIRE.resolve(specifier)
   return pathToFileURL(resolved).href
 }
