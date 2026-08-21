@@ -1,15 +1,28 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type convergence only: locale/theme declarations expose settings slot rows.
-// The desktop client does not load or register a settings surface.
+// Locale/theme/settings declarations expose settings slot rows used by the worker pack.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { applyAdvancedShell } from './advanced-shell.ts'
 import { startRendererBootReporter } from './boot-health.ts'
 import { installDesktopDirectoryPickerBridge, requestDesktopDirectoryValidation } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { installWorkspaceFolderDrop } from './workspace-folder-drop.ts'
+import { en, zh, type DesktopLocaleKey } from './locales.ts'
+import { McpSettingsTab } from './McpSettingsTab.tsx'
+import { DESKTOP_MCP_SETTINGS_KEY, type DesktopMcpSettings } from '../mcp-settings.ts'
+import { WorkerPackTab } from './WorkerPackTab.tsx'
+import { installWorkerStyles } from './worker-styles.ts'
+
+const DESKTOP_CLIENT_LOCALE_NS = 'dsh-desktop'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    'dsh-desktop': DesktopLocaleKey
+  }
+}
 
 export { applyAdvancedShell } from './advanced-shell.ts'
 export {
@@ -54,5 +67,34 @@ export function apply(ctx: ClientContext): void {
       'dsh-plugin-desktop: native directory picker bridge',
     )
   }
+  ctx.inject(['locale', 'settingsScope'], (settingsCtx) => {
+    settingsCtx.effect(
+      () => settingsCtx.locale.register(DESKTOP_CLIENT_LOCALE_NS, { zh, en }),
+      'dsh-plugin-desktop: worker pack dictionaries',
+    )
+    settingsCtx.effect(
+      () => installWorkerStyles(),
+      'dsh-plugin-desktop: worker pack styles',
+    )
+    settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
+      name: 'settings.plugins.tab',
+      id: 'desktop-worker-pack',
+      order: 15,
+      label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('workerTab'),
+      locale: DESKTOP_CLIENT_LOCALE_NS,
+    }, WorkerPackTab))
+    settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
+      name: 'settings.plugins.tab',
+      id: 'desktop-mcp',
+      order: 30,
+      label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('mcpTab'),
+      locale: DESKTOP_CLIENT_LOCALE_NS,
+      inject: () => ({
+        scope: settingsCtx.settingsScope.bind<DesktopMcpSettings>({
+          namespace: DESKTOP_MCP_SETTINGS_KEY,
+        }) as SettingsScope<DesktopMcpSettings>,
+      }),
+    }, McpSettingsTab))
+  })
   if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)
 }

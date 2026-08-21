@@ -117,6 +117,10 @@ describe('published package surface', () => {
       types: './lib/types/notifications.d.ts',
       default: './lib/notifications.js',
     })
+    expect(manifest.exports).toHaveProperty('./mcp', {
+      types: './lib/types/mcp.d.ts',
+      default: './lib/mcp.js',
+    })
     expect(manifest.exports).not.toHaveProperty('./windows-acl-runner')
     expect(manifest.exports).not.toHaveProperty('./desktop-cli')
     expect(manifest.exports).not.toHaveProperty('./desktop-runtime-environment')
@@ -129,6 +133,8 @@ describe('published package surface', () => {
       platform: 'web',
       inject: [
         '@deepseek-ai/dsh-client-runtime',
+        '@deepseek-ai/dsh-client-locale',
+        '@deepseek-ai/dsh-client-ui-settings',
         '@deepseek-ai/dsh-client-ui-theme',
       ],
     })
@@ -140,6 +146,7 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/mcp')
   })
 
   it('keeps unaudited marketplace packages out of the published runtime', () => {
@@ -318,6 +325,7 @@ describe('published package surface', () => {
     expect(config).toContain("terminal: 'src/terminal.ts'")
     expect(config).toContain("'update-download': 'src/update-download.ts'")
     expect(config).toContain("updates: 'src/updates.ts'")
+    expect(config).toContain("mcp: 'src/mcp.ts'")
   })
 
   it('installs Host command PATHs after the launch snapshot and before profile boot', () => {
@@ -671,7 +679,7 @@ describe('published package surface', () => {
       [info.width - 1, 0],
       [0, info.height - 1],
       [info.width - 1, info.height - 1],
-    ]
+    ] as const
     for (const [x, y] of corners) {
       expect(data[(y * info.width + x) * 4 + 3]).toBe(0)
     }

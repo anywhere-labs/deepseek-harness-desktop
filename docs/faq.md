@@ -36,6 +36,8 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 可以。AI Buddy 使用官方 Harness 插件体系。日常安装优先打开 **设置 > 插件** 中的**插件市场**标签，或使用侧边栏入口；也可以从托盘打开 AI Buddy Terminal，运行 `dsh plugin add`、`dsh plugin remove` 和 `dsh plugin update`。命令和市场操作默认作用于当前激活的 profile，插件变更后需要重启 Desktop。目录收录不等于安全审核。
 
+想要更接近 Codex 的工作台时，打开 **设置 > 插件 > 工作套件**：默认 Agent 预设是 Code，推荐的工作区插件需从市场安装。外部 MCP 服务器在 **MCP** 标签里用官方客户端配置，不会预置令牌。
+
 ## Desktop profile 和已有 web profile 会自动同步吗？
 
 不会自动复制插件。每个 profile 都有自己的 bundle 和依赖组合；切换 profile 后，终端中的默认插件命令会作用于当前 profile，也可以使用 `--profile <name>` 显式指定目标。

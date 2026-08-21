@@ -2401,7 +2401,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-mcp-client@npm:^0.1.1-rc.1":
+"@deepseek-ai/dsh-mcp-client@npm:0.1.1-rc.1, @deepseek-ai/dsh-mcp-client@npm:^0.1.1-rc.1":
   version: 0.1.1-rc.1
   resolution: "@deepseek-ai/dsh-mcp-client@npm:0.1.1-rc.1"
   dependencies:
@@ -7309,6 +7309,7 @@ __metadata:
     "@deepseek-ai/dsh-launch-environment": "npm:0.1.1-rc.1"
     "@deepseek-ai/dsh-llm": "npm:0.1.1-rc.1"
     "@deepseek-ai/dsh-llm-retry": "npm:0.1.1-rc.1"
+    "@deepseek-ai/dsh-mcp-client": "npm:0.1.1-rc.1"
     "@deepseek-ai/dsh-message-feedback": "npm:0.1.1-rc.1"
     "@deepseek-ai/dsh-output-retention": "npm:0.1.1-rc.1"
     "@deepseek-ai/dsh-permission-presets": "npm:0.1.1-rc.1"

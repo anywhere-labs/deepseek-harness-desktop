@@ -35,6 +35,7 @@ import {
   desktopPluginBundleMutable,
   readDesktopDisabledBundles,
 } from './desktop-plugins.ts'
+import { desktopAgentPresetConfig } from './worker-pack.ts'
 
 /** Persistent profile managed by the desktop launcher and the ordinary dsh plugin command. */
 export const DESKTOP_PROFILE_NAME = 'desktop'
@@ -495,7 +496,7 @@ export function prepareDesktopProfile(
   const presets = rows.get(AGENT_PRESETS_ROW_ID)
   if (presets !== undefined) {
     const config = {
-      ...rowConfig(presets),
+      ...desktopAgentPresetConfig(rowConfig(presets)),
       roots: [{ path: shippedPresetRoot(), trust: 'system' }],
     }
     if (platform === 'win32'

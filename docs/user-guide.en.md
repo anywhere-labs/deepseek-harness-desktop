@@ -32,6 +32,14 @@ dsh-desktop:
 
 The port must be an integer from `0` through `65535`. Changing it performs an orderly restart, and the service remains bound only to `127.0.0.1`. If another program already uses a fixed port, Desktop cannot start; release that port or change the setting back to `0` or another available port.
 
+## Worker pack
+
+New sessions default to the upstream **Code** (PTC) preset: standard file, terminal, search, skill, plan, subagent, and Ralph tools, plus TypeScript Code Mode presentation. You can switch back to `standard` in settings. Windows still hides the incompatible `minimal` preset.
+
+**Settings > Plugins > Worker pack** lists recommended workspace plugins such as `dsh-better-sidebar` and `dsh-context`. They are not preinstalled, and catalog listing is not a security review. The plugin market does not preselect a source; the Worker pack page can add and select DSH 1024Store in one click, then search those npm names under **Plugin market**. Restart AI Buddy after installing or enabling plugins.
+
+External MCP servers use the official `@deepseek-ai/dsh-mcp-client`. Add stdio or HTTP servers under **Settings > Plugins > MCP**. AI Buddy does not ship tokens or default child processes. Saving also requires a restart.
+
 ## Plugin management
 
 Plugins are extensions that add capabilities to DSH, such as models, tools, interfaces, and workflows. AI Buddy uses the same plugin system as official Harness, so official plugins install and work directly; multiple plugins follow the same conventions and can be installed and used together.
@@ -82,8 +90,9 @@ After confirmation, the app first opens the native **Save Update Installer** dia
   If the npm desktop launcher is installed, `dsh-desktop --export-diagnostics` provides the same archive. This command does not start Host, profiles, plugins, or a window. It prints the absolute diagnostics ZIP path when complete.
 - **Diagnostic archive contents**: recent application logs, local Crashpad `.dmp` files, the active-run marker, and `system-info.txt`. System information records Desktop, Electron, Node, platform, and architecture versions. Recognized credentials are masked in logs, but local paths, workspace IDs, session IDs, and crash-time memory fragments may remain. Review the archive before public upload and send sensitive dumps only through a trusted channel.
 - **The window disappeared**: check the system tray; closing the window is not quitting.
-- **A plugin is missing**: confirm the command or marketplace action targeted the intended profile and restart the application.
+- **A plugin is missing**: confirm the command or marketplace action targeted the intended profile and restart the application. Recommended worker-pack community plugins also need a restart before they enter the Loader composition.
 - **The plugin marketplace will not open**: confirm you are in the AI Buddy desktop composition. The market lives under **Settings > Plugins**; the sidebar button opens the same surface.
+- **MCP tools do not appear**: confirm the server is enabled, the command or URL is reachable, and you restarted after saving. AI Buddy does not preinstall GitHub or any other token-bearing server.
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.
 - **No update notification appeared**: background failures are silent; use the manual tray check to see the result.
 
