@@ -70,8 +70,8 @@
     "verify:loader": "node scripts/verify-client-loader.mjs",
     "check": "node scripts/verify-docs.mjs && yarn run build && node scripts/verify-package-exports.mjs && yarn run verify:loader && yarn run typecheck && yarn run test",
     "prepack": "yarn run check",
-    "pretest": "node ./assemble-default-service.mjs && node ./apply-company-store-wiring.mjs",
-    "prepare": "node ./assemble-default-service.mjs && node ./apply-company-store-wiring.mjs"
+    "pretest": "node ./assemble-default-service.mjs && node ./apply-company-store-wiring.mjs && node ./apply-company-store-docs.mjs",
+    "prepare": "node ./assemble-default-service.mjs && node ./apply-company-store-wiring.mjs && node ./apply-company-store-docs.mjs"
   },
   "dependencies": {
     "ajv": "^8.20.0",
@@ -114,25 +114,63 @@
     "react": "18.3.1"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-agent": { "optional": true },
-    "@deepseek-ai/dsh-agent-presets": { "optional": true },
-    "@deepseek-ai/dsh-api-gateway": { "optional": true },
-    "@deepseek-ai/dsh-api-remotes": { "optional": true },
-    "@deepseek-ai/dsh-brand": { "optional": true },
-    "@deepseek-ai/dsh-client-connection": { "optional": true },
-    "@deepseek-ai/dsh-client-ui-theme": { "optional": true },
-    "@deepseek-ai/dsh-commands": { "optional": true },
-    "@deepseek-ai/dsh-cordis-host-runner": { "optional": true },
-    "@deepseek-ai/dsh-credentials": { "optional": true },
-    "@deepseek-ai/dsh-goal": { "optional": true },
-    "@deepseek-ai/dsh-host-plugin-inventory": { "optional": true },
-    "@deepseek-ai/dsh-invariants": { "optional": true },
-    "@deepseek-ai/dsh-llm": { "optional": true },
-    "@deepseek-ai/dsh-message-feedback": { "optional": true },
-    "@deepseek-ai/dsh-session": { "optional": true },
-    "@deepseek-ai/dsh-session-persistence": { "optional": true },
-    "@deepseek-ai/dsh-typert-protocol": { "optional": true },
-    "@deepseek-ai/dsh-typert-registry": { "optional": true }
+    "@deepseek-ai/dsh-agent": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent-presets": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-api-gateway": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-api-remotes": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-brand": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-connection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-theme": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-commands": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-cordis-host-runner": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-credentials": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-goal": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-host-plugin-inventory": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-invariants": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-message-feedback": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-persistence": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-registry": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.1",
