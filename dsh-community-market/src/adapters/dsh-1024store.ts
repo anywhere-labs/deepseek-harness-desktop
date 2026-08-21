@@ -406,8 +406,10 @@ function buildCatalogScanSnapshots(
     ? new Date(generatedAt).toISOString()
     : undefined
   const providerRevision = plainText(meta.revision, 160, '') || undefined
+  // A provider may serve fewer items than its declared total (for example a
+  // truncated first page without cursor pagination). Report the provider total
+  // so the Host can mark the scan partial instead of failing the whole scan.
   const total = providerTotal(meta, raw.packages.length) ?? items.length
-  if (total !== items.length) throw new Error('1024Store scan did not reach the provider total')
   const fetchedAt = new Date().toISOString()
   const snapshots: CatalogSnapshot[] = []
   for (let offset = 0; offset < items.length; offset += 100) {

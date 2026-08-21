@@ -250,6 +250,17 @@ describe('MarketSettingsTab', () => {
     expect(readMarketCatalog).not.toHaveBeenCalled()
   })
 
+  it('shows a partial-catalog notice when the installable source is truncated', async () => {
+    vi.mocked(readMarketState).mockResolvedValue(enabledState)
+    vi.mocked(readMarketInstallable).mockResolvedValue(installableResponse([], firstSource, {
+      truncated: true,
+      providerTotal: 8165,
+    }))
+    render(<MarketSettingsTab {...({ t, readLocale: () => 'en' } as MarketSettingsTabProps)} />)
+
+    expect(await screen.findByText(en.installableTruncated.replace('{total}', '8165'))).toBeTruthy()
+  })
+
   it('loads the catalog when leaving the default Installable view for Discover', async () => {
     vi.mocked(readMarketState).mockResolvedValue(enabledState)
     vi.mocked(readMarketInstallable).mockResolvedValue(installableResponse([]))

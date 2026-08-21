@@ -539,6 +539,25 @@ describe('market install service', () => {
     expect(acknowledgeRecoveredInstall).not.toHaveBeenCalled()
   })
 
+  it('surfaces a truncated catalog scan in the installable metadata', async () => {
+    const profileDir = await createProfile()
+    const service = new MarketInstallService(
+      memoryScope().scope,
+      () => ({ name: 'web', dir: profileDir }),
+      runner(profileDir, []),
+      { verify: vi.fn(async () => verification) },
+    )
+    const index: CatalogFullIndex = {
+      ...fullIndex({ ...snapshotWithCandidates(2), page: { total: 300 } }, 'scan-truncated'),
+      truncated: true,
+    }
+    const installable = await service.listInstallable(index, new AbortController().signal)
+    expect(installable.metadata).toMatchObject({
+      truncated: true,
+      providerTotal: index.snapshots[0]?.page.total,
+    })
+  })
+
   it('returns the complete local catalog beyond the former 2048-candidate cap', async () => {
     const profileDir = await createProfile()
     const verifier = { verify: vi.fn(async () => verification) }
@@ -1054,6 +1073,7 @@ describe('market install Host routes', () => {
     } as unknown as MarketInstallService
     const desktopEvents: string[] = []
     const actions = {
+      openTerminalSupported: true,
       openTerminal: vi.fn(),
       requestRestart: vi.fn(async () => { desktopEvents.push('restart') }),
     }
@@ -1355,6 +1375,72 @@ describe('market install Host routes', () => {
     await expect(request(marketRoutes.operationExecute, 'POST', { previewId: 'disable_opaque_preview' }))
       .resolves.toMatchObject({ status: 200, body: { action: 'disable' } })
     expect(install.listInstallable).not.toHaveBeenCalled()
+    dispose()
+  })
+
+  it('refuses to open the terminal on a platform the desktop does not support', async () => {
+    type Handler = (req: any, res: any) => Promise<void>
+    const handlers = new Map<string, Handler>()
+    const ctx = {
+      logger: { error: vi.fn() },
+      webServer: {
+        port: 43_120,
+        register: vi.fn((route: { path: string; handler: Handler }) => {
+          handlers.set(route.path, route.handler)
+          return vi.fn()
+        }),
+      },
+    } as never
+    const settings = memoryScope()
+    const actions = {
+      openTerminalSupported: false,
+      openTerminal: vi.fn(),
+      requestRestart: vi.fn(async () => {}),
+    }
+    const dispose = registerMarketRoutes(
+      ctx as never,
+      settings.scope,
+      { get: () => undefined },
+      { get: () => actions },
+      { get: () => undefined },
+    )
+    const request = async (path: string, method: string, body?: unknown) => {
+      const req = Object.assign(new EventEmitter(), {
+        method,
+        url: path,
+        headers: {
+          host: '127.0.0.1:43120',
+          origin: 'http://127.0.0.1:43120',
+          'sec-fetch-site': 'same-origin',
+        },
+        socket: { remoteAddress: '127.0.0.1' },
+        destroy: vi.fn(),
+      })
+      let responseBody = ''
+      const res = Object.assign(new EventEmitter(), {
+        destroyed: false,
+        writableEnded: false,
+        statusCode: 0,
+        setHeader: vi.fn(),
+        removeHeader: vi.fn(),
+        end: vi.fn((value?: string) => {
+          responseBody = value ?? ''
+          res.writableEnded = true
+        }),
+      })
+      const pending = handlers.get(path)!(req, res)
+      if (body !== undefined) {
+        queueMicrotask(() => {
+          req.emit('data', Buffer.from(JSON.stringify(body)))
+          req.emit('end')
+        })
+      }
+      await pending
+      return { status: res.statusCode, body: JSON.parse(responseBody) as Record<string, unknown> }
+    }
+
+    await expect(request(marketRoutes.openTerminal, 'POST', {})).resolves.toMatchObject({ status: 503 })
+    expect(actions.openTerminal).not.toHaveBeenCalled()
     dispose()
   })
 

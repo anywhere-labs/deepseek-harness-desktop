@@ -15,6 +15,22 @@ import {
   WINDOWS_TITLEBAR_HEIGHT,
 } from '../src/window-chrome.ts'
 
+// `apply` now wires in the close-behavior row, whose component pulls the full
+// primitives bundle; its katex CSS import node vitest cannot load, so stub the
+// package the same way the close-behavior settings spec does. This spec never
+// exercises the row, so the stub only needs the named exports to resolve.
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
+  Menu: () => null,
+  IconChevronDownOutline14: () => null,
+}))
+// The row store factory imports the Cordis browser runtime
+// (`window.__ModuleLoader__`), which node vitest cannot load; this spec only
+// calls `apply` with an empty environment, so `defineStore` never runs and the
+// stub is only needed to resolve the store module's import.
+vi.mock('@deepseek-ai/dsh-client-runtime/client', () => ({
+  defineStore: () => ({ getState: () => undefined, subscribe: () => () => {} }),
+}))
+
 describe('desktop client environment', () => {
   it('does not activate desktop effects for an ordinary browser URL', () => {
     vi.stubGlobal('window', { location: { search: '' } })

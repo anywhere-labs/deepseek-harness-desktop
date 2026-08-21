@@ -221,6 +221,12 @@ corepack.cmd yarn dist:win-portable
 
 `yarn dist:mac-smoke` 会在原生 macOS 宿主机上构建一个未签名的 universal DMG，同一个安装包可以在 Intel 和 Apple Silicon Mac 上原生运行。该命令拒绝非 macOS 宿主，并在打包前运行完整产品 gate：仓库布局与社区契约检查、Market 的 build 与 check，然后再运行 Desktop build、全部 TypeScript compiler face、完整 unit-test suite、runtime-closure 验证、CLI/Loader/profile headless smoke 与 license audit；其中包括对 macOS runner 上已安装的每种受支持 shell 执行真实 login-shell 测试。随后它会在不接触任何签名材料的情况下打包，挂载 DMG，并检查属性列表、主程序执行权限、`x86_64` 与 `arm64` 两个架构切片，以及 `app.asar`。该命令与 `dist:win` 的密钥纪律一致：剥离 Electron Builder 能识别的全部 macOS 签名与公证变量、设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`、关闭 notarization，且从不发布。产物没有 Developer ID 签名，因此 Gatekeeper 会在其他机器上拦截它；它的存在是为了让打包回归在人工发布之前就在 CI 中失败。签名并公证的 universal 正式发布仍是在持有凭证的 macOS 机器上执行 `yarn dist:mac`，产物写入 `dsh-plugin-desktop/dist/mac-release/`。
 
+### Linux amd64 安装包
+
+`yarn dist:linux` 会在原生 Linux 宿主机上构建未签名的 amd64 deb、rpm 与 AppImage。与 macOS smoke 类似，它拒绝非 Linux 或非 x64 宿主，运行完整产品 gate（仓库布局与社区契约检查、Market 的 build 与 check，再运行 Desktop build、全部 TypeScript compiler face、完整 unit-test suite、runtime-closure 验证，以及 CLI/Loader/profile headless smoke），随后在不接触签名材料的情况下打包，设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，且从不发布。产物 `DSH-Desktop-<version>-amd64.deb`、`DSH-Desktop-<version>-x86_64.rpm` 与 `DSH-Desktop-<version>-x86_64.AppImage` 写入 `dsh-plugin-desktop/dist/linux/`，`verify-linux-package.ts` 会校验每个归档头与解压后的 ELF 可执行文件 `dsh-plugin-desktop/dist/linux/linux-unpacked/dsh-desktop`。rpm 目标需要系统 `rpmbuild` 可执行文件（`rpm` 包），CI 任务会在打包前安装它；本地构建 rpm 时需自行安装。产物首先面向 amd64，与 Windows x64 安装包对齐；arm64 与 snap 不在范围内。
+
+使用 `sudo dpkg -i DSH-Desktop-<version>-amd64.deb`（Debian/Ubuntu）或 `sudo rpm -i DSH-Desktop-<version>-x86_64.rpm`（Fedora/RHEL）安装，桌面入口会从应用菜单启动 `dsh-desktop` 二进制。AppImage 执行 `chmod +x DSH-Desktop-<version>-x86_64.AppImage` 后可直接运行，无需安装。Linux 仅运行兼容模式，因此窗口保留操作系统边框与官方 Web 界面。登录 shell 的 `PATH` 恢复与分层启动环境快照已覆盖打包后的 Linux 启动。`yarn package:dir` 生成的解压目录也可以免安装直接运行 `dist/linux/linux-unpacked/dsh-desktop`。产物未签名，部分发行版可能提示未知发布者。
+
 ## 模型体验
 
 无。desktop package 只改变应用组合与原生呈现，不增加任何模型可见的指令、工具、事件或请求字段。

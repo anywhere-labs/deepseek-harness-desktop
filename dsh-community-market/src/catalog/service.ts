@@ -94,6 +94,7 @@ function cachedScanView(entry: CatalogFullIndexCacheEntry, cacheStatus: 'fresh' 
     scannedAt: new Date(entry.scannedAt).toISOString(),
     expiresAt: new Date(entry.expiresAt).toISOString(),
     ...(entry.providerRevision === undefined ? {} : { providerRevision: entry.providerRevision }),
+    ...(entry.truncated === true ? { truncated: true } : {}),
     cacheStatus,
     ...(entry.locale === undefined ? {} : { locale: entry.locale }),
     scanKey: entry.scanKey,
@@ -144,7 +145,7 @@ function sortCatalogItems(items: readonly CatalogItem[], query: CatalogQuery): r
 function validateCompleteCatalogScan(
   source: LocalSourceRecord,
   values: readonly CatalogSnapshot[],
-): { readonly snapshots: readonly CatalogSnapshot[]; readonly providerRevision?: string } {
+): { readonly snapshots: readonly CatalogSnapshot[]; readonly truncated: boolean; readonly providerRevision?: string } {
   if (values.length > MAX_CATALOG_PAGES) throw new Error('catalog scan exceeded the page limit')
   const snapshots: CatalogSnapshot[] = []
   const itemIds = new Set<string>()
@@ -181,12 +182,16 @@ function validateCompleteCatalogScan(
     }
     snapshots.push(snapshot)
   }
-  if (expectedTotal !== undefined && expectedTotal !== itemCount) {
-    throw new Error('catalog scan did not reach the provider total')
+  if (expectedTotal !== undefined && expectedTotal < itemCount) {
+    throw new Error('catalog scan provider total is inconsistent')
   }
+  // A provider may serve fewer items than its declared total. Keep the scan
+  // usable but mark it truncated so installable results surface a partial list.
+  const truncated = expectedTotal !== undefined && expectedTotal > itemCount
   const providerRevision = revisions.values().next().value as string | undefined
   return {
     snapshots,
+    truncated,
     ...(providerRevision === undefined ? {} : { providerRevision }),
   }
 }
@@ -225,6 +230,8 @@ export interface CatalogFullIndex {
   readonly expiresAt: string
   readonly providerRevision?: string
   readonly cacheStatus: 'fresh' | 'cached'
+  /** Source served fewer items than its declared total; the scan is partial. */
+  readonly truncated?: boolean
   readonly locale?: string
   /** Opaque identity shared only between the Catalog and install verifier caches. */
   readonly scanKey: string
@@ -275,6 +282,7 @@ interface CatalogFullIndexCacheEntry {
   readonly scannedAt: number
   readonly expiresAt: number
   readonly providerRevision?: string
+  readonly truncated?: boolean
   readonly scanKey: string
 }
 
@@ -617,6 +625,7 @@ export class DefaultCatalogService implements CatalogService {
           scannedAt,
           expiresAt: scannedAt + this.catalogScanCacheTtlMs,
           ...(complete.providerRevision === undefined ? {} : { providerRevision: complete.providerRevision }),
+          ...(complete.truncated ? { truncated: true } : {}),
           scanKey: randomUUID(),
         }
         this.catalogScanCache.set(key, entry)

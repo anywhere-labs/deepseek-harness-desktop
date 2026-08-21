@@ -375,7 +375,7 @@ describe('1024Store adapter', () => {
     expect(snapshot.page).toEqual({ nextCursor: '50', total: 7635 })
   })
 
-  it('fails a complete 1024Store scan when provider metadata says more items exist', async () => {
+  it('keeps a truncated 1024Store scan usable and reports the provider total', async () => {
     const packages = Array.from({ length: 51 }, (_, index) => ({
       ...rawCatalog.packages[0]!,
       id: `anywhere-labs/plugin-${index}`,
@@ -389,10 +389,14 @@ describe('1024Store adapter', () => {
       })),
     }
 
-    await expect(dsh1024StoreAdapter.scanCatalog!(
+    const snapshots = await dsh1024StoreAdapter.scanCatalog!(
       { limit: 100 },
       { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
-    )).rejects.toThrow(/provider total/u)
+    )
+
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0]?.page.total).toBe(7635)
+    expect(snapshots[0]?.items.length).toBeLessThan(7635)
   })
 
   it('keeps the reviewed 1024Store adapter page size fixed at 50', async () => {
@@ -1034,6 +1038,27 @@ describe('catalog active-source reads', () => {
 
     expect(first).toMatchObject({ cacheStatus: 'fresh', providerRevision: 'sha256:fixture' })
     expect(second).toMatchObject({ cacheStatus: 'cached', scanKey: first?.scanKey })
+    expect(getJson).toHaveBeenCalledOnce()
+  })
+
+  it('marks a scan partial when the provider reports more items than it served', async () => {
+    const store = new MemoryCatalogSourceStore()
+    await store.save([source()])
+    const packages = Array.from({ length: 2 }, (_, index) => ({
+      ...rawCatalog.packages[0]!,
+      id: `anywhere-labs/plugin-${index}`,
+      name: `plugin-${index}`,
+      url: `https://github.com/anywhere-labs/plugin-${index}`,
+    }))
+    const getJson = vi.fn().mockResolvedValueOnce({
+      value: { ...rawCatalog, meta: { ...rawCatalog.meta, total: 300 }, packages },
+      finalUrl: 'https://deepseek1024.com/api/v1/plugins',
+    })
+    const service = new DefaultCatalogService(store, { getJson })
+
+    const index = await service.scanCatalog(new AbortController().signal)
+
+    expect(index).toMatchObject({ truncated: true })
     expect(getJson).toHaveBeenCalledOnce()
   })
 

@@ -14,6 +14,9 @@ export type DesktopThemeSource = 'system' | 'light' | 'dark'
 /** Locale identifiers shared by the Web client and native desktop tray. */
 export type DesktopLocale = 'zh' | 'en'
 
+/** Close-button behavior selected through desktop settings. */
+export type DesktopCloseBehavior = 'tray' | 'quit'
+
 /** Window values resolved from the desktop-shell Cordis row. */
 export interface DesktopWindowConfig {
   /** Native presentation mode selected before BrowserWindow construction. */
@@ -133,6 +136,8 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
   readLocalePreference(): DesktopLocale | undefined
   /** Read the authoritative built-in theme preference after Host boot settles. */
   readThemeSource(): DesktopThemeSource
+  /** Read the close-button behavior selected in desktop settings. */
+  readCloseBehavior(): DesktopCloseBehavior
   /** Request Cordis teardown followed by native application exit. */
   requestQuit(code: number): void
   /** Persist another mode through the registered desktop settings scope. */

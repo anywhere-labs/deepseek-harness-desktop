@@ -1,0 +1,14 @@
+#!/bin/sh
+# Packaged dsh command: dispatch the bundled DeepSeek Harness CLI through the
+# packaged Electron runtime in Node mode (mirrors the Windows dsh shim). The
+# app-local bin directory is prepended to PATH so `dsh plugin` finds the
+# bundled pnpm and node instead of requiring a system-wide install.
+SELF="$(readlink -f -- "$0" 2>/dev/null || printf '%s\n' "$0")"
+APP_DIR="$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)"
+export PATH="$APP_DIR/bin:$PATH"
+export ELECTRON_RUN_AS_NODE=1
+# Marks the packaged dsh process tree so the bundled pnpm shim applies the
+# desktop build-policy (rather than pnpm's strict hard-fail default) only when
+# invoked through this dsh command, never when pnpm is run manually elsewhere.
+export DSH_DESKTOP_DSH_CONTEXT=1
+exec "$APP_DIR/dsh-desktop" --expose-internals "$APP_DIR/resources/app.asar/lib/desktop-cli.js" "$@"

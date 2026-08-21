@@ -37,6 +37,7 @@ Current release installers support Windows x64 and macOS Universal. No extra env
 | --- | --- | --- |
 | Windows x64 | [Download installer](https://www.dshdesktop.cn/api/downloads/windows) | Run the NSIS installer and follow its prompts |
 | macOS Universal | [Download DMG](https://www.dshdesktop.cn/api/downloads/mac) | Open the DMG and drag DSH Desktop into Applications |
+| Linux amd64 | [Download deb / rpm / AppImage](https://www.dshdesktop.cn/api/downloads/linux) | deb: `sudo dpkg -i DSH-Desktop-*.deb`; rpm: `sudo rpm -i DSH-Desktop-*.rpm`; AppImage: `chmod +x *.AppImage && ./DSH-Desktop-*.AppImage` |
 
 See the [user guide](docs/user-guide.en.md) and [FAQ](docs/faq.en.md) for plugin commands, platform details, and troubleshooting.
 
@@ -144,6 +145,8 @@ corepack yarn dev
 ```
 
 Use `corepack yarn check` for the headless gate. The [architecture](docs/architecture.en.md) and package [`README`](dsh-plugin-desktop/README.md) describe the full build, test, and release boundaries. See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for how to contribute.
+
+On Linux, `corepack yarn dist:linux` builds the amd64 deb / rpm / AppImage installers (output in `dsh-plugin-desktop/dist/linux/`); `corepack yarn package:dir` produces an unpacked directory that can run directly via `dsh-plugin-desktop/dist/linux/linux-unpacked/dsh-desktop` without installation.
 
 ## Community
 

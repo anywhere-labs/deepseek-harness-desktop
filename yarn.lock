@@ -7345,7 +7345,7 @@ __metadata:
     "@types/react": "npm:^18"
     adm-zip: "npm:^0.6.0"
     dsh-community-market: "npm:0.1.0-dev.0"
-    electron: "npm:43.4.0"
+    electron: "npm:42.9.3"
     electron-builder: "npm:26.15.7"
     koffi: "npm:3.1.5"
     node-addon-require-builtin: "npm:^0.1.4"
@@ -7357,7 +7357,7 @@ __metadata:
     vitest: "npm:4.1.8"
     yaml: "npm:^2.9.0"
   peerDependencies:
-    electron: 43.4.0
+    electron: 42.9.3
   bin:
     dsh-desktop: lib/bin.js
     dsh-plugin-desktop: lib/bin.js
@@ -7461,9 +7461,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"electron@npm:43.4.0":
-  version: 43.4.0
-  resolution: "electron@npm:43.4.0"
+"electron@npm:42.9.3":
+  version: 42.9.3
+  resolution: "electron@npm:42.9.3"
   dependencies:
     "@electron-internal/extract-zip": "npm:^1.0.1"
     "@electron/get": "npm:^5.0.0"
@@ -7471,7 +7471,7 @@ __metadata:
   bin:
     electron: cli.js
     install-electron: install.js
-  checksum: 10c0/8b03553d1a5d186d4d95f80195ff634f6afd4ea9db7e09fdc67f251f93e7e2447da9a233e05281289450335ad8a01630609ffb5f3467ab38e71b65be489c9342
+  checksum: 10c0/5c13734978e99138ab8ad9178bbfc34c2546d27cf1a1f71d2a042cde8020637e888dfb9e6ec044d0739fb0d69f6c0ee4f423746b6de6d967b17149cc87dd9bdb
   languageName: node
   linkType: hard
 

@@ -15,9 +15,6 @@ export const inject = ['desktopRuntime']
  * @param ctx - Host context carrying the Electron adapter.
  */
 export function apply(ctx: Context): void {
-  if (ctx.desktopRuntime.platform === 'linux') {
-    throw new Error('dsh-plugin-desktop: the packaged terminal is supported on macOS and Windows')
-  }
   ctx.effect(() => {
     const registration = ctx.desktopRuntime.registerTrayItem({
       group: 'tools',

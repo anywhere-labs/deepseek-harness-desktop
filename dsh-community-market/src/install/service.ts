@@ -737,6 +737,7 @@ export class MarketInstallService {
       return candidate !== undefined
         && candidate.providerId === item.provenance.providerId
     })
+    const providerTotal = index.truncated === true ? index.snapshots[0]?.page.total : undefined
     return {
       source: index.source,
       items,
@@ -746,6 +747,9 @@ export class MarketInstallService {
         expiresAt: index.expiresAt,
         ...(index.providerRevision === undefined ? {} : { providerRevision: index.providerRevision }),
         cacheStatus: index.cacheStatus,
+        ...(index.truncated === true
+          ? { truncated: true, ...(providerTotal === undefined ? {} : { providerTotal }) }
+          : {}),
       },
     }
   }

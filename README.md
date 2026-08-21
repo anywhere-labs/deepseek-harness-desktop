@@ -37,6 +37,7 @@ DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
 | --- | --- | --- |
 | Windows x64 | [下载安装程序](https://www.dshdesktop.cn/api/downloads/windows) | 运行 NSIS 安装程序并按提示完成安装 |
 | macOS Universal | [下载 DMG](https://www.dshdesktop.cn/api/downloads/mac) | 打开 DMG，将 DSH Desktop 拖入 Applications |
+| Linux amd64 | [下载 deb / rpm / AppImage](https://www.dshdesktop.cn/api/downloads/linux) | deb：`sudo dpkg -i DSH-Desktop-*.deb`；rpm：`sudo rpm -i DSH-Desktop-*.rpm`；AppImage：`chmod +x *.AppImage && ./DSH-Desktop-*.AppImage` |
 
 详细步骤、插件命令和故障排查见[用户指南](docs/user-guide.md)与[常见问题](docs/faq.md)。
 
@@ -144,6 +145,8 @@ corepack yarn dev
 ```
 
 headless 检查使用 `corepack yarn check`；完整的构建、测试和发布边界见[架构说明](docs/architecture.md)和包级 [`README`](dsh-plugin-desktop/README.md)。如何参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+在 Linux 上，`corepack yarn dist:linux` 构建 amd64 deb / rpm / AppImage 安装包（输出到 `dsh-plugin-desktop/dist/linux/`）；`corepack yarn package:dir` 生成解压目录，可直接运行 `dsh-plugin-desktop/dist/linux/linux-unpacked/dsh-desktop` 无需安装。
 
 ## 社区交流
 

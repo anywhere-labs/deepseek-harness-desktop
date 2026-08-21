@@ -241,8 +241,8 @@ describe('desktop profile composition', {
     expect(rows.map(row => row.id)).not.toContain('desktop-windows-pwsh-sandbox')
     expect(rows.find(row => row.id === 'desktop-terminal')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/terminal',
-      disabled: { __jsExpr: "process.platform === 'linux'" },
     }))
+    expect(rows.find(row => row.id === 'desktop-terminal')?.disabled).toBeFalsy()
     expect(rows.find(row => row.id === 'desktop-pnpm')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/pnpm',
     }))

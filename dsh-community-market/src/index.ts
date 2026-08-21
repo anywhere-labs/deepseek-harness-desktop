@@ -23,6 +23,7 @@ interface DesktopProfilesCapability {
 
 interface DesktopActionsCapability {
   openTerminal(): void
+  openTerminalSupported: boolean
   requestRestart(): Promise<void>
 }
 

@@ -1344,6 +1344,14 @@ function InstallableView(props: {
   if (!props.loaded) return (
     <div className="dshMarketEmpty"><StateDot state="ongoing" size={16} /><p>{props.t('scanningInstallable')}</p></div>
   )
+  const metadata = props.metadata
+  let truncatedNotice: string | undefined
+  if (metadata !== undefined && metadata.truncated === true) {
+    const total = metadata.providerTotal
+    truncatedNotice = total === undefined
+      ? props.t('installableTruncated')
+      : props.t('installableTruncated').replace('{total}', String(total))
+  }
   return (
     <div className="dshMarketContent">
       <div className="dshMarketSectionHead">
@@ -1363,6 +1371,12 @@ function InstallableView(props: {
             <span>{props.t('providerRevision')}: {props.metadata.providerRevision}</span>
           )}
           <span>{props.metadata.cacheStatus === 'fresh' ? props.t('freshScan') : props.t('cachedScan')}</span>
+        </div>
+      )}
+      {truncatedNotice !== undefined && (
+        <div className="dshMarketBanner" role="status">
+          <StateDot state="warning" size={12} />
+          <span>{truncatedNotice}</span>
         </div>
       )}
       <form className="dshMarketToolbar" onSubmit={event => { event.preventDefault(); props.onSearch() }}>

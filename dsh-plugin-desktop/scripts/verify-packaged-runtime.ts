@@ -61,6 +61,7 @@ export const REQUIRED_UNPACKED_RUNTIME_ENTRIES = [
   'cordis.patch.yml',
   'build/app-icon.png',
   'build/app-icon-mac.png',
+  'build/app-icon-linux.png',
   'build/tray-iconTemplate.png',
   'build/tray-icon-blue.png',
   'lib/main.js',
@@ -94,6 +95,11 @@ export const REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES = [
   'node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node',
   'node_modules/node-pty/prebuilds/win32-x64/conpty/OpenConsole.exe',
   'node_modules/node-pty/prebuilds/win32-x64/conpty/conpty.dll',
+] as const
+
+/** Prebuilt Node-API module required when the Linux package skips native source rebuilds. */
+export const REQUIRED_LINUX_X64_NODE_PTY_ENTRIES = [
+  'node_modules/node-pty/prebuilds/linux-x64/pty.node',
 ] as const
 
 /** CPU-specific runtime assets that must coexist in a universal macOS application. */
@@ -369,9 +375,11 @@ export function verifyPackagedRuntime(
   const unpackedRoot = resolvePackagedUnpackedRoot(context)
   const requiredPhysicalEntries = context.electronPlatformName === 'win32'
     ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_WINDOWS_X64_NODE_PTY_ENTRIES]
-    : context.electronPlatformName === 'darwin' && context.arch === 4
-      ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_MACOS_UNIVERSAL_ENTRIES]
-      : REQUIRED_UNPACKED_RUNTIME_ENTRIES
+    : context.electronPlatformName === 'linux'
+      ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_LINUX_X64_NODE_PTY_ENTRIES]
+      : context.electronPlatformName === 'darwin' && context.arch === 4
+        ? [...REQUIRED_UNPACKED_RUNTIME_ENTRIES, ...REQUIRED_MACOS_UNIVERSAL_ENTRIES]
+        : REQUIRED_UNPACKED_RUNTIME_ENTRIES
   const missing = requiredPhysicalEntries.filter(entry => !exists(join(unpackedRoot, entry)))
   if (missing.length > 0) {
     throw new Error(

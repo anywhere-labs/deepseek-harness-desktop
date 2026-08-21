@@ -12,7 +12,11 @@ import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-terminal.ts'
+import {
+  desktopTerminalStateDirectory,
+  isDesktopTerminalPlatform,
+  openDesktopTerminal,
+} from './desktop-terminal.ts'
 import { desktopInstallRecoveryStatePath } from './install-recovery.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import { ElectronShellGeneration } from './electron-shell-generation.ts'
@@ -104,6 +108,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private scheduled: DesktopShellSpec | undefined
   private mountTask: Promise<void> | undefined
   private quitting = false
+  private trayUnavailableNotified = false
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
@@ -223,6 +228,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         preloadPath: desktopPreloadPath(),
         isQuitting: () => this.quitting,
         buildTrayTemplate: () => this.buildTrayTemplate(spec),
+        readCloseBehavior: () => spec.readCloseBehavior(),
+        requestQuit: code => spec.requestQuit(code),
+        notifyTrayUnavailable: () => this.notifyTrayUnavailable(),
         stopRendererBootMonitoring: () => { this.stopRendererBootMonitoring() },
         abortRendererBootMonitoring: cause => { this.rendererHealthGate?.stop(cause) },
         failRendererBoot: error => { this.failRendererBoot('renderer-failed', error) },
@@ -420,18 +428,24 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       ? 'Unknown client plugin'
       : report.plugins.map(plugin => `- ${plugin}`).join('\n')
     const error = report.error === undefined ? 'The client Loader did not provide an error message.' : report.error
+    const terminalSupported = isDesktopTerminalPlatform(this.platform)
+    const detail = `Failed plugins:\n${plugins}\n\n${error}\n\n${terminalSupported
+      ? 'Open DSH Terminal to update or remove the failing third-party plugin, then restart DSH Desktop.'
+      : 'Update or remove the failing third-party plugin in your profile, then restart DSH Desktop.'}`
     const result = await dialog.showMessageBox({
       type: 'error',
       title: 'Plugin Recovery',
       message: 'DSH Desktop could not load all plugins.',
-      detail: `Failed plugins:\n${plugins}\n\n${error}\n\nOpen DSH Terminal to update or remove the failing third-party plugin, then restart DSH Desktop.`,
-      buttons: ['Open DSH Terminal', 'Restart DSH Desktop', 'Dismiss'],
+      detail,
+      buttons: terminalSupported
+        ? ['Open DSH Terminal', 'Restart DSH Desktop', 'Dismiss']
+        : ['Restart DSH Desktop', 'Dismiss'],
       defaultId: 0,
-      cancelId: 2,
+      cancelId: terminalSupported ? 2 : 1,
       noLink: true,
     })
-    if (result.response === 0) this.openTerminal()
-    else if (result.response === 1) await this.requestRestart()
+    if (result.response === 0 && terminalSupported) this.openTerminal()
+    else if (result.response === (terminalSupported ? 1 : 0)) await this.requestRestart()
   }
 
   private contributedTrayItems(group: DesktopTrayItemGroup): Electron.MenuItemConstructorOptions[] {
@@ -469,6 +483,16 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         this.logError(`dsh-plugin-desktop: tray command failed: ${cause instanceof Error ? cause.message : String(cause)}`)
       })
     }
+  }
+
+  /** Explain once per session why closing exits instead of hiding to the tray. */
+  private notifyTrayUnavailable(): void {
+    if (this.trayUnavailableNotified) return
+    this.trayUnavailableNotified = true
+    this.showNotification({
+      title: 'System Tray Unavailable',
+      body: 'This desktop does not expose a system tray, so closing the window exits DSH Desktop. Install the AppIndicator extension to enable tray mode.',
+    })
   }
 
   private showNotification(notification: DesktopNotification): void {

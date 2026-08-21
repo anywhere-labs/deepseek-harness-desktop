@@ -17,8 +17,9 @@ describe('desktop actions Host service', () => {
   it('exposes only no-argument terminal and restart operations', async () => {
     const openTerminal = vi.fn<() => void>()
     const requestRestart = vi.fn<() => Promise<void>>(async () => {})
-    const mounted = await mount({ openTerminal, requestRestart })
+    const mounted = await mount({ openTerminalSupported: true, openTerminal, requestRestart })
 
+    expect(mounted.service.openTerminalSupported).toBe(true)
     mounted.service.openTerminal()
     await expect(mounted.service.requestRestart()).resolves.toBeUndefined()
 
@@ -30,7 +31,7 @@ describe('desktop actions Host service', () => {
   it('coalesces a restart request and rejects retained references after disposal', async () => {
     let finishRestart!: () => void
     const requestRestart = vi.fn(() => new Promise<void>(resolve => { finishRestart = resolve }))
-    const mounted = await mount({ openTerminal: vi.fn(), requestRestart })
+    const mounted = await mount({ openTerminalSupported: true, openTerminal: vi.fn(), requestRestart })
 
     const first = mounted.service.requestRestart()
     const second = mounted.service.requestRestart()
