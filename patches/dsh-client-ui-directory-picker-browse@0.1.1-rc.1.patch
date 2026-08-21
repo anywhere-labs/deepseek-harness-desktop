@@ -90,12 +90,12 @@ index 3d67601..f3181c7 100644
 +				createDirectory: (path, name) => ctx.workspaces.createDirectory(path, name),
 +				pickNativeDirectory: new URLSearchParams(window.location.search).get("dsh-desktop-platform") === "win32" ? () => {
 +					const pick = window.__DSH_DESKTOP_PICK_DIRECTORY__;
-+					if (typeof pick !== "function") throw new Error("DSH Desktop native directory picker is unavailable");
++					if (typeof pick !== "function") throw new Error("AI Buddy native directory picker is unavailable");
 +					return pick();
 +				} : void 0,
 +				validateDirectory: new URLSearchParams(window.location.search).get("dsh-desktop-platform") === "win32" ? (path) => {
 +					const validate = window.__DSH_DESKTOP_VALIDATE_DIRECTORY__;
-+					if (typeof validate !== "function") throw new Error("DSH Desktop directory validation is unavailable");
++					if (typeof validate !== "function") throw new Error("AI Buddy directory validation is unavailable");
 +					return validate(path);
 +				} : void 0,
 diff --git a/lib/types/client/DirectoryBrowser.d.ts b/lib/types/client/DirectoryBrowser.d.ts
