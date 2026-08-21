@@ -1,0 +1,135 @@
+{
+  "name": "dsh-1024store-catalog",
+  "meta": {
+    "total": 3,
+    "catalogTotal": 3,
+    "updated": "2026-08-21",
+    "generatedAt": "2026-08-21T15:35:15.000Z",
+    "revision": "sha256:6a1593a73f261aa56ecb9fbb805e3e9fc93ce836490de733e740181844d346c9",
+    "source": "fixture",
+    "metricCoverage": 3
+  },
+  "packages": [
+    {
+      "id": "amruthpillai/reactive-resume/packages/dsh-plugin",
+      "name": "dsh-plugin",
+      "owner": "amruthpillai",
+      "url": "https://github.com/amruthpillai/reactive-resume",
+      "category": "ui",
+      "description": {
+        "en": "Builds privacy-focused, customizable resumes directly in the interface, offering secure editing and export options.",
+        "zh": "提供隐私保护、可定制的简历构建工具，支持安全编辑与导出功能。"
+      },
+      "added": "2026-08-21",
+      "stars": 41368,
+      "installCount": 8,
+      "pushedAt": "2026-08-20T08:56:18Z",
+      "install": "dsh plugin --profile web add dsh-plugin-reactive-resume",
+      "installMethods": [
+        {
+          "kind": "npm",
+          "spec": "dsh-plugin-reactive-resume",
+          "command": "dsh plugin --profile web add dsh-plugin-reactive-resume",
+          "verification": "verified",
+          "code": "published_package",
+          "requiresBuildAllowance": false,
+          "buildPackage": null,
+          "revision": "0.1.0",
+          "checkedAt": "2026-08-19T10:20:51.000Z"
+        },
+        {
+          "kind": "npm",
+          "spec": "dsh-plugin-reactive-resume",
+          "command": "dsh plugin --profile web add dsh-plugin-reactive-resume",
+          "verification": "verified",
+          "code": "repository_backlink",
+          "requiresBuildAllowance": false,
+          "buildPackage": null,
+          "revision": "0.1.0",
+          "checkedAt": "2026-08-19T10:20:51.000Z"
+        }
+      ]
+    },
+    {
+      "id": "volcengine/OpenViking/examples/dsh-memory-plugin",
+      "name": "dsh-memory-plugin",
+      "owner": "volcengine",
+      "url": "https://github.com/volcengine/OpenViking",
+      "category": "memory",
+      "description": {
+        "en": "Unifies long-term memory, knowledge retrieval, and skills into a self-evolving context database for agents.",
+        "zh": "整合长期记忆、知识检索与技能，为智能体提供自演进的上下文数据库。"
+      },
+      "added": "2026-08-21",
+      "stars": 31434,
+      "installCount": 57,
+      "pushedAt": "2026-08-21T13:10:47Z",
+      "install": "dsh plugin --profile web add @openviking/dsh-memory-plugin",
+      "installMethods": [
+        {
+          "kind": "npm",
+          "spec": "@openviking/dsh-memory-plugin",
+          "command": "dsh plugin --profile web add @openviking/dsh-memory-plugin",
+          "verification": "verified",
+          "code": "published_package",
+          "requiresBuildAllowance": false,
+          "buildPackage": null,
+          "revision": "0.2.1",
+          "checkedAt": "2026-08-20T13:40:31.000Z"
+        },
+        {
+          "kind": "npm",
+          "spec": "@openviking/dsh-memory-plugin",
+          "command": "dsh plugin --profile web add @openviking/dsh-memory-plugin",
+          "verification": "verified",
+          "code": "repository_backlink",
+          "requiresBuildAllowance": false,
+          "buildPackage": null,
+          "revision": "0.2.1",
+          "checkedAt": "2026-08-20T13:40:31.000Z"
+        }
+      ]
+    },
+    {
+      "id": "vectorize-io/hindsight/hindsight-integrations/coding-agents",
+      "name": "coding-agents",
+      "owner": "vectorize-io",
+      "url": "https://github.com/vectorize-io/hindsight",
+      "category": "memory",
+      "description": {
+        "en": "Hindsight, agent memory that learns: long-term project memory with auto recall and retain, knowledge pages, deep reflection, and per-repo memory banks.",
+        "zh": "Hindsight 可学习的 Agent 记忆：自动召回与沉淀的长期项目记忆、知识页、深度反思与按仓库隔离的记忆库。"
+      },
+      "added": "2026-08-16",
+      "stars": 20766,
+      "installCount": 24,
+      "pushedAt": "2026-08-21T03:37:05Z",
+      "install": "dsh plugin --profile web add @vectorize-io/hindsight-coding-agents",
+      "installMethods": [
+        {
+          "kind": "npm",
+          "spec": "@vectorize-io/hindsight-coding-agents",
+          "command": "dsh plugin --profile web add @vectorize-io/hindsight-coding-agents",
+          "verification": "verified",
+          "code": "published_package",
+          "requiresBuildAllowance": false,
+          "buildPackage": null,
+          "revision": "0.4.1",
+          "checkedAt": "2026-08-20T09:25:31.000Z"
+        },
+        {
+          "kind": "npm",
+          "spec": "@vectorize-io/hindsight-coding-agents",
+          "command": "dsh plugin --profile web add @vectorize-io/hindsight-coding-agents",
+          "verification": "verified",
+          "code": "repository_backlink",
+          "requiresBuildAllowance": false,
+          "buildPackage": null,
+          "revision": "0.4.1",
+          "checkedAt": "2026-08-20T09:25:31.000Z"
+        }
+      ]
+    }
+  ],
+  "_note": "Captured from public deepseek1024.com GET /api/v1/plugins for adapter contract tests. Top-level name is optional (registry name dsh-1024store-catalog lives on /api/v1/registry). Company Store preserves packages/meta/installMethods. AI Buddy installability requires a single verified npm method with code repository_backlink; Store list responses alias published_package ↔ repository_backlink."
+}
