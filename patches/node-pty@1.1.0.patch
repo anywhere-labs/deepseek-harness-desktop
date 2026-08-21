@@ -1,0 +1,20 @@
+diff --git a/lib/unixTerminal.js b/lib/unixTerminal.js
+--- a/lib/unixTerminal.js
++++ b/lib/unixTerminal.js
+@@ -26,10 +26,14 @@ var terminal_1 = require("./terminal");
+ var utils_1 = require("./utils");
+ var native = utils_1.loadNativeModule('pty');
+ var pty = native.module;
+ var helperPath = native.dir + '/spawn-helper';
+ helperPath = path.resolve(__dirname, helperPath);
+-helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
+-helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
++if (helperPath.indexOf('app.asar.unpacked') === -1) {
++    helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
++}
++if (helperPath.indexOf('node_modules.asar.unpacked') === -1) {
++    helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
++}
+ var DEFAULT_FILE = 'sh';
+ var DEFAULT_NAME = 'xterm';
+ var DESTROY_SOCKET_TIMEOUT_MS = 200;

@@ -652,3 +652,23 @@ describe('published package surface', () => {
     expect(installedRuntime).not.toContain('134217728')
   })
 })
+
+describe('node-pty packaged runtime', () => {
+  it('does not rewrite an already-unpacked spawn helper path twice', () => {
+    const unixTerminal = readFileSync(
+      new URL('node_modules/node-pty/lib/unixTerminal.js', packageRoot),
+      'utf8',
+    )
+
+    expect(unixTerminal).toContain([
+      "if (helperPath.indexOf('app.asar.unpacked') === -1) {",
+      "    helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');",
+      '}',
+      "if (helperPath.indexOf('node_modules.asar.unpacked') === -1) {",
+      "    helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');",
+      '}',
+    ].join('\n'))
+    expect(unixTerminal.match(/helperPath = helperPath\.replace\('app\.asar'/gu)).toHaveLength(1)
+    expect(unixTerminal.match(/helperPath = helperPath\.replace\('node_modules\.asar'/gu)).toHaveLength(1)
+  })
+})

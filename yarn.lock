@@ -9667,13 +9667,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"node-pty@npm:1.2.0-beta.15":
-  version: 1.2.0-beta.15
-  resolution: "node-pty@npm:1.2.0-beta.15"
+"node-pty@npm:1.1.0":
+  version: 1.1.0
+  resolution: "node-pty@npm:1.1.0"
   dependencies:
     node-addon-api: "npm:^7.1.0"
     node-gyp: "npm:latest"
-  checksum: 10c0/2f2bcca18efe94f56fd5c9fc9611164f63af912b96286ea4d858f4886e3b25aa9c529e3d7680d47e5ddefc6c3e799786ed11dc4b80947e40438e00a67dbc2fbf
+  checksum: 10c0/e527305263da36d554b7d2116aee6430b898675fc50e7bd82fbd762f14cb6b948fb8d997736af1f70d76bf9ffd4f5179bc1ed1d8002567dfcf3b29f039291798
+  languageName: node
+  linkType: hard
+
+"node-pty@patch:node-pty@npm%3A1.1.0#./patches/node-pty@1.1.0.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 1.1.0
+  resolution: "node-pty@patch:node-pty@npm%3A1.1.0#./patches/node-pty@1.1.0.patch::version=1.1.0&hash=1e7fd1&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    node-addon-api: "npm:^7.1.0"
+    node-gyp: "npm:latest"
+  checksum: 10c0/8d4df6bdfc0a8860b8a96632c40a0dd389831f38f19e9f8ca84c6e75c27a4b5684248ce38c38ed65da37bc86e874ea9c459f5d84c5a520ac7a6353e618c69c7b
   languageName: node
   linkType: hard
 

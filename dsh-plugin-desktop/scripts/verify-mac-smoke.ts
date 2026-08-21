@@ -7,6 +7,17 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MACOS_UNIVERSAL_NATIVE_ENTRIES } from './mac-universal.ts'
 
+const NODE_PTY_SMOKE_TIMEOUT_MS = 5_000
+
+function nodePtySmokeScript(nodePtyRoot: string): string {
+  return [
+    `const pty = require(${JSON.stringify(nodePtyRoot)})`,
+    "const terminal = pty.spawn('/usr/bin/true', [], { name: 'xterm-256color', cols: 80, rows: 24, cwd: '/', env: process.env })",
+    `const timeout = setTimeout(() => { terminal.kill(); process.exit(124) }, ${String(NODE_PTY_SMOKE_TIMEOUT_MS)})`,
+    'terminal.onExit(({ exitCode }) => { clearTimeout(timeout); process.exit(exitCode === 0 ? 0 : 1) })',
+  ].join(';')
+}
+
 /** Injectable filesystem and command boundaries for smoke verification. */
 export interface MacSmokeVerificationOptions {
   /** Directory containing exactly one smoke DMG. */
@@ -141,6 +152,22 @@ export function verifyMacSmoke(
       }
       options.run('lipo', [nativePath, '-verify_arch', entry.arch])
     }
+
+    const nodePtyRoot = join(unpackedRoot, 'node_modules', 'node-pty')
+    const nodePtyManifest = join(nodePtyRoot, 'package.json')
+    if (!options.exists(nodePtyManifest)) {
+      throw new Error(`universal application is missing node-pty package: ${nodePtyManifest}`)
+    }
+
+    // Exercise the node-pty instance sealed inside the Universal application.
+    // Without the asar rewrite guard, helper resolution becomes
+    // app.asar.unpacked.unpacked and this spawn fails with posix_spawnp.
+    options.run('/usr/bin/env', [
+      'ELECTRON_RUN_AS_NODE=1',
+      executablePath,
+      '-e',
+      nodePtySmokeScript(nodePtyRoot),
+    ])
   } catch (cause) {
     failure = cause
   }
