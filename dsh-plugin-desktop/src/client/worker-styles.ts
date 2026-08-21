@@ -1,6 +1,46 @@
 const STYLE_ID = 'dsh-plugin-desktop/worker-pack'
 
 const css = `
+/* Official Plugins tablist shrinks 4-character labels. Keep each tab one line. */
+h2 + p + [role="tablist"] {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  column-gap: 16px;
+}
+h2 + p + [role="tablist"] [role="tab"] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.dshWorkerHub {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.dshWorkerSubnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dshWorkerSubnav button {
+  appearance: none;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-container);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dshWorkerSubnav button[data-active="true"] {
+  background: var(--dsw-alias-bg-brand, var(--dsw-alias-label-primary));
+  border-color: transparent;
+  color: var(--dsw-alias-label-on-brand, #fff);
+}
 .dshWorkerRoot,
 .dshMcpRoot {
   display: flex;

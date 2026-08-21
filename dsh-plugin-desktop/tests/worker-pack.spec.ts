@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import {
   DESKTOP_DEFAULT_AGENT_PRESET,
+  DESKTOP_PLUGIN_SETTINGS_TAB_IDS,
+  DESKTOP_WORKBENCH_PAGE_IDS,
   desktopAgentPresetConfig,
   findCatalogItemForPackage,
   isWorkerPackRecommendedPackage,
@@ -67,6 +69,11 @@ describe('desktop worker pack', () => {
     expect(en.officeImBody).toContain('community')
     expect(en.workerBody).toContain('nothing installs at launch')
     expect(en.installWorkspace).toContain('Install recommended workspace')
+  })
+
+  it('keeps desktop workbench pages off the official Plugins tab row', () => {
+    expect(DESKTOP_PLUGIN_SETTINGS_TAB_IDS).toEqual(['desktop-worker-pack', 'desktop-mcp'])
+    expect(DESKTOP_WORKBENCH_PAGE_IDS).toEqual(['pack', 'models', 'home', 'remote'])
   })
 
   it('groups one-click packs without making them a silent boot list', () => {

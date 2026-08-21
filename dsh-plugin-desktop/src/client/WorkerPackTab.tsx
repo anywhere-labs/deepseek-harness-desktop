@@ -78,7 +78,7 @@ type InstallState =
   | { readonly status: 'busy' }
   | { readonly status: 'done'; readonly tone: 'ok' | 'error'; readonly message: DesktopLocaleKey; readonly restartToken?: string }
 
-export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
+export function WorkerPackTab({ t }: Pick<WorkerPackTabProps, 't'>): ReactNode {
   const [catalog, setCatalog] = useState<CatalogState>({ status: 'loading' })
   const [installedNames, setInstalledNames] = useState<readonly string[]>([])
   const [install, setInstall] = useState<InstallState>({ status: 'idle' })

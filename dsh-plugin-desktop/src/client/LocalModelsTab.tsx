@@ -17,7 +17,7 @@ export type LocalModelsTabProps = PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'dsh-desktop'>
   & InjectFace<LocalModelsTabInjected>
 
-export function LocalModelsTab({ scope, t }: LocalModelsTabProps): ReactNode {
+export function LocalModelsTab({ scope, t }: Pick<LocalModelsTabProps, 'scope' | 't'>): ReactNode {
   const snapshot = useSyncExternalStore(listener => scope.subscribe(listener), () => scope.getSnapshot())
   const [results, setResults] = useState<readonly LocalModelProbeView[]>([])
   const [status, setStatus] = useState<'idle' | 'busy' | 'error' | 'applied'>('idle')
