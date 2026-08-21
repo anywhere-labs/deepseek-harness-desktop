@@ -36,7 +36,7 @@ dsh-desktop:
 
 新会话默认使用上游 **Code** 预设（PTC）：它包含标准模式的文件、终端、搜索、技能、计划、子代理和 Ralph 循环，并打开 TypeScript Code Mode 展示。可在设置里改回 `standard`。Windows 仍会隐藏不兼容的 `minimal` 预设。
 
-**设置 > 插件 > 工作套件** 列出推荐的工作区插件（例如 `dsh-better-sidebar` 和 `dsh-context`），以及官方办公 IM：钉钉只推荐官方 Stream 通道 `dsh-dingtalk-channel`，企业微信推荐官方智能机器人通道 `dsh-wecom`。它们不会随应用预装，目录收录也不等于安全审核。Webhook 群通知、飞书和多家 IM 聚合插件不在这份名单里。插件市场默认不预选来源；你可以在工作套件页一键添加并选用 DSH 1024Store，再在**插件市场**里搜索这些 npm 包名。安装或启用插件后需要重启 AI Buddy。凭证写在插件配置或本机凭据服务，不要提交密钥。
+**设置 > 插件 > 工作套件** 列出推荐的工作区插件（例如 `dsh-better-sidebar` 和 `dsh-context`），以及办公 IM 起点：钉钉官方 Stream（`dsh-dingtalk-channel`）和企业微信官方智能机器人（`dsh-wecom`）。推荐不是白名单，也不会预装；飞书、聚合通道和其他社区插件仍可从**插件市场**或 `dsh plugin add` 安装。目录收录不等于安全审核。插件市场默认不预选来源；你可以在工作套件页一键添加并选用 DSH 1024Store，再搜索 npm 包名。安装或启用插件后需要重启 AI Buddy。凭证写在插件配置或本机凭据服务，不要提交密钥。
 
 外部 MCP 服务器走官方 `@deepseek-ai/dsh-mcp-client`。打开 **设置 > 插件 > MCP** 添加 stdio 或 HTTP 服务器；应用不会预置令牌或默认子进程。保存后同样需要重启。
 

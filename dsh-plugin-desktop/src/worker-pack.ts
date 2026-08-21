@@ -31,8 +31,9 @@ export const WORKER_PACK_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlug
 ])
 
 /**
- * Official-platform office IM channels only: DingTalk Stream and WeCom AI Bot.
- * Webhook notify bots, Feishu, and multi-IM aggregators stay out of this list.
+ * Starting office-IM recommendations: official DingTalk Stream and WeCom AI Bot.
+ * This is a curated list, not an install allowlist. Community channels stay
+ * installable through the market and `dsh plugin add`.
  */
 export const OFFICE_IM_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlugin[] = Object.freeze([
   {
@@ -60,6 +61,14 @@ export function desktopAgentPresetConfig(
     ...existing,
     default: DESKTOP_DEFAULT_AGENT_PRESET,
   }
+}
+
+/**
+ * Worker-pack recommendations never gate installation.
+ * Official defaults stay opt-in; community packages remain installable.
+ */
+export function workerPackBlocksCommunityPackage(_packageName: string): false {
+  return false
 }
 
 /** True when the recommended built-in catalog is the selected market source. */
