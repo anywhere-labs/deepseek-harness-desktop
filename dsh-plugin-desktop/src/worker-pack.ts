@@ -93,13 +93,20 @@ export function workerPackCatalogSelected(
   ))
 }
 
+/** Desktop-owned Internal Market tab. Sibling of Plugin Market, not a community package. */
+export const DESKTOP_INTERNAL_MARKET_TAB_ID = 'desktop-internal-market'
+
 /** Top-level Plugins tabs registered by the desktop client. */
-export const DESKTOP_PLUGIN_SETTINGS_TAB_IDS = ['desktop-worker-pack', 'desktop-mcp'] as const
+export const DESKTOP_PLUGIN_SETTINGS_TAB_IDS = [
+  'desktop-worker-pack',
+  DESKTOP_INTERNAL_MARKET_TAB_ID,
+  'desktop-mcp',
+] as const
 
 /** Workbench pages that share the Worker pack tab instead of adding more top tabs. */
-export const DESKTOP_WORKBENCH_PAGE_IDS = ['pack', 'models', 'home', 'remote'] as const
+export const DESKTOP_WORKBENCH_PAGE_IDS = ['models', 'home', 'remote'] as const
 
-/** User-initiated install groups on the Worker pack tab. */
+/** User-initiated install groups on the Internal Market tab. */
 export type WorkerPackInstallKind = 'workspace' | 'office-im' | 'later'
 
 /** One profile inventory row the worker pack can match by npm name. */
@@ -138,7 +145,7 @@ export function recommendedPluginsFor(
   return WORKBENCH_LATER_RECOMMENDED_PLUGINS
 }
 
-/** True only for the curated recommendation lists shown on the Worker pack tab. */
+/** True only for the curated recommendation lists shown on Internal Market. */
 export function isWorkerPackRecommendedPackage(packageName: string): boolean {
   return ALL_RECOMMENDED_PLUGINS.some(plugin => plugin.packageName === packageName)
 }

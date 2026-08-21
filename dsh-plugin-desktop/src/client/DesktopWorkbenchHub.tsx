@@ -21,7 +21,6 @@ export type DesktopWorkbenchHubProps = PropsRuntime<'settings.plugins.tab'>
 export type DesktopWorkbenchPage = typeof DESKTOP_WORKBENCH_PAGE_IDS[number]
 
 const PAGES: readonly { readonly id: DesktopWorkbenchPage; readonly label: DesktopLocaleKey }[] = [
-  { id: 'pack', label: 'workerTab' },
   { id: 'models', label: 'modelsTab' },
   { id: 'home', label: 'homeTab' },
   { id: 'remote', label: 'remoteTab' },
@@ -29,9 +28,10 @@ const PAGES: readonly { readonly id: DesktopWorkbenchPage; readonly label: Deskt
 
 /** Desktop workbench surfaces share one Plugins tab, with an inner page switch. */
 export function DesktopWorkbenchHub({ scope, t }: DesktopWorkbenchHubProps): ReactNode {
-  const [page, setPage] = useState<DesktopWorkbenchPage>('pack')
+  const [page, setPage] = useState<DesktopWorkbenchPage>('models')
   return (
     <div className="dshWorkerHub">
+      <WorkerPackTab t={t} />
       <nav className="dshWorkerSubnav" aria-label={t('workbenchNav')}>
         {PAGES.map(entry => (
           <button
@@ -44,7 +44,6 @@ export function DesktopWorkbenchHub({ scope, t }: DesktopWorkbenchHubProps): Rea
           </button>
         ))}
       </nav>
-      {page === 'pack' ? <WorkerPackTab t={t} /> : null}
       {page === 'models' ? <LocalModelsTab scope={scope} t={t} /> : null}
       {page === 'home' ? <HomeMigrationTab scope={scope} t={t} /> : null}
       {page === 'remote' ? <RemoteAccessTab scope={scope} t={t} /> : null}

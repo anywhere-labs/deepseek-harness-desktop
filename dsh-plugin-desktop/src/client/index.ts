@@ -11,8 +11,10 @@ import { installDesktopDirectoryPickerBridge, requestDesktopDirectoryValidation 
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { installWorkspaceFolderDrop } from './workspace-folder-drop.ts'
 import { en, zh, type DesktopLocaleKey } from './locales.ts'
+import { DESKTOP_INTERNAL_MARKET_TAB_ID } from '../worker-pack.ts'
 import { CommandPalette } from './CommandPalette.tsx'
 import { DesktopWorkbenchHub } from './DesktopWorkbenchHub.tsx'
+import { InternalMarketTab } from './InternalMarketTab.tsx'
 import { McpSettingsTab } from './McpSettingsTab.tsx'
 import { DESKTOP_MCP_SETTINGS_KEY, type DesktopMcpSettings } from '../mcp-settings.ts'
 import { DESKTOP_WORKBENCH_SETTINGS_KEY, type DesktopWorkbenchSettings } from '../workbench-settings.ts'
@@ -90,6 +92,13 @@ export function apply(ctx: ClientContext): void {
         }) as SettingsScope<DesktopWorkbenchSettings>,
       }),
     }, DesktopWorkbenchHub))
+    settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
+      name: 'settings.plugins.tab',
+      id: DESKTOP_INTERNAL_MARKET_TAB_ID,
+      order: 18,
+      label: () => settingsCtx.locale.bind(DESKTOP_CLIENT_LOCALE_NS)('internalMarketTab'),
+      locale: DESKTOP_CLIENT_LOCALE_NS,
+    }, InternalMarketTab))
     settingsCtx.slots.inject('settings.plugins.tab', () => settingsCtx.slots.register({
       name: 'settings.plugins.tab',
       id: 'desktop-mcp',
