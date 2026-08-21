@@ -104,7 +104,7 @@ describe('desktop worker pack', () => {
     expect(pack).not.toContain('WORKER_PACK_RECOMMENDED_PLUGINS')
     expect(hub).not.toContain('installRecommendedPlugins')
     expect(hub).not.toMatch(/page === 'pack'/)
-    expect(client).toContain('desktop-internal-market')
+    expect(client).toContain('DESKTOP_INTERNAL_MARKET_TAB_ID')
     expect(client).toContain('InternalMarketTab')
     expect(client).not.toMatch(/id: ['"]community-market['"]/)
   })
