@@ -76,7 +76,7 @@ describe('packaged dsh bootstrap', () => {
       '工作 profile',
       'update',
     ])
-    expect(() => withDefaultDesktopProfile([], '../desktop')).toThrow('invalid profile name')
+    expect(() => withDefaultDesktopProfile([], '../desktop')).toThrow('invalid desktop profile name')
   })
 
   it('snapshots plugin installs launched from the built-in DSH Terminal', async () => {
