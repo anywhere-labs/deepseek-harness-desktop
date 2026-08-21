@@ -9,6 +9,7 @@ describe('desktop profiles Host plugin', () => {
     let trayItem: DesktopTrayItem | undefined
     let disposeEffect: (() => void) | undefined
     const events: string[] = []
+    const promptText = vi.fn(async () => 'new profile')
     const disposeRegistration = vi.fn()
     let locale: DesktopRuntime['locale'] = 'en'
     const runtime = {
@@ -17,6 +18,7 @@ describe('desktop profiles Host plugin', () => {
         trayItem = item
         return { refresh: () => {}, dispose: disposeRegistration }
       },
+      promptText,
       requestRestart: vi.fn(async () => { events.push('unexpected restart') }),
     } as unknown as DesktopRuntime
     const profiles: DesktopProfiles = {
@@ -53,6 +55,7 @@ describe('desktop profiles Host plugin', () => {
       { label: 'desktop', checked: true, enabled: true },
       { label: '工作 profile', checked: false, enabled: true },
       { label: 'headless (Unavailable for Desktop)', checked: false, enabled: false },
+      { label: 'Add Profile…', checked: undefined, enabled: undefined },
     ])
 
     locale = 'zh'
@@ -60,7 +63,9 @@ describe('desktop profiles Host plugin', () => {
     expect(trayItem?.submenu?.()[2]?.label()).toBe('headless（不可用于桌面端）')
 
     await commands[1]?.invoke()
-    expect(events).toEqual(['select:工作 profile'])
+    await commands[3]?.invoke()
+    expect(events).toEqual(['select:工作 profile', 'select:new profile'])
+    expect(promptText).toHaveBeenCalledWith('添加配置…')
     expect(runtime.requestRestart).not.toHaveBeenCalled()
     disposeEffect?.()
     expect(disposeRegistration).toHaveBeenCalledOnce()

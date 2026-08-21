@@ -202,6 +202,17 @@ export class ElectronShellGeneration {
     revealApplication(window, this.options.platform.platform)
   }
 
+  /** Run the browser's native text prompt in the trusted Desktop renderer. */
+  async promptText(title: string, defaultValue = ''): Promise<string | null> {
+    const window = this.window
+    if (window === undefined || window.isDestroyed()) return null
+    const value = await window.webContents.executeJavaScript(
+      `window.prompt(${JSON.stringify(title)}, ${JSON.stringify(defaultValue)})`,
+      true,
+    )
+    return typeof value === 'string' ? value : null
+  }
+
   notifyAttention(notification: DesktopNotification): void {
     const window = this.window
     if (window === undefined || window.isDestroyed() || window.isFocused()) return
