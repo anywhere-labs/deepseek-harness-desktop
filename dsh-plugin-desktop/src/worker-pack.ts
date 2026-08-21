@@ -10,7 +10,7 @@ export const WORKER_PACK_CATALOG_SOURCE_KEY = 'dsh-1024store'
 export interface WorkerPackRecommendedPlugin {
   readonly packageName: string
   readonly displayName: string
-  readonly role: 'workspace-shell' | 'workspace-context'
+  readonly role: 'workspace-shell' | 'workspace-context' | 'office-dingtalk' | 'office-wecom'
   readonly repositoryUrl: string
 }
 
@@ -31,6 +31,26 @@ export const WORKER_PACK_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlug
 ])
 
 /**
+ * Starting office-IM recommendations: official DingTalk Stream and WeCom AI Bot.
+ * This is a curated list, not an install allowlist. Community channels stay
+ * installable through the market and `dsh plugin add`.
+ */
+export const OFFICE_IM_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlugin[] = Object.freeze([
+  {
+    packageName: 'dsh-dingtalk-channel',
+    displayName: 'dsh-dingtalk-channel',
+    role: 'office-dingtalk',
+    repositoryUrl: 'https://github.com/ttmouse/dsh-dingtalk-channel',
+  },
+  {
+    packageName: 'dsh-wecom',
+    displayName: 'dsh-wecom',
+    role: 'office-wecom',
+    repositoryUrl: 'https://github.com/TtTRz/dsh-wecom',
+  },
+])
+
+/**
  * Overlay the desktop worker default onto an existing agent-presets config.
  * User settings still win at runtime through `agent-presets.default`.
  */
@@ -41,6 +61,14 @@ export function desktopAgentPresetConfig(
     ...existing,
     default: DESKTOP_DEFAULT_AGENT_PRESET,
   }
+}
+
+/**
+ * Worker-pack recommendations never gate installation.
+ * Official defaults stay opt-in; community packages remain installable.
+ */
+export function workerPackBlocksCommunityPackage(_packageName: string): false {
+  return false
 }
 
 /** True when the recommended built-in catalog is the selected market source. */

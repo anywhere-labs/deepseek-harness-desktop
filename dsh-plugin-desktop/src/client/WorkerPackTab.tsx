@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
+  OFFICE_IM_RECOMMENDED_PLUGINS,
   WORKER_PACK_RECOMMENDED_PLUGINS,
   type WorkerPackRecommendedPlugin,
 } from '../worker-pack.ts'
@@ -14,9 +15,31 @@ import {
 export type WorkerPackTabProps = PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'dsh-desktop'>
 
+function RecommendedPluginCard({
+  plugin,
+  t,
+}: {
+  readonly plugin: WorkerPackRecommendedPlugin
+  readonly t: WorkerPackTabProps['t']
+}): ReactNode {
+  return (
+    <article className="dshWorkerCard">
+      <h3>{plugin.displayName}</h3>
+      <p>{t(ROLE_KEY[plugin.role])}</p>
+      <div className="dshWorkerMeta">
+        <span>{t('pluginPackage')}</span>
+        <code className="dshWorkerCode">{plugin.packageName}</code>
+        <a href={plugin.repositoryUrl} target="_blank" rel="noreferrer">{t('openRepository')}</a>
+      </div>
+    </article>
+  )
+}
+
 const ROLE_KEY: Record<WorkerPackRecommendedPlugin['role'], DesktopLocaleKey> = {
   'workspace-shell': 'pluginWorkspaceShell',
   'workspace-context': 'pluginWorkspaceContext',
+  'office-dingtalk': 'pluginOfficeDingtalk',
+  'office-wecom': 'pluginOfficeWecom',
 }
 
 type CatalogState =
@@ -61,15 +84,14 @@ export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
         <h2>{t('pluginsTitle')}</h2>
         <p>{t('pluginsBody')}</p>
         {WORKER_PACK_RECOMMENDED_PLUGINS.map(plugin => (
-          <article key={plugin.packageName} className="dshWorkerCard">
-            <h3>{plugin.displayName}</h3>
-            <p>{t(ROLE_KEY[plugin.role])}</p>
-            <div className="dshWorkerMeta">
-              <span>{t('pluginPackage')}</span>
-              <code className="dshWorkerCode">{plugin.packageName}</code>
-              <a href={plugin.repositoryUrl} target="_blank" rel="noreferrer">{t('openRepository')}</a>
-            </div>
-          </article>
+          <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
+        ))}
+      </div>
+      <div className="dshWorkerSection">
+        <h2>{t('officeImTitle')}</h2>
+        <p>{t('officeImBody')}</p>
+        {OFFICE_IM_RECOMMENDED_PLUGINS.map(plugin => (
+          <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
         ))}
       </div>
       <div className="dshWorkerSection">
