@@ -23,7 +23,7 @@ DSH Community Market 是 [AI Buddy](../README.md) 内置的开放插件市场，
 
 任何人都可以提供、接入和使用插件数据源。符合规范的数据源只需发布一份 [`catalog-source` manifest](docs/schemas/catalog-source.schema.json)，并由其 `/v1/plugins` 接口返回符合 [`catalog-provider-page` Schema](docs/schemas/catalog-provider-page.schema.json) 的数据，无需为 Market 编写自定义代码。已有 API 无需更换自己的格式，也可以联系我们，通过随 Market 发布的受审 adapter 作为合作数据源接入。来源可以提供 `media.icon`，Desktop 会先校验并代理图片再显示；没有图标的来源仍然合法，界面会使用本地 fallback。
 
-展示已选来源前，Host 会先建立一份完整、经过校验的本地索引。标准来源按照声明的 cursor 与 page limit 扫描；经过审核的 1024Store adapter 只读取一次完整 registry，再按 Schema 上限分块标准化；经过审核的 dshfind adapter 则遍历 REST 分页，并在整次扫描中固定同一个 `data_version`。之后的搜索、多分类 OR 筛选、分类选项和分页都在这份完整本地索引上进行，不会因为每次交互重新请求 provider。每个可见页面最多展示 50 条，分类选项覆盖索引中的全部分类，而不只是已经显示的页面。**可安装**是同一索引上 fail-closed 的结构子集，不随本地安装、receipt 或启用/禁用状态变化；只有用户预览某个候选时，才开始权威 npm 与本地操作复核。
+展示已选来源前，Host 会先建立一份完整、经过校验的本地索引。标准来源按照声明的 cursor 与 page limit 扫描；经过审核的 1024Store adapter 只读取一次当前发布的 registry 页并索引该首页切片，再按 Schema 上限分块标准化；之后的搜索可以发送 provider 的 `q` 参数；经过审核的 dshfind adapter 则遍历 REST 分页，并在整次扫描中固定同一个 `data_version`。之后的搜索、多分类 OR 筛选、分类选项和分页都在这份完整本地索引上进行，不会因为每次交互重新请求 provider。每个可见页面最多展示 50 条，分类选项覆盖索引中的全部分类，而不只是已经显示的页面。**可安装**是同一索引上 fail-closed 的结构子集，不随本地安装、receipt 或启用/禁用状态变化；只有用户预览某个候选时，才开始权威 npm 与本地操作复核。
 
 Host 会在 cache 过期前复用已经完成的索引（当前默认五分钟）。如果 response 提供可选索引 metadata，`scannedAt` 表示扫描完成时间，`expiresAt` 表示 cache 截止时间，可选 `providerRevision` 表示整次扫描中一致观察到的来源 revision，`cacheStatus` 表示本次使用新扫描还是复用 cache。用户明确刷新时会替换索引并绕过底层目录 response cache，不只是重新绘制当前 50 条。
 

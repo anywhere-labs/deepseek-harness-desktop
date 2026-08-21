@@ -12,7 +12,7 @@ export type RemoteAccessTabProps = PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'dsh-desktop'>
   & InjectFace<RemoteAccessTabInjected>
 
-export function RemoteAccessTab({ scope, t }: RemoteAccessTabProps): ReactNode {
+export function RemoteAccessTab({ scope, t }: Pick<RemoteAccessTabProps, 'scope' | 't'>): ReactNode {
   const snapshot = useSyncExternalStore(listener => scope.subscribe(listener), () => scope.getSnapshot())
   const remote = snapshot.value?.remote ?? { enabled: false, trustedHost: '' }
   const [enabled, setEnabled] = useState(remote.enabled)

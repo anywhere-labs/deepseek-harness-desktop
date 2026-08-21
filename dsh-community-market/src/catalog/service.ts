@@ -107,6 +107,45 @@ function completeItems(index: CatalogFullIndex): readonly CatalogItem[] {
   return index.snapshots.flatMap(snapshot => snapshot.items)
 }
 
+function localSourceFromView(view: MarketSourceView): LocalSourceRecord {
+  return {
+    sourceRecordId: view.sourceRecordId,
+    registrationKind: view.registrationKind,
+    adapterId: view.adapterId,
+    providerId: view.providerId,
+    ...(view.manifestUrl === undefined ? {} : { manifestUrl: view.manifestUrl }),
+    ...(view.manifest === undefined ? {} : { manifest: view.manifest }),
+    ...(view.builtInProviderKey === undefined ? {} : { builtInProviderKey: view.builtInProviderKey }),
+    enabled: view.enabled,
+    order: view.order,
+  }
+}
+
+function chunkCatalogItems(
+  items: readonly CatalogItem[],
+  template: CatalogSnapshot,
+): readonly CatalogSnapshot[] {
+  const total = items.length
+  if (total === 0) {
+    return [parseCatalogSnapshot({
+      schemaVersion: template.schemaVersion,
+      source: template.source,
+      items: [],
+      page: { total: 0 },
+    })]
+  }
+  const snapshots: CatalogSnapshot[] = []
+  for (let offset = 0; offset < items.length; offset += 100) {
+    snapshots.push(parseCatalogSnapshot({
+      schemaVersion: template.schemaVersion,
+      source: template.source,
+      items: items.slice(offset, offset + 100),
+      page: { total },
+    }))
+  }
+  return snapshots
+}
+
 function normalizedSearchText(item: CatalogItem): string {
   return [
     item.id,
@@ -207,6 +246,16 @@ export interface CatalogService {
     query: unknown,
     scope?: CatalogFetchScope,
   ): readonly MarketCatalogSourceResult[]
+  /**
+   * For 1024Store, merge a provider `q` search page into the cached homepage
+   * slice so one-click and market search can resolve packages that are not in
+   * the published first page. Does not replace the cached scan.
+   */
+  mergeProviderSearch?(
+    index: CatalogFullIndex,
+    query: unknown,
+    signal: AbortSignal,
+  ): Promise<CatalogFullIndex>
   invalidateSource(sourceRecordId: string): void
 }
 
@@ -633,6 +682,39 @@ export class DefaultCatalogService implements CatalogService {
     }))
   }
 
+  async mergeProviderSearch(
+    index: CatalogFullIndex,
+    value: unknown,
+    signal: AbortSignal,
+  ): Promise<CatalogFullIndex> {
+    const query = normalizeCatalogQuery(value)
+    if (query.q === undefined || index.source.adapterId !== DSH_1024STORE_ADAPTER_ID) {
+      return index
+    }
+    const adapter = adapters.get(index.source.adapterId)
+    if (adapter === undefined) return index
+    const template = index.snapshots[0]
+    if (template === undefined) return index
+    const delegate = this.adapterHttpClients.get(index.source.adapterId) ?? this.http
+    const extra = await adapter.fetch(query, {
+      signal,
+      source: localSourceFromView(index.source),
+      http: delegate,
+      media: this.media,
+    })
+    signal.throwIfAborted()
+    const existing = completeItems(index)
+    const seen = new Set(existing.map(item => item.id))
+    const added = extra.items.filter(item => !seen.has(item.id))
+    if (added.length === 0) return index
+    const items = [...existing, ...added]
+    if (items.length > MAX_CATALOG_ITEMS) throw new Error('catalog scan exceeded the item limit')
+    return {
+      ...index,
+      snapshots: chunkCatalogItems(items, template),
+    }
+  }
+
   queryCatalog(
     index: CatalogFullIndex,
     value: unknown,
@@ -707,6 +789,9 @@ export class DefaultCatalogService implements CatalogService {
       ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
     })
     signal.throwIfAborted()
-    return index === undefined ? [] : this.queryCatalog(index, query, scope)
+    if (index === undefined) return []
+    const merged = await this.mergeProviderSearch(index, query, signal)
+    signal.throwIfAborted()
+    return this.queryCatalog(merged, query, scope)
   }
 }

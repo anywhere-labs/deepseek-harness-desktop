@@ -70,7 +70,7 @@ The published normative contract is the [catalog provider contract](catalog-prov
 
 ## Complete local index and cache
 
-The Host completes one full normalized scan for the selected source and current locale before serving catalog interactions. Standard sources are exhausted through their declared cursor and effective page limits. The reviewed 1024Store adapter instead performs one full-registry GET, normalizes every valid item, and emits Schema-bounded chunks of at most 100 items. The dshfind adapter walks REST pages of at most 100 items and fixes the first page's `data_version` across every later page. Because its published anonymous quota is lower than the current first-sync page count, that initial scan is deliberately throttled and may take longer. A stale-version or rate-limit failure never publishes a partial index. The 10,000-item Host limit, source identity, cancellation, provenance, and origin checks apply across the whole scan.
+The Host completes one full normalized scan for the selected source and current locale before serving catalog interactions. Standard sources are exhausted through their declared cursor and effective page limits. The reviewed 1024Store adapter instead performs one registry GET, indexes the published homepage slice, and emits Schema-bounded chunks of at most 100 items. A later search may send the provider `q` parameter so packages outside that slice remain resolvable. The dshfind adapter walks REST pages of at most 100 items and fixes the first page's `data_version` across every later page. Because its published anonymous quota is lower than the current first-sync page count, that initial scan is deliberately throttled and may take longer. A stale-version or rate-limit failure never publishes a partial index. The 10,000-item Host limit, source identity, cancellation, provenance, and origin checks apply across the whole scan.
 
 Search, sorting, multi-category OR filtering, category enumeration, and pagination operate only on this complete local index. The UI shows at most 50 matching items per page. **Load more** advances a Host-owned local cursor; it does not issue another filtered provider request. The category list is the complete set present in the index. **Installable** is a fail-closed structural subset of this same index, not a second provider feed and not the result of per-package registry requests. Its catalog membership is independent of local installation, receipt, uninstall history, and enabled/disabled state.
 
@@ -89,7 +89,7 @@ Catalog browsing provides:
 
 - a source chooser, saved source management, and addition of a conforming source;
 - one selected source per browsing session, with no hidden request or fallback to another saved source;
-- one complete selected-source scan, with standard-source network pages bounded by the manifest and Schema maximum of 100, and one full-registry read for the reviewed 1024Store adapter;
+- one complete selected-source scan, with standard-source network pages bounded by the manifest and Schema maximum of 100, and one published-page read for the reviewed 1024Store adapter;
 - a bottom **Load more** action that advances through local matching results in fixed pages of at most 50;
 - loading, empty, offline, invalid-response, and retry states;
 - local search over every normalized name and description in the complete index;
