@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hooks = vi.hoisted(() => ({
@@ -53,7 +54,7 @@ describe('installProfilePackageResolver', () => {
       nextResolve,
     )).toEqual({
       shortCircuit: true,
-      url: 'file:///current/dsh-plugin-desktop/lib/index.js',
+      url: pathToFileURL('/current/dsh-plugin-desktop/lib/index.js').href,
     })
 
     expect(hooks.resolve?.(
@@ -62,7 +63,7 @@ describe('installProfilePackageResolver', () => {
       nextResolve,
     )).toEqual({
       shortCircuit: true,
-      url: 'file:///current/dsh-plugin-desktop/lib/profile.js',
+      url: pathToFileURL('/current/dsh-plugin-desktop/lib/profile.js').href,
     })
 
     expect(() => hooks.resolve?.(
