@@ -73,6 +73,117 @@ describe('installProfilePackageResolver', () => {
     expect(hooks.deregister).toHaveBeenCalledTimes(1)
   })
 
+  it('resolves dependencies of a linked profile plugin through the selected profile', () => {
+    const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
+    const linkedPluginUrl = 'file:///D:/workspace/plugins/dsh-linked/lib/index.js'
+    const profileDependencyUrl = 'file:///C:/Users/test/profile/node_modules/zod/index.js'
+    installProfilePackageResolver(profileBaseUrl)
+    const nextResolve = vi.fn((specifier: string, context: { parentURL?: string }) => {
+      if (specifier === 'dsh-linked' && context.parentURL === profileBaseUrl) {
+        return { url: linkedPluginUrl }
+      }
+      if (specifier === 'zod' && context.parentURL === profileBaseUrl) {
+        return { url: profileDependencyUrl }
+      }
+      const error = new Error(`Cannot find package '${specifier}' imported from ${context.parentURL ?? 'unknown'}`)
+      Object.assign(error, { code: 'ERR_MODULE_NOT_FOUND' })
+      throw error
+    })
+    const loaderEntryUrl = import.meta.resolve('@deepseek-ai/cordis-plugin-loader')
+
+    expect(hooks.resolve?.(
+      'dsh-linked',
+      { parentURL: loaderEntryUrl },
+      nextResolve,
+    )).toEqual({ url: linkedPluginUrl })
+
+    expect(hooks.resolve?.(
+      'zod',
+      { parentURL: linkedPluginUrl },
+      nextResolve,
+    )).toEqual({ url: profileDependencyUrl })
+  })
+
+  it('keeps profile dependency fallback across linked plugin relative modules', () => {
+    const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
+    const linkedPluginUrl = 'file:///D:/workspace/plugins/dsh-linked/lib/index.js'
+    const linkedFeatureUrl = 'file:///D:/workspace/plugins/dsh-linked/lib/feature.js'
+    const profileDependencyUrl = 'file:///C:/Users/test/profile/node_modules/zod/index.js'
+    installProfilePackageResolver(profileBaseUrl)
+    const nextResolve = vi.fn((specifier: string, context: { parentURL?: string }) => {
+      if (specifier === 'dsh-linked' && context.parentURL === profileBaseUrl) {
+        return { url: linkedPluginUrl }
+      }
+      if (specifier === './feature.js' && context.parentURL === linkedPluginUrl) {
+        return { url: linkedFeatureUrl }
+      }
+      if (specifier === 'zod' && context.parentURL === profileBaseUrl) {
+        return { url: profileDependencyUrl }
+      }
+      const error = new Error(`Cannot find package '${specifier}' imported from ${context.parentURL ?? 'unknown'}`)
+      Object.assign(error, { code: 'ERR_MODULE_NOT_FOUND' })
+      throw error
+    })
+    const loaderEntryUrl = import.meta.resolve('@deepseek-ai/cordis-plugin-loader')
+
+    expect(hooks.resolve?.('dsh-linked', { parentURL: loaderEntryUrl }, nextResolve))
+      .toEqual({ url: linkedPluginUrl })
+    expect(hooks.resolve?.('./feature.js', { parentURL: linkedPluginUrl }, nextResolve))
+      .toEqual({ url: linkedFeatureUrl })
+    expect(hooks.resolve?.('zod', { parentURL: linkedFeatureUrl }, nextResolve))
+      .toEqual({ url: profileDependencyUrl })
+  })
+
+  it('keeps profile dependency fallback across linked plugin package dependencies', () => {
+    const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
+    const linkedPluginUrl = 'file:///D:/workspace/plugins/dsh-linked/lib/index.js'
+    const localDependencyUrl = 'file:///D:/workspace/plugins/dsh-linked/node_modules/local-dependency/index.js'
+    const profilePeerUrl = 'file:///C:/Users/test/profile/node_modules/profile-peer/index.js'
+    installProfilePackageResolver(profileBaseUrl)
+    const nextResolve = vi.fn((specifier: string, context: { parentURL?: string }) => {
+      if (specifier === 'dsh-linked' && context.parentURL === profileBaseUrl) {
+        return { url: linkedPluginUrl }
+      }
+      if (specifier === 'local-dependency' && context.parentURL === linkedPluginUrl) {
+        return { url: localDependencyUrl }
+      }
+      if (specifier === 'profile-peer' && context.parentURL === profileBaseUrl) {
+        return { url: profilePeerUrl }
+      }
+      const error = new Error(`Cannot find package '${specifier}' imported from ${context.parentURL ?? 'unknown'}`)
+      Object.assign(error, { code: 'ERR_MODULE_NOT_FOUND' })
+      throw error
+    })
+    const loaderEntryUrl = import.meta.resolve('@deepseek-ai/cordis-plugin-loader')
+
+    expect(hooks.resolve?.('dsh-linked', { parentURL: loaderEntryUrl }, nextResolve))
+      .toEqual({ url: linkedPluginUrl })
+    expect(hooks.resolve?.('local-dependency', { parentURL: linkedPluginUrl }, nextResolve))
+      .toEqual({ url: localDependencyUrl })
+    expect(hooks.resolve?.('profile-peer', { parentURL: localDependencyUrl }, nextResolve))
+      .toEqual({ url: profilePeerUrl })
+  })
+
+  it('does not expose profile dependencies to unrelated modules', () => {
+    const profileBaseUrl = 'file:///C:/Users/test/profile/package.json'
+    installProfilePackageResolver(profileBaseUrl)
+    const nextResolve = vi.fn((specifier: string, context: { parentURL?: string }) => {
+      if (context.parentURL === profileBaseUrl) {
+        return { url: 'file:///C:/Users/test/profile/node_modules/zod/index.js' }
+      }
+      const error = new Error(`Cannot find package '${specifier}' imported from ${context.parentURL ?? 'unknown'}`)
+      Object.assign(error, { code: 'ERR_MODULE_NOT_FOUND' })
+      throw error
+    })
+
+    expect(() => hooks.resolve?.(
+      'zod',
+      { parentURL: 'file:///C:/Program%20Files/DSH%20Desktop/resources/app.asar/lib/main.js' },
+      nextResolve,
+    )).toThrow('Cannot find package')
+    expect(nextResolve).toHaveBeenCalledTimes(1)
+  })
+
   it('deregisters hooks only once even if the disposer is reused', () => {
     const dispose = installProfilePackageResolver('file:///C:/Users/test/profile/')
 

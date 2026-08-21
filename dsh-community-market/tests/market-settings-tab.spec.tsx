@@ -1502,6 +1502,20 @@ describe('MarketSettingsTab', () => {
     expect(signal?.aborted).toBe(true)
   })
 
+  it('identifies the selected source and a bounded catalog failure reason', async () => {
+    vi.mocked(readMarketState).mockResolvedValue(enabledState)
+    vi.mocked(readMarketCatalog).mockRejectedValue({
+      status: 504,
+      code: 'catalog-timeout',
+      message: 'private upstream URL and response detail',
+    })
+    render(<MarketSettingsTab {...props} />)
+
+    expect(await screen.findByRole('heading', { name: en.catalogError })).toBeTruthy()
+    expect(screen.getByText('Source: Fixture catalog. The catalog request timed out.')).toBeTruthy()
+    expect(screen.queryByText(/private upstream URL/u)).toBeNull()
+  })
+
   it('does not let reads interrupt a pending source selection and aborts it on unmount', async () => {
     const second = makeSecondSource(false)
     vi.mocked(readMarketState).mockResolvedValue({ sources: [firstSource, second], builtIns: [], desktopActions })

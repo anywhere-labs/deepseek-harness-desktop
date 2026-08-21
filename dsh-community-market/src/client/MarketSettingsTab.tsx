@@ -121,6 +121,22 @@ function isDesktopUnavailable(cause: unknown): boolean {
     && (cause as { status?: unknown }).status === 503
 }
 
+function catalogFailureMessage(
+  cause: unknown,
+  source: MarketSourceView,
+  t: MarketSettingsTabProps['t'],
+): string {
+  const code = cause !== null && typeof cause === 'object' && 'code' in cause
+    ? (cause as { code?: unknown }).code
+    : undefined
+  const reason = code === 'catalog-timeout'
+    ? t('catalogFailureTimeout')
+    : code === 'catalog-invalid-response'
+      ? t('catalogFailureInvalidResponse')
+      : t('catalogFailureUnavailable')
+  return `${t('catalogFailureSource')}: ${source.name}. ${reason}`
+}
+
 function PluginIcon({ item, large = false }: { item: MarketItem; large?: boolean }) {
   const icon = item.media?.icon
   return (
@@ -330,7 +346,7 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
       if (!request.signal.aborted && readRequest.current === request) {
         const retained = applyCatalog(next)
         if (retained === undefined) {
-          setError(t('catalogError'))
+          setError(catalogFailureMessage({ code: 'catalog-invalid-response' }, selected, t))
           return
         }
         if (!forceRefresh
@@ -348,8 +364,10 @@ export function MarketSurface({ initialView = 'installable', readLocale, t, show
           if (!request.signal.aborted && readRequest.current === request) applyCatalog(refreshed)
         }
       }
-    } catch {
-      if (!request.signal.aborted && readRequest.current === request && !catalogApplied) setError(t('catalogError'))
+    } catch (cause) {
+      if (!request.signal.aborted && readRequest.current === request && !catalogApplied) {
+        setError(catalogFailureMessage(cause, selected, t))
+      }
     } finally {
       if (readRequest.current === request) {
         readRequest.current = undefined

@@ -88,6 +88,13 @@ export interface DesktopPluginInstallRequest {
 export interface DesktopPnpm {
   run(args: readonly string[], signal?: AbortSignal): DesktopPnpmHandle
   runPlugin(args: readonly string[], invokingDir: string, signal?: AbortSignal): DesktopPnpmHandle
+  /** @deprecated Use `installPlugin()` so Desktop constructs the exact package target. */
+  runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: DesktopPluginInstallRecovery,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle>
   installPlugin(request: DesktopPluginInstallRequest): Promise<DesktopPnpmHandle>
   recoveredInstallReceiptIds(): Promise<readonly string[]>
   acknowledgeRecoveredInstall(receiptId: string): Promise<void>
@@ -239,6 +246,30 @@ class DesktopPnpmService extends Service implements DesktopPnpm {
         ...resolvedArgs,
       ],
       cwd: invokingDir,
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  /** Preserve the v2.0.1 install surface without allowing callers to choose another target. */
+  async runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: DesktopPluginInstallRecovery,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle> {
+    const resolvedArgs = validatedArgs(args)
+    const expectedTarget = `${recovery.packageName}@${recovery.packageVersion}`
+    if (
+      resolvedArgs[0] !== 'add'
+      || resolvedArgs.at(-1) !== expectedTarget
+      || resolvedArgs.slice(1, -1).some(argument => !argument.startsWith('-'))
+    ) {
+      throw new Error(`${BIN_NAME}: recoverable plugin install requires the exact receipt target`)
+    }
+    return await this.installPlugin({
+      pnpmOptions: resolvedArgs.slice(1, -1),
+      invokingDir,
+      recovery,
       ...(signal === undefined ? {} : { signal }),
     })
   }

@@ -69,6 +69,12 @@ export interface MarketCatalogResponse {
   readonly fetchedAt: string
 }
 
+/** Bounded catalog failure identity returned by the Host without upstream details. */
+export type MarketCatalogErrorCode =
+  | 'catalog-timeout'
+  | 'catalog-invalid-response'
+  | 'catalog-unavailable'
+
 export interface MarketCatalogMetadata {
   readonly scannedAt: string
   readonly expiresAt: string

@@ -41,6 +41,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          node --test scripts/bilingual-docs.test.mjs
+          node scripts/verify-bilingual-docs.mjs
+          node --test scripts/market-dependency-direction.test.mjs
+          node scripts/verify-market-dependency-direction.mjs
           if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
             product=true
           else

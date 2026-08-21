@@ -241,7 +241,8 @@ describe('community market overlay', () => {
     renderOpenOverlay()
 
     expect(await screen.findByRole('heading', { name: 'catalogError' })).toBeTruthy()
-    expect(screen.getAllByText('catalogError')).toHaveLength(2)
+    expect(screen.getByText('catalogFailureSource: DSH 1024Store. catalogFailureUnavailable')).toBeTruthy()
+    expect(screen.queryByText('market offline')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'retry' }))
 
     expect(await screen.findByText('Better Sidebar')).toBeTruthy()

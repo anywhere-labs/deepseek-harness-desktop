@@ -1515,7 +1515,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-client-ui-settings-models@npm:^0.1.0-rc.7":
+"@deepseek-ai/dsh-client-ui-settings-models@npm:0.1.0-rc.7":
   version: 0.1.0-rc.7
   resolution: "@deepseek-ai/dsh-client-ui-settings-models@npm:0.1.0-rc.7"
   peerDependencies:
@@ -1530,6 +1530,24 @@ __metadata:
     "@deepseek-ai/dsh-invariants": ^0.1.0-rc.7
     react: ^18.2.0
   checksum: 10c0/f507c09fafb21075572f88f99dbcc84e6473f86e7885e3b400eb4dec394362a874d3b25b084ff15226434aaab26e303ebdd7c09d8f4b1dacc8d2bd295b497c94
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-client-ui-settings-models@patch:@deepseek-ai/dsh-client-ui-settings-models@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-settings-models@0.1.0-rc.7.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.7
+  resolution: "@deepseek-ai/dsh-client-ui-settings-models@patch:@deepseek-ai/dsh-client-ui-settings-models@npm%3A0.1.0-rc.7#./patches/dsh-client-ui-settings-models@0.1.0-rc.7.patch::version=0.1.0-rc.7&hash=49291d&locator=deepseek-harness-desktop%40workspace%3A."
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-api-remotes": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-connection": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-runtime": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-schema-form": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-ui-primitives": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-ui-slots": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-client-web-react": ^0.1.0-rc.7
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.7
+    react: ^18.2.0
+  checksum: 10c0/4cc58a74a529c487914a4ff85cfe23750503664c8bc1658d821431c2be5298b23b30c1ff03ce7e7cd56d7a7d846dc6a8883d373d8ae4c18e6eee96a8d53b69f1
   languageName: node
   linkType: hard
 
@@ -6142,7 +6160,7 @@ __metadata:
 
 "app-builder-lib@patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 26.15.7
-  resolution: "app-builder-lib@patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch::version=26.15.7&hash=17e0f0&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "app-builder-lib@patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch::version=26.15.7&hash=f9c097&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@electron/asar": "npm:3.4.1"
     "@electron/fuses": "npm:^1.8.0"
@@ -6188,7 +6206,7 @@ __metadata:
   peerDependencies:
     dmg-builder: 26.15.7
     electron-builder-squirrel-windows: 26.15.7
-  checksum: 10c0/3d0bdb4cfec1750900cc4c6a9084c515302174e762168f5551c7d6e65cb3469adc648088fab3d7d0ef25c8595285038fa47445b54e255887bd46203edff8545e
+  checksum: 10c0/5a1a3c283ee655741cac7bccbf2e94d6c48d36a8b96b640b84691e85d7e6a2cbf667cf42cc5c33bdb2b384eae834cac333fc84f4f37c604a0e2693b76faf1bfb
   languageName: node
   linkType: hard
 

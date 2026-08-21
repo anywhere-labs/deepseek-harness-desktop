@@ -123,6 +123,7 @@ export const REQUIRED_UNPACKED_PACKAGE_SPECIFIERS = [
   'dsh-plugin-desktop/windows-pwsh-sandbox',
   'dsh-plugin-desktop/package.json',
   '@deepseek-ai/dsh-base/package.json',
+  '@deepseek-ai/schemastery/package.json',
   '@deepseek-ai/dsh-web-app/package.json',
 ] as const
 

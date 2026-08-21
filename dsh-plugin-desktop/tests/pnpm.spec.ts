@@ -271,6 +271,66 @@ describe('desktop pnpm Host service', () => {
     }
   })
 
+  it('keeps the v2.0.1 recoverable install interface for an exact receipt target', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-pnpm-legacy-install-'))
+    const selectedBootstrap = bootstrap(root)
+    const child = controlledSubprocess()
+    try {
+      mkdirSync(selectedBootstrap.activeProfileDir, { recursive: true })
+      writeFileSync(join(selectedBootstrap.activeProfileDir, 'package.json'), '{}\n')
+      const harness = await createHarness([child], selectedBootstrap)
+
+      const operation = await harness.service.runPluginInstall(
+        ['add', '--save-exact', 'legacy-plugin@1.2.3'],
+        '/workspace',
+        {
+          packageName: 'legacy-plugin',
+          packageVersion: '1.2.3',
+          receiptId: 'receipt:legacy-install-0001',
+        },
+      )
+
+      expect(harness.spawn.mock.calls[0]?.[0].argv).toEqual([
+        selectedBootstrap.appExecutable,
+        '--expose-internals',
+        selectedBootstrap.dshBootstrapPath,
+        'plugin',
+        '--profile',
+        selectedBootstrap.activeProfileName,
+        'add',
+        '--save-exact',
+        'legacy-plugin@1.2.3',
+      ])
+      finish(child)
+      await operation.done
+      await harness.dispose()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects legacy recoverable installs that do not match the receipt target', async () => {
+    const harness = await createHarness([])
+    const recovery = {
+      packageName: 'legacy-plugin',
+      packageVersion: '1.2.3',
+      receiptId: 'receipt:legacy-install-invalid-0001',
+    }
+
+    await expect(harness.service.runPluginInstall(
+      ['add', 'other-plugin@1.2.3'],
+      '/workspace',
+      recovery,
+    )).rejects.toThrow('requires the exact receipt target')
+    await expect(harness.service.runPluginInstall(
+      ['add', 'extra-plugin@1.0.0', 'legacy-plugin@1.2.3'],
+      '/workspace',
+      recovery,
+    )).rejects.toThrow('requires the exact receipt target')
+    expect(harness.spawn).not.toHaveBeenCalled()
+    await harness.dispose()
+  })
+
   it('validates operation arguments and the plugin invocation directory before spawning', async () => {
     const harness = await createHarness([])
 

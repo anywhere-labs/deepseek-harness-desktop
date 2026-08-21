@@ -1,0 +1,10 @@
+diff --git a/lib/client.js b/lib/client.js
+index 741dc8a..72b49c7 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1500,0 +1501,2 @@ window.__ModuleLoader__.load({
++				const baseURLOverridden = (0, _deepseek_ai_dsh_client_schema_form.hasPath)(draft, ["baseURL"]);
++				const canCustomizeApi = ownsIdentity || baseURLOverridden;
+@@ -1589 +1591 @@ window.__ModuleLoader__.load({
+-							ownsIdentity ? (0, react_jsx_runtime.jsxs)("div", {
++							canCustomizeApi ? (0, react_jsx_runtime.jsxs)("div", {

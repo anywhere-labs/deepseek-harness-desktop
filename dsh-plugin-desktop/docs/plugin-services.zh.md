@@ -88,6 +88,17 @@ interface DesktopPnpm {
     invokingDir: string,
     signal?: AbortSignal,
   ): DesktopPnpmHandle
+  /** @deprecated 请使用 installPlugin()。 */
+  runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: {
+      readonly packageName: string
+      readonly packageVersion: string
+      readonly receiptId: string
+    },
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle>
   installPlugin(request: {
     readonly pnpmOptions?: readonly string[]
     readonly invokingDir: string
@@ -120,6 +131,7 @@ interface DesktopPnpmHandle {
 | --- | --- | --- |
 | `run(args, signal?)` | 直接执行已打包 pnpm JavaScript entry，以激活 profile 目录为 `cwd`。 | 调用方明确不需要 DSH 插件 reconcile 的低层 pnpm 工作。 |
 | `runPlugin(args, invokingDir, signal?)` | 以调用方绝对目录为 CLI `cwd`，执行已打包 `dsh plugin --profile <active> ...`；上游 DSH 会为 pnpm 进入 profile。 | 插件 remove、update、collection 修复或 dependency 修复。它会拒绝 `add`。 |
+| `runPluginInstall(args, invokingDir, recovery, signal?)` | 仅当 v2.0.1 `add` 形式中的唯一精确目标与恢复 receipt 一致时接受调用，随后委托给 `installPlugin()`。 | 为已发布插件管理器保留的废弃兼容入口；新集成不得使用。 |
 | `installPlugin(request)` | 先快照 profile，生成精确 `name@version` 目标，再执行强制的 `dsh plugin ... add`；`done` settle 前会封存或恢复快照。 | Desktop 唯一受支持的插件安装路径。 |
 
 `run()` 不是 `runPlugin()` 的短写。直接 pnpm 不承诺首次 profile 初始化、调用方相对 `file:` 或 `link:` source 锚定，也不承诺成功后的 `dsh.profile.bundles` reconcile。插件管理器若使用错误方法，package 可能已经出现在 dependency 中，却没有加入 Loader layer stack。
@@ -133,6 +145,8 @@ interface DesktopPnpmHandle {
 ```
 
 `installPlugin()` 拥有可恢复的 `add` 生命周期。调用方提供 pnpm flag、绝对调用目录和持久 receipt 身份。Desktop 会生成精确的 `${packageName}@${packageVersion}` 目标，在 spawn 前快照 profile manifest 与 lockfile，命令失败后恢复，成功后封存安装后图像。`receiptId` 把调用方的持久 receipt ledger 与 Desktop WAL 关联起来。启动回滚后，必须先删除精确 receipt，然后才调用 `acknowledgeRecoveredInstall(receiptId)`；确认操作是幂等的。`rollbackPluginInstall(receiptId)` 仅适用于当前 generation 中匹配的 transaction。
+
+`runPluginInstall()` 仅为避免破坏 v2.0.1 插件管理器而保留。它只接受 `['add', ...flags, exactTarget]`，其中 `exactTarget` 必须精确等于 `${recovery.packageName}@${recovery.packageVersion}`，中间参数必须全部是 flag。命令、目标不符，存在额外位置参数，或参数格式错误时，都会在启动进程前拒绝。
 
 Service 在每个 generation 同时最多启动一个 package operation；已有 operation 活跃时再次调用会同步抛错。它只暴露输出，不选择 progress UI，也没有内置 timeout。Consumer 拥有 deadline、读取两个 stream、报告 progress、在需要时调用 `cancel()` 或 abort signal、等待 `done`，并同时检查 `exitCode` 与 `signal`。
 

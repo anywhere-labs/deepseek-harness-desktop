@@ -88,6 +88,17 @@ interface DesktopPnpm {
     invokingDir: string,
     signal?: AbortSignal,
   ): DesktopPnpmHandle
+  /** @deprecated Use installPlugin(). */
+  runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: {
+      readonly packageName: string
+      readonly packageVersion: string
+      readonly receiptId: string
+    },
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle>
   installPlugin(request: {
     readonly pnpmOptions?: readonly string[]
     readonly invokingDir: string
@@ -120,6 +131,7 @@ The actual stream type is Node's `Readable`. Command methods validate non-empty,
 | --- | --- | --- |
 | `run(args, signal?)` | Runs the packaged pnpm JavaScript entry directly, with the active profile directory as `cwd`. | Low-level pnpm work whose caller deliberately does not need DSH plugin reconciliation. |
 | `runPlugin(args, invokingDir, signal?)` | Runs packaged `dsh plugin --profile <active> ...` with the absolute caller directory as CLI `cwd`; upstream DSH changes into the profile for pnpm. | Plugin remove, update, collection repair, or dependency repair. It rejects `add`. |
+| `runPluginInstall(args, invokingDir, recovery, signal?)` | Accepts the v2.0.1 `add` shape only when its single exact target equals the recovery receipt, then delegates to `installPlugin()`. | Deprecated compatibility for released plugin managers; do not use in new integrations. |
 | `installPlugin(request)` | Snapshots the profile, generates the exact `name@version` target, then runs the enforced `dsh plugin ... add` operation and seals or restores the snapshot before `done` settles. | The only supported Desktop plugin-install path. |
 
 `run()` is not a shorter spelling of `runPlugin()`. Direct pnpm does not promise first-use profile initialization, caller-relative `file:` or `link:` source anchoring, or successful `dsh.profile.bundles` reconciliation. A package can appear in dependencies yet fail to join the Loader layer stack if a plugin manager uses the wrong method.
@@ -133,6 +145,8 @@ The actual stream type is Node's `Readable`. Command methods validate non-empty,
 ```
 
 `installPlugin()` owns the recoverable `add` lifecycle. The caller supplies pnpm flags, an absolute invoking directory, and a durable receipt identity. Desktop generates the exact `${packageName}@${packageVersion}` target, snapshots the profile manifest and lockfiles before spawning, restores them after a failed command, and seals the post-install image after success. `receiptId` links the caller's durable receipt ledger to the Desktop WAL. After startup rollback, remove that exact receipt first and only then call `acknowledgeRecoveredInstall(receiptId)`; acknowledgment is idempotent. `rollbackPluginInstall(receiptId)` is limited to the current generation's matching transaction.
+
+`runPluginInstall()` remains available only to avoid breaking v2.0.1 plugin managers. It accepts `['add', ...flags, exactTarget]` only when `exactTarget` is precisely `${recovery.packageName}@${recovery.packageVersion}` and every intermediate argument is a flag. A different command, target, extra positional package, or malformed argument is rejected before any process starts.
 
 The service starts at most one package operation per generation. A second call while one is active throws synchronously. It exposes output instead of choosing a progress UI, and it has no built-in timeout. The consumer owns deadlines, reads both streams, reports progress, calls `cancel()` or aborts its signal when needed, awaits `done`, and checks both `exitCode` and `signal`.
 

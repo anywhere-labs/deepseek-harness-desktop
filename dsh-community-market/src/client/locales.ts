@@ -139,6 +139,10 @@ export const zh = {
   sourceNotice: '可以添加多个来源，但每次只使用一个。请使用您信任的插件来源。',
   sourceError: '来源操作失败',
   catalogError: '暂时无法加载插件目录',
+  catalogFailureSource: '来源',
+  catalogFailureTimeout: '目录请求超时。',
+  catalogFailureInvalidResponse: '来源返回了无法识别的目录数据。',
+  catalogFailureUnavailable: '当前无法连接该目录来源。',
   retry: '重试',
 } as const
 
@@ -285,5 +289,9 @@ export const en: Record<MarketLocaleKey, string> = {
   sourceNotice: 'You can add multiple sources, but only one is used at a time. Use only plugin sources you trust.',
   sourceError: 'Source operation failed',
   catalogError: 'The plugin catalog is temporarily unavailable',
+  catalogFailureSource: 'Source',
+  catalogFailureTimeout: 'The catalog request timed out.',
+  catalogFailureInvalidResponse: 'The source returned catalog data that could not be read.',
+  catalogFailureUnavailable: 'The catalog source could not be reached.',
   retry: 'Retry',
 }
