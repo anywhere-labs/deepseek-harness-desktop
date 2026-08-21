@@ -36,7 +36,7 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 可以。AI Buddy 使用官方 Harness 插件体系。日常安装优先打开 **设置 > 插件** 中的**插件市场**标签，或使用侧边栏入口；也可以从托盘打开 AI Buddy Terminal，运行 `dsh plugin add`、`dsh plugin remove` 和 `dsh plugin update`。命令和市场操作默认作用于当前激活的 profile，插件变更后需要重启 Desktop。目录收录不等于安全审核。
 
-想要更接近 Codex 的工作台时，打开 **设置 > 插件 > 工作套件**：默认 Agent 预设是 Code，推荐的工作区插件需从市场安装。办公 IM 的起点是钉钉官方 Stream（`dsh-dingtalk-channel`）和企业微信官方智能机器人（`dsh-wecom`）；这是推荐，不是白名单，其他社区通道仍可安装。不会预装，也不会预置密钥。外部 MCP 服务器在 **MCP** 标签里用官方客户端配置，不会预置令牌。
+想要更接近 Codex 的工作台时，打开 **设置 > 插件 > 工作套件**：默认 Agent 预设是 Code，推荐的工作区插件需从市场安装。办公 IM 的起点是钉钉官方 Stream（`dsh-dingtalk-channel`）和企业微信官方智能机器人（`dsh-wecom`）；这是推荐，不是白名单，其他社区通道仍可安装。窄屏可以把 `dsh-web-mobile` 当作后续可选推荐。不会预装，也不会预置密钥。外部 MCP 服务器在 **MCP** 标签里用官方客户端配置，不会预置令牌。命令面板、本机模型、数据目录迁移和远程入口都是可选能力；远程入口默认关闭，不会做像素流。
 
 ## 有官方钉钉和企业微信吗？
 

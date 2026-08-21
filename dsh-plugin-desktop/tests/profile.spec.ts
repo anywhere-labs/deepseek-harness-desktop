@@ -238,6 +238,12 @@ describe('desktop profile composition', {
     expect(rows.find(row => row.id === 'desktop-mcp')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/mcp',
     }))
+    expect(rows.find(row => row.id === 'desktop-workbench')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/workbench',
+    }))
+    expect(rows.find(row => row.id === 'web-runtime')).toEqual(expect.objectContaining({
+      config: expect.objectContaining({ trustedHosts: [] }),
+    }))
     expect(rows.map(row => row.id)).not.toContain('desktop-windows-agent-presets')
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',
@@ -317,6 +323,29 @@ describe('desktop profile composition', {
     expect(rows.find(row => row.id === 'ui-layout')?.disabled).toBe(true)
     expect(rows.find(row => row.id === 'ui-sidebar')?.disabled).toBe(false)
     expect(rows.find(row => row.id === 'ui-conversation')?.disabled).toBe(false)
+    expect(rows.find(row => row.id === 'web-runtime')).toEqual(expect.objectContaining({
+      config: expect.objectContaining({ trustedHosts: [] }),
+    }))
+  })
+
+  it('projects an enabled remote trusted host only after the user opts in', () => {
+    const home = temporaryHome()
+    writeFileSync(join(home, 'settings.yaml'), [
+      'dsh-desktop-workbench:',
+      '  remote:',
+      '    enabled: true',
+      '    trustedHost: ai-buddy.tailnet.ts.net',
+      '',
+    ].join('\n'))
+
+    const prepared = prepareDesktopProfile(undefined, home, 'darwin')
+    const rows = composeEntries([prepared.patches])
+    expect(rows.find(row => row.id === 'web-runtime')).toEqual(expect.objectContaining({
+      config: expect.objectContaining({ trustedHosts: ['ai-buddy.tailnet.ts.net'] }),
+    }))
+    expect(rows.find(row => row.id === 'webserver')).toEqual(expect.objectContaining({
+      config: { host: '127.0.0.1', port: 0 },
+    }))
   })
 
   it('reads JSON settings and defaults an absent desktop namespace to compatibility', () => {
@@ -328,10 +357,24 @@ describe('desktop profile composition', {
     expect(desktopStartupSettingsFromSettings({ 'dsh-desktop': { mode: 'advanced', port: 43_189 } })).toEqual({
       mode: 'advanced',
       port: 43_189,
+      remoteEnabled: false,
+      remoteTrustedHost: '',
     })
     expect(desktopStartupSettingsFromSettings({ 'dsh-desktop': { mode: 'advanced' } })).toEqual({
       mode: 'advanced',
       port: 0,
+      remoteEnabled: false,
+      remoteTrustedHost: '',
+    })
+    expect(desktopStartupSettingsFromSettings({
+      'dsh-desktop-workbench': {
+        remote: { enabled: true, trustedHost: 'ai-buddy.tailnet.ts.net' },
+      },
+    })).toEqual({
+      mode: 'compatibility',
+      port: 0,
+      remoteEnabled: true,
+      remoteTrustedHost: 'ai-buddy.tailnet.ts.net',
     })
     expect(desktopShellModeFromSettings({ unrelated: { enabled: true } })).toBe('compatibility')
   })

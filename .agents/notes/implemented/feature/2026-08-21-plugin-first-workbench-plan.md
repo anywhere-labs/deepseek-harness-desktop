@@ -1,6 +1,6 @@
 # Agent Note: Plugin-first workbench optimization plan
 
-Status: proposed
+Status: implemented
 
 English | [中文](2026-08-21-plugin-first-workbench-plan.zh.md)
 
@@ -81,3 +81,5 @@ Each phase is done only when:
 ## Consequences
 
 Desktop remains the official Host for windows, tray, updates, MCP settings, and packaged runtimes. Copied workbench features arrive as plugins the market can replace. Official defaults stay a starting point, so community plugins remain usable after later Host work.
+
+The workbench Host now lives at `dsh-plugin-desktop/workbench`. Compatibility mode still leaves official layout, sidebar, and conversation in place. The Command Palette occupies `shell.overlay`. Local-model discovery, data-home merge, and the remote control plane start disabled and ship no secrets. Office IM stays a community recommendation, not a first-party lock. Remote access syncs sessions, files, and a host shell; it does not stream the Electron window. DSH remains on `127.0.0.1`.

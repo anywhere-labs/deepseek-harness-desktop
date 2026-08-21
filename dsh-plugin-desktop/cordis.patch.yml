@@ -22,6 +22,8 @@
       name: dsh-plugin-desktop/updates
     - id: desktop-mcp
       name: dsh-plugin-desktop/mcp
+    - id: desktop-workbench
+      name: dsh-plugin-desktop/workbench
 
 # A desktop launch has no terminal operator waiting for the Web readiness line.
 - id: web-runtime

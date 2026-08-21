@@ -130,6 +130,75 @@ const css = `
 .dshMcpStatus[data-tone="ok"] {
   color: var(--dsw-alias-label-secondary);
 }
+.dshPaletteRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+.dshPaletteBackdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgb(0 0 0 / 0.28);
+}
+.dshPalettePanel {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  width: min(560px, calc(100vw - 32px));
+  margin: 12vh auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-container);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.18);
+}
+.dshPaletteInput {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  color: inherit;
+  font: inherit;
+}
+.dshPaletteList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.dshPaletteItem {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.dshPaletteItem:hover,
+.dshPaletteItem:focus-visible {
+  background: var(--dsw-alias-bg-base);
+}
+.dshPaletteEmpty {
+  padding: 8px 10px;
+  color: var(--dsw-alias-label-tertiary);
+}
 `
 
 /** Install the worker-pack and MCP settings stylesheet. */

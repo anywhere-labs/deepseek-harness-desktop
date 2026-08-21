@@ -75,6 +75,10 @@
       "types": "./lib/types/mcp.d.ts",
       "default": "./lib/mcp.js"
     },
+    "./workbench": {
+      "types": "./lib/types/workbench.d.ts",
+      "default": "./lib/workbench.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

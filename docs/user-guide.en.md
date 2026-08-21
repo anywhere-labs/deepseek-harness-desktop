@@ -36,9 +36,11 @@ The port must be an integer from `0` through `65535`. Changing it performs an or
 
 New sessions default to the upstream **Code** (PTC) preset: standard file, terminal, search, skill, plan, subagent, and Ralph tools, plus TypeScript Code Mode presentation. You can switch back to `standard` in settings. Windows still hides the incompatible `minimal` preset.
 
-**Settings > Plugins > Worker pack** lists recommended workspace plugins such as `dsh-better-sidebar` and `dsh-context`, plus a starting office-IM pair: official DingTalk Stream (`dsh-dingtalk-channel`) and the official WeCom AI Bot (`dsh-wecom`). Recommendations are not an allowlist and are not preinstalled; Feishu, aggregators, and other community channels still install from **Plugin market** or `dsh plugin add`. Catalog listing is not a security review. The plugin market does not preselect a source; the Worker pack page can add and select DSH 1024Store in one click, then search npm names. Restart AI Buddy after installing or enabling plugins. Put credentials in the plugin config or the local credential store; do not commit secrets.
+**Settings > Plugins > Worker pack** lists recommended workspace plugins such as `dsh-better-sidebar` and `dsh-context`, plus a starting office-IM pair: official DingTalk Stream (`dsh-dingtalk-channel`) and the official WeCom AI Bot (`dsh-wecom`). Recommendations are not an allowlist and are not preinstalled; Feishu, aggregators, and other community channels still install from **Plugin market** or `dsh plugin add`. Narrow screens can later add the community plugin `dsh-web-mobile`; it is not the default workbench path. Catalog listing is not a security review. The plugin market does not preselect a source; the Worker pack page can add and select DSH 1024Store in one click, then search npm names. Restart AI Buddy after installing or enabling plugins. Put credentials in the plugin config or the local credential store; do not commit secrets.
 
 External MCP servers use the official `@deepseek-ai/dsh-mcp-client`. Add stdio or HTTP servers under **Settings > Plugins > MCP**. AI Buddy does not ship tokens or default child processes. Saving also requires a restart.
+
+`Mod+K` opens the desktop Command Palette for new sessions, session search, and workspace starts. It does not replace the official conversation surface. **Local models** probes loopback Ollama / LM Studio / OpenAI-compatible runtimes. It may start a supported runtime that is not running, will not take over a service that is already listening, and does not ship tokens. **Data home** previews and merges another DSH home; nothing migrates silently, and conflicting files are preserved. **Remote access** stays off by default: it syncs sessions, files, and a host shell instead of encoding the Electron window. DSH remains on `127.0.0.1`. The validated private entrance may be a Tailscale Serve HTTPS hostname; the trust fence is reachability, not authentication.
 
 ## Plugin management
 
@@ -93,6 +95,8 @@ After confirmation, the app first opens the native **Save Update Installer** dia
 - **A plugin is missing**: confirm the command or marketplace action targeted the intended profile and restart the application. Recommended worker-pack community plugins also need a restart before they enter the Loader composition.
 - **The plugin marketplace will not open**: confirm you are in the AI Buddy desktop composition. The market lives under **Settings > Plugins**; the sidebar button opens the same surface.
 - **MCP tools do not appear**: confirm the server is enabled, the command or URL is reachable, and you restarted after saving. AI Buddy does not preinstall GitHub or any other token-bearing server.
+- **Local models do not appear**: confirm Ollama or LM Studio is listening on `127.0.0.1`, then scan and apply them under **Local models**. AI Buddy does not ship API keys.
+- **Remote access does not open**: enable it, set the Tailscale Serve hostname, and restart. DSH still binds `127.0.0.1` only; do not enable Funnel or rebind to `0.0.0.0`.
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.
 - **No update notification appeared**: background failures are silent; use the manual tray check to see the result.
 
