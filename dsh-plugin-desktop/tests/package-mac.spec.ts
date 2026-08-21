@@ -121,7 +121,7 @@ describe('macOS DMG smoke packaging', () => {
     ])
     expect(logs).toEqual([
       'Building an unsigned macOS DMG smoke; signing and notarization are release-only steps.',
-      'Skipping the macOS package preflight; the CI shared gate already passed.',
+      'Skipping the macOS package preflight; the package gate already passed.',
     ])
   })
 

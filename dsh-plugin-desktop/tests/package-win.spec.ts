@@ -141,7 +141,7 @@ describe('Windows x64 installer packaging', () => {
     ])
     expect(logs).toEqual([
       'Building an unsigned Windows x64 installer; Authenticode is a separate release step.',
-      'Skipping the Windows package preflight; the CI shared gate already passed.',
+      'Skipping the Windows package preflight; the package gate already passed.',
     ])
   })
 
