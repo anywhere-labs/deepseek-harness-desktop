@@ -3,7 +3,12 @@ import { en, zh } from '../src/client/locales.ts'
 import {
   DESKTOP_DEFAULT_AGENT_PRESET,
   desktopAgentPresetConfig,
+  findCatalogItemForPackage,
+  isWorkerPackRecommendedPackage,
   OFFICE_IM_RECOMMENDED_PLUGINS,
+  recommendedPackageInstalled,
+  recommendedPluginsFor,
+  summarizeWorkerPackInstallResults,
   WORKER_PACK_CATALOG_SOURCE_KEY,
   WORKBENCH_LATER_RECOMMENDED_PLUGINS,
   WORKER_PACK_RECOMMENDED_PLUGINS,
@@ -56,8 +61,62 @@ describe('desktop worker pack', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
     expect(zh.officeImBody).toContain('不是白名单')
     expect(zh.officeImBody).toContain('社区插件')
+    expect(zh.workerBody).toContain('不会开机自动装')
+    expect(zh.installWorkspace).toContain('一键安装')
     expect(en.officeImBody).toContain('not an allowlist')
     expect(en.officeImBody).toContain('community')
+    expect(en.workerBody).toContain('nothing installs at launch')
+    expect(en.installWorkspace).toContain('Install recommended workspace')
+  })
+
+  it('groups one-click packs without making them a silent boot list', () => {
+    expect(recommendedPluginsFor('workspace').map(plugin => plugin.packageName)).toEqual([
+      'dsh-better-sidebar',
+      'dsh-context',
+    ])
+    expect(recommendedPluginsFor('office-im').map(plugin => plugin.packageName)).toEqual([
+      'dsh-dingtalk-channel',
+      'dsh-wecom',
+    ])
+    expect(recommendedPluginsFor('later').map(plugin => plugin.packageName)).toEqual([
+      'dsh-web-mobile',
+    ])
+    expect(isWorkerPackRecommendedPackage('dsh-better-sidebar')).toBe(true)
+    expect(isWorkerPackRecommendedPackage('dsh-im')).toBe(false)
+  })
+
+  it('matches installed recommendations and exact catalog package names', () => {
+    expect(recommendedPackageInstalled('dsh-context', [
+      { receipt: { packageName: 'dsh-context' } },
+    ])).toBe(true)
+    expect(recommendedPackageInstalled('dsh-context', [
+      { packageName: 'dsh-better-sidebar' },
+    ])).toBe(false)
+    expect(findCatalogItemForPackage([
+      { id: 'other', package: { name: 'dsh-im' } },
+      { id: 'sidebar', package: { name: 'dsh-better-sidebar' } },
+    ], 'dsh-better-sidebar')?.id).toBe('sidebar')
+    expect(findCatalogItemForPackage([
+      { id: 'fuzzy', package: { name: 'dsh-better-sidebar-extra' } },
+    ], 'dsh-better-sidebar')).toBeUndefined()
+  })
+
+  it('summarizes user-initiated install results', () => {
+    expect(summarizeWorkerPackInstallResults([
+      { packageName: 'dsh-context', status: 'installed' },
+      { packageName: 'dsh-better-sidebar', status: 'already' },
+    ])).toBe('installRestart')
+    expect(summarizeWorkerPackInstallResults([
+      { packageName: 'dsh-context', status: 'installed' },
+      { packageName: 'dsh-better-sidebar', status: 'missing' },
+    ])).toBe('installPartial')
+    expect(summarizeWorkerPackInstallResults([
+      { packageName: 'dsh-context', status: 'missing' },
+    ])).toBe('installMissing')
+    expect(summarizeWorkerPackInstallResults([
+      { packageName: 'dsh-context', status: 'failed', error: 'network' },
+    ])).toBe('installError')
+    expect(summarizeWorkerPackInstallResults([])).toBe('installError')
   })
 
   it('treats the catalog as selected only after an explicit enabled source', () => {

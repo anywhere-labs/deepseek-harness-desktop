@@ -1,4 +1,12 @@
-import { WORKER_PACK_CATALOG_SOURCE_KEY, workerPackCatalogSelected } from '../worker-pack.ts'
+import {
+  WORKER_PACK_CATALOG_SOURCE_KEY,
+  findCatalogItemForPackage,
+  isWorkerPackRecommendedPackage,
+  recommendedPackageInstalled,
+  workerPackCatalogSelected,
+  type WorkerPackInstallResult,
+  type WorkerPackInstallationRef,
+} from '../worker-pack.ts'
 
 export { workerPackCatalogSelected }
 
@@ -60,4 +68,134 @@ export async function selectWorkerPackCatalog(signal?: AbortSignal): Promise<rea
   if (source === undefined) throw new Error('built-in catalog source unavailable')
   if (source.enabled) return sources
   return await mutateMarketSource({ action: 'select', sourceRecordId: source.sourceRecordId }, signal)
+}
+
+interface MarketInstallationsResponse {
+  readonly installations: readonly WorkerPackInstallationRef[]
+}
+
+interface MarketCatalogResponse {
+  readonly results: readonly {
+    readonly snapshot?: { readonly items?: readonly { readonly id: string; readonly package?: { readonly name?: string } }[] }
+  }[]
+}
+
+interface MarketPreviewResponse {
+  readonly previewId: string
+  readonly action: string
+}
+
+interface MarketExecuteResponse {
+  readonly action: string
+  readonly restartToken?: string
+}
+
+/** Read the active-profile plugin inventory used to mark recommendations installed. */
+export async function readWorkerPackInstallations(
+  signal?: AbortSignal,
+): Promise<readonly WorkerPackInstallationRef[]> {
+  const response = await readJson<MarketInstallationsResponse>(await fetch('/api/community-market/installations', {
+    cache: 'no-store',
+    ...(signal === undefined ? {} : { signal }),
+  }))
+  return response.installations
+}
+
+async function searchCatalogItems(
+  sourceRecordId: string,
+  packageName: string,
+  signal?: AbortSignal,
+): Promise<readonly { readonly id: string; readonly package?: { readonly name?: string } }[]> {
+  const url = new URL('/api/community-market/catalog', window.location.origin)
+  url.searchParams.set('sourceRecordId', sourceRecordId)
+  url.searchParams.set('q', packageName)
+  url.searchParams.set('limit', '50')
+  url.searchParams.set('locale', 'zh')
+  const response = await readJson<MarketCatalogResponse>(await fetch(url, {
+    cache: 'no-store',
+    ...(signal === undefined ? {} : { signal }),
+  }))
+  return response.results.flatMap(result => result.snapshot?.items ?? [])
+}
+
+async function previewAndExecuteInstall(
+  sourceRecordId: string,
+  itemId: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const preview = await readJson<MarketPreviewResponse>(await fetch('/api/community-market/operations/preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'install', sourceRecordId, itemId }),
+    ...(signal === undefined ? {} : { signal }),
+  }))
+  if (preview.action !== 'install') throw new Error('operation preview action mismatch')
+  const executed = await readJson<MarketExecuteResponse>(await fetch('/api/community-market/operations/execute', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ previewId: preview.previewId }),
+    ...(signal === undefined ? {} : { signal }),
+  }))
+  if (executed.action !== 'install') throw new Error('operation response action mismatch')
+  return executed.restartToken
+}
+
+/**
+ * Install curated recommendations through the plugin market.
+ * This is user-initiated: unknown package names are rejected, and nothing runs at boot.
+ */
+export async function installRecommendedPlugins(
+  packageNames: readonly string[],
+  signal?: AbortSignal,
+): Promise<{ readonly results: readonly WorkerPackInstallResult[]; readonly restartToken?: string }> {
+  if (packageNames.length === 0) throw new Error('no recommended plugins requested')
+  if (packageNames.some(packageName => !isWorkerPackRecommendedPackage(packageName))) {
+    throw new Error('worker pack can only install its recommended plugins')
+  }
+  const sources = await selectWorkerPackCatalog(signal)
+  const source = sources.find(item => item.builtInProviderKey === WORKER_PACK_CATALOG_SOURCE_KEY && item.enabled)
+  if (source === undefined) throw new Error('built-in catalog source unavailable')
+  const installations = [...await readWorkerPackInstallations(signal)]
+  const results: WorkerPackInstallResult[] = []
+  let restartToken: string | undefined
+  for (const packageName of packageNames) {
+    if (recommendedPackageInstalled(packageName, installations)) {
+      results.push({ packageName, status: 'already' })
+      continue
+    }
+    try {
+      const item = findCatalogItemForPackage(
+        await searchCatalogItems(source.sourceRecordId, packageName, signal),
+        packageName,
+      )
+      if (item === undefined) {
+        results.push({ packageName, status: 'missing' })
+        continue
+      }
+      const nextToken = await previewAndExecuteInstall(source.sourceRecordId, item.id, signal)
+      if (nextToken !== undefined) restartToken = nextToken
+      installations.push({ packageName })
+      results.push({ packageName, status: 'installed' })
+    } catch (cause) {
+      results.push({
+        packageName,
+        status: 'failed',
+        error: cause instanceof Error ? cause.message : 'install failed',
+      })
+    }
+  }
+  return restartToken === undefined ? { results } : { results, restartToken }
+}
+
+/** Ask Desktop to restart after a completed market install. */
+export async function requestWorkerPackRestart(
+  restartToken: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await readJson<{ ok: true }>(await fetch('/api/community-market/desktop/request-restart', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ restartToken }),
+    ...(signal === undefined ? {} : { signal }),
+  }))
 }
