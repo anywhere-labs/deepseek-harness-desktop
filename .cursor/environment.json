@@ -1,0 +1,4 @@
+{
+  "name": "DSH Desktop",
+  "install": "bash .cursor/install.sh"
+}
