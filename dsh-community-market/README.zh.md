@@ -31,6 +31,8 @@ Host 会在 cache 过期前复用已经完成的索引（当前默认五分钟�
 
 [dshfind](https://dshfind.com) 是另一个可选合作目录来源。只有用户添加并选择它之后，经审查的 adapter 才会读取其公开 REST 目录。Adapter 会把首页的 `data_version` 固定到所有后续分页，再从完成的本地索引提供搜索、分类和分页。由于 dshfind 公布的匿名配额限制，首次完整同步会主动节流，可能明显慢于普通页面加载。它不会被默认选择、优先排序、推荐或用作兜底。
 
+**Company Store（公司插件目录）**（`company-store`）是可选合作内置来源，通过与 1024Store 相同的经审查 adapter 工厂接入公司目录。它不是默认或优先来源，也不会在官方 `dsh-1024store` 失败时兜底；选中后会显示免责声明：`公司目录，收录≠安全审核`。占位公开域名是 `https://plugins.company.example`。
+
 dshfind 可以提供包含精确稳定版本和 `repository_backlink` 证据、由提供方复核的 npm method。只有恰好一个 method 同时满足 `npm`、`verified`、`repository_backlink`、无需 build allowance，并且与已提供的 `install.pkg_name` 一致时，adapter 才会输出 `package` 和 `latestVersion`；其他条目仍然只能浏览。Adapter 不展示也不执行 `install.cmd`，也绝不会从命令文本中推断身份。进入**可安装**仍只代表结构候选；Host 会在 preview 和执行阶段独立复核 npm、仓库、integrity、runtime、lifecycle、bundle 与 profile 事实。dshfind 的分数、等级、精选/官方标记、风险标记与安装探测都只是 provider claim；它们都不代表 Anywhere Labs 完成了安全审核或作出推荐。
 
 所有目录数据都是远程、且不可信的输入。项目被收录只表示提供方返回了相关元数据；这**不表示** Anywhere Labs 已经审核、推荐或保证该插件。
