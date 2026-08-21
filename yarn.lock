@@ -1278,7 +1278,7 @@ __metadata:
 
 "@deepseek-ai/dsh-client-ui-directory-picker-browse@patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.1-rc.1#./patches/dsh-client-ui-directory-picker-browse@0.1.1-rc.1.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.1-rc.1
-  resolution: "@deepseek-ai/dsh-client-ui-directory-picker-browse@patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.1-rc.1#./patches/dsh-client-ui-directory-picker-browse@0.1.1-rc.1.patch::version=0.1.1-rc.1&hash=46cebf&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-client-ui-directory-picker-browse@patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.1-rc.1#./patches/dsh-client-ui-directory-picker-browse@0.1.1-rc.1.patch::version=0.1.1-rc.1&hash=386139&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     clsx: "npm:^2.0.0"
   peerDependencies:
@@ -1287,7 +1287,7 @@ __metadata:
     "@deepseek-ai/dsh-client-runtime": ^0.1.1-rc.1
     "@deepseek-ai/dsh-client-ui-workspace": ^0.1.1-rc.1
     "@deepseek-ai/dsh-invariants": ^0.1.1-rc.1
-  checksum: 10c0/1d3d01e383c6e00c07cd51ef7a4f7d5108e7c2f3f5bcca8e5cf65fa58862d11a31fa5688846ce49c8e68a8fa31a51180067eacbd4c101674089778c203c989d2
+  checksum: 10c0/b08f1d6b35bc1fbb49c1e0859bcc5d77dc189c31a2c2975efef2b74ca443b4da52ac9a5d275d977252b2324a0f2d4d63852b9a695d869873430bd78f5edabc4a
   languageName: node
   linkType: hard
 
