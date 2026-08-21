@@ -13,6 +13,7 @@ export const inject = ['desktopRuntime']
 export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = settingsNamespace('dsh-desktop-notifications')
 
 export interface DesktopNotificationSettings {
+  enabled: boolean
   notifyOnTurnCompletion: boolean
   notifyOnTurnFailure: boolean
   notifyOnJobCompletion: boolean
@@ -20,6 +21,7 @@ export interface DesktopNotificationSettings {
 }
 
 export const DesktopNotificationSettingsSchema: z<DesktopNotificationSettings> = z.object({
+  enabled: z.boolean().default(true),
   notifyOnTurnCompletion: z.boolean().default(true),
   notifyOnTurnFailure: z.boolean().default(true),
   notifyOnJobCompletion: z.boolean().default(true),
@@ -55,6 +57,7 @@ function notifyJob(
   settings: DesktopNotificationSettings,
   snapshot: JobSnapshot,
 ): void {
+  if (!settings.enabled) return
   if (snapshot.status === 'completed' && settings.notifyOnJobCompletion) {
     runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['job-completed'])
   } else if (snapshot.status === 'failed' && settings.notifyOnJobFailure) {
@@ -69,6 +72,7 @@ function trackTurn(
   session: Session,
   event: SessionEvent,
 ): void {
+  if (!settings.enabled) return
   if (session.header.origin === 'subagent') return
   const sessionId = String(session.header.id)
 

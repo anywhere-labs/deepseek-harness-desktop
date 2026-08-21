@@ -165,13 +165,14 @@ function userMessage(source: 'user' | 'plugin', seq: number): SessionEvent<'user
 }
 
 describe('desktop notifications Host plugin', () => {
-  it('registers four live settings with notifications enabled by default', () => {
+  it('registers live notification settings with the global switch enabled by default', () => {
     const harness = createHarness(['settings'])
 
     expect(name).toBe('desktop-notifications')
     expect(inject).toEqual(['desktopRuntime'])
     expect(String(DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)).toBe('dsh-desktop-notifications')
     expect(DesktopNotificationSettingsSchema({} as DesktopNotificationSettings)).toEqual({
+      enabled: true,
       notifyOnTurnCompletion: true,
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: true,
@@ -222,6 +223,7 @@ describe('desktop notifications Host plugin', () => {
     } satisfies JobSnapshot
 
     await harness.updateSettings({
+      enabled: true,
       notifyOnTurnCompletion: false,
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: false,
@@ -245,6 +247,35 @@ describe('desktop notifications Host plugin', () => {
       [{ title: 'Background Job Failed', body: 'A background job needs attention.' }],
       [{ title: 'User Turn Failed', body: 'A direct user turn needs attention.' }],
     ])
+  })
+
+  it('keeps fine-grained choices while the live global switch is disabled', async () => {
+    const harness = createHarness()
+    const snapshot = {
+      id: 'bash-disabled' as JobId,
+      kind: 'bash',
+      label: 'build',
+      status: 'completed',
+      startedAt: 1,
+      finishedAt: 2,
+      reported: false,
+    } satisfies JobSnapshot
+
+    await harness.updateSettings({
+      enabled: false,
+      notifyOnTurnCompletion: true,
+      notifyOnTurnFailure: true,
+      notifyOnJobCompletion: true,
+      notifyOnJobFailure: true,
+    })
+    await harness.jobDone(snapshot)
+
+    const active = session('disabled')
+    await harness.sessionEvent(active, event('turn/start', { turn: 1 }, 1))
+    await harness.sessionEvent(active, userMessage('user', 2))
+    await harness.sessionEvent(active, event('turn/end', { turn: 1, reason: { kind: 'completed' } }, 3))
+
+    expect(harness.notifyAttention).not.toHaveBeenCalled()
   })
 
   it('notifies only matching direct-user turn endings', async () => {
