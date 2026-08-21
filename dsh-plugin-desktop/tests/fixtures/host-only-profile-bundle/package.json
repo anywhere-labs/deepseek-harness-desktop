@@ -1,0 +1,12 @@
+{
+  "name": "dsh-host-only-profile-smoke-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./index.js",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

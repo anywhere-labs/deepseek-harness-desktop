@@ -288,18 +288,33 @@ export function apply(ctx: Context, config: { profile?: string }): void {
 
 Type-only import 会从 JavaScript 中消除。跨环境 package 可以把 `dsh-plugin-desktop` 作为编译所需 dev dependency；若发布的 declaration 会暴露这些类型，也可以将其声明为 optional peer。仅为了探测 service，不需要 runtime import。
 
+### 仅 Host 的通道连接器
+
+如果一个常驻通道连接器只负责接收远程消息并创建或恢复 DSH Agent，它不需要 Desktop 专用 adapter。把它打包成带 Host Loader entry 的普通 DSH Bundle，顶层 `inject` 只声明普通 DSH service；没有浏览器界面时不要声明 `dsh.client`。同一个 package 就能在 Web、headless 与 Desktop Host 中运行。
+
+请从 DSH Desktop 打开的终端安装 Bundle，这样命令会继承当前选中的 profile 与 launcher 的 `DSH_HOME`：
+
+```powershell
+dsh plugin add C:\absolute\path\to\channel-connector.tgz
+pnpm exec channel-connector setup --agent-cwd C:\absolute\path\to\workspace
+```
+
+在 Windows 上分发本地 package 时应使用绝对 `.tgz` 路径。执行 `dsh plugin add` 后重启 Desktop，让已安装 Bundle 进入下一次 Loader generation。Setup 命令应通过 DSH credentials 保存秘密，并把私有通道状态放在 `DSH_HOME` 下；不能从 `process.argv`、进程工作目录或猜测的 `web` 默认值推断当前 profile。
+
+这类连接器可以读取 `ctx.get('desktopProfiles')?.current`，用于诊断或确实属于 Desktop 的可选行为。仅仅运行 Agent 不需要 `desktopProfiles`；除非插件自身会修改 package，否则也不能要求 `desktopPnpm`。同时不得依赖 `desktopRuntime`、Electron API、托盘内部对象或 renderer IPC。这样，无页面连接器可以保持跨环境兼容，并让 Desktop 与 Web 界面复用 Host 拥有的 Session。
+
 ## 最小可运行测试插件
 
-仓库在 [`tests/fixtures/desktop-host-services-smoke-plugin`](../tests/fixtures/desktop-host-services-smoke-plugin/) 中提供了一个只有两个文件的 profile-local fixture。它的 entry 声明 `inject = ['desktopProfiles', 'desktopPnpm']`，读取 `desktopProfiles.current`，并确认 command 与可恢复安装生命周期方法可用。它只把结果发布为测试 probe，绝不会执行 pnpm 或修改 profile。
+仓库提供了两个 profile-local fixture。[`tests/fixtures/desktop-host-services-smoke-plugin`](../tests/fixtures/desktop-host-services-smoke-plugin/) 声明 `inject = ['desktopProfiles', 'desktopPnpm']`，读取 `desktopProfiles.current`，并确认 command 与可恢复安装生命周期方法可用。[`tests/fixtures/host-only-profile-bundle`](../tests/fixtures/host-only-profile-bundle/) 是完整的 DSH Bundle，只依赖普通 Host service，并可选探测 Desktop capability。
 
-完整 Profile Loader smoke 会把该 package 复制到临时 profile 的 `node_modules`，以普通 bare-package Loader entry 加载，并在 probe 没有返回激活 profile 或两个 package-manager 方法时失败。运行命令：
+完整 Profile Loader smoke 会通过临时 profile 的 `dsh.profile.bundles` layer stack 安装仅 Host fixture，把 Desktop-only fixture 作为普通 bare-package Loader entry 加载；如果两者没有使用预期的核心与 Desktop service 激活，测试就会失败。两个 fixture 都不会执行 pnpm 或修改真实 profile。运行命令：
 
 ```sh
 yarn workspace dsh-plugin-desktop build
 yarn workspace dsh-plugin-desktop verify:profile
 ```
 
-该 fixture 位于 `tests/`，不在 npm `files` 列表或 Electron build files 中，因此不会进入生产 archive。
+两个 fixture 都位于 `tests/`，不在 npm `files` 列表或 Electron build files 中，因此不会进入生产 archive。
 
 ## Failure 与 teardown checklist
 

@@ -289,18 +289,33 @@ Never fall back to a guessed `web` profile after `desktopProfiles` is present. A
 
 Type-only imports are erased from JavaScript. A cross-environment package can keep `dsh-plugin-desktop` as a development dependency for compilation, or as an optional peer if it publishes declarations that expose these types; it does not need a runtime import merely to probe the services.
 
+### Host-only channel connectors
+
+A long-running channel connector that only receives remote messages and starts or resumes DSH Agents does not need a Desktop-specific adapter. Package it as an ordinary DSH Bundle with a Host Loader entry, keep its top-level `inject` list limited to ordinary DSH services, and omit `dsh.client` when it contributes no browser UI. The same package can then run under Web, headless, and Desktop Hosts.
+
+Install the Bundle from the terminal opened by DSH Desktop so the command inherits the selected profile and the launcher's `DSH_HOME`:
+
+```powershell
+dsh plugin add C:\absolute\path\to\channel-connector.tgz
+pnpm exec channel-connector setup --agent-cwd C:\absolute\path\to\workspace
+```
+
+Use an absolute `.tgz` path on Windows when distributing a local package. Restart Desktop after `dsh plugin add` so the installed Bundle enters the next Loader generation. Setup commands should store secrets through DSH credentials and place private channel state under `DSH_HOME`; they must not derive the active profile from `process.argv`, the process working directory, or a guessed `web` default.
+
+Such a connector may read `ctx.get('desktopProfiles')?.current` for diagnostics or genuinely Desktop-specific optional behavior. It does not need `desktopProfiles` merely to run Agents, and it must not require `desktopPnpm` unless it performs package mutations itself. It must also avoid `desktopRuntime`, Electron APIs, tray internals, and renderer IPC. This keeps a no-UI connector portable and lets Desktop and Web surfaces reuse the same Host-owned Sessions.
+
 ## Minimal runnable test plugin
 
-The repository includes a two-file profile-local fixture at [`tests/fixtures/desktop-host-services-smoke-plugin`](../tests/fixtures/desktop-host-services-smoke-plugin/). Its entry declares `inject = ['desktopProfiles', 'desktopPnpm']`, reads `desktopProfiles.current`, and confirms that the command and recoverable-install lifecycle methods are available. It only publishes the result as a test probe; it never executes pnpm or changes a profile.
+The repository includes two profile-local fixtures. [`tests/fixtures/desktop-host-services-smoke-plugin`](../tests/fixtures/desktop-host-services-smoke-plugin/) declares `inject = ['desktopProfiles', 'desktopPnpm']`, reads `desktopProfiles.current`, and confirms that the command and recoverable-install lifecycle methods are available. [`tests/fixtures/host-only-profile-bundle`](../tests/fixtures/host-only-profile-bundle/) is a complete DSH Bundle with only ordinary Host dependencies and an optional Desktop capability probe.
 
-The complete Profile Loader smoke copies that package into a temporary profile's `node_modules`, loads it as a normal bare-package Loader entry, and fails unless the probe reports the active profile and both package-manager methods. Run it with:
+The complete Profile Loader smoke installs the Host-only fixture through the temporary profile's `dsh.profile.bundles` layer stack, loads the Desktop-only fixture as a normal bare-package Loader entry, and fails unless both activate with the expected core and Desktop services. Neither fixture executes pnpm or changes a live profile. Run the smoke with:
 
 ```sh
 yarn workspace dsh-plugin-desktop build
 yarn workspace dsh-plugin-desktop verify:profile
 ```
 
-This fixture is under `tests/`, is absent from the npm `files` list and Electron build files, and never enters a production archive.
+Both fixtures are under `tests/`, are absent from the npm `files` list and Electron build files, and never enter a production archive.
 
 ## Failure and teardown checklist
 

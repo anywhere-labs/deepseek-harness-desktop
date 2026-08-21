@@ -1,0 +1,3 @@
+- insert:
+    - id: host-only-profile-smoke
+      name: dsh-host-only-profile-smoke-bundle
