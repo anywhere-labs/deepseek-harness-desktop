@@ -15,6 +15,7 @@ interface AppFixture {
   readonly infoPlist: string
   readonly executable: string
   readonly appAsar: string
+  readonly nodePtyRoot: string
   readonly modeOverrides: Map<string, number>
 }
 
@@ -44,7 +45,10 @@ function fixture(): AppFixture {
       modeOverrides.set(path, 0o755)
     }
   }
-  return { root, infoPlist, executable, appAsar, modeOverrides }
+  const nodePtyRoot = join(`${appAsar}.unpacked`, 'node_modules', 'node-pty')
+  mkdirSync(nodePtyRoot, { recursive: true })
+  writeFileSync(join(nodePtyRoot, 'package.json'), '{"main":"lib/index.js"}')
+  return { root, infoPlist, executable, appAsar, nodePtyRoot, modeOverrides }
 }
 
 function options(
@@ -123,8 +127,19 @@ describe('macOS DMG smoke artifact verification', () => {
         command: 'lipo',
         args: [join(`${value.appAsar}.unpacked`, entry.path), '-verify_arch', entry.arch],
       })),
+      {
+        command: '/usr/bin/env',
+        args: [
+          'ELECTRON_RUN_AS_NODE=1',
+          value.executable,
+          '-e',
+          expect.stringContaining(`require(${JSON.stringify(value.nodePtyRoot)})`),
+        ],
+      },
       { command: 'hdiutil', args: ['detach', value.root] },
     ])
+    const nodePtySmoke = harness.calls.find(call => call.command === '/usr/bin/env')
+    expect(nodePtySmoke?.args.at(-1)).toContain("pty.spawn('/usr/bin/true'")
     expect(harness.removeMountPoint).toHaveBeenCalledWith(value.root)
   })
 
@@ -177,6 +192,16 @@ describe('macOS DMG smoke artifact verification', () => {
     const harness = options({ makeMountPoint: () => value.root }, value.modeOverrides)
 
     expectSmokeFailure(harness, 'app.asar')
+    expect(harness.removeMountPoint).toHaveBeenCalledWith(value.root)
+  })
+
+  it('rejects an application without its unpacked node-pty runtime', () => {
+    const value = fixture()
+    rmSync(join(value.nodePtyRoot, 'package.json'))
+    const harness = options({ makeMountPoint: () => value.root }, value.modeOverrides)
+
+    expectSmokeFailure(harness, 'node-pty package')
+    expect(harness.calls.some(call => call.command === '/usr/bin/env')).toBe(false)
     expect(harness.removeMountPoint).toHaveBeenCalledWith(value.root)
   })
 })
