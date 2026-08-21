@@ -1,0 +1,121 @@
+
+  async scanCatalog(
+    signal: AbortSignal,
+    options: CatalogScanOptions = {},
+  ): Promise<CatalogFullIndex | undefined> {
+    if (options.force !== undefined && typeof options.force !== 'boolean') {
+      throw new TypeError('invalid catalog scan options')
+    }
+    if (
+      options.expectedSourceRecordId !== undefined
+      && (typeof options.expectedSourceRecordId !== 'string' || options.expectedSourceRecordId.length === 0)
+    ) {
+      throw new TypeError('invalid catalog scan options')
+    }
+    const scanQuery = normalizeCatalogQuery({
+      limit: 100,
+      ...(options.locale === undefined ? {} : { locale: options.locale }),
+    })
+    const locale = scanQuery.locale
+    signal.throwIfAborted()
+    const sourceGenerationsAtLoadStart = new Map(this.sourceGenerations)
+    const records = [...await this.store.load()].sort((left, right) => left.order - right.order)
+    signal.throwIfAborted()
+    const source = records.find(record => record.enabled)
+    if (
+      options.expectedSourceRecordId !== undefined
+      && source?.sourceRecordId !== options.expectedSourceRecordId
+    ) {
+      throw new Error('catalog source is not active')
+    }
+    if (source === undefined) return undefined
+    const sourceGeneration = sourceGenerationsAtLoadStart.get(source.sourceRecordId) ?? 0
+    if ((this.sourceGenerations.get(source.sourceRecordId) ?? 0) !== sourceGeneration) {
+      throw new Error('catalog source changed during scan setup')
+    }
+    const key = catalogScanKey(source.sourceRecordId, locale)
+    let scanGate = this.catalogScanGates.get(key)
+    if (scanGate === undefined) {
+      scanGate = new ConcurrencyGate(1)
+      this.catalogScanGates.set(key, scanGate)
+    }
+    const scanGeneration = options.force === true
+      ? this.resetCatalogScan(key, source.sourceRecordId)
+      : this.catalogScanGenerations.get(key) ?? 0
+    const cached = this.catalogScanCache.get(key)
+    if (
+      options.force !== true
+      && cached !== undefined
+      && cached.sourceGeneration === sourceGeneration
+      && cached.scanGeneration === scanGeneration
+      && this.now() < cached.expiresAt
+    ) return cachedScanView(cached, 'cached')
+    if (cached !== undefined) {
+      if (this.now() >= cached.expiresAt) this.revokeSourceCursors(source.sourceRecordId)
+      this.catalogScanCache.delete(key)
+    }
+
+    return await scanGate.run(signal, async () => await this.sourceConcurrency.run(signal, async () => {
+      signal.throwIfAborted()
+      if (
+        (this.sourceGenerations.get(source.sourceRecordId) ?? 0) !== sourceGeneration
+        || (this.catalogScanGenerations.get(key) ?? 0) !== scanGeneration
+      ) throw new Error('catalog source changed while waiting to scan')
+      const cachedAfterWait = this.catalogScanCache.get(key)
+      if (
+        options.force !== true
+        && cachedAfterWait !== undefined
+        && cachedAfterWait.sourceGeneration === sourceGeneration
+        && cachedAfterWait.scanGeneration === scanGeneration
+        && this.now() < cachedAfterWait.expiresAt
+      ) return cachedScanView(cachedAfterWait, 'cached')
+      if (cachedAfterWait !== undefined) {
+        if (this.now() >= cachedAfterWait.expiresAt) this.revokeSourceCursors(source.sourceRecordId)
+        this.catalogScanCache.delete(key)
+      }
+      const adapter = adapters.get(source.adapterId)
+      if (adapter === undefined) throw new Error('catalog adapter unavailable')
+      const invalidationController = new AbortController()
+      const controllers = this.catalogScanControllers.get(key) ?? new Set<AbortController>()
+      controllers.add(invalidationController)
+      this.catalogScanControllers.set(key, controllers)
+      const sourceSignal = AbortSignal.any([signal, invalidationController.signal])
+      const delegate = this.adapterHttpClients.get(source.adapterId) ?? this.http
+      const http: CatalogHttpClient = {
+        getJson: async (url, requestSignal, policy = {}) => await delegate.getJson(
+          url,
+          requestSignal,
+          options.force === true ? { ...policy, cacheMode: 'reload' } : policy,
+        ),
+      }
+      const context = { signal: sourceSignal, source, http, media: this.media }
+      try {
+        let rawSnapshots: readonly CatalogSnapshot[]
+        if (adapter.scanCatalog !== undefined) {
+          rawSnapshots = await adapter.scanCatalog(scanQuery, context)
+        } else {
+          const pages: CatalogSnapshot[] = []
+          const cursors = new Set<string>()
+          let query: CatalogQuery = scanQuery
+          while (true) {
+            sourceSignal.throwIfAborted()
+            if (pages.length >= MAX_CATALOG_PAGES) {
+              throw new Error('catalog scan exceeded the page limit')
+            }
+            const snapshot = parseCatalogSnapshot(await adapter.fetch(query, context))
+            pages.push(snapshot)
+            const itemCount = pages.reduce((total, page) => total + page.items.length, 0)
+            if (itemCount > MAX_CATALOG_ITEMS) {
+              throw new Error('catalog scan exceeded the item limit')
+            }
+            const cursor = snapshot.page.nextCursor
+            if (cursor === undefined) break
+            if (cursors.has(cursor)) throw new Error('catalog scan cursor repeated')
+            cursors.add(cursor)
+            query = { ...scanQuery, cursor }
+          }
+          rawSnapshots = pages
+        }
+        sourceSignal.throwIfAborted()
+        if (
+          (this.sourceGenerations.get(source.sourceRecordId) ?? 0) !== sourceGeneration
