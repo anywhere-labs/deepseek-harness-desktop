@@ -1,0 +1,143 @@
+          || (this.catalogScanGenerations.get(key) ?? 0) !== scanGeneration
+        ) throw new Error('catalog source changed during scan')
+        const complete = validateCompleteCatalogScan(source, rawSnapshots)
+        const scannedAt = this.now()
+        const entry: CatalogFullIndexCacheEntry = {
+          sourceRecordId: source.sourceRecordId,
+          sourceGeneration,
+          scanGeneration,
+          ...(locale === undefined ? {} : { locale }),
+          source: sourceView(source),
+          snapshots: complete.snapshots,
+          scannedAt,
+          expiresAt: scannedAt + this.catalogScanCacheTtlMs,
+          ...(complete.providerRevision === undefined ? {} : { providerRevision: complete.providerRevision }),
+          scanKey: randomUUID(),
+        }
+        this.catalogScanCache.set(key, entry)
+        for (const snapshot of entry.snapshots) {
+          try { this.observeSnapshot?.(snapshot) } catch { /* installation is optional; catalog browsing remains available */ }
+        }
+        return cachedScanView(entry, 'fresh')
+      } finally {
+        controllers.delete(invalidationController)
+        if (controllers.size === 0 && this.catalogScanControllers.get(key) === controllers) {
+          this.catalogScanControllers.delete(key)
+        }
+      }
+    }))
+  }
+
+  async mergeProviderSearch(
+    index: CatalogFullIndex,
+    value: unknown,
+    signal: AbortSignal,
+  ): Promise<CatalogFullIndex> {
+    const query = normalizeCatalogQuery(value)
+    if (query.q === undefined || index.source.adapterId !== DSH_1024STORE_ADAPTER_ID) {
+      return index
+    }
+    const adapter = adapters.get(index.source.adapterId)
+    if (adapter === undefined) return index
+    const template = index.snapshots[0]
+    if (template === undefined) return index
+    const delegate = this.adapterHttpClients.get(index.source.adapterId) ?? this.http
+    const extra = await adapter.fetch(query, {
+      signal,
+      source: localSourceFromView(index.source),
+      http: delegate,
+      media: this.media,
+    })
+    signal.throwIfAborted()
+    const existing = completeItems(index)
+    const seen = new Set(existing.map(item => item.id))
+    const added = extra.items.filter(item => !seen.has(item.id))
+    if (added.length === 0) return index
+    const items = [...existing, ...added]
+    if (items.length > MAX_CATALOG_ITEMS) throw new Error('catalog scan exceeded the item limit')
+    return {
+      ...index,
+      snapshots: chunkCatalogItems(items, template),
+    }
+  }
+
+  queryCatalog(
+    index: CatalogFullIndex,
+    value: unknown,
+    scope?: CatalogFetchScope,
+  ): readonly MarketCatalogSourceResult[] {
+    if (scope !== undefined && (
+      typeof scope.sourceRecordId !== 'string'
+      || scope.sourceRecordId.length === 0
+      || scope.cursor !== undefined && (
+        typeof scope.cursor !== 'string'
+        || scope.cursor.length === 0
+      )
+    )) {
+      throw new Error('catalog source scope is invalid')
+    }
+    const baseQuery = normalizeCatalogQuery(value)
+    if (baseQuery.cursor !== undefined) {
+      throw new Error('catalog cursor requires an explicit source scope')
+    }
+    if (scope !== undefined && index.source.sourceRecordId !== scope.sourceRecordId) {
+      throw new Error('catalog source is not active')
+    }
+    if ((this.sourceGenerations.get(index.source.sourceRecordId) ?? 0) !== index.sourceGeneration) {
+      throw new Error('catalog source is no longer active')
+    }
+    if (baseQuery.locale !== index.locale) throw new Error('catalog index locale does not match the query')
+    const query = scope?.cursor === undefined
+      ? baseQuery
+      : this.applyCursor(scope.cursor, scope.sourceRecordId, baseQuery, index.sourceGeneration)
+    const filtered = sortCatalogItems(
+      completeItems(index).filter(item => matchesCatalogQuery(item, query)),
+      query,
+    )
+    const rawCursor = query.cursor ?? '0'
+    if (!/^\d+$/u.test(rawCursor)) throw new Error('catalog cursor is invalid')
+    const offset = Number(rawCursor)
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > filtered.length) {
+      throw new Error('catalog cursor is invalid')
+    }
+    const limit = Math.min(
+      query.limit ?? 50,
+      index.source.adapterId === DSH_1024STORE_ADAPTER_ID ? 50 : 100,
+    )
+    const end = Math.min(offset + limit, filtered.length)
+    const baseSnapshot = index.snapshots[0]
+    if (baseSnapshot === undefined) return [{ source: index.source, stale: false }]
+    const snapshot = parseCatalogSnapshot({
+      schemaVersion: '1.0.0',
+      source: baseSnapshot.source,
+      items: filtered.slice(offset, end),
+      page: {
+        total: filtered.length,
+        ...(end < filtered.length ? { nextCursor: String(end) } : {}),
+      },
+    })
+    return [{
+      source: index.source,
+      snapshot: this.exposeSnapshot(snapshot, index.source.sourceRecordId, baseQuery, index.sourceGeneration),
+      stale: false,
+    }]
+  }
+
+  async fetch(
+    value: unknown,
+    signal: AbortSignal,
+    scope?: CatalogFetchScope,
+  ): Promise<readonly MarketCatalogSourceResult[]> {
+    const query = normalizeCatalogQuery(value)
+    if (query.cursor !== undefined) throw new Error('catalog cursor requires an explicit source scope')
+    const index = await this.scanCatalog(signal, {
+      ...(query.locale === undefined ? {} : { locale: query.locale }),
+      ...(scope === undefined ? {} : { expectedSourceRecordId: scope.sourceRecordId }),
+    })
+    signal.throwIfAborted()
+    if (index === undefined) return []
+    const merged = await this.mergeProviderSearch(index, query, signal)
+    signal.throwIfAborted()
+    return this.queryCatalog(merged, query, scope)
+  }
+}
