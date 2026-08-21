@@ -80,6 +80,10 @@ export interface MarketCatalogMetadata {
   readonly expiresAt: string
   readonly providerRevision?: string
   readonly cacheStatus: 'fresh' | 'cached'
+  /** Source served fewer items than its declared total; the list is partial. */
+  readonly truncated?: boolean
+  /** Provider-declared catalog total, present when the source was truncated. */
+  readonly providerTotal?: number
 }
 
 export interface MarketSourceManifestResponse {

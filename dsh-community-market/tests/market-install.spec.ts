@@ -539,6 +539,25 @@ describe('market install service', () => {
     expect(acknowledgeRecoveredInstall).not.toHaveBeenCalled()
   })
 
+  it('surfaces a truncated catalog scan in the installable metadata', async () => {
+    const profileDir = await createProfile()
+    const service = new MarketInstallService(
+      memoryScope().scope,
+      () => ({ name: 'web', dir: profileDir }),
+      runner(profileDir, []),
+      { verify: vi.fn(async () => verification) },
+    )
+    const index: CatalogFullIndex = {
+      ...fullIndex({ ...snapshotWithCandidates(2), page: { total: 300 } }, 'scan-truncated'),
+      truncated: true,
+    }
+    const installable = await service.listInstallable(index, new AbortController().signal)
+    expect(installable.metadata).toMatchObject({
+      truncated: true,
+      providerTotal: index.snapshots[0]?.page.total,
+    })
+  })
+
   it('returns the complete local catalog beyond the former 2048-candidate cap', async () => {
     const profileDir = await createProfile()
     const verifier = { verify: vi.fn(async () => verification) }
