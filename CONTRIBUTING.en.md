@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for wanting to contribute to DSH Desktop. This is a community project — whether you are a regular user, a plugin author, or a developer, there is a way to contribute that fits you.
+Thank you for wanting to contribute to AI Buddy. This is a community project — whether you are a regular user, a plugin author, or a developer, there is a way to contribute that fits you.
 
 ## Regular users: use, report, and spread the word
 

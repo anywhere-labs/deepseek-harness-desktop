@@ -1,16 +1,16 @@
-# DSH Desktop 常见问题
+# AI Buddy 常见问题
 
 [English](faq.en.md)
 
 本页回答当前正式版本最常见的安装、平台、运行环境和插件问题。功能范围以[最新 GitHub Release](https://github.com/anywhere-labs/deepseek-harness-desktop/releases/latest)和[用户指南](user-guide.md)为准。
 
-## DSH Desktop 是什么？
+## AI Buddy 是什么？
 
-DSH Desktop 是面向 Windows 和 macOS 的开源 DeepSeek Harness 桌面客户端。它把官方 Harness 的本地 Web UI、Host 服务和插件系统装进原生桌面应用，并提供窗口、系统托盘、终端、更新和 profile 管理。
+AI Buddy 是面向 Windows 和 macOS 的开源 DeepSeek Harness 桌面客户端。它把官方 Harness 的本地 Web UI、Host 服务和插件系统装进原生桌面应用，并提供窗口、系统托盘、终端、更新和 profile 管理。
 
 ## 这是 DeepSeek 官方产品吗？
 
-不是。DSH Desktop 是社区维护的独立开源项目，不隶属于 DeepSeek，也未获得 DeepSeek 官方背书。项目名称仅用于说明它与官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的技术关系。
+不是。AI Buddy 是社区维护的独立开源项目，不隶属于 DeepSeek，也未获得 DeepSeek 官方背书。项目名称仅用于说明它与官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的技术关系。
 
 ## 支持哪些操作系统？
 
@@ -24,7 +24,7 @@ DSH Desktop 是面向 Windows 和 macOS 的开源 DeepSeek Harness 桌面客户�
 
 不需要另行下载 Node.js 或 Harness 核心。安装包较大，是因为运行时和固定版本依赖已经包含在内，以换取更确定的首次启动和版本组合。使用云端模型、检查更新或下载新版本时仍然需要网络。
 
-## DSH Desktop 会修改官方 Harness 吗？
+## AI Buddy 会修改官方 Harness 吗？
 
 不会。仓库固定一个未修改的官方 Harness 上游版本。兼容模式运行上游默认 Web client；高级模式通过 Desktop 自有插件增加桌面布局和原生窗口效果，不直接修改上游源码。
 
@@ -34,7 +34,7 @@ Desktop Host、profile 和 DSH home 位于本机。是否向外部服务发送�
 
 ## 可以安装 DSH 插件吗？
 
-可以。DSH Desktop 使用官方 Harness 插件体系。可以从托盘打开 DSH Terminal，然后运行 `dsh plugin add`、`dsh plugin remove` 和 `dsh plugin update`；命令默认作用于当前激活的 profile，插件变更后需要重启 Desktop。
+可以。AI Buddy 使用官方 Harness 插件体系。可以从托盘打开 AI Buddy Terminal，然后运行 `dsh plugin add`、`dsh plugin remove` 和 `dsh plugin update`；命令默认作用于当前激活的 profile，插件变更后需要重启 Desktop。
 
 ## Desktop profile 和已有 web profile 会自动同步吗？
 

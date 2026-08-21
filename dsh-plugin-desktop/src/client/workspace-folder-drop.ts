@@ -17,13 +17,13 @@ const COPY = {
     ready: 'Drop to add workspace',
     busy: 'Adding workspace…',
     invalid: 'Drop exactly one folder',
-    unavailable: 'DSH Desktop could not read this folder path',
+    unavailable: 'AI Buddy could not read this folder path',
   },
   zh: {
     ready: '松开以添加工作区',
     busy: '正在添加工作区…',
     invalid: '请只拖入一个文件夹',
-    unavailable: 'DSH Desktop 无法读取这个文件夹路径',
+    unavailable: 'AI Buddy 无法读取这个文件夹路径',
   },
 } as const
 
@@ -62,9 +62,9 @@ export async function adoptWorkspaceFolder(
   actions: WorkspaceFolderDropActions,
 ): Promise<void> {
   const path = bridge.getPathForFile(file).trim()
-  if (path.length === 0) throw new Error('DSH Desktop could not read this folder path')
+  if (path.length === 0) throw new Error('AI Buddy could not read this folder path')
   if (actions.validateDirectory !== undefined && !await actions.validateDirectory(path)) {
-    throw new Error('DSH Desktop rejected this workspace location')
+    throw new Error('AI Buddy rejected this workspace location')
   }
   const workspace = await actions.create({ path })
   actions.startSession(workspace.workspaceId)

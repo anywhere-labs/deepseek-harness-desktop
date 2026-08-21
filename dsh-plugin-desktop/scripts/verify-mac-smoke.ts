@@ -52,7 +52,7 @@ function defaultOptions(): MacSmokeVerificationOptions {
     distDir: process.argv[2] === undefined
       ? join(packageRoot, 'dist', 'mac-smoke')
       : resolve(process.argv[2]),
-    productName: 'DSH Desktop',
+    productName: 'AI Buddy',
     listDmgs,
     makeMountPoint: () => mkdtempSync(join(tmpdir(), 'dsh-desktop-dmg-smoke-')),
     run,

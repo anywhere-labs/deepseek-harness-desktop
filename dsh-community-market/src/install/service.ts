@@ -253,7 +253,7 @@ function assertRuntimeCompatibility(manifest: Record<string, unknown>): void {
       if (name === 'cordis') {
         throw new MarketInstallError(
           'verification-failed',
-          'The plugin package depends on the legacy Cordis runtime and is not compatible with DSH Desktop.',
+          'The plugin package depends on the legacy Cordis runtime and is not compatible with AI Buddy.',
         )
       }
       const runtimeVersion = name === '@deepseek-ai/cordis'
@@ -265,7 +265,7 @@ function assertRuntimeCompatibility(manifest: Record<string, unknown>): void {
       if (!accepts(runtimeVersion, range)) {
         throw new MarketInstallError(
           'verification-failed',
-          'The plugin package is not compatible with this DSH Desktop runtime.',
+          'The plugin package is not compatible with this AI Buddy runtime.',
         )
       }
     }
@@ -279,7 +279,7 @@ function assertRuntimeCompatibility(manifest: Record<string, unknown>): void {
   if (nodeRange !== undefined && !accepts(NODE_RUNTIME_VERSION, nodeRange)) {
     throw new MarketInstallError(
       'verification-failed',
-      'The plugin package does not support the Node.js runtime bundled with DSH Desktop.',
+      'The plugin package does not support the Node.js runtime bundled with AI Buddy.',
     )
   }
 }

@@ -37,9 +37,9 @@ export async function requestDesktopDirectory(
     method: 'POST',
     headers: { accept: 'application/json' },
   })
-  if (!response.ok) throw new Error('DSH Desktop could not open the system folder picker')
+  if (!response.ok) throw new Error('AI Buddy could not open the system folder picker')
   const value: unknown = await response.json()
-  if (!isResponse(value)) throw new Error('DSH Desktop received an invalid response from the system folder picker')
+  if (!isResponse(value)) throw new Error('AI Buddy received an invalid response from the system folder picker')
   return value.path
 }
 
@@ -56,9 +56,9 @@ export async function requestDesktopDirectoryValidation(
     },
     body: JSON.stringify({ path }),
   })
-  if (!response.ok) throw new Error('DSH Desktop could not validate the selected workspace')
+  if (!response.ok) throw new Error('AI Buddy could not validate the selected workspace')
   const value: unknown = await response.json()
-  if (!isValidationResponse(value)) throw new Error('DSH Desktop received an invalid workspace validation response')
+  if (!isValidationResponse(value)) throw new Error('AI Buddy received an invalid workspace validation response')
   return value.allowed
 }
 

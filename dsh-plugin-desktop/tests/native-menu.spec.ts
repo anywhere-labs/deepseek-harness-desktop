@@ -17,13 +17,13 @@ describe('native macOS application menu', () => {
   })
 
   it('localizes the complete Simplified Chinese menu while retaining native roles', () => {
-    const template = macApplicationMenuTemplate('DSH Desktop', 'zh-CN')
+    const template = macApplicationMenuTemplate('AI Buddy', 'zh-CN')
 
     expect(template.map(item => item.label)).toEqual([
-      'DSH Desktop', '文件', '编辑', '显示', '窗口',
+      'AI Buddy', '文件', '编辑', '显示', '窗口',
     ])
     expect(submenu(template[0]!).map(item => item.label).filter(Boolean)).toEqual([
-      '关于 DSH Desktop', '服务', '隐藏 DSH Desktop', '隐藏其他', '全部显示', '退出 DSH Desktop',
+      '关于 AI Buddy', '服务', '隐藏 AI Buddy', '隐藏其他', '全部显示', '退出 AI Buddy',
     ])
     expect(submenu(template[1]!)).toEqual([
       expect.objectContaining({ label: '关闭窗口', role: 'close' }),
@@ -41,14 +41,14 @@ describe('native macOS application menu', () => {
   })
 
   it('keeps the English fallback complete', () => {
-    const template = macApplicationMenuTemplate('DSH Desktop', 'en')
+    const template = macApplicationMenuTemplate('AI Buddy', 'en')
 
     expect(template.map(item => item.label)).toEqual([
-      'DSH Desktop', 'File', 'Edit', 'View', 'Window',
+      'AI Buddy', 'File', 'Edit', 'View', 'Window',
     ])
     expect(submenu(template[0]!)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'About DSH Desktop', role: 'about' }),
-      expect.objectContaining({ label: 'Quit DSH Desktop', role: 'quit' }),
+      expect.objectContaining({ label: 'About AI Buddy', role: 'about' }),
+      expect.objectContaining({ label: 'Quit AI Buddy', role: 'quit' }),
     ]))
   })
 })

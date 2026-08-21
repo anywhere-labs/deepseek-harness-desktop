@@ -1,8 +1,8 @@
-# DSH Desktop plugin services
+# AI Buddy plugin services
 
 English | [中文](plugin-services.zh.md)
 
-This document is the supported Host-side integration contract for plugin authors. It covers the public `desktopProfiles` and `desktopPnpm` Cordis services exported by DSH Desktop 2.x in both compatibility and advanced presentation modes. It does not grant third-party access to raw Electron APIs, the renderer, or launcher bootstrap state.
+This document is the supported Host-side integration contract for plugin authors. It covers the public `desktopProfiles` and `desktopPnpm` Cordis services exported by AI Buddy 2.x in both compatibility and advanced presentation modes. It does not grant third-party access to raw Electron APIs, the renderer, or launcher bootstrap state.
 
 ## Layers and data flow
 
@@ -39,7 +39,7 @@ flowchart LR
 
 The launcher resolves one profile before the Loader tree mounts. `desktopProfiles.current` remains fixed until that whole Cordis generation is disposed. The `desktop-pnpm` Host row builds `desktopPnpm` from launcher-private facts and the upstream subprocess service. A profile or mode switch disposes the current generation and starts a new one; service references must not cross that boundary.
 
-The renderer receives ordinary Web Client modules over the existing loopback carrier. It cannot read these Host services directly, and DSH Desktop adds no preload or Electron IPC bridge for them. A plugin with browser UI continues to use normal DSH Host routes, RPC, client metadata, services, and slots.
+The renderer receives ordinary Web Client modules over the existing loopback carrier. It cannot read these Host services directly, and AI Buddy adds no preload or Electron IPC bridge for them. A plugin with browser UI continues to use normal DSH Host routes, RPC, client metadata, services, and slots.
 
 ## Public Cordis services
 
@@ -168,7 +168,7 @@ The fact that a private type is present in emitted declarations does not make it
 
 ### Desktop-only plugin: required injection
 
-A plugin that only makes sense inside DSH Desktop can declare both services as required dependencies. Cordis keeps the plugin pending until both providers are available and unloads its effects if a required service disappears.
+A plugin that only makes sense inside AI Buddy can declare both services as required dependencies. Cordis keeps the plugin pending until both providers are available and unloads its effects if a required service disappears.
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -319,7 +319,7 @@ This fixture is under `tests/`, is absent from the npm `files` list and Electron
 
 `dshmarket@1.2.3` predates this contract. It chooses `config.profile`, then launcher argv, then `web`; it privately imports `node:child_process`, discovers a bare `dsh` command, and runs `dsh plugin --profile ...` itself. Its public package exports expose no route or runner injection seam. An external config patch can correct the profile name and a PATH shim can make its legacy command discoverable, but neither adaptation makes version `1.2.3` consume `desktopProfiles` or `desktopPnpm`.
 
-DSH Desktop therefore does not preinstall or depend on that version. A compatible future release must:
+AI Buddy therefore does not preinstall or depend on that version. A compatible future release must:
 
 - use `desktopProfiles.current` as the authoritative Desktop identity;
 - use `desktopPnpm.installPlugin()` for add and `runPlugin()` for remove, update, collection cleanup, and dependency repair;

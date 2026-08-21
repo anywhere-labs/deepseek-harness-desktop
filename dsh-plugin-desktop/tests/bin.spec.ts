@@ -32,16 +32,16 @@ describe('desktop npm launcher', () => {
   })
 
   it('names the installed product and selected profile behavior', () => {
-    expect(DESKTOP_CLI_HELP).toContain('DSH Desktop')
+    expect(DESKTOP_CLI_HELP).toContain('AI Buddy')
     expect(DESKTOP_CLI_HELP).toContain('selected Web-capable profile')
     expect(DESKTOP_CLI_HELP).toContain('--export-diagnostics')
   })
 
   it('resolves the packaged Desktop user-data directory without Electron', () => {
     expect(defaultDesktopUserDataDirectory('win32', { APPDATA: 'C:\\Users\\Example\\AppData\\Roaming' }, 'ignored'))
-      .toBe('C:\\Users\\Example\\AppData\\Roaming\\DSH Desktop')
+      .toBe('C:\\Users\\Example\\AppData\\Roaming\\AI Buddy')
     expect(defaultDesktopUserDataDirectory('darwin', {}, '/Users/example'))
-      .toBe('/Users/example/Library/Application Support/DSH Desktop')
+      .toBe('/Users/example/Library/Application Support/AI Buddy')
   })
 
   it('exports diagnostics without launching Electron', async () => {

@@ -1,4 +1,4 @@
-/** Cordis Host plugin for scheduled and interactive DSH Desktop updates. */
+/** Cordis Host plugin for scheduled and interactive AI Buddy updates. */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'

@@ -32,9 +32,9 @@ describe('desktop terminal Host plugin', () => {
     expect(name).toBe('desktop-terminal')
     expect(inject).toEqual(['desktopRuntime'])
     expect(trayItem).toMatchObject({ group: 'tools', order: 10 })
-    expect(trayItem?.label()).toBe('Open DSH Terminal')
+    expect(trayItem?.label()).toBe('Open AI Buddy Terminal')
     locale = 'zh'
-    expect(trayItem?.label()).toBe('打开 DSH 终端')
+    expect(trayItem?.label()).toBe('打开 AI Buddy 终端')
     trayItem?.invoke()
     expect(openTerminal).toHaveBeenCalledOnce()
 

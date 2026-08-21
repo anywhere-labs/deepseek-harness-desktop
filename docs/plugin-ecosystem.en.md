@@ -20,7 +20,7 @@ We want to build an **open, composable, and sustainable** DSH plugin ecosystem:
 
 ## The desktop shell is the first example
 
-DSH Desktop is the first practitioner of this approach: the desktop shell itself is an ordinary DSH plugin on the same composition path as official and third-party plugins, with no special privileges. We did not fork upstream source into a fixed shell — we made "the desktop" an equal member of the plugin ecosystem.
+AI Buddy is the first practitioner of this approach: the desktop shell itself is an ordinary DSH plugin on the same composition path as official and third-party plugins, with no special privileges. We did not fork upstream source into a fixed shell — we made "the desktop" an equal member of the plugin ecosystem.
 
 ## A living document, built with the community
 

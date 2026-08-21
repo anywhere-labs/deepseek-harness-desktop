@@ -2,7 +2,7 @@
 
 [English](catalog-provider-contract.md)
 
-状态：**已实现的公开 v1 契约。** 带版本的 Schema、生成类型、严格校验、来源持久化、受限网络与媒体边界、标准 HTTP adapter、经过审核的 DSH 1024Store 与 dshfind adapter、完整本地索引，以及可加载的 Host/Client 入口均已在 DSH Desktop 中实现并通过测试。本文档和 fixture 是 `manifestVersion` 与 `schemaVersion` `1.x` 的公开互操作契约。
+状态：**已实现的公开 v1 契约。** 带版本的 Schema、生成类型、严格校验、来源持久化、受限网络与媒体边界、标准 HTTP adapter、经过审核的 DSH 1024Store 与 dshfind adapter、完整本地索引，以及可加载的 Host/Client 入口均已在 AI Buddy 中实现并通过测试。本文档和 fixture 是 `manifestVersion` 与 `schemaVersion` `1.x` 的公开互操作契约。
 
 ## 决策摘要
 

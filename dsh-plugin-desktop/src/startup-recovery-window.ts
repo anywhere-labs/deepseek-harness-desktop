@@ -195,7 +195,7 @@ interface RecoveryCopy {
 
 const COPY: Record<DesktopLocale, RecoveryCopy> = {
   en: {
-    title: 'DSH Desktop Recovery',
+    title: 'AI Buddy Recovery',
     lead: 'The active profile could not start. Save diagnostics, restore the last protected installation, or temporarily disable a plugin before trying again.',
     currentProfile: 'Active profile',
     startupError: 'Startup error',
@@ -230,7 +230,7 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     saveDiagnostics: 'Save diagnostics',
     showDiagnostics: 'Show in folder',
     privacy: 'Diagnostic archives may contain local paths, logs, system information, and crash-memory fragments. Review the archive before sharing it.',
-    restart: 'Restart DSH Desktop',
+    restart: 'Restart AI Buddy',
     quit: 'Quit',
     cancel: 'Cancel',
     confirmDisable: 'Confirm plugin disable',
@@ -253,7 +253,7 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     openProfileDirectory: 'Open configuration folder',
   },
   zh: {
-    title: 'DSH Desktop 恢复',
+    title: 'AI Buddy 恢复',
     lead: '当前配置无法启动。你可以先保存诊断信息，然后恢复最近一次受保护安装，或暂时禁用一个插件后重试。',
     currentProfile: '当前配置',
     startupError: '启动错误',
@@ -288,7 +288,7 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     saveDiagnostics: '保存诊断信息',
     showDiagnostics: '在文件夹中显示',
     privacy: '诊断包可能包含本地路径、日志、系统信息和崩溃内存片段，分享前请先检查。',
-    restart: '重新启动 DSH Desktop',
+    restart: '重新启动 AI Buddy',
     quit: '退出',
     cancel: '取消',
     confirmDisable: '确认禁用插件',

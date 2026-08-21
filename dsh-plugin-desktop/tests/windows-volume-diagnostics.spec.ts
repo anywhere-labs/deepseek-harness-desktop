@@ -29,12 +29,12 @@ describe('Windows volume diagnostics', () => {
   })
 
   it('accepts fixed NTFS and ReFS volumes', () => {
-    expect(diagnoseWindowsVolumes('win32', [{ label: 'install', path: 'C:\\App\\DSH Desktop.exe' }], query({
+    expect(diagnoseWindowsVolumes('win32', [{ label: 'install', path: 'C:\\App\\AI Buddy.exe' }], query({
       root: 'C:\\',
       fileSystem: 'NTFS',
       driveType: 3,
     }))).toEqual([])
-    expect(diagnoseWindowsVolumes('win32', [{ label: 'install', path: 'D:\\App\\DSH Desktop.exe' }], query({
+    expect(diagnoseWindowsVolumes('win32', [{ label: 'install', path: 'D:\\App\\AI Buddy.exe' }], query({
       root: 'D:\\',
       fileSystem: 'REFS',
       driveType: 3,

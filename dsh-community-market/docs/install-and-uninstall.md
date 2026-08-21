@@ -2,9 +2,9 @@
 
 [中文](install-and-uninstall.zh.md)
 
-Status: delivered and built into DSH Desktop; this does not constitute a plugin security review
+Status: delivered and built into AI Buddy; this does not constitute a plugin security review
 
-This guide explains what users see and the boundary developers must preserve. The current Market installs only a narrow class of exact npm packages into the active DSH Desktop profile. It does not install from GitHub or run a command supplied by a catalog. For plugins installed elsewhere, it can only persist a Desktop-owned enabled/disabled loading choice; it never claims uninstall ownership.
+This guide explains what users see and the boundary developers must preserve. The current Market installs only a narrow class of exact npm packages into the active AI Buddy profile. It does not install from GitHub or run a command supplied by a catalog. For plugins installed elsewhere, it can only persist a Desktop-owned enabled/disabled loading choice; it never claims uninstall ownership.
 
 ## The four views
 
@@ -29,7 +29,7 @@ Optional catalog metadata reports `scannedAt`, cache `expiresAt`, optional `prov
 6. Choose **Restart now** or **Restart later**. A successful install changes the profile on disk, but the running process does not load the new plugin automatically. The immediate action consumes a short-lived one-shot restart grant and never restarts silently. Until the next Desktop generation verifies a healthy startup, another protected plugin add is refused.
 7. On the next launch, Desktop claims the pending recovery record before preparing the profile. The install is committed only after the Host starts successfully and the Renderer reports healthy within its 30-second deadline. If startup fails or remains unconfirmed, Desktop first saves a local diagnostics archive, restores a recognized before/after configuration image, and relaunches at most once.
 
-If managed preview is unavailable, the dialog remains a details view. For an exact stable npm identity, the Host may show a bounded display-only command reconstructed from normalized identity. It may differ from the command described in the repository, is not the provider's original command, and has not passed the managed installer's complete verification. **Open DSH Terminal** sends no command, path, or profile: it only opens Desktop's built-in terminal so the user can inspect the source and decide whether to copy and run the text. A `dsh plugin add` launched through that built-in terminal uses the same configuration-recovery record as a Market install. Direct `pnpm` or `npm` commands typed there, and commands run from an external system terminal, are outside this recovery boundary. A manual install creates no Market receipt and therefore grants no Market uninstall authority.
+If managed preview is unavailable, the dialog remains a details view. For an exact stable npm identity, the Host may show a bounded display-only command reconstructed from normalized identity. It may differ from the command described in the repository, is not the provider's original command, and has not passed the managed installer's complete verification. **Open AI Buddy Terminal** sends no command, path, or profile: it only opens Desktop's built-in terminal so the user can inspect the source and decide whether to copy and run the text. A `dsh plugin add` launched through that built-in terminal uses the same configuration-recovery record as a Market install. Direct `pnpm` or `npm` commands typed there, and commands run from an external system terminal, are outside this recovery boundary. A manual install creates no Market receipt and therefore grants no Market uninstall authority.
 
 The **Installable** label means only “this listing is a structural candidate from the selected catalog.” It does not mean npm has been contacted, the current profile permits installation, compatibility is proven, or the code is approved or safe. Installed, receipted, disabled, or subsequently uninstalled packages remain listed while the catalog still contains them. Preview may still reject a local operation, and a successful preview is not a promise that execution will succeed if registry, catalog, or profile state changes.
 
@@ -82,7 +82,7 @@ A GitHub repository link may still appear as inert provenance and may be used to
 2. Choose **Uninstall**. The Host checks that the receipt still exists and that the installed package, exact version, and bundle still match it.
 3. Confirm the exact package and active profile. The UI sends only the receipt identifier; it cannot choose an arbitrary package name.
 4. Desktop runs the managed remove operation. The Host verifies that the package has left the profile before removing the receipt.
-5. Restart DSH Desktop so the running process no longer uses the removed plugin.
+5. Restart AI Buddy so the running process no longer uses the removed plugin.
 
 Uninstall does not need the provider to remain online and does not refetch the original listing. If a plugin has no Market receipt, belongs to another profile, or was changed after installation, the built-in Market refuses to remove it. That conservative behavior avoids claiming ownership of packages managed elsewhere.
 

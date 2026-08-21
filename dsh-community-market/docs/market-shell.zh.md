@@ -2,7 +2,7 @@
 
 [English](market-shell.md)
 
-状态：已完成并内置于 DSH Desktop，包括 Host/Client 市场、有限 npm 安装、基于 receipt 的卸载及 direct-bundle 启用/禁用
+状态：已完成并内置于 AI Buddy，包括 Host/Client 市场、有限 npm 安装、基于 receipt 的卸载及 direct-bundle 启用/禁用
 
 本文定义 `dsh-community-market` 已交付的实现边界。它刻意比完整的插件市场更小：package 只负责产品内的市场壳和适配器，不负责社区目录、包 registry 或 DSH profile 格式。
 
@@ -123,7 +123,7 @@ Preview 会针对这一个 package 完整检查 npm registry、规范仓库、de
 5. 保存 receipt 前验证 profile dependency 和没有越出 package 的 DSH bundle；安装结果非法或无法记录，并且文件状态可识别时，恢复白名单配置快照。
 6. 成功后签发短时、一次性重启许可，让用户选择**立即重启**或**稍后重启**；绝不静默重启。恢复记录继续保持 pending，直到下一次 Desktop generation 验证启动健康或完成回滚 reconcile；此前拒绝另一次受保护的插件添加。
 
-没有 Desktop 服务时，目录浏览仍可使用，package 操作则会说明需要 DSH Desktop。受管安装不会退回 ambient `pnpm`、shell 命令、猜测的 `dsh` executable 或未激活 profile。**打开 DSH 终端**是独立的用户控制入口：请求不携带命令、路径或 profile，只负责打开 Desktop 内置终端；是否复制并运行展示文本完全由用户决定。之后通过该内置终端运行的 `dsh plugin add` 会获得相同的配置恢复 handoff；在其中直接执行 `pnpm`、`npm`，或在外部系统终端运行命令，都不会获得这项保护。
+没有 Desktop 服务时，目录浏览仍可使用，package 操作则会说明需要 AI Buddy。受管安装不会退回 ambient `pnpm`、shell 命令、猜测的 `dsh` executable 或未激活 profile。**打开 AI Buddy 终端**是独立的用户控制入口：请求不携带命令、路径或 profile，只负责打开 Desktop 内置终端；是否复制并运行展示文本完全由用户决定。之后通过该内置终端运行的 `dsh plugin add` 会获得相同的配置恢复 handoff；在其中直接执行 `pnpm`、`npm`，或在外部系统终端运行命令，都不会获得这项保护。
 
 ## 安装恢复边界
 
@@ -178,7 +178,7 @@ Add 成功后，系统会在开放重启许可前封存白名单文件的结果 
 
 - npm 名称和 monorepo package 边界已经确立。
 - 目录来源、信任规则和集成决策已经记录。
-- Host/Client package 已作为 DSH Desktop 内置实现交付。
+- Host/Client package 已作为 AI Buddy 内置实现交付。
 
 ### Phase 1：目录市场壳——已交付并内置
 

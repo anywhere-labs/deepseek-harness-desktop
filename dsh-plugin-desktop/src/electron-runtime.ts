@@ -56,6 +56,7 @@ import type { UpdateCheckResult } from './update-checker.ts'
 import {
   type WindowsVolumeQuery,
 } from './windows-volume-diagnostics.ts'
+import { PRODUCT_NAME } from './product-identity.ts'
 import { ElectronWorkspaceAdmission } from './workspace-admission.ts'
 
 /** Return the presentation mode opposite the active generation. */
@@ -93,7 +94,7 @@ const PRODUCT_VERSION = desktopProductVersion()
 /** Main-process deadline for one Renderer generation to settle its client Loader. */
 export const RENDERER_BOOT_TIMEOUT_MS = 30_000
 
-/** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
+/** Native adapter used by the AI Buddy launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
   readonly platform: DesktopPlatform
   private readonly platformStrategy: ElectronPlatformStrategy
@@ -423,9 +424,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const result = await dialog.showMessageBox({
       type: 'error',
       title: 'Plugin Recovery',
-      message: 'DSH Desktop could not load all plugins.',
-      detail: `Failed plugins:\n${plugins}\n\n${error}\n\nOpen DSH Terminal to update or remove the failing third-party plugin, then restart DSH Desktop.`,
-      buttons: ['Open DSH Terminal', 'Restart DSH Desktop', 'Dismiss'],
+      message: `${PRODUCT_NAME} could not load all plugins.`,
+      detail: `Failed plugins:\n${plugins}\n\n${error}\n\nOpen ${PRODUCT_NAME} Terminal to update or remove the failing third-party plugin, then restart ${PRODUCT_NAME}.`,
+      buttons: [`Open ${PRODUCT_NAME} Terminal`, `Restart ${PRODUCT_NAME}`, 'Dismiss'],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
@@ -484,8 +485,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private async confirmUpdateDownload(version: string): Promise<boolean> {
     const result = await dialog.showMessageBox({
       type: 'info',
-      title: 'DSH Desktop Update Available',
-      message: `DSH Desktop ${version} is available.`,
+      title: `${PRODUCT_NAME} Update Available`,
+      message: `${PRODUCT_NAME} ${version} is available.`,
       detail: 'Download this update now?',
       buttons: ['Download', 'Later'],
       defaultId: 1,
@@ -501,7 +502,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       await dialog.showMessageBox({
         type: 'warning',
         title: 'Unable to Check for Updates',
-        message: 'DSH Desktop could not check for updates.',
+        message: `${PRODUCT_NAME} could not check for updates.`,
         detail: 'Please try again later.',
         buttons: ['OK'],
         defaultId: 0,
@@ -513,8 +514,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     if (result.status === 'up-to-date') {
       await dialog.showMessageBox({
         type: 'info',
-        title: 'DSH Desktop Is Up to Date',
-        message: 'No newer version of DSH Desktop is available.',
+        title: `${PRODUCT_NAME} Is Up to Date`,
+        message: `No newer version of ${PRODUCT_NAME} is available.`,
         detail: `Installed version: ${result.currentVersion}`,
         buttons: ['OK'],
         defaultId: 0,
@@ -525,8 +526,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
     await dialog.showMessageBox({
       type: 'info',
-      title: 'DSH Desktop Update Available',
-      message: `DSH Desktop ${result.latestVersion} is available.`,
+      title: `${PRODUCT_NAME} Update Available`,
+      message: `${PRODUCT_NAME} ${result.latestVersion} is available.`,
       detail: 'Installer downloads are unavailable in this build.',
       buttons: ['OK'],
       defaultId: 0,
@@ -564,9 +565,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       signal.throwIfAborted()
       await dialog.showMessageBox({
         type: 'info',
-        title: 'DSH Desktop Update Downloaded',
-        message: `DSH Desktop ${version} is ready to install.`,
-        detail: 'The disk image has opened. Replace DSH Desktop in Applications, then reopen it.',
+        title: `${PRODUCT_NAME} Update Downloaded`,
+        message: `${PRODUCT_NAME} ${version} is ready to install.`,
+        detail: `The disk image has opened. Replace ${PRODUCT_NAME} in Applications, then reopen it.`,
         buttons: ['OK'],
         defaultId: 0,
         noLink: true,
@@ -576,9 +577,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
     const result = await dialog.showMessageBox({
       type: 'info',
-      title: 'DSH Desktop Update Downloaded',
-      message: `DSH Desktop ${version} is ready to install.`,
-      detail: 'Restart DSH Desktop and run the installer now?',
+      title: `${PRODUCT_NAME} Update Downloaded`,
+      message: `${PRODUCT_NAME} ${version} is ready to install.`,
+      detail: `Restart ${PRODUCT_NAME} and run the installer now?`,
       buttons: ['Restart and Install', 'Later'],
       defaultId: 1,
       cancelId: 1,
@@ -633,8 +634,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       type: 'question',
       title: zh ? '删除更新安装包' : 'Remove Update Installer',
       message: zh
-        ? `DSH Desktop ${artifact.version} 已安装。`
-        : `DSH Desktop ${artifact.version} has been installed.`,
+        ? `${PRODUCT_NAME} ${artifact.version} 已安装。`
+        : `${PRODUCT_NAME} ${artifact.version} has been installed.`,
       detail: zh
         ? `是否删除下载的安装包以释放磁盘空间？\n\n${artifact.path}`
         : `Delete the downloaded installer to free disk space?\n\n${artifact.path}`,
@@ -679,7 +680,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     const error = cause instanceof Error ? cause : new Error(String(cause))
     this.logError(`dsh-plugin-desktop: failed to open terminal: ${error.message}`)
     try {
-      dialog.showErrorBox('Unable to Open DSH Terminal', error.message)
+      dialog.showErrorBox(`Unable to Open ${PRODUCT_NAME} Terminal`, error.message)
     } catch (dialogCause) {
       this.logError(`dsh-plugin-desktop: failed to show terminal error: ${dialogCause instanceof Error ? dialogCause.message : String(dialogCause)}`)
     }

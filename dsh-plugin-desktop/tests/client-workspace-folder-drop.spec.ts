@@ -66,7 +66,7 @@ describe('desktop workspace folder drop', () => {
       { name: 'repo' } as File,
       { getPathForFile: () => 'E:\\repo' },
       actions,
-    )).rejects.toThrow('DSH Desktop rejected this workspace location')
+    )).rejects.toThrow('AI Buddy rejected this workspace location')
     expect(actions.validateDirectory).toHaveBeenCalledWith('E:\\repo')
     expect(actions.create).not.toHaveBeenCalled()
   })

@@ -35,10 +35,10 @@ function options(
   return {
     platform,
     appExecutable: platform === 'win32'
-      ? 'C:\\Program Files\\DSH 100% Desktop\\DSH Desktop.exe'
-      : "/Applications/DSH O'Brien.app/Contents/MacOS/DSH Desktop",
+      ? 'C:\\Program Files\\DSH 100% Desktop\\AI Buddy.exe'
+      : "/Applications/DSH O'Brien.app/Contents/MacOS/AI Buddy",
     pnpmBinPath: platform === 'win32'
-      ? 'C:\\Program Files\\DSH Desktop\\resources\\app.asar.unpacked\\node_modules\\pnpm\\bin\\pnpm.mjs'
+      ? 'C:\\Program Files\\AI Buddy\\resources\\app.asar.unpacked\\node_modules\\pnpm\\bin\\pnpm.mjs'
       : "/Applications/DSH O'Brien.app/Contents/Resources/app.asar.unpacked/node_modules/pnpm/bin/pnpm.mjs",
     electronVersion: '43.4.0',
     stateDir,

@@ -1,6 +1,6 @@
-/** Headless version checks against the public DSH Desktop release service. */
+/** Headless version checks against the public AI Buddy release service. */
 
-/** Public endpoint returning the latest stable DSH Desktop version. */
+/** Public endpoint returning the latest stable AI Buddy version. */
 export const DESKTOP_VERSION_ENDPOINT = 'https://www.dshdesktop.cn/api/desktop/version'
 
 /** Maximum response body bytes accepted from the version service. */
@@ -85,7 +85,7 @@ export function compareSemVerVersions(left: string, right: string): number | nul
 }
 
 /**
- * Check the fixed DSH Desktop version endpoint for a newer stable release.
+ * Check the fixed AI Buddy version endpoint for a newer stable release.
  * @param options - installed version, caller-owned signal, and optional request adapter.
  * @returns a successful comparison, or null when any request or validation step fails.
  */

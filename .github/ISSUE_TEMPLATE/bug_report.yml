@@ -1,12 +1,12 @@
 name: Bug report / 问题反馈
-description: Report a reproducible problem with DSH Desktop / 反馈可复现的 DSH Desktop 问题
+description: Report a reproducible problem with AI Buddy / 反馈可复现的 AI Buddy 问题
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve DSH Desktop. Every report is welcome. Reports with exact versions, reproduction steps, and error evidence are usually easier to reproduce and prioritize. You do not need to understand the code or provide a patch.
+        Thanks for helping improve AI Buddy. Every report is welcome. Reports with exact versions, reproduction steps, and error evidence are usually easier to reproduce and prioritize. You do not need to understand the code or provide a patch.
 
-        感谢你帮助改进 DSH Desktop。所有反馈都会被查看；版本、复现步骤、错误日志等信息越完整，通常越容易被优先复现和处理。你不需要懂代码，也不需要提供补丁。无法获取某项信息时，请填写“Unknown / 不知道”。
+        感谢你帮助改进 AI Buddy。所有反馈都会被查看；版本、复现步骤、错误日志等信息越完整，通常越容易被优先复现和处理。你不需要懂代码，也不需要提供补丁。无法获取某项信息时，请填写“Unknown / 不知道”。
 
         Please remove API keys, tokens, account details, and other sensitive data before attaching logs or screenshots.
 
@@ -67,7 +67,7 @@ body:
   - type: input
     id: desktop_version
     attributes:
-      label: DSH Desktop version / DSH Desktop 版本
+      label: AI Buddy version / AI Buddy 版本
       description: Use the installed version when the app cannot start / 无法启动时填写已安装版本
       placeholder: "For example: 2.0.1; or Unknown / 不知道"
     validations:

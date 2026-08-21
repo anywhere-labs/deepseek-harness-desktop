@@ -2,7 +2,7 @@
 
 [中文](catalog-provider-contract.zh.md)
 
-Status: **Implemented public v1 contract.** The versioned Schemas, generated types, strict validation, source persistence, constrained network and media boundaries, standard HTTP adapter, reviewed DSH 1024Store and dshfind adapters, complete local indexing, and loadable Host/Client entries are implemented and tested in DSH Desktop. This document and its fixtures are the public interoperability contract for `manifestVersion` and `schemaVersion` `1.x`.
+Status: **Implemented public v1 contract.** The versioned Schemas, generated types, strict validation, source persistence, constrained network and media boundaries, standard HTTP adapter, reviewed DSH 1024Store and dshfind adapters, complete local indexing, and loadable Host/Client entries are implemented and tested in AI Buddy. This document and its fixtures are the public interoperability contract for `manifestVersion` and `schemaVersion` `1.x`.
 
 ## Decision summary
 

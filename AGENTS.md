@@ -1,4 +1,4 @@
-# DSH Desktop repository rules
+# AI Buddy repository rules
 
 This repository owns the desktop product around an unmodified DeepSeek Harness checkout.
 

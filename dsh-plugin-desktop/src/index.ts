@@ -1,4 +1,4 @@
-/** DSH Desktop Host plugin: owns the selected native shell generation. */
+/** AI Buddy Host plugin: owns the selected native shell generation. */
 
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -26,6 +26,7 @@ import {
   handleDesktopDirectoryPickerRequest,
   handleDesktopDirectoryValidationRequest,
 } from './directory-picker-route.ts'
+import { PRODUCT_NAME, PRODUCT_WINDOW_TITLE } from './product-identity.ts'
 import type { DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 
@@ -112,8 +113,8 @@ export function apply(ctx: Context, config: Config): void {
   const runtime = ctx.get('desktopRuntime')
   if (runtime === undefined) {
     process.stderr.write(
-      'dsh-plugin-desktop: this profile is composed with the DSH Desktop shell, which requires the desktop launcher (desktopRuntime).\n'
-      + 'Start it with `dsh-desktop`, or select this profile inside the packaged DSH Desktop application.\n'
+      'dsh-plugin-desktop: this profile is composed with the AI Buddy shell, which requires the desktop launcher (desktopRuntime).\n'
+      + 'Start it with `dsh-desktop`, or select this profile inside the packaged AI Buddy application.\n'
       + 'The desktop terminal, profile, and update rows stay inactive in an ordinary DSH boot.\n',
     )
     return
@@ -228,8 +229,8 @@ export function apply(ctx: Context, config: Config): void {
     () => runtime.schedule({
       ...config,
       url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform),
-      productName: 'DSH Desktop',
-      windowTitle: 'DeepSeek Harness Desktop',
+      productName: PRODUCT_NAME,
+      windowTitle: PRODUCT_WINDOW_TITLE,
       iconPath,
       trayIcons,
       readLocalePreference: () => {
