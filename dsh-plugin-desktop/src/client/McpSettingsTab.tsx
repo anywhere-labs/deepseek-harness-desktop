@@ -1,5 +1,4 @@
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -112,9 +111,14 @@ export function McpSettingsTab({ scope, t }: McpSettingsTabProps): ReactNode {
       </div>
       <div className="dshMcpActions">
         {templates.map(template => (
-          <Button key={template.id} variant="outline" onClick={() => addTemplate(template)}>
+          <button
+            key={template.id}
+            type="button"
+            className="dshWorkerButton dshWorkerButtonSecondary"
+            onClick={() => addTemplate(template)}
+          >
             {t('mcpAddTemplate')}: {t(templateLabel(template.id))}
-          </Button>
+          </button>
         ))}
       </div>
       {servers.length === 0 ? <p className="dshMcpLead">{t('mcpEmpty')}</p> : null}
@@ -199,16 +203,25 @@ export function McpSettingsTab({ scope, t }: McpSettingsTabProps): ReactNode {
             </>
           )}
           <div className="dshMcpActions">
-            <Button variant="ghost" onClick={() => setServers(servers.filter(entry => entry.id !== server.id))}>
+            <button
+              type="button"
+              className="dshWorkerButton dshWorkerButtonSecondary"
+              onClick={() => setServers(servers.filter(entry => entry.id !== server.id))}
+            >
               {t('mcpRemove')}
-            </Button>
+            </button>
           </div>
         </article>
       ))}
       <div className="dshMcpActions">
-        <Button variant="primary" disabled={status === 'saving'} onClick={save}>
+        <button
+          type="button"
+          className="dshWorkerButton"
+          disabled={status === 'saving'}
+          onClick={save}
+        >
           {status === 'saving' ? t('mcpSaving') : t('mcpSave')}
-        </Button>
+        </button>
       </div>
       {status === 'saved' ? <p className="dshMcpStatus" data-tone="ok">{t('mcpSaved')}</p> : null}
       {status === 'error' ? <p className="dshMcpStatus" data-tone="error">{t('mcpSaveError')}</p> : null}

@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   WORKER_PACK_RECOMMENDED_PLUGINS,
@@ -77,13 +76,14 @@ export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
         <h2>{t('catalogTitle')}</h2>
         <p>{t('catalogBody')}</p>
         <div className="dshWorkerActions">
-          <Button
-            variant="primary"
+          <button
+            type="button"
+            className="dshWorkerButton"
             disabled={catalog.status === 'busy' || (catalog.status === 'ready' && catalog.selected)}
             onClick={addCatalog}
           >
             {t('addCatalog')}
-          </Button>
+          </button>
         </div>
         {catalog.status === 'busy' ? <p className="dshWorkerStatus">{t('catalogBusy')}</p> : null}
         {catalog.status === 'error' ? <p className="dshWorkerStatus" data-tone="error">{t('catalogError')}</p> : null}

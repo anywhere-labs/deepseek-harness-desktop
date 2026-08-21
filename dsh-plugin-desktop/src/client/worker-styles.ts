@@ -65,6 +65,25 @@ const css = `
   font-size: 12px;
   line-height: 18px;
 }
+.dshWorkerButton {
+  appearance: none;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-brand, var(--dsw-alias-label-primary));
+  color: var(--dsw-alias-label-on-brand, #fff);
+  font: inherit;
+  cursor: pointer;
+}
+.dshWorkerButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.dshWorkerButtonSecondary {
+  background: var(--dsw-alias-bg-container);
+  color: var(--dsw-alias-label-primary);
+}
 .dshWorkerActions,
 .dshMcpActions,
 .dshMcpFieldRow {
