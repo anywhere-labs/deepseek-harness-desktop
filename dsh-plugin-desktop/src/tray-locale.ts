@@ -4,6 +4,7 @@ import { PRODUCT_NAME } from './product-identity.ts'
 import type { DesktopLocale } from './runtime.ts'
 
 export type DesktopTrayLabelKey =
+  | 'addProfile'
   | 'checkForUpdates'
   | 'checkingForUpdates'
   | 'downloadingUpdate'
@@ -19,6 +20,7 @@ export type DesktopTrayLabelKey =
 
 const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) => string>> = {
   en: {
+    addProfile: () => 'Add Profile…',
     checkForUpdates: () => 'Check for Updates…',
     checkingForUpdates: () => 'Checking for Updates…',
     downloadingUpdate: version => `Downloading ${PRODUCT_NAME} ${version}…`,
@@ -33,6 +35,7 @@ const labels: Record<DesktopLocale, Record<DesktopTrayLabelKey, (value: string) 
     updateAvailable: version => `${PRODUCT_NAME} ${version} Available`,
   },
   zh: {
+    addProfile: () => '添加配置…',
     checkForUpdates: () => '检查更新…',
     checkingForUpdates: () => '正在检查更新…',
     downloadingUpdate: version => `正在下载 ${PRODUCT_NAME} ${version}…`,

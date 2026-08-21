@@ -264,6 +264,12 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** @inheritdoc */
+  async promptText(title: string, defaultValue?: string): Promise<string | null> {
+    this.show()
+    return await this.generation?.promptText(title, defaultValue) ?? null
+  }
+
+  /** @inheritdoc */
   registerTrayItem(item: DesktopTrayItem): DesktopTrayItemRegistration {
     const key = Symbol()
     this.trayItems.set(key, item)

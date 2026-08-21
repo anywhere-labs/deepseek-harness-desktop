@@ -1,0 +1,37 @@
+diff --git a/lib/client.js b/lib/client.js
+index 928d9f0a6d2e1f1af6b6aa627f76a6efcb9c6fdb..1a2cd164a90df92f17369e550d61078887583fd7 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -52,3 +52,3 @@
+-			"toolbar.duration": "Duration",
+-			"toolbar.useActualDuration": "Use actual duration",
+-			"toolbar.useEqualWidth": "Use equal-width operations",
++			"toolbar.duration": "耗时",
++			"toolbar.useActualDuration": "使用实际耗时",
++			"toolbar.useEqualWidth": "使用等宽操作",
+@@ -56,6 +56,7 @@
+-			"toolbar.turns": "Turns",
+-			"toolbar.expandTurns": "Expand turns",
+-			"toolbar.collapseTurns": "Collapse turns",
+-			"toolbar.calls": "Calls",
+-			"toolbar.expandCalls": "Expand calls",
+-			"toolbar.collapseCalls": "Collapse calls",
++			"toolbar.turns": "轮次",
++			"toolbar.expandTurns": "展开轮次",
++			"toolbar.collapseTurns": "折叠轮次",
++			"toolbar.calls": "调用",
++			"toolbar.expandCalls": "展开调用",
++			"toolbar.collapseCalls": "折叠调用",
++			"toolbar.thinking": "思考",
+@@ -78,0 +80 @@
++			"toolbar.thinking": "Thinking",
+@@ -81,0 +84,4 @@
++		let currentTrajectoryT = (key) => en[key] ?? key;
++		function trajectoryLabel(key) {
++			return currentTrajectoryT(key);
++		}
+@@ -4076 +4082 @@
+-								children: ["Thinking", (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconChevronRightOutline14, {
++								children: [trajectoryLabel("toolbar.thinking"), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconChevronRightOutline14, {
+@@ -7007,0 +7014 @@
++			currentTrajectoryT = t;

@@ -187,6 +187,9 @@ export interface DesktopRuntime {
   /** Open the desktop operating system's native workspace-folder chooser. */
   pickDirectory(): Promise<string | null>
 
+  /** Show a small native text prompt through the active Desktop window. */
+  promptText(title: string, defaultValue?: string): Promise<string | null>
+
   /** Confirm that one renderer-selected workspace is safe to persist. */
   validateDirectory(path: string): Promise<boolean>
 

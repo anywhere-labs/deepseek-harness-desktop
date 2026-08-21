@@ -238,6 +238,36 @@ describe('published package surface', () => {
     }
   })
 
+  it('localizes Trajectory toolbar labels in Simplified Chinese', () => {
+    const patchPath = './patches/dsh-client-ui-trajectory@0.1.1-rc.1.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-client-ui-trajectory@npm:0.1.1-rc.1': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-trajectory@npm:^0.1.1-rc.1': expect.stringContaining(patchPath),
+    })
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedClient = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-client-ui-trajectory/lib/client.js',
+      packageRoot,
+    ), 'utf8')
+    for (const marker of [
+      '"toolbar.duration": "耗时"',
+      '"toolbar.useActualDuration": "使用实际耗时"',
+      '"toolbar.useEqualWidth": "使用等宽操作"',
+      '"toolbar.turns": "轮次"',
+      '"toolbar.expandTurns": "展开轮次"',
+      '"toolbar.collapseTurns": "折叠轮次"',
+      '"toolbar.calls": "调用"',
+      '"toolbar.expandCalls": "展开调用"',
+      '"toolbar.collapseCalls": "折叠调用"',
+      '"toolbar.thinking": "思考"',
+      'children: [trajectoryLabel("toolbar.thinking")',
+      'currentTrajectoryT = t',
+    ]) {
+      expect(patch).toContain(marker)
+      expect(installedClient).toContain(marker)
+    }
+  })
+
   it('keeps Desktop boot from opening an external browser and uses Electron Node mode for explicit helpers', () => {
     const patchPath = './patches/dsh-web-app@0.1.1-rc.1.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
@@ -364,6 +394,23 @@ describe('published package surface', () => {
     expect(main).toContain('async () => { await generation.release() }')
     expect(main).not.toContain('disposePnpmRuntime')
     expect(main).not.toContain('disposeDshRuntime')
+  })
+
+  it('injects profile creation into the generation-scoped Host service without selecting it', () => {
+    const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
+    const profileImport = main.indexOf('createDesktopWebProfile,')
+    const profileService = main.indexOf('await hostCtx.plugin(DesktopProfileService, {')
+    const create = main.indexOf('create: name => createDesktopWebProfile(homeDir, name),', profileService)
+    const list = main.indexOf('list: () => listDesktopProfiles(homeDir),', profileService)
+    const persist = main.indexOf('persistSelection: name => { selectDesktopProfile(selectionStatePath, homeDir, name) },', profileService)
+    const restart = main.indexOf('requestRestart: () => runtime.requestRestart(),', profileService)
+
+    expect(profileImport).toBeGreaterThanOrEqual(0)
+    expect(profileService).toBeGreaterThan(profileImport)
+    expect(create).toBeGreaterThan(profileService)
+    expect(list).toBeGreaterThan(create)
+    expect(persist).toBeGreaterThan(list)
+    expect(restart).toBeGreaterThan(persist)
   })
 
   it('wires local crash evidence before Electron becomes ready', () => {

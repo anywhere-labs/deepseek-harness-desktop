@@ -89,6 +89,7 @@ const electron = vi.hoisted(() => {
     setTemplateImage: vi.fn(),
   }
   const webContents = {
+    executeJavaScript: vi.fn(async (_code: string, _userGesture?: boolean) => null as string | null),
     getZoomLevel: vi.fn(() => zoomLevel),
     on: vi.fn(),
     off: vi.fn(),
@@ -1002,6 +1003,23 @@ describe('Electron desktop runtime', () => {
     expect(item).toBeDefined()
     item?.click?.()
     await vi.waitFor(() => { expect(requestModeChange).toHaveBeenCalledWith('advanced') })
+
+    await release()
+  })
+
+  it('prompts for a profile name through the active Desktop window', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    electron.webContents.executeJavaScript.mockResolvedValueOnce('work')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+
+    await runtime.mountScheduled()
+    await expect(runtime.promptText('Add Profile…', 'work')).resolves.toBe('work')
+    expect(electron.webContents.executeJavaScript).toHaveBeenCalledWith(
+      'window.prompt("Add Profile…", "work")',
+      true,
+    )
 
     await release()
   })
