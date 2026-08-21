@@ -8219,16 +8219,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"dsh-llm-guardian@github:ice-kele/dsh-llm-guardian#5e793f25fe6ac9d7cf1ae5f95a03410706a82064":
+"dsh-llm-guardian@github:ice-kele/dsh-llm-guardian#bc140288aa24c0f221dc8b0512a5c4fece08514c":
   version: 0.2.0
-  resolution: "dsh-llm-guardian@https://github.com/ice-kele/dsh-llm-guardian.git#commit=5e793f25fe6ac9d7cf1ae5f95a03410706a82064"
+  resolution: "dsh-llm-guardian@https://github.com/ice-kele/dsh-llm-guardian.git#commit=bc140288aa24c0f221dc8b0512a5c4fece08514c"
   dependencies:
     "@deepseek-ai/schemastery": "npm:^3.18.1"
   peerDependencies:
-    "@deepseek-ai/dsh-api-remotes": 0.1.0-rc.7
-    "@deepseek-ai/dsh-client-runtime": 0.1.0-rc.7
-    "@deepseek-ai/dsh-client-ui-settings-models": 0.1.0-rc.7
-    "@deepseek-ai/dsh-settings": 0.1.0-rc.7
+    "@deepseek-ai/dsh-api-remotes": 0.1.1-rc.2
+    "@deepseek-ai/dsh-client-runtime": 0.1.1-rc.2
+    "@deepseek-ai/dsh-client-ui-settings-models": 0.1.1-rc.2
+    "@deepseek-ai/dsh-settings": 0.1.1-rc.2
   peerDependenciesMeta:
     "@deepseek-ai/dsh-api-remotes":
       optional: true
@@ -8238,7 +8238,7 @@ __metadata:
       optional: true
     "@deepseek-ai/dsh-settings":
       optional: true
-  checksum: 10c0/d650589b18a2dec709260ec3e2d50c408c8cfd6be0e176070c69ec6cbbaa955b31bfae1cfae2659e6942c6dd2e0a0980809706229c98fca8641d11053aed0ce9
+  checksum: 10c0/0a58a3e6a5724f748d51db8b262b089dd90089ba12cc5cd90966ae03598c095a11e5f457c3fa9da4a3272ae1bc336a8b2d064359f04765f9e099edb3602e0605
   languageName: node
   linkType: hard
 
@@ -8366,8 +8366,8 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
+    dsh-llm-guardian: "github:ice-kele/dsh-llm-guardian#bc140288aa24c0f221dc8b0512a5c4fece08514c"
     dshmarket: "npm:1.17.1"
-    dsh-llm-guardian: "github:ice-kele/dsh-llm-guardian#5e793f25fe6ac9d7cf1ae5f95a03410706a82064"
     electron: "npm:43.4.0"
     electron-builder: "npm:26.15.7"
     koffi: "npm:3.1.5"

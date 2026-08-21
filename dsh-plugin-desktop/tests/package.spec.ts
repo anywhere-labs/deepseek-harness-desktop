@@ -151,7 +151,7 @@ describe('published package surface', () => {
   it('pins the Provider health and usage plugin to an audited commit', () => {
     expect(manifest.dependencies).toHaveProperty(
       'dsh-llm-guardian',
-      'github:ice-kele/dsh-llm-guardian#5e793f25fe6ac9d7cf1ae5f95a03410706a82064',
+      'github:ice-kele/dsh-llm-guardian#bc140288aa24c0f221dc8b0512a5c4fece08514c',
     )
   })
 
