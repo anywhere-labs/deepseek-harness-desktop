@@ -4,7 +4,7 @@
 
 ## Current status
 
-`dsh-community-market` is complete and built into DSH Desktop. It openly connects to a wide range of plugin data sources: anyone can provide, integrate, and use a source that follows the public schemas, while an existing API can become a cooperating source through a reviewed adapter shipped with Market. Its Host/Client runtime validates and normalizes catalog data, persists user-owned source choices, and performs constrained HTTPS requests only after a source is explicitly enabled. Market also implements a limited exact-version npm install path and receipt-backed uninstall through the managed package capability; the renderer has no package-manager access.
+`dsh-community-market` is complete and built into AI Buddy. It openly connects to a wide range of plugin data sources: anyone can provide, integrate, and use a source that follows the public schemas, while an existing API can become a cooperating source through a reviewed adapter shipped with Market. Its Host/Client runtime validates and normalizes catalog data, persists user-owned source choices, and performs constrained HTTPS requests only after a source is explicitly enabled. Market also implements a limited exact-version npm install path and receipt-backed uninstall through the managed package capability; the renderer has no package-manager access.
 
 ## Trust model
 

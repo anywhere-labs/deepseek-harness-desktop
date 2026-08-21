@@ -1,10 +1,10 @@
-# Why DSH Desktop Exists
+# Why AI Buddy Exists
 
 ## The problem
 
 DeepSeek Harness is a composable agent harness. It is powerful from the command line and through its Web UI, and it lets developers combine models, tools, sessions, and workflows into their own runtime. For a first-time user, however, Node.js, profiles, dependency installation, ports, and process lifetime are still part of the experience.
 
-DSH Desktop does not reimplement Harness. It puts the same runtime into an application that is easier to start and manage on a desktop operating system:
+AI Buddy does not reimplement Harness. It puts the same runtime into an application that is easier to start and manage on a desktop operating system:
 
 - The installer provides Electron, a Node runtime, and pinned DSH dependencies.
 - The application owns the window, tray, single-instance lock, shutdown, and local-service lifecycle.

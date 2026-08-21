@@ -4,7 +4,7 @@ import { type Context, Service } from '@deepseek-ai/cordis'
 
 /** Native actions deliberately exposed without command, path, or restart arguments. */
 export interface DesktopActions {
-  /** Open the already-configured DSH Desktop terminal for the active profile. */
+  /** Open the already-configured AI Buddy terminal for the active profile. */
   openTerminal(): void
   /** Request one orderly Host-owned application restart. */
   requestRestart(): Promise<void>

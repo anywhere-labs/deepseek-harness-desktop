@@ -58,7 +58,7 @@ export class ElectronWorkspaceAdmission {
           : 'This workspace is on a removable NTFS/ReFS drive.',
         detail: zh
           ? `使用过程中拔出磁盘会导致命令或插件操作失败。请保持磁盘连接。\n\n${path}`
-          : `Disconnecting the drive while DSH Desktop is running can break commands or plugin operations. Keep it connected.\n\n${path}`,
+          : `Disconnecting the drive while AI Buddy is running can break commands or plugin operations. Keep it connected.\n\n${path}`,
         buttons: zh ? ['使用此文件夹', '选择其他文件夹'] : ['Use This Folder', 'Choose Another Folder'],
         defaultId: 1,
         cancelId: 1,
@@ -73,8 +73,8 @@ export class ElectronWorkspaceAdmission {
       type: 'error',
       title: zh ? '不支持的工作区存储' : 'Unsupported Workspace Storage',
       message: zh
-        ? `${decision.concern.fileSystem ?? '当前文件系统'} 不能安全用作 DSH Desktop 工作区。`
-        : `${decision.concern.fileSystem ?? 'This filesystem'} cannot safely host a DSH Desktop workspace.`,
+        ? `${decision.concern.fileSystem ?? '当前文件系统'} 不能安全用作 AI Buddy 工作区。`
+        : `${decision.concern.fileSystem ?? 'This filesystem'} cannot safely host a AI Buddy workspace.`,
       detail: zh
         ? `请选择本地 NTFS 或 ReFS 磁盘上的文件夹。exFAT、FAT32、网络盘和无法检测的磁盘不会被保存为工作区。\n\n${path}`
         : `Choose a folder on a local NTFS or ReFS volume. exFAT, FAT32, network drives, and uninspectable volumes are not persisted as workspaces.\n\n${path}`,

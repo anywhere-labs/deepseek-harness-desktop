@@ -21,13 +21,13 @@ interface AppFixture {
 function fixture(): AppFixture {
   const root = mkdtempSync(join(tmpdir(), 'dsh-mac-smoke-'))
   temporaryRoots.push(root)
-  const contents = join(root, 'DSH Desktop.app', 'Contents')
+  const contents = join(root, 'AI Buddy.app', 'Contents')
   const macos = join(contents, 'MacOS')
   const resources = join(contents, 'Resources')
   mkdirSync(macos, { recursive: true })
   mkdirSync(resources, { recursive: true })
   const infoPlist = join(contents, 'Info.plist')
-  const executable = join(macos, 'DSH Desktop')
+  const executable = join(macos, 'AI Buddy')
   const appAsar = join(resources, 'app.asar')
   const modeOverrides = new Map<string, number>()
   writeFileSync(infoPlist, '<?xml version="1.0" encoding="UTF-8"?>')
@@ -55,8 +55,8 @@ function options(
   const removeMountPoint = vi.fn()
   const value: MacSmokeVerificationOptions = {
     distDir: '/release/dist',
-    productName: 'DSH Desktop',
-    listDmgs: () => ['/release/dist/DSH Desktop-2.0.1.dmg'],
+    productName: 'AI Buddy',
+    listDmgs: () => ['/release/dist/AI Buddy-2.0.1.dmg'],
     makeMountPoint: () => '/private/tmp/dsh-desktop-dmg-smoke-test',
     run: (command, args) => { calls.push({ command, args: [...args] }) },
     removeMountPoint,
@@ -98,18 +98,18 @@ describe('macOS DMG smoke artifact verification', () => {
   it('mounts one DMG and accepts a well-formed unsigned application bundle', () => {
     const value = fixture()
     const harness = options({ makeMountPoint: () => value.root }, value.modeOverrides)
-    const appPath = join(value.root, 'DSH Desktop.app')
+    const appPath = join(value.root, 'AI Buddy.app')
 
     expect(verifyMacSmoke(harness.value)).toEqual({
       appPath,
-      dmgPath: '/release/dist/DSH Desktop-2.0.1.dmg',
+      dmgPath: '/release/dist/AI Buddy-2.0.1.dmg',
     })
 
     expect(harness.calls).toEqual([
       {
         command: 'hdiutil',
         args: [
-          'attach', '/release/dist/DSH Desktop-2.0.1.dmg',
+          'attach', '/release/dist/AI Buddy-2.0.1.dmg',
           '-mountpoint', value.root, '-nobrowse', '-readonly',
         ],
       },
@@ -145,7 +145,7 @@ describe('macOS DMG smoke artifact verification', () => {
     expect(harness.calls).toEqual([
       {
         command: 'hdiutil',
-        args: ['attach', '/release/dist/DSH Desktop-2.0.1.dmg', '-mountpoint', value.root, '-nobrowse', '-readonly'],
+        args: ['attach', '/release/dist/AI Buddy-2.0.1.dmg', '-mountpoint', value.root, '-nobrowse', '-readonly'],
       },
       { command: 'hdiutil', args: ['detach', value.root] },
     ])

@@ -46,7 +46,7 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.canPickDirectory).toBe(true)
     expect(strategy.canToggleShellMode).toBe(true)
 
-    strategy.configureApplication(icon, 'DSH Desktop')
+    strategy.configureApplication(icon, 'AI Buddy')
     strategy.configureWindow(window as never)
     strategy.refreshThemeMaterial(window as never)
 
@@ -66,7 +66,7 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.canPickDirectory).toBe(false)
     expect(strategy.canToggleShellMode).toBe(true)
 
-    strategy.configureApplication(icon, 'DSH Desktop')
+    strategy.configureApplication(icon, 'AI Buddy')
     strategy.configureWindow(window as never)
     strategy.refreshThemeMaterial(window as never)
 
@@ -86,7 +86,7 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.canPickDirectory).toBe(false)
     expect(strategy.canToggleShellMode).toBe(false)
 
-    strategy.configureApplication({} as never, 'DSH Desktop')
+    strategy.configureApplication({} as never, 'AI Buddy')
     strategy.configureWindow(window as never)
     strategy.refreshThemeMaterial(window as never)
 

@@ -101,7 +101,7 @@ function concernForPath(
     return {
       ...entry,
       ...info,
-      reason: `${info.fileSystem} does not provide the NTFS-style ACL and junction behavior DSH Desktop relies on`,
+      reason: `${info.fileSystem} does not provide the NTFS-style ACL and junction behavior AI Buddy relies on`,
     }
   }
   if (info.driveType === REMOVABLE_DRIVE) {

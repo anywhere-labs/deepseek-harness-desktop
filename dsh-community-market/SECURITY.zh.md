@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`dsh-community-market` 已完成并内置于 DSH Desktop。它以开放方式连接各种插件数据源：任何人都可以提供、接入和使用符合公开 Schema 的来源，已有 API 也可以通过随 Market 发布的受审 adapter 成为合作数据源。Host/Client runtime 会校验并规范化目录数据、持久化用户拥有的来源选择，并且只在来源被明确启用后执行受限 HTTPS 请求。Market 通过受管 package 能力实现有限的精确版本 npm 安装和基于 receipt 的卸载；renderer 不能访问 package manager。
+`dsh-community-market` 已完成并内置于 AI Buddy。它以开放方式连接各种插件数据源：任何人都可以提供、接入和使用符合公开 Schema 的来源，已有 API 也可以通过随 Market 发布的受审 adapter 成为合作数据源。Host/Client runtime 会校验并规范化目录数据、持久化用户拥有的来源选择，并且只在来源被明确启用后执行受限 HTTPS 请求。Market 通过受管 package 能力实现有限的精确版本 npm 安装和基于 receipt 的卸载；renderer 不能访问 package manager。
 
 ## 信任模型
 
@@ -19,7 +19,7 @@
 - 只有通过独立 registry、仓库、integrity、bundle、deprecated、lifecycle script、DSH rc.8 和内置 Node.js 检查的精确稳定 npm 目标才能继续；
 - 预览与读取可取消；确认被接受后，串行 mutation 由 Host 持有，UI 断连只会丢失响应；当前 profile 变化或一次性 preview 无效时必须拒绝；
 - 卸载只接管当前 profile 中 package 与 bundle 仍然精确匹配的合法 Market receipt，且不依赖目录来源继续存在；
-- 打开 DSH 终端只能使用严格的空 body 操作，不携带命令、路径或 profile，也不会粘贴或执行界面展示的手动提示；
+- 打开 AI Buddy 终端只能使用严格的空 body 操作，不携带命令、路径或 profile，也不会粘贴或执行界面展示的手动提示；
 - Market 安装，或通过 Desktop 内置 DSH 终端运行 `dsh plugin add` 之前，Desktop 只会为当前 profile 的 `package.json`、`pnpm-lock.yaml` 和 `pnpm-workspace.yaml` 创建私有快照；在该终端直接执行 `pnpm`/`npm`，或在外部系统终端运行命令，都不在此边界内；
 - 快照不会备份或主动回滚 `node_modules`、环境变量或独立凭据存储；三个白名单文件会按原内容复制，因此不得在其中嵌入凭据；
 - 一条恢复记录会阻止下一次受保护的插件添加，直到后续 Desktop generation 成功启动 Host 并收到 Renderer 健康报告，或完成恢复 reconcile；

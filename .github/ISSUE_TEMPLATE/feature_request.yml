@@ -1,5 +1,5 @@
 name: Feature request / 功能建议
-description: Suggest an improvement to DSH Desktop / 提议改进 DSH Desktop
+description: Suggest an improvement to AI Buddy / 提议改进 AI Buddy
 labels: ["enhancement"]
 body:
   - type: markdown
@@ -48,7 +48,7 @@ body:
     attributes:
       label: Desired outcome / 期望结果
       description: Describe the user-visible result, not necessarily the implementation / 描述用户最终能做到什么，不必设计技术实现
-      placeholder: I would like DSH Desktop to ... / 希望 DSH Desktop 能够……
+      placeholder: I would like AI Buddy to ... / 希望 AI Buddy 能够……
     validations:
       required: true
 

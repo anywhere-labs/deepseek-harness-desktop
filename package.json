@@ -2,7 +2,7 @@
   "name": "deepseek-harness-desktop",
   "version": "2.0.2",
   "private": true,
-  "description": "DSH Desktop product workspace",
+  "description": "AI Buddy product workspace",
   "license": "MIT",
   "packageManager": "yarn@4.18.0",
   "engines": {

@@ -11,8 +11,8 @@ function options(overrides: Partial<MacReleaseVerificationOptions> = {}) {
   const removeMountPoint = vi.fn()
   const value: MacReleaseVerificationOptions = {
     distDir: '/release/dist',
-    productName: 'DSH Desktop',
-    listDmgs: () => ['/release/dist/DSH Desktop-2.0.0-universal.dmg'],
+    productName: 'AI Buddy',
+    listDmgs: () => ['/release/dist/AI Buddy-2.0.0-universal.dmg'],
     makeMountPoint: () => '/private/tmp/dsh-desktop-dmg-test',
     run: (command, args) => { calls.push({ command, args: [...args] }) },
     removeMountPoint,
@@ -24,28 +24,28 @@ function options(overrides: Partial<MacReleaseVerificationOptions> = {}) {
 describe('macOS release artifact verification', () => {
   it('mounts one DMG and verifies signature, Gatekeeper, and the stapled ticket', () => {
     const harness = options()
-    const appPath = join('/private/tmp/dsh-desktop-dmg-test', 'DSH Desktop.app')
+    const appPath = join('/private/tmp/dsh-desktop-dmg-test', 'AI Buddy.app')
 
     expect(verifyMacRelease(harness.value)).toEqual({
       appPath,
-      dmgPath: '/release/dist/DSH Desktop-2.0.0-universal.dmg',
+      dmgPath: '/release/dist/AI Buddy-2.0.0-universal.dmg',
     })
 
     expect(harness.calls).toEqual([
       {
         command: 'hdiutil',
         args: [
-          'attach', '/release/dist/DSH Desktop-2.0.0-universal.dmg',
+          'attach', '/release/dist/AI Buddy-2.0.0-universal.dmg',
           '-mountpoint', '/private/tmp/dsh-desktop-dmg-test', '-nobrowse', '-readonly',
         ],
       },
       {
         command: 'lipo',
-        args: [join(appPath, 'Contents', 'MacOS', 'DSH Desktop'), '-verify_arch', 'x86_64'],
+        args: [join(appPath, 'Contents', 'MacOS', 'AI Buddy'), '-verify_arch', 'x86_64'],
       },
       {
         command: 'lipo',
-        args: [join(appPath, 'Contents', 'MacOS', 'DSH Desktop'), '-verify_arch', 'arm64'],
+        args: [join(appPath, 'Contents', 'MacOS', 'AI Buddy'), '-verify_arch', 'arm64'],
       },
       ...MACOS_UNIVERSAL_NATIVE_ENTRIES.map(entry => ({
         command: 'lipo',

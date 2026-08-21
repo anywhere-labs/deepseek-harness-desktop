@@ -487,8 +487,8 @@ describe('published package surface', () => {
 
   it('fixes the installed application identity', () => {
     expect(manifest.version).toBe(workspaceManifest.version)
-    expect(manifest.build?.productName).toBe('DSH Desktop')
-    expect(manifest.build?.appId).toBe('ai.deepseek.dsh.desktop')
+    expect(manifest.build?.productName).toBe('AI Buddy')
+    expect(manifest.build?.appId).toBe('app.ai-buddy.desktop')
     expect(manifest.build?.asarUnpack).toEqual([
       'package.json',
       'cordis.patch.yml',
@@ -522,7 +522,7 @@ describe('published package surface', () => {
       target: 'nsis',
       arch: ['x64'],
     }])
-    expect(manifest.build?.win?.artifactName).toBe('DSH-Desktop-${version}-${arch}-Portable.${ext}')
+    expect(manifest.build?.win?.artifactName).toBe('AI-Buddy-${version}-${arch}-Portable.${ext}')
     expect(manifest.build?.nsis).toEqual({
       license: 'THIRD_PARTY_NOTICES.md',
       oneClick: false,
@@ -532,9 +532,9 @@ describe('published package surface', () => {
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
       differentialPackage: false,
-      shortcutName: 'DSH Desktop',
+      shortcutName: 'AI Buddy',
       useZip: true,
-      artifactName: 'DSH-Desktop-${version}-${arch}-Setup.${ext}',
+      artifactName: 'AI-Buddy-${version}-${arch}-Setup.${ext}',
     })
     expect(manifest.build?.linux?.icon).toBe('build/app-icon.png')
   })
@@ -631,20 +631,25 @@ describe('published package surface', () => {
     expect(ciWorkflow).toContain('Documentation-only change; product build and tests are not required.')
   })
 
-  it('keeps one fixed brand-blue tray source for generated native assets', () => {
-    const source = readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')
+  it('generates native tray bitmaps from the brand mascot', async () => {
+    const generator = readFileSync(new URL('scripts/generate-tray-icons.mjs', packageRoot), 'utf8')
 
-    expect(source.match(/#4D6BFE/gu)).toHaveLength(1)
-    expect(source).not.toMatch(/<style\b|prefers-color-scheme/iu)
-    for (const filename of [
-      'tray-iconTemplate.png',
-      'tray-iconTemplate@2x.png',
-      'tray-icon-blue.png',
-      'tray-icon-blue@1.25x.png',
-      'tray-icon-blue@1.5x.png',
-      'tray-icon-blue@2x.png',
-    ]) {
-      expect(readFileSync(new URL(`build/${filename}`, packageRoot)).byteLength).toBeGreaterThan(0)
+    expect(generator).toContain("join(buildRoot, 'brand-mascot.png')")
+    expect(generator).not.toContain('#4D6BFE')
+    for (const [filename, size] of [
+      ['tray-iconTemplate.png', 16],
+      ['tray-iconTemplate@2x.png', 32],
+      ['tray-icon-blue.png', 16],
+      ['tray-icon-blue@1.25x.png', 20],
+      ['tray-icon-blue@1.5x.png', 24],
+      ['tray-icon-blue@2x.png', 32],
+    ] as const) {
+      const metadata = await sharp(readFileSync(new URL(`build/${filename}`, packageRoot))).metadata()
+      expect(metadata).toEqual(expect.objectContaining({
+        format: 'png',
+        width: size,
+        height: size,
+      }))
     }
   })
 
@@ -653,7 +658,7 @@ describe('published package surface', () => {
       .update(readFileSync(new URL('build/app-icon.png', packageRoot)))
       .digest('hex')
 
-    expect(digest).toBe('315fbc6e57ff1f34894f21f66fb7f9f26deccf78333c71fad21a6cec64e7de80')
+    expect(digest).toBe('5d43c040132397b04a9df39db7043e038bc17e8d50705efe3cd258001ccdafdc')
   })
 
   it('generates a centered macOS icon with a 100-pixel visual inset', async () => {

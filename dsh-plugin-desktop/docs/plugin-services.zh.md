@@ -1,8 +1,8 @@
-# DSH Desktop 插件 service
+# AI Buddy 插件 service
 
 [English](plugin-services.md) | 中文
 
-本文档是面向插件作者、受支持的 Host 侧集成 contract，覆盖 DSH Desktop 2.x 在兼容与高级两种呈现模式下导出的公开 `desktopProfiles` 与 `desktopPnpm` Cordis service。它不会授予第三方访问原始 Electron API、renderer 或 launcher bootstrap 状态的能力。
+本文档是面向插件作者、受支持的 Host 侧集成 contract，覆盖 AI Buddy 2.x 在兼容与高级两种呈现模式下导出的公开 `desktopProfiles` 与 `desktopPnpm` Cordis service。它不会授予第三方访问原始 Electron API、renderer 或 launcher bootstrap 状态的能力。
 
 ## 分层与数据流
 
@@ -39,7 +39,7 @@ flowchart LR
 
 Launcher 会在 Loader tree 挂载前解析一个 profile。`desktopProfiles.current` 在整个 Cordis generation dispose 前保持不变。`desktop-pnpm` Host row 会根据 launcher 私有 fact 与上游 subprocess service 构造 `desktopPnpm`。切换 profile 或模式会 dispose 当前 generation 并启动新 generation；service reference 不能跨越该边界。
 
-Renderer 通过现有 loopback carrier 接收普通 Web Client module，无法直接读取这些 Host service；DSH Desktop 也不会为它们增加 preload 或 Electron IPC bridge。包含浏览器 UI 的插件继续使用普通 DSH Host route、RPC、client metadata、service 与 slot。
+Renderer 通过现有 loopback carrier 接收普通 Web Client module，无法直接读取这些 Host service；AI Buddy 也不会为它们增加 preload 或 Electron IPC bridge。包含浏览器 UI 的插件继续使用普通 DSH Host route、RPC、client metadata、service 与 slot。
 
 ## 公开 Cordis service
 
@@ -168,7 +168,7 @@ Service 在每个 generation 同时最多启动一个 package operation；已有
 
 ### 仅支持 Desktop 的插件：required injection
 
-只在 DSH Desktop 中有意义的插件可以把两个 service 都声明为 required dependency。Cordis 会让插件保持 pending，直到两个 provider 都可用；任一 required service 消失时，插件 effect 会被 unload。
+只在 AI Buddy 中有意义的插件可以把两个 service 都声明为 required dependency。Cordis 会让插件保持 pending，直到两个 provider 都可用；任一 required service 消失时，插件 effect 会被 unload。
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -318,7 +318,7 @@ yarn workspace dsh-plugin-desktop verify:profile
 
 `dshmarket@1.2.3` 早于该 contract。它依次选择 `config.profile`、launcher argv 与 `web`；私有导入 `node:child_process`，发现裸 `dsh` 命令，并自行运行 `dsh plugin --profile ...`。其公开 package exports 不提供 route 或 runner injection seam。外部 config patch 可以修正 profile 名称，PATH shim 也可以让旧命令变得可发现，但两种适配都不能让 `1.2.3` 消费 `desktopProfiles` 或 `desktopPnpm`。
 
-因此 DSH Desktop 不会预装或依赖该版本。未来兼容 release 必须：
+因此 AI Buddy 不会预装或依赖该版本。未来兼容 release 必须：
 
 - 使用 `desktopProfiles.current` 作为 Desktop 权威身份；
 - add 使用 `desktopPnpm.installPlugin()`，remove、update、collection cleanup 与 dependency repair 使用 `runPlugin()`；

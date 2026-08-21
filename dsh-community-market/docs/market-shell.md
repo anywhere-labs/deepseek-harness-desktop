@@ -2,7 +2,7 @@
 
 [中文](market-shell.zh.md)
 
-Status: delivered and built into DSH Desktop, including the Host/Client market, limited npm installation, receipt-backed uninstall, and direct-bundle enable/disable
+Status: delivered and built into AI Buddy, including the Host/Client market, limited npm installation, receipt-backed uninstall, and direct-bundle enable/disable
 
 This document defines the delivered implementation boundary for `dsh-community-market`. It is deliberately narrower than a complete marketplace. The package owns an in-product shell and adapters; it does not own the community catalog, package registry, or DSH profile format.
 
@@ -123,7 +123,7 @@ On Desktop, the Market Host uses the public services already owned by `dsh-plugi
 5. Verify the installed profile dependency and contained DSH bundle before saving a receipt; restore the allowlisted configuration snapshot when an invalid or unrecordable install has a recognized file image.
 6. After success, issue a short-lived one-shot restart grant so the user can choose **Restart now** or **Restart later**; never restart silently. Keep the recovery record pending and refuse another protected plugin add until the next Desktop generation verifies startup health or reconciles a rollback.
 
-When Desktop services are unavailable, browsing stays available while package operations explain that they require DSH Desktop. Managed installation never falls back to ambient `pnpm`, a shell command, a guessed `dsh` executable, or an inactive profile. **Open DSH Terminal** is a separate user-controlled escape hatch: its request contains no command, path, or profile and only opens Desktop's built-in terminal; the user decides whether to copy and run displayed text. A later `dsh plugin add` through that built-in terminal receives the same configuration-recovery handoff. Direct `pnpm` or `npm` commands in that terminal and commands run in an external system terminal do not.
+When Desktop services are unavailable, browsing stays available while package operations explain that they require AI Buddy. Managed installation never falls back to ambient `pnpm`, a shell command, a guessed `dsh` executable, or an inactive profile. **Open AI Buddy Terminal** is a separate user-controlled escape hatch: its request contains no command, path, or profile and only opens Desktop's built-in terminal; the user decides whether to copy and run displayed text. A later `dsh plugin add` through that built-in terminal receives the same configuration-recovery handoff. Direct `pnpm` or `npm` commands in that terminal and commands run in an external system terminal do not.
 
 ## Install recovery boundary
 
@@ -178,7 +178,7 @@ Raw response bodies, filesystem paths, tokens, environment variables, and comman
 
 - The npm name and monorepo package boundary are established.
 - Catalog attribution, trust rules, and integration decisions are recorded.
-- The Host/Client package is delivered as a built-in DSH Desktop implementation.
+- The Host/Client package is delivered as a built-in AI Buddy implementation.
 
 ### Phase 1: catalog market shell — delivered and built in
 

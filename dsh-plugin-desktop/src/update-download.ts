@@ -1,9 +1,10 @@
-/** Headless, confirmation-gated downloads for DSH Desktop installers. */
+/** Headless, confirmation-gated downloads for AI Buddy installers. */
 
 import { randomUUID } from 'node:crypto'
 import { chmod, lstat, mkdir, open, readFile, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { PRODUCT_ARTIFACT_STEM } from './product-identity.ts'
 import { compareSemVerVersions, parseSemVer } from './update-checker.ts'
 
 /** Desktop platforms with a fixed installer download endpoint. */
@@ -161,7 +162,7 @@ export function desktopUpdateFilename(platform: DesktopDownloadPlatform, version
   validatedVersion(version)
   const extension = platform === 'darwin' ? 'dmg' : 'exe'
   const platformName = platform === 'darwin' ? 'mac' : 'windows'
-  return `DSH-Desktop-${version}-${platformName}.${extension}`
+  return `${PRODUCT_ARTIFACT_STEM}-${version}-${platformName}.${extension}`
 }
 
 /** Remember a downloaded installer until an upgraded application resolves its retention. */
