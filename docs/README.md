@@ -13,6 +13,7 @@
 | 文档 | 你会得到什么 |
 | --- | --- |
 | [用户指南](user-guide.md) | 安装、profile、模式、终端、插件命令和更新 |
+| [升级 runtime 排障](upgrading-runtime.md) | 手动升级 runtime/rc 版本后，壳覆盖 runtime、插件报 prepareCall、pnpm 守卫拦截的排障 |
 | [常见问题](faq.md) | 支持平台、内置环境、官方边界、数据、插件和更新的直接回答 |
 | [为什么做 Desktop](why-desktop.md) | Desktop 与官方 Harness 的边界，以及为什么坚持插件化 |
 
