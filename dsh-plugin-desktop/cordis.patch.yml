@@ -9,7 +9,6 @@
       name: dsh-community-market
     - id: desktop-terminal
       name: dsh-plugin-desktop/terminal
-      disabled: !!js process.platform === 'linux'
     - id: desktop-diagnostics
       name: dsh-plugin-desktop/diagnostics
     - id: desktop-notifications

@@ -58,6 +58,7 @@ import {
 } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
 import { DesktopActionsService } from './desktop-actions.ts'
+import { isDesktopTerminalPlatform } from './desktop-terminal.ts'
 import { DesktopPluginsService } from './desktop-plugins.ts'
 import { DesktopStartupRecoveryController } from './startup-recovery-controller.ts'
 import {
@@ -552,6 +553,7 @@ async function start(): Promise<void> {
         hostCtx.provide('desktopRuntime', runtime)
         hostCtx.provide('desktopPnpmBootstrap', desktopPnpmBootstrap)
         await hostCtx.plugin(DesktopActionsService, {
+          openTerminalSupported: isDesktopTerminalPlatform(process.platform),
           openTerminal: () => { runtime.openTerminal() },
           requestRestart: () => runtime.requestRestart(),
         })

@@ -1334,6 +1334,38 @@ describe('Electron desktop runtime', () => {
     expect(recoveryCalls[0]?.[0].detail).toContain('vision_crop')
   })
 
+  it('offers the native terminal action during recovery on Linux', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    electron.dialog.showMessageBox.mockResolvedValueOnce({ response: 2, checkboxChecked: false })
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const onRendererBoot = vi.fn()
+    const runtime = new ElectronDesktopRuntime(async () => {}, onRendererBoot)
+    const rendererBoot = runtime.beginRendererBootMonitoring({ commitHealthy: async () => {} })
+    const report = {
+      status: 'failed' as const,
+      plugins: ['dsh-vision-router'],
+      error: 'keyed slot "tool.call.toolview" already has an entry for key "vision_crop" at priority 0',
+    }
+
+    runtime.reportRendererBoot(report)
+    await rendererBoot
+    await vi.waitFor(() => { expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce() })
+    runtime.reportRendererBoot({ status: 'healthy' })
+
+    expect(onRendererBoot).toHaveBeenCalledWith(report)
+    expect(electron.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      title: 'Plugin Recovery',
+      message: 'DSH Desktop could not load all plugins.',
+      detail: expect.stringContaining('dsh-vision-router'),
+      buttons: ['Open DSH Terminal', 'Restart DSH Desktop', 'Dismiss'],
+      defaultId: 0,
+      cancelId: 2,
+    }))
+    const recoveryCalls = electron.dialog.showMessageBox.mock.calls as unknown as Array<[{ detail?: string }]>
+    expect(recoveryCalls[0]?.[0].detail).toContain('Open DSH Terminal to update or remove the failing third-party plugin')
+  })
+
   it('logs the renderer boot failure details for diagnostics', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')

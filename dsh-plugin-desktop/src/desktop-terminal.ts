@@ -50,7 +50,12 @@ const WINDOWS_TERMINAL_COMMAND = 'wt.exe'
 const ELECTRON_HEADERS_URL = 'https://electronjs.org/headers'
 
 /** Platforms with a native terminal launch contract owned by DSH Desktop. */
-export type DesktopTerminalPlatform = 'darwin' | 'win32'
+export type DesktopTerminalPlatform = 'darwin' | 'win32' | 'linux'
+
+/** Whether a host platform owns a native terminal launch contract. */
+export function isDesktopTerminalPlatform(platform: NodeJS.Platform): platform is DesktopTerminalPlatform {
+  return platform === 'darwin' || platform === 'win32' || platform === 'linux'
+}
 
 /** Process launcher injected by the Electron adapter. */
 export type DesktopTerminalSpawn = (
@@ -75,6 +80,14 @@ export interface WindowsTerminalLauncher {
   executable: string
   /** Arguments placed before the selected shell child command. */
   arguments?: readonly string[]
+}
+
+/** One Linux terminal emulator candidate with the arguments built from the welcome path. */
+export interface LinuxTerminalLauncher {
+  /** Executable name resolved through PATH, for example `gnome-terminal`. */
+  readonly command: string
+  /** Arguments built from the generated welcome script path. */
+  readonly argv: (welcomePath: string) => readonly string[]
 }
 
 /** Inputs for one isolated desktop terminal launch. */
@@ -111,6 +124,12 @@ export interface DesktopTerminalOptions {
   windowsExecutableExists?: DesktopTerminalExecutableExists
   /** Windows executable resolver; defaults to a trusted PATH/SystemRoot lookup. */
   windowsExecutableResolver?: DesktopTerminalExecutableResolver
+  /** Optional ordered Linux terminal emulators; defaults to a trusted discovery table. */
+  linuxTerminalLaunchers?: readonly LinuxTerminalLauncher[]
+  /** Linux executable existence probe; defaults to `existsSync`. */
+  linuxExecutableExists?: DesktopTerminalExecutableExists
+  /** Linux executable resolver; defaults to a trusted PATH lookup. */
+  linuxExecutableResolver?: DesktopTerminalExecutableResolver
   /** Reporter attached before the platform launcher can emit an asynchronous failure. */
   onLaunchError?: (cause: Error) => void
 }
@@ -430,7 +449,7 @@ function windowsCmdWelcome(): string {
 
 /** Create command shims and the interactive welcome script. */
 function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTerminalFiles {
-  if (options.platform !== 'darwin' && options.platform !== 'win32') {
+  if (options.platform !== 'darwin' && options.platform !== 'win32' && options.platform !== 'linux') {
     throw new Error(`dsh-plugin-desktop: terminal is unsupported on ${options.platform}`)
   }
   assertDesktopProfileName(options.profileName)
@@ -449,13 +468,13 @@ function prepareDesktopTerminalFiles(options: DesktopTerminalOptions): DesktopTe
   prepareStateDirectory(options.stateDir)
   const shimDir = join(options.stateDir, 'bin')
   prepareStateDirectory(shimDir)
-  if (options.platform === 'darwin') {
+  if (options.platform === 'darwin' || options.platform === 'linux') {
     const files: DesktopTerminalFiles = {
       shimDir,
       dshShimPath: join(shimDir, 'dsh'),
       pnpmShimPath: join(shimDir, 'pnpm'),
       nodeShimPath: join(shimDir, 'node'),
-      welcomePath: join(options.stateDir, 'welcome.command'),
+      welcomePath: join(options.stateDir, options.platform === 'darwin' ? 'welcome.command' : 'welcome.sh'),
     }
     const bashRcPath = join(options.stateDir, 'bashrc')
     replacePrivateFile(files.dshShimPath, macDshShim(options), EXECUTABLE_FILE_MODE)
@@ -565,6 +584,57 @@ function defaultWindowsExecutableResolver(
     }
   }
   return candidates.find(candidate => exists(candidate))
+}
+
+/** Well-known Linux terminal emulators in discovery order with their argument shape. */
+const LINUX_TERMINAL_LAUNCHERS: readonly LinuxTerminalLauncher[] = [
+  // freedesktop spec: runs the command directly with its own argv.
+  { command: 'xdg-terminal-exec', argv: welcomePath => [welcomePath] },
+  // Modern `--` separator keeps the executable welcome path argv-safe.
+  { command: 'gnome-terminal', argv: welcomePath => ['--', welcomePath] },
+  // Classic `-e` joins the following argv into one shell line, so the welcome
+  // path must be shell-quoted to survive spaces under the Electron userData dir.
+  { command: 'x-terminal-emulator', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+  { command: 'konsole', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+  { command: 'xfce4-terminal', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+  { command: 'mate-terminal', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+  { command: 'kgx', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+  { command: 'tilix', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+  { command: 'xterm', argv: welcomePath => ['-e', `bash ${quoteSh(welcomePath)}`] },
+]
+
+/** Resolve a Linux terminal emulator executable through the inherited PATH. */
+function defaultLinuxExecutableResolver(
+  command: string,
+  environment: Readonly<NodeJS.ProcessEnv>,
+  exists: DesktopTerminalExecutableExists,
+): string | undefined {
+  const inheritedPath = windowsEnvironmentValue(environment, PATH)
+  if (inheritedPath === undefined) return undefined
+  const candidates: string[] = []
+  for (const rawDir of inheritedPath.split(':')) {
+    const dir = rawDir.length === 0 ? '.' : rawDir
+    candidates.push(join(dir, command))
+  }
+  return candidates.find(candidate => exists(candidate))
+}
+
+/** Resolve the preferred Linux terminal emulator and its welcome launch arguments. */
+function resolveLinuxTerminal(
+  options: DesktopTerminalOptions,
+  environment: Readonly<NodeJS.ProcessEnv>,
+  welcomePath: string,
+): { readonly executable: string; readonly argv: readonly string[] } {
+  const launchers = options.linuxTerminalLaunchers ?? LINUX_TERMINAL_LAUNCHERS
+  const exists = options.linuxExecutableExists ?? existsSync
+  const resolveExecutable = options.linuxExecutableResolver ?? defaultLinuxExecutableResolver
+  for (const launcher of launchers) {
+    const executable = resolveExecutable(launcher.command, environment, exists)
+    if (executable === undefined) continue
+    assertScriptValue(`${launcher.command} executable`, executable)
+    return { executable, argv: launcher.argv(welcomePath) }
+  }
+  throw new Error('dsh-plugin-desktop: terminal requires a Linux terminal emulator (x-terminal-emulator, gnome-terminal, konsole, xterm, or similar)')
 }
 
 interface ResolvedWindowsShell {
@@ -703,6 +773,10 @@ export function openDesktopTerminal(options: DesktopTerminalOptions): DesktopTer
   if (options.platform === 'darwin') {
     command = '/usr/bin/open'
     args = ['-a', 'Terminal', files.welcomePath]
+  } else if (options.platform === 'linux') {
+    const launcher = resolveLinuxTerminal(options, env, files.welcomePath)
+    command = launcher.executable
+    args = [...launcher.argv]
   } else {
     const shell = resolveWindowsShell(options, env)
     const shellArgs = windowsShellArgv(shell, files)

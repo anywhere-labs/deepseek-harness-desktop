@@ -42,11 +42,28 @@ describe('desktop terminal Host plugin', () => {
     expect(disposeRegistration).toHaveBeenCalledOnce()
   })
 
-  it('fails loud if a Linux profile activates the unsupported terminal row', () => {
+  it('registers the terminal tray command on Linux', () => {
+    let trayItem: DesktopTrayItem | undefined
+    const openTerminal = vi.fn()
+    const runtime = {
+      platform: 'linux',
+      locale: 'en',
+      openTerminal,
+      registerTrayItem: (item: DesktopTrayItem) => {
+        trayItem = item
+        return { refresh: () => {}, dispose: () => {} }
+      },
+    } as unknown as DesktopRuntime
     const ctx = {
-      desktopRuntime: { platform: 'linux' },
+      desktopRuntime: runtime,
+      effect: (register: () => (() => void)) => register(),
     } as unknown as Context
 
-    expect(() => apply(ctx)).toThrow('supported on macOS and Windows')
+    apply(ctx)
+
+    expect(trayItem).toMatchObject({ group: 'tools', order: 10 })
+    expect(trayItem?.label()).toBe('Open DSH Terminal')
+    trayItem?.invoke()
+    expect(openTerminal).toHaveBeenCalledOnce()
   })
 })
