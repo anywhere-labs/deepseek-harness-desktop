@@ -375,7 +375,7 @@ describe('1024Store adapter', () => {
     expect(snapshot.page).toEqual({ nextCursor: '50', total: 7635 })
   })
 
-  it('fails a complete 1024Store scan when provider metadata says more items exist', async () => {
+  it('accepts a truncated 1024Store scan when provider metadata claims more items than the endpoint returns', async () => {
     const packages = Array.from({ length: 51 }, (_, index) => ({
       ...rawCatalog.packages[0]!,
       id: `anywhere-labs/plugin-${index}`,
@@ -389,10 +389,14 @@ describe('1024Store adapter', () => {
       })),
     }
 
-    await expect(dsh1024StoreAdapter.scanCatalog!(
+    const snapshots = await dsh1024StoreAdapter.scanCatalog!(
       { limit: 100 },
       { source: source(), signal: new AbortController().signal, http, media: { register: () => fixtureAssetRef } },
-    )).rejects.toThrow(/provider total/u)
+    )
+
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0]!.items).toHaveLength(51)
+    expect(snapshots[0]!.page).toEqual({ total: 51 })
   })
 
   it('keeps the reviewed 1024Store adapter page size fixed at 50', async () => {
