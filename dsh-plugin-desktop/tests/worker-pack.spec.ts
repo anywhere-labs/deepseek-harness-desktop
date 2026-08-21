@@ -45,8 +45,10 @@ describe('desktop worker pack', () => {
 
   it('keeps worker-pack locale keys aligned', () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort())
-    expect(zh.officeImTitle).toContain('钉钉')
-    expect(en.officeImTitle.toLowerCase()).toContain('office')
+    expect(zh.officeImBody).toContain('钉钉官方 Stream')
+    expect(zh.officeImBody).toContain('企业微信')
+    expect(en.officeImBody).toContain('DingTalk Stream')
+    expect(en.officeImBody).toContain('WeCom')
   })
 
   it('treats the catalog as selected only after an explicit enabled source', () => {
