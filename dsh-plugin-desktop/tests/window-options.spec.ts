@@ -36,7 +36,7 @@ describe('compatibility BrowserWindow options', () => {
     const options = compatibilityWindowOptions(spec, icon, 'darwin', preload)
 
     expect(options).toEqual(expect.objectContaining({
-      title: '',
+      title: 'DeepSeek Harness Desktop',
       width: 1280,
       height: 840,
       minWidth: 900,
