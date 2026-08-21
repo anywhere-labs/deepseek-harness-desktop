@@ -92,3 +92,78 @@ export function workerPackCatalogSelected(
     source.builtInProviderKey === WORKER_PACK_CATALOG_SOURCE_KEY && source.enabled
   ))
 }
+
+/** User-initiated install groups on the Worker pack tab. */
+export type WorkerPackInstallKind = 'workspace' | 'office-im' | 'later'
+
+/** One profile inventory row the worker pack can match by npm name. */
+export interface WorkerPackInstallationRef {
+  readonly packageName?: string
+  readonly receipt?: { readonly packageName: string }
+}
+
+/** Catalog row used to resolve a recommended npm name to a market item. */
+export interface WorkerPackCatalogItemRef {
+  readonly id: string
+  readonly package?: { readonly name?: string }
+}
+
+/** Outcome of one user-initiated recommended install. */
+export type WorkerPackInstallStatus = 'installed' | 'already' | 'missing' | 'failed'
+
+export interface WorkerPackInstallResult {
+  readonly packageName: string
+  readonly status: WorkerPackInstallStatus
+  readonly error?: string
+}
+
+const ALL_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlugin[] = Object.freeze([
+  ...WORKER_PACK_RECOMMENDED_PLUGINS,
+  ...WORKBENCH_LATER_RECOMMENDED_PLUGINS,
+  ...OFFICE_IM_RECOMMENDED_PLUGINS,
+])
+
+/** Recommended plugins for one one-click button. Never a silent boot list. */
+export function recommendedPluginsFor(
+  kind: WorkerPackInstallKind,
+): readonly WorkerPackRecommendedPlugin[] {
+  if (kind === 'workspace') return WORKER_PACK_RECOMMENDED_PLUGINS
+  if (kind === 'office-im') return OFFICE_IM_RECOMMENDED_PLUGINS
+  return WORKBENCH_LATER_RECOMMENDED_PLUGINS
+}
+
+/** True only for the curated recommendation lists shown on the Worker pack tab. */
+export function isWorkerPackRecommendedPackage(packageName: string): boolean {
+  return ALL_RECOMMENDED_PLUGINS.some(plugin => plugin.packageName === packageName)
+}
+
+/** True when the active profile already has this recommended package. */
+export function recommendedPackageInstalled(
+  packageName: string,
+  installations: readonly WorkerPackInstallationRef[],
+): boolean {
+  return installations.some(item => (
+    item.packageName === packageName || item.receipt?.packageName === packageName
+  ))
+}
+
+/** Exact npm-name match from a catalog page. Fuzzy hits are ignored. */
+export function findCatalogItemForPackage(
+  items: readonly WorkerPackCatalogItemRef[],
+  packageName: string,
+): WorkerPackCatalogItemRef | undefined {
+  return items.find(item => item.package?.name === packageName)
+}
+
+/** Locale key for a finished one-click install. */
+export function summarizeWorkerPackInstallResults(
+  results: readonly WorkerPackInstallResult[],
+): 'installRestart' | 'installPartial' | 'installMissing' | 'installError' {
+  if (results.length === 0) return 'installError'
+  const wrote = results.some(result => result.status === 'installed')
+  const incomplete = results.some(result => result.status === 'missing' || result.status === 'failed')
+  if (wrote && incomplete) return 'installPartial'
+  if (wrote || results.every(result => result.status === 'already')) return 'installRestart'
+  if (results.every(result => result.status === 'missing')) return 'installMissing'
+  return 'installError'
+}

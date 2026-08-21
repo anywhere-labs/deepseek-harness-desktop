@@ -4,11 +4,18 @@ import {
   OFFICE_IM_RECOMMENDED_PLUGINS,
   WORKBENCH_LATER_RECOMMENDED_PLUGINS,
   WORKER_PACK_RECOMMENDED_PLUGINS,
+  recommendedPackageInstalled,
+  recommendedPluginsFor,
+  summarizeWorkerPackInstallResults,
+  type WorkerPackInstallKind,
   type WorkerPackRecommendedPlugin,
 } from '../worker-pack.ts'
 import type { DesktopLocaleKey } from './locales.ts'
 import {
+  installRecommendedPlugins,
   readMarketSources,
+  readWorkerPackInstallations,
+  requestWorkerPackRestart,
   selectWorkerPackCatalog,
   workerPackCatalogSelected,
 } from './market-actions.ts'
@@ -16,12 +23,26 @@ import {
 export type WorkerPackTabProps = PropsRuntime<'settings.plugins.tab'>
   & PropsLocale<'dsh-desktop'>
 
+const ROLE_KEY: Record<WorkerPackRecommendedPlugin['role'], DesktopLocaleKey> = {
+  'workspace-shell': 'pluginWorkspaceShell',
+  'workspace-context': 'pluginWorkspaceContext',
+  'workspace-mobile': 'pluginWorkspaceMobile',
+  'office-dingtalk': 'pluginOfficeDingtalk',
+  'office-wecom': 'pluginOfficeWecom',
+}
+
 function RecommendedPluginCard({
   plugin,
   t,
+  installed,
+  busy,
+  onInstall,
 }: {
   readonly plugin: WorkerPackRecommendedPlugin
   readonly t: WorkerPackTabProps['t']
+  readonly installed: boolean
+  readonly busy: boolean
+  readonly onInstall: (packageName: string) => void
 }): ReactNode {
   return (
     <article className="dshWorkerCard">
@@ -32,16 +53,18 @@ function RecommendedPluginCard({
         <code className="dshWorkerCode">{plugin.packageName}</code>
         <a href={plugin.repositoryUrl} target="_blank" rel="noreferrer">{t('openRepository')}</a>
       </div>
+      <div className="dshWorkerActions">
+        <button
+          type="button"
+          className="dshWorkerButton dshWorkerButtonSecondary"
+          disabled={busy || installed}
+          onClick={() => onInstall(plugin.packageName)}
+        >
+          {installed ? t('installed') : t('installPlugin')}
+        </button>
+      </div>
     </article>
   )
-}
-
-const ROLE_KEY: Record<WorkerPackRecommendedPlugin['role'], DesktopLocaleKey> = {
-  'workspace-shell': 'pluginWorkspaceShell',
-  'workspace-context': 'pluginWorkspaceContext',
-  'workspace-mobile': 'pluginWorkspaceMobile',
-  'office-dingtalk': 'pluginOfficeDingtalk',
-  'office-wecom': 'pluginOfficeWecom',
 }
 
 type CatalogState =
@@ -50,8 +73,24 @@ type CatalogState =
   | { readonly status: 'busy' }
   | { readonly status: 'error' }
 
+type InstallState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'busy' }
+  | { readonly status: 'done'; readonly tone: 'ok' | 'error'; readonly message: DesktopLocaleKey; readonly restartToken?: string }
+
 export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
   const [catalog, setCatalog] = useState<CatalogState>({ status: 'loading' })
+  const [installedNames, setInstalledNames] = useState<readonly string[]>([])
+  const [install, setInstall] = useState<InstallState>({ status: 'idle' })
+
+  const refreshInstallations = async (signal?: AbortSignal): Promise<void> => {
+    const installations = await readWorkerPackInstallations(signal)
+    setInstalledNames([
+      ...WORKER_PACK_RECOMMENDED_PLUGINS,
+      ...WORKBENCH_LATER_RECOMMENDED_PLUGINS,
+      ...OFFICE_IM_RECOMMENDED_PLUGINS,
+    ].filter(plugin => recommendedPackageInstalled(plugin.packageName, installations)).map(plugin => plugin.packageName))
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -61,6 +100,7 @@ export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
       },
       () => { setCatalog({ status: 'error' }) },
     )
+    void refreshInstallations(controller.signal).catch(() => undefined)
     return () => controller.abort()
   }, [])
 
@@ -71,6 +111,36 @@ export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
       () => { setCatalog({ status: 'error' }) },
     )
   }
+
+  const runInstall = (packageNames: readonly string[]): void => {
+    setInstall({ status: 'busy' })
+    void installRecommendedPlugins(packageNames).then(
+      async (outcome) => {
+        await refreshInstallations().catch(() => undefined)
+        setCatalog({ status: 'ready', selected: true })
+        const message = summarizeWorkerPackInstallResults(outcome.results)
+        setInstall({
+          status: 'done',
+          tone: message === 'installError' || message === 'installMissing' ? 'error' : 'ok',
+          message,
+          ...(outcome.restartToken === undefined ? {} : { restartToken: outcome.restartToken }),
+        })
+      },
+      () => { setInstall({ status: 'done', tone: 'error', message: 'installError' }) },
+    )
+  }
+
+  const installKind = (kind: WorkerPackInstallKind): void => {
+    runInstall(recommendedPluginsFor(kind).map(plugin => plugin.packageName))
+  }
+
+  const restartNow = (): void => {
+    if (install.status !== 'done' || install.restartToken === undefined) return
+    void requestWorkerPackRestart(install.restartToken).catch(() => undefined)
+  }
+
+  const busy = catalog.status === 'busy' || install.status === 'busy'
+  const isInstalled = (packageName: string): boolean => installedNames.includes(packageName)
 
   return (
     <section className="dshWorkerRoot">
@@ -85,24 +155,92 @@ export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
       <div className="dshWorkerSection">
         <h2>{t('pluginsTitle')}</h2>
         <p>{t('pluginsBody')}</p>
+        <div className="dshWorkerActions">
+          <button
+            type="button"
+            className="dshWorkerButton"
+            disabled={busy || WORKER_PACK_RECOMMENDED_PLUGINS.every(plugin => isInstalled(plugin.packageName))}
+            onClick={() => installKind('workspace')}
+          >
+            {t('installWorkspace')}
+          </button>
+        </div>
         {WORKER_PACK_RECOMMENDED_PLUGINS.map(plugin => (
-          <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
+          <RecommendedPluginCard
+            key={plugin.packageName}
+            plugin={plugin}
+            t={t}
+            installed={isInstalled(plugin.packageName)}
+            busy={busy}
+            onInstall={packageName => runInstall([packageName])}
+          />
         ))}
       </div>
       <div className="dshWorkerSection">
         <h2>{t('laterTitle')}</h2>
         <p>{t('laterBody')}</p>
+        <div className="dshWorkerActions">
+          <button
+            type="button"
+            className="dshWorkerButton dshWorkerButtonSecondary"
+            disabled={busy || WORKBENCH_LATER_RECOMMENDED_PLUGINS.every(plugin => isInstalled(plugin.packageName))}
+            onClick={() => installKind('later')}
+          >
+            {t('installLater')}
+          </button>
+        </div>
         {WORKBENCH_LATER_RECOMMENDED_PLUGINS.map(plugin => (
-          <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
+          <RecommendedPluginCard
+            key={plugin.packageName}
+            plugin={plugin}
+            t={t}
+            installed={isInstalled(plugin.packageName)}
+            busy={busy}
+            onInstall={packageName => runInstall([packageName])}
+          />
         ))}
       </div>
       <div className="dshWorkerSection">
         <h2>{t('officeImTitle')}</h2>
         <p>{t('officeImBody')}</p>
+        <div className="dshWorkerActions">
+          <button
+            type="button"
+            className="dshWorkerButton"
+            disabled={busy || OFFICE_IM_RECOMMENDED_PLUGINS.every(plugin => isInstalled(plugin.packageName))}
+            onClick={() => installKind('office-im')}
+          >
+            {t('installOfficeIm')}
+          </button>
+        </div>
         {OFFICE_IM_RECOMMENDED_PLUGINS.map(plugin => (
-          <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
+          <RecommendedPluginCard
+            key={plugin.packageName}
+            plugin={plugin}
+            t={t}
+            installed={isInstalled(plugin.packageName)}
+            busy={busy}
+            onInstall={packageName => runInstall([packageName])}
+          />
         ))}
       </div>
+      {install.status === 'busy' ? <p className="dshWorkerStatus">{t('installBusy')}</p> : null}
+      {install.status === 'done'
+        ? (
+            <div className="dshWorkerSection">
+              <p className="dshWorkerStatus" data-tone={install.tone}>{t(install.message)}</p>
+              {install.restartToken === undefined
+                ? null
+                : (
+                    <div className="dshWorkerActions">
+                      <button type="button" className="dshWorkerButton" onClick={restartNow}>
+                        {t('installRestartNow')}
+                      </button>
+                    </div>
+                  )}
+            </div>
+          )
+        : null}
       <div className="dshWorkerSection">
         <h2>{t('catalogTitle')}</h2>
         <p>{t('catalogBody')}</p>
