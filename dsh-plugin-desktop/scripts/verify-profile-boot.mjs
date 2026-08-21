@@ -13,12 +13,14 @@ import {
 import { DESKTOP_SETTINGS_NAMESPACE } from '../lib/index.js'
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
-import { prepareDesktopProfile } from '../lib/profile.js'
+import { ensureDesktopProfile, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
 const HOST_SERVICE_PLUGIN_NAME = 'dsh-desktop-host-services-smoke-plugin'
 const HOST_SERVICE_PROBE_KEY = 'desktopHostServiceProbe'
+const HOST_ONLY_BUNDLE_NAME = 'dsh-host-only-profile-smoke-bundle'
+const HOST_ONLY_PROBE_KEY = 'hostOnlyProfileProbe'
 const home = mkdtempSync(join(tmpdir(), 'dsh-desktop-profile-'))
 let ctx
 let releasePackageResolver
@@ -35,7 +37,23 @@ try {
     '  default: minimal',
     '',
   ].join('\n'))
+  const profileDir = ensureDesktopProfile(home)
+  const hostOnlyBundleDir = join(profileDir, 'node_modules', HOST_ONLY_BUNDLE_NAME)
+  mkdirSync(join(profileDir, 'node_modules'), { recursive: true })
+  cpSync(
+    fileURLToPath(new URL('../tests/fixtures/host-only-profile-bundle/', import.meta.url)),
+    hostOnlyBundleDir,
+    { recursive: true, force: false, errorOnExist: true },
+  )
+  const profileManifestPath = join(profileDir, 'package.json')
+  const profileManifest = JSON.parse(readFileSync(profileManifestPath, 'utf8'))
+  profileManifest.dependencies[HOST_ONLY_BUNDLE_NAME] = '0.0.0'
+  profileManifest.dsh.profile.bundles.push(HOST_ONLY_BUNDLE_NAME)
+  writeFileSync(profileManifestPath, `${JSON.stringify(profileManifest, undefined, 2)}\n`)
   const prepared = prepareDesktopProfile('1', home, 'win32')
+  if (!prepared.profile.layers.some(layer => layer.packageName === HOST_ONLY_BUNDLE_NAME)) {
+    throw new Error('profile-installed Host-only Bundle is missing from the prepared layer stack')
+  }
   const hostServicePluginDir = join(
     prepared.profile.dir,
     'node_modules',
@@ -193,6 +211,17 @@ try {
     || hostServiceProbe.pnpm.rollbackPluginInstall !== 'function') {
     throw new Error(
       `profile-local Host service plugin produced an unexpected probe: ${JSON.stringify(hostServiceProbe)}`,
+    )
+  }
+  const hostOnlyProbe = ctx.get(HOST_ONLY_PROBE_KEY)
+  const hostOnlyRequiredServices = Object.values(hostOnlyProbe?.requiredServices ?? {})
+  if (hostOnlyProbe?.desktopProfile?.name !== 'desktop'
+    || hostOnlyProbe.desktopProfile.dir !== prepared.profile.dir
+    || hostOnlyProbe.hasDesktopPnpm !== true
+    || hostOnlyRequiredServices.length !== 7
+    || hostOnlyRequiredServices.some(available => available !== true)) {
+    throw new Error(
+      `profile-installed Host-only Bundle produced an unexpected probe: ${JSON.stringify(hostOnlyProbe)}`,
     )
   }
 
