@@ -61,7 +61,7 @@ describe('remote control plane', () => {
     stdin.on('data', chunk => { written.push(String(chunk)) })
 
     const session = createRemotePty(home, {
-      spawn: () => child,
+      spawn: () => child as never,
     })
     stdout.write('ready\n')
     session.write('ls\n')

@@ -59,15 +59,18 @@ export function CommandPalette({ sessions, workspaces, t }: CommandPaletteProps)
       }
     }),
     workspaces: workspaceList.items.map((workspace) => {
-      const row = workspace as { id: string; title?: string; name?: string }
-      return { id: row.id, title: row.title ?? row.name ?? row.id }
+      const row = workspace as unknown as { id?: string; workspaceId?: string; title?: string; name?: string }
+      const id = row.id ?? row.workspaceId ?? ''
+      return { id, title: row.title ?? row.name ?? id }
     }),
     ...(sessionList.current === undefined ? {} : { currentSessionId: sessionList.current }),
     query,
-    onNewSession: (workspaceId) => { workspaces.startSession(workspaceId) },
-    onOpenSession: (sessionId) => { sessions.open(sessionId) },
+    onNewSession: (workspaceId) => {
+      workspaces.startSession(workspaceId as never)
+    },
+    onOpenSession: (sessionId) => { sessions.open(sessionId as never) },
     onForkSession: async (sessionId) => {
-      const child = await sessions.fork({ sessionId })
+      const child = await sessions.fork({ sessionId: sessionId as never })
       sessions.open(child)
     },
     onSearch: async (search) => {
@@ -77,7 +80,7 @@ export function CommandPalette({ sessions, workspaces, t }: CommandPaletteProps)
           readonly items?: readonly { readonly sessionId: string }[]
         }
         const first = result.value?.items?.[0] ?? result.items?.[0]
-        if (first !== undefined) sessions.open(first.sessionId)
+        if (first !== undefined) sessions.open(first.sessionId as never)
       } catch {
         return
       }

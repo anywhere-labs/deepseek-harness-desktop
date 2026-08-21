@@ -107,18 +107,19 @@ export function listRemoteSessions(home: string): readonly RemoteSessionRecord[]
 export function listRemoteFiles(root: string, rel = '.'): readonly RemoteFileEntry[] {
   const path = confineRemotePath(root, rel)
   if (!existsSync(path) || !statSync(path).isDirectory()) throw new Error('path is not a directory')
-  return readdirSync(path).flatMap((name) => {
-    if (name === '.' || name === '..') return []
+  const entries: RemoteFileEntry[] = []
+  for (const name of readdirSync(path)) {
+    if (name === '.' || name === '..') continue
     const child = join(path, name)
     try {
       const stat = statSync(child)
-      if (stat.isDirectory()) return [{ name, kind: 'directory' as const }]
-      if (stat.isFile()) return [{ name, kind: 'file' as const, size: stat.size }]
+      if (stat.isDirectory()) entries.push({ name, kind: 'directory' })
+      else if (stat.isFile()) entries.push({ name, kind: 'file', size: stat.size })
     } catch {
-      return []
+      continue
     }
-    return []
-  })
+  }
+  return entries
 }
 
 /** Read a text file under an admitted root. Binary and oversized files are rejected. */
