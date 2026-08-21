@@ -32,6 +32,7 @@ AI Buddy 的目标不是重新实现 Harness，而是把同一个运行时放进
 - 多 profile 选择。当前 generation 的 profile 身份由 Desktop 明确提供，切换通过有序重启生效。
 - 内置终端和固定版本 pnpm 环境。它们只作用于 Desktop 自己创建的进程，不修改用户的全局 PATH。
 - 面向插件开发者的一组受控扩展接口（详见[插件开发](plugin-development.md)）。
+- 内置插件市场：在 **设置 > 插件** 中发现、安装和管理目录插件。收录不等于安全审核。
 - 版本检查、用户确认后的安装包下载，以及 macOS DMG/Windows NSIS 的平台交接。
 
 ## 我们刻意不做什么
@@ -40,7 +41,7 @@ AI Buddy 的目标不是重新实现 Harness，而是把同一个运行时放进
 - 不在兼容模式中覆盖上游 layout、sidebar 或 conversation 组合。
 - 不把记录复制到另一个“Desktop 数据库”；官方 profile 默认共享 DSH home 中的会话和设置。
 - 不给第三方插件一个未定义的 Electron 私有 API。
-- 不把 roadmap（插件市场、手机远程、Channels）写成当前版本已经交付的功能。
+- 不把尚未交付的 roadmap（手机远程、Channels）写成当前版本已经提供的功能。插件市场已内置，但目录收录不等于安全审核。
 
 ## 适合谁
 

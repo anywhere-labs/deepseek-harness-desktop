@@ -28,7 +28,7 @@ This manifesto is not a unilateral rulebook. It is a **living document**: it fol
 
 ## The plugin marketplace: making conventions the beneficial choice
 
-Once the plugin marketplace ships, plugins that follow this manifesto will be easier to discover, install, and trust. We want convention-driven development to be the beneficial choice for every author, not an extra burden.
+The built-in plugin marketplace already makes plugins that follow this manifesto easier to discover, install, and trust. We want convention-driven development to be the beneficial choice for every author, not an extra burden.
 
 ## From a manifesto to a testable contract
 
@@ -36,7 +36,7 @@ Once the plugin marketplace ships, plugins that follow this manifesto will be ea
 
 Fabric capabilities begin as compatibility, consent, and audit declarations. They do not present in-process JavaScript as a security sandbox. Only a Host with evidence of real isolation may claim technical permission enforcement.
 
-The market is still in its [product and safety design phase](../dsh-community-market/README.md), with no usable page or installer yet. Catalog inclusion means that a project matched catalog rules; it is not a security review or endorsement.
+[DSH Community Market](../dsh-community-market/README.md) is built into AI Buddy and opens from **Settings > Plugins**. Catalog inclusion means that a project matched catalog rules; it is not a security review or endorsement.
 
 ## How to participate
 

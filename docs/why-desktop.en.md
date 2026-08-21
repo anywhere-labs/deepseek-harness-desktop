@@ -32,6 +32,7 @@ The current Desktop product provides:
 - Multiple profile selection. Desktop exposes the active profile identity for the current generation, and switching takes effect through an orderly restart.
 - A bundled terminal and pinned pnpm environment. They apply only to processes created by Desktop and do not modify the user's global PATH.
 - A controlled set of extension interfaces for plugin developers (see [plugin development](plugin-development.en.md)).
+- A built-in plugin marketplace under **Settings > Plugins** for discovering, installing, and managing catalog plugins. Listing is not a security review.
 - Version discovery and confirmation-gated installer downloads, handing off to a macOS DMG or Windows NSIS installer.
 
 ## What we deliberately do not do
@@ -40,7 +41,7 @@ The current Desktop product provides:
 - Override the upstream layout, sidebar, or conversation composition in compatibility mode.
 - Copy records into a separate “Desktop database”; official profiles share the DSH home for sessions and settings by default.
 - Give third-party plugins an undefined private Electron API.
-- Present roadmap items such as a plugin marketplace, mobile remote control, or Channels as shipped features.
+- Present unshipped roadmap items such as mobile remote control or Channels as current features. The plugin marketplace is built in, but catalog inclusion is not a security review.
 
 ## Who should read this
 

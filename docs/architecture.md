@@ -33,7 +33,7 @@ flowchart LR
 ## Host、Client 和 native runtime
 
 - **Upstream Host**：agent、model、tool、session、settings、webServer 和 subprocess 等官方能力。
-- **Desktop Host**：窗口、托盘、profile、终端、更新，以及对第三方开放的两个 service。
+- **Desktop Host**：窗口、托盘、profile、终端、更新、内置插件市场，以及对第三方开放的两个 service。
 - **Web Client**：官方 Web UI 和第三方浏览器界面。它通过 loopback carrier 工作，不直接调用 Electron。
 - **Native runtime**：Electron BrowserWindow、系统托盘、文件/网络/安装器适配。`desktopRuntime` 只供 Desktop 自有 row 使用。
 

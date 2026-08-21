@@ -33,7 +33,7 @@ Every profile or mode switch disposes the current generation before starting the
 ## Host, Client, and native runtime
 
 - **Upstream Host** owns agent, model, tool, session, settings, webServer, and subprocess capabilities.
-- **Desktop Host** owns the window, tray, profiles, terminal, updates, and the two public Desktop services.
+- **Desktop Host** owns the window, tray, profiles, terminal, updates, the built-in plugin marketplace, and the two public Desktop services.
 - **Web Client** contains the official Web UI and third-party browser contributions. It works over the loopback carrier and does not call Electron directly.
 - **Native runtime** adapts Electron BrowserWindow, the tray, filesystem/network operations, and installers. `desktopRuntime` is for Desktop-owned rows only.
 
