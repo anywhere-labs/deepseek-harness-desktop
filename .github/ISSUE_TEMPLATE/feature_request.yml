@@ -65,7 +65,11 @@ body:
       options:
         - All supported platforms / 所有已支持平台
         - Windows only / 仅 Windows
+        - Windows portable ZIP / Windows 便携版 ZIP
         - macOS only / 仅 macOS
+        - macOS Intel
+        - macOS Universal package / macOS 通用安装包
+        - Linux
         - Unknown or not platform-specific / 不确定或与平台无关
     validations:
       required: true

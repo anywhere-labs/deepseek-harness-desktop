@@ -201,15 +201,15 @@ describe('desktop pnpm Host service', () => {
       writeFileSync(manifestPath, JSON.stringify({ dependencies: {} }))
       const harness = await createHarness([child], selectedBootstrap)
 
-      const pending = harness.service.runPluginInstall(
-        ['add', '--save-exact', 'example-plugin@1.0.0'],
-        '/workspace',
-        {
+      const pending = harness.service.installPlugin({
+        pnpmOptions: ['--save-exact'],
+        invokingDir: '/workspace',
+        recovery: {
           packageName: 'example-plugin',
           packageVersion: '1.0.0',
           receiptId: 'receipt:test-install-0001',
         },
-      )
+      })
       expect(() => harness.service.runPlugin(['remove', 'other-plugin'], '/workspace')).toThrow(
         'another desktop pnpm operation is already running',
       )
@@ -218,7 +218,17 @@ describe('desktop pnpm Host service', () => {
       finish(child)
       await expect(operation.done).resolves.toEqual({ exitCode: 0, signal: null })
 
-      expect(harness.spawn.mock.calls[0]?.[0].argv).toContain('example-plugin@1.0.0')
+      expect(harness.spawn.mock.calls[0]?.[0].argv).toEqual([
+        selectedBootstrap.appExecutable,
+        '--expose-internals',
+        selectedBootstrap.dshBootstrapPath,
+        'plugin',
+        '--profile',
+        selectedBootstrap.activeProfileName,
+        'add',
+        '--save-exact',
+        'example-plugin@1.0.0',
+      ])
       expect(JSON.parse(readFileSync(selectedBootstrap.installRecoveryStatePath, 'utf8'))).toMatchObject({
         packageName: 'example-plugin',
         packageVersion: '1.0.0',
@@ -241,15 +251,14 @@ describe('desktop pnpm Host service', () => {
       mkdirSync(selectedBootstrap.activeProfileDir, { recursive: true })
       writeFileSync(manifestPath, originalManifest)
       const harness = await createHarness([child], selectedBootstrap)
-      const operation = await harness.service.runPluginInstall(
-        ['add', 'broken-plugin@1.0.0'],
-        '/workspace',
-        {
+      const operation = await harness.service.installPlugin({
+        invokingDir: '/workspace',
+        recovery: {
           packageName: 'broken-plugin',
           packageVersion: '1.0.0',
           receiptId: 'receipt:test-install-failure-0001',
         },
-      )
+      })
       writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'broken-plugin': '1.0.0' } }))
       finish(child, { exitCode: 1, signal: null })
 
@@ -260,6 +269,66 @@ describe('desktop pnpm Host service', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('keeps the v2.0.1 recoverable install interface for an exact receipt target', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-pnpm-legacy-install-'))
+    const selectedBootstrap = bootstrap(root)
+    const child = controlledSubprocess()
+    try {
+      mkdirSync(selectedBootstrap.activeProfileDir, { recursive: true })
+      writeFileSync(join(selectedBootstrap.activeProfileDir, 'package.json'), '{}\n')
+      const harness = await createHarness([child], selectedBootstrap)
+
+      const operation = await harness.service.runPluginInstall(
+        ['add', '--save-exact', 'legacy-plugin@1.2.3'],
+        '/workspace',
+        {
+          packageName: 'legacy-plugin',
+          packageVersion: '1.2.3',
+          receiptId: 'receipt:legacy-install-0001',
+        },
+      )
+
+      expect(harness.spawn.mock.calls[0]?.[0].argv).toEqual([
+        selectedBootstrap.appExecutable,
+        '--expose-internals',
+        selectedBootstrap.dshBootstrapPath,
+        'plugin',
+        '--profile',
+        selectedBootstrap.activeProfileName,
+        'add',
+        '--save-exact',
+        'legacy-plugin@1.2.3',
+      ])
+      finish(child)
+      await operation.done
+      await harness.dispose()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects legacy recoverable installs that do not match the receipt target', async () => {
+    const harness = await createHarness([])
+    const recovery = {
+      packageName: 'legacy-plugin',
+      packageVersion: '1.2.3',
+      receiptId: 'receipt:legacy-install-invalid-0001',
+    }
+
+    await expect(harness.service.runPluginInstall(
+      ['add', 'other-plugin@1.2.3'],
+      '/workspace',
+      recovery,
+    )).rejects.toThrow('requires the exact receipt target')
+    await expect(harness.service.runPluginInstall(
+      ['add', 'extra-plugin@1.0.0', 'legacy-plugin@1.2.3'],
+      '/workspace',
+      recovery,
+    )).rejects.toThrow('requires the exact receipt target')
+    expect(harness.spawn).not.toHaveBeenCalled()
+    await harness.dispose()
   })
 
   it('validates operation arguments and the plugin invocation directory before spawning', async () => {
@@ -276,6 +345,15 @@ describe('desktop pnpm Host service', () => {
     expect(() => harness.service.runPlugin(['add', 'plugin'], '/workspace')).toThrow(
       'plugin add must use the recoverable install boundary',
     )
+    await expect(harness.service.installPlugin({
+      pnpmOptions: ['--registry=https://registry.example\0.invalid'],
+      invokingDir: '/workspace',
+      recovery: {
+        packageName: 'plugin',
+        packageVersion: '1.0.0',
+        receiptId: 'receipt:test-empty-install',
+      },
+    })).rejects.toThrow('arguments must not contain NUL')
     expect(harness.spawn).not.toHaveBeenCalled()
     await harness.dispose()
   })

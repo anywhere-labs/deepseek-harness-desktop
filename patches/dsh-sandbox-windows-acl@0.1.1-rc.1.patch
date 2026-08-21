@@ -1,5 +1,5 @@
 diff --git a/lib/types-CNjZgO4h.js b/lib/types-CNjZgO4h.js
-index b220efde20bba91b172345f10d261cffdb887a62..528121ed0a5c59762f309abcf5ba0947ac157cd7 100644
+index 3a737a6..a954f1a 100644
 --- a/lib/types-CNjZgO4h.js
 +++ b/lib/types-CNjZgO4h.js
 @@ -857 +857,2 @@ function spawnSandboxed(api, token, options) {

@@ -20,6 +20,10 @@ const GITHUB_OWNER_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/iu
 const GITHUB_REPOSITORY_PATTERN = /^[a-z0-9._-]{1,100}$/iu
 const CATEGORY_PATTERN = /^[a-z0-9][a-z0-9._:-]*$/u
 const DATA_VERSION_PATTERN = /^sha256:[0-9a-f]{64}$/u
+const NPM_PACKAGE_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
+const STABLE_SEMVER_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u
+const MAX_NPM_PACKAGE_LENGTH = 214
+const MAX_NPM_VERSION_LENGTH = 64
 const UNSAFE_TEXT_PATTERN = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u
 
 type CatalogItem = CatalogSnapshot['items'][number]
@@ -182,6 +186,40 @@ function keywords(value: unknown, languageValue: unknown): readonly string[] | u
   return result.length === 0 ? undefined : result
 }
 
+/**
+ * Convert only one provider-reviewed npm target into non-executable catalog
+ * identity. dshfind's install.cmd semantics bind install.pkg_name, so a
+ * target whose spec disagrees with a supplied pkg_name is self-contradictory
+ * and is not trusted. The Host still revalidates the exact version against
+ * the npm registry before it can create an install intent.
+ */
+function reviewedNpmTarget(
+  install: Record<string, unknown> | undefined,
+): { spec: string; revision: string } | undefined {
+  if (install === undefined || !Array.isArray(install.methods)) return undefined
+  const packageName = typeof install.pkg_name === 'string' ? install.pkg_name : undefined
+  const targets = new Map<string, { spec: string; revision: string }>()
+  for (const value of install.methods) {
+    const method = record(value)
+    if (method === undefined) continue
+    if (
+      method.kind !== 'npm'
+      || method.verification !== 'verified'
+      || method.code !== 'repository_backlink'
+      || method.requiresBuildAllowance !== false
+      || typeof method.spec !== 'string'
+      || typeof method.revision !== 'string'
+      || method.spec.length > MAX_NPM_PACKAGE_LENGTH
+      || method.revision.length > MAX_NPM_VERSION_LENGTH
+      || !NPM_PACKAGE_PATTERN.test(method.spec)
+      || !STABLE_SEMVER_PATTERN.test(method.revision)
+      || (packageName !== undefined && method.spec !== packageName)
+    ) continue
+    targets.set(`${method.spec}@${method.revision}`, { spec: method.spec, revision: method.revision })
+  }
+  return targets.size === 1 ? targets.values().next().value : undefined
+}
+
 function normalizeItem(value: unknown, context: CatalogFetchContext): CatalogItem | undefined {
   const raw = record(value)
   if (raw === undefined) return undefined
@@ -208,6 +246,7 @@ function normalizeItem(value: unknown, context: CatalogFetchContext): CatalogIte
   const pushedAt = typeof raw.pushed_at === 'string' && Number.isFinite(Date.parse(raw.pushed_at))
     ? new Date(Date.parse(raw.pushed_at)).toISOString()
     : undefined
+  const npmTarget = reviewedNpmTarget(record(raw.install))
 
   return {
     id,
@@ -223,8 +262,15 @@ function normalizeItem(value: unknown, context: CatalogFetchContext): CatalogIte
       url: `https://github.com/${identity.owner.toLowerCase()}`,
     },
     ...(pushedAt === undefined ? {} : { updatedAt: pushedAt }),
-    // dshfind currently has no exact package version. Its install.cmd and
-    // install.pkg_name are intentionally not executable catalog identity.
+    // install.cmd and install.pkg_name stay non-executable catalog identity.
+    // A package target is exposed only when the provider-reviewed
+    // install.methods carry exactly one verified exact-version npm target;
+    // the Host still rechecks that version against the npm registry itself
+    // before it can create an install intent at preview time.
+    ...(npmTarget === undefined ? {} : {
+      package: { registry: 'npm' as const, name: npmTarget.spec },
+      latestVersion: npmTarget.revision,
+    }),
     provenance: {
       sourceRecordId: context.source.sourceRecordId,
       providerId: context.source.providerId,

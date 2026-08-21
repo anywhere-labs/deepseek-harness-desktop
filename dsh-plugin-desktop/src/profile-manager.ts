@@ -11,6 +11,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  rmSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -18,8 +19,10 @@ import {
 import { basename, dirname, join } from 'node:path'
 import {
   PROFILE_TEMPLATES,
+  initProfile,
   readProfileManifest,
   resolveProfileDir,
+  writeProfileManifest,
 } from '@deepseek-ai/dsh-app-boot'
 
 const BIN_NAME = 'dsh-plugin-desktop'
@@ -33,6 +36,7 @@ const STATE_VERSION = 1
 const MAX_STATE_BYTES = 4 * 1024
 const STATE_DIRECTORY_MODE = 0o700
 const STATE_FILE_MODE = 0o600
+const MAX_PROFILE_NAME_BYTES = 255
 
 /** One discovered or lazily available DSH profile. */
 export interface DesktopProfileSummary {
@@ -93,10 +97,15 @@ function defaultState(): DesktopProfileStateV1 {
 
 /** Reject profile names that cannot safely cross the persisted state boundary. */
 export function assertDesktopProfileName(name: string): void {
-  resolveProfileDir(name, '/')
-  if (name.length > 255 || /[\0-\x1f\x7f]/.test(name)) {
+  if (typeof name !== 'string' || name.length === 0
+    || name.includes('/') || name.includes('\\') || name === '.' || name === '..'
+    || name === 'node_modules' || Buffer.byteLength(name, 'utf8') > MAX_PROFILE_NAME_BYTES
+    || /[\0-\x1f\x7f-\x9f]/.test(name)
+    || /[<>:"|?*]/.test(name) || /[. ]$/.test(name)
+    || /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i.test(name)) {
     throw new Error(`${BIN_NAME}: invalid desktop profile name ${JSON.stringify(name)}`)
   }
+  resolveProfileDir(name, '/')
 }
 
 /** Validate a manifest bundle list without trusting arbitrary JSON values. */
@@ -154,6 +163,50 @@ function virtualProfile(name: typeof DEFAULT_PROFILE_NAME | typeof WEB_PROFILE_N
     bundles: [...bundles],
     webCapable: true,
   }
+}
+
+/**
+ * Create a safe Web profile using only the shipped template.
+ *
+ * The profile is initialized in a sibling staging directory and published with
+ * one rename, so a failed initialization never leaves a partially initialized
+ * target visible to discovery.
+ */
+export function createDesktopWebProfile(home: string, name: string): DesktopProfileSummary {
+  assertDesktopProfileName(name)
+  const template = PROFILE_TEMPLATES.web
+  if (template === undefined) {
+    throw new Error(`${BIN_NAME}: installed dsh-app-boot has no web profile template`)
+  }
+  const target = resolveProfileDir(name, home)
+  const profilesDir = dirname(target)
+  mkdirSync(profilesDir, { recursive: true })
+  try {
+    lstatSync(target)
+    throw new Error(`${BIN_NAME}: profile ${JSON.stringify(name)} already exists`)
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
+  }
+
+  const staging = join(profilesDir, `.${basename(target)}.creating-${process.pid}-${randomUUID()}`)
+  try {
+    initProfile(staging, [...template])
+    const manifest = readProfileManifest(BIN_NAME, staging)
+    writeProfileManifest(staging, { ...manifest, name: `dsh-profile-${name}` })
+    // The target is checked again immediately before publication. `renameSync`
+    // is atomic on the same filesystem; an existing target is never replaced.
+    try {
+      lstatSync(target)
+      throw new Error(`${BIN_NAME}: profile ${JSON.stringify(name)} already exists`)
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
+    }
+    renameSync(staging, target)
+  } catch (cause) {
+    rmSync(staging, { recursive: true, force: true })
+    throw cause
+  }
+  return existingProfile(name, home)
 }
 
 /** Deterministic profile order with the product defaults first. */

@@ -94,6 +94,37 @@ describe('macOS DMG smoke packaging', () => {
     ])
   })
 
+  it('reuses a completed CI package gate when explicitly requested', () => {
+    const calls: CommandCall[] = []
+    const logs: string[] = []
+    const value = {
+      ...options(calls, logs),
+      env: {
+        ...options(calls).env,
+        DSH_PACKAGE_CHECK_ALREADY_RAN: '1',
+      },
+    }
+
+    packageMacSmoke(value)
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0]?.args).toEqual([
+      '/repo/node_modules/electron-builder/cli.js',
+      '--mac',
+      'dmg',
+      '--universal',
+      '--publish',
+      'never',
+      '--config.mac.notarize=false',
+      '--config.npmRebuild=false',
+      '--config.directories.output=/repo/dsh-plugin-desktop/dist/mac-smoke',
+    ])
+    expect(logs).toEqual([
+      'Building an unsigned macOS DMG smoke; signing and notarization are release-only steps.',
+      'Skipping the macOS package preflight; the CI shared gate already passed.',
+    ])
+  })
+
   it.each([
     ['win32', 'arm64', '22.23.2', 'native macOS host'],
     ['darwin', 'ia32', '22.23.2', 'requires x64 or arm64 Node'],

@@ -32,6 +32,10 @@ interface MarketServer {
   readonly close: () => Promise<void>
 }
 
+interface SharedMarketSettings {
+  document: MarketSettingsDocument
+}
+
 function localHeaders(server: MarketServer, origin = server.baseUrl): Record<string, string> {
   return {
     host: new URL(server.baseUrl).host,
@@ -93,13 +97,16 @@ const standardSource = (overrides: Partial<LocalSourceRecord> = {}): LocalSource
   ...overrides,
 })
 
-async function startMarketServer(initialSources: readonly LocalSourceRecord[]): Promise<MarketServer> {
+async function startMarketServer(
+  initialSources: readonly LocalSourceRecord[],
+  sharedSettings?: SharedMarketSettings,
+): Promise<MarketServer> {
   const routes = new Map<string, RouteHandler>()
-  let document: MarketSettingsDocument = { sources: initialSources }
+  const settings = sharedSettings ?? { document: { sources: initialSources } }
   const scope = {
-    get: () => document,
+    get: () => settings.document,
     update: async (patch: object) => {
-      document = { ...document, ...patch as Partial<MarketSettingsDocument> }
+      settings.document = { ...settings.document, ...patch as Partial<MarketSettingsDocument> }
     },
   } as unknown as SettingsScope<MarketSettingsDocument>
   const server = createServer((req, res) => {
@@ -250,6 +257,67 @@ describe('community market Host routes', () => {
       )
     } finally {
       await server.close()
+    }
+  })
+
+  it('serves the persisted first page before a restarted Host refresh completes', async () => {
+    const activeSource = standardSource({ enabled: true, order: 0 })
+    const providerPage = fixture('../docs/examples/catalog-provider-page.example.json') as {
+      readonly items: readonly unknown[]
+      readonly [key: string]: unknown
+    }
+    let requests = 0
+    const getJson = vi.spyOn(restrictedHttpClient, 'getJson').mockImplementation(async (_url, signal) => {
+      requests += 1
+      if (requests === 1) return { value: standardManifest, finalUrl: activeSource.manifestUrl! }
+      if (requests === 2) return {
+        value: { ...providerPage, page: { total: 1 } },
+        finalUrl: 'https://plugins.example.org/v1/plugins?limit=50',
+      }
+      return await new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const settings: SharedMarketSettings = { document: { sources: [activeSource] } }
+    const first = await startMarketServer([], settings)
+    try {
+      const firstResponse = await readRoute(
+        first,
+        `${marketRoutes.catalog}?sourceRecordId=${activeSource.sourceRecordId}&limit=50&locale=en`,
+      )
+      expect(firstResponse.status).toBe(200)
+      await vi.waitFor(() => expect(settings.document.catalogCache).toBeDefined())
+    } finally {
+      await first.close()
+    }
+
+    const second = await startMarketServer([], settings)
+    try {
+      const startedAt = Date.now()
+      const secondResponse = await readRoute(
+        second,
+        `${marketRoutes.catalog}?sourceRecordId=${activeSource.sourceRecordId}&limit=50&locale=en`,
+      )
+      expect(Date.now() - startedAt).toBeLessThan(500)
+      expect(secondResponse.status).toBe(200)
+      await expect(secondResponse.json()).resolves.toMatchObject({
+        results: [{ stale: true, snapshot: { items: [{ id: 'better-sidebar' }] } }],
+        metadata: { cacheStatus: 'cached' },
+      })
+      expect(requests).toBe(2)
+
+      const refreshController = new AbortController()
+      const refresh = readRoute(
+        second,
+        `${marketRoutes.catalog}?sourceRecordId=${activeSource.sourceRecordId}&limit=50&locale=en&refresh=1`,
+        refreshController.signal,
+      )
+      await vi.waitFor(() => expect(requests).toBe(3))
+      refreshController.abort()
+      await expect(refresh).rejects.toMatchObject({ name: 'AbortError' })
+    } finally {
+      await second.close()
+      getJson.mockRestore()
     }
   })
 

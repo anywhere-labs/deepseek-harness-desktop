@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   assertDesktopProfileName,
   beginDesktopProfileStartup,
+  createDesktopWebProfile,
   listDesktopProfiles,
   markDesktopProfileFailed,
   markDesktopProfileHealthy,
@@ -50,6 +51,43 @@ describe('desktop profile discovery', () => {
     expect(() => assertDesktopProfileName('团队 profile')).not.toThrow()
     expect(() => assertDesktopProfileName('profile\nname')).toThrow('invalid desktop profile name')
     expect(() => assertDesktopProfileName('../outside')).toThrow()
+    expect(() => assertDesktopProfileName('CON.txt')).toThrow('invalid desktop profile name')
+    expect(() => assertDesktopProfileName('name.')).toThrow('invalid desktop profile name')
+    expect(() => assertDesktopProfileName('name ')).toThrow('invalid desktop profile name')
+    expect(() => assertDesktopProfileName('é'.repeat(128))).toThrow('invalid desktop profile name')
+  })
+
+  it('creates a Web profile from the shipped template and publishes all files together', () => {
+    const home = temporaryRoot()
+
+    expect(createDesktopWebProfile(home, 'work')).toEqual(expect.objectContaining({
+      name: 'work',
+      dir: join(home, 'profiles', 'work'),
+      exists: true,
+      bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+      webCapable: true,
+    }))
+    expect(readFileSync(join(home, 'profiles', 'work', 'package.json'), 'utf8'))
+      .toContain('"name": "dsh-profile-work"')
+    expect(existsSync(join(home, 'profiles', 'work', 'cordis.patch.yml'))).toBe(true)
+    expect(existsSync(join(home, 'profiles', 'work', 'pnpm-workspace.yaml'))).toBe(true)
+    expect(readdirSync(join(home, 'profiles')).filter(name => name.includes('.work.creating-'))).toEqual([])
+  })
+
+  it('does not overwrite an existing profile or leave a target after failure', () => {
+    const home = temporaryRoot()
+    const existing = writeProfile(home, 'work', ['@deepseek-ai/dsh-base'])
+    const before = readFileSync(join(existing, 'package.json'), 'utf8')
+
+    expect(() => createDesktopWebProfile(home, 'work')).toThrow('already exists')
+    expect(readFileSync(join(existing, 'package.json'), 'utf8')).toBe(before)
+    expect(readdirSync(join(home, 'profiles')).filter(name => name.includes('.work.creating-'))).toEqual([])
+
+    const blockedHome = join(home, 'blocked-home')
+    mkdirSync(blockedHome, { recursive: true })
+    writeFileSync(join(blockedHome, 'profiles'), 'not a directory')
+    expect(() => createDesktopWebProfile(blockedHome, 'work')).toThrow()
+    expect(existsSync(join(blockedHome, 'profiles', 'work'))).toBe(false)
   })
 
   it('lists lazy defaults and existing profiles without creating or changing manifests', () => {

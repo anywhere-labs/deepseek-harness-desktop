@@ -1,0 +1,31 @@
+diff --git a/lib/index.js b/lib/index.js
+index 285727092554d6fe2c70e56dd3f0eefabf8e2ed8..e494b944e104f61d46c161bd5ad007145e1c9c2e 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -51,6 +51,7 @@ function launchedThroughSsh(ctx) {
+ }
+ const BROWSER_OPENER_MODULE = import.meta.resolve("open");
+ const BROWSER_OPENER_PROGRAM = `
++for (const name of Object.keys(process.env)) if (name.toUpperCase() === 'ELECTRON_RUN_AS_NODE') delete process.env[name]
+ try {
+   const { default: open } = await import(${JSON.stringify(BROWSER_OPENER_MODULE)})
+   const launcher = await open(process.argv[1])
+@@ -125 +126,4 @@ function spawnBrowserLauncher(url) {
+-		env: scrubbedParentEnv(),
++		env: {
++			...scrubbedParentEnv(),
++			ELECTRON_RUN_AS_NODE: "1"
++		},
+diff --git a/cordis.patch.yml b/cordis.patch.yml
+--- a/cordis.patch.yml
++++ b/cordis.patch.yml
+@@ -138,8 +138,8 @@
+     - id: web-runtime
+       name: '@deepseek-ai/dsh-web-app'
+       inject: [webStartup]
+       config:
+-        openBrowser: !!js ctx.webStartup.openBrowser
++        openBrowser: false
+         printUrl: true
+         surfaceContext: true
+         trustedHosts: !!js ctx.webStartup.trustedHosts

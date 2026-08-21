@@ -1,8 +1,8 @@
 diff --git a/lib/index.js b/lib/index.js
-index 85201f297e55b3fcbd81b9258eca232f00eaa522..ee79a72a0d23121ec373aa510651f067e45aa735 100644
+index b2cadf0..79ce466 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -321,2 +321,2 @@ async function* translate(response, request) {
+@@ -455,2 +455,2 @@ async function* translate(payloads) {
 -				if (call.id !== void 0) block.callId = call.id;
 -				if (call.function?.name !== void 0) block.name = call.function.name;
 +				if (call.id) block.callId = call.id;

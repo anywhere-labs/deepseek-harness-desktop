@@ -249,6 +249,9 @@ describe('desktop profile composition', {
     expect(rows.find(row => row.id === 'desktop-updates')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/updates',
     }))
+    expect(rows.find(row => row.id === 'desktop-notifications')).toEqual(expect.objectContaining({
+      name: 'dsh-plugin-desktop/notifications',
+    }))
     expect(rows.find(row => row.id === 'desktop-profiles')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/profiles',
     }))
@@ -345,6 +348,21 @@ describe('desktop profile composition', {
     const path = join(home, 'invalid.yaml')
     writeFileSync(path, 'dsh-desktop: [\n')
     expect(() => readDesktopShellMode({ path })).toThrow('invalid settings document')
+  })
+
+  it('treats an empty machine-wide patch file as no desktop patches', () => {
+    for (const content of ['', '# no machine-wide patches\n']) {
+      const home = temporaryHome()
+      writeFileSync(join(home, 'cordis.patch.yml'), content)
+
+      expect(() => prepareDesktopProfile(undefined, home, 'win32')).not.toThrow()
+    }
+
+    const invalidHome = temporaryHome()
+    writeFileSync(join(invalidHome, 'cordis.patch.yml'), 'not: a patch list\n')
+    expect(() => prepareDesktopProfile(undefined, invalidHome, 'win32')).toThrow(
+      'must be a top-level YAML array of loader patch entries',
+    )
   })
 
   it('keeps the Windows browse panel and desktop pwsh provider without replacing process boundaries', () => {

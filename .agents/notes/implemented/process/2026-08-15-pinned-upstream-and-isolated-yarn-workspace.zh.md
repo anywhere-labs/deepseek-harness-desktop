@@ -16,7 +16,7 @@ DSH Desktop 需要保留可供审查的 DeepSeek Harness 官方精确源码，�
 
 外层仓库是使用 `node_modules` linker 的 Yarn 4 工作区。自有 workspace 成员是 [`dsh-plugin-desktop`](../../../../dsh-plugin-desktop/)、[`dsh-community-fabric`](../../../../dsh-community-fabric/) 和 [`dsh-community-market`](../../../../dsh-community-market/)。Fabric 从私有文档初始化工程开始：在社区 Draft 拥有经过评审的 contract 与一致性证据前，不提供 runtime 入口、SDK、正式 schema 或 DSH bundle。Market 同样从私有文档初始化工程开始：在市场壳具备实现和 Loader 证据前，不提供运行入口或 DSH bundle。上游 checkout 按照自己的[包管理器决策](../../../../deepseek-harness/.agents/notes/implemented/process/2026-06-16-pnpm-over-yarn.zh.md)保持为独立的 pnpm 工作区。根目录的 `upstream:*` 脚本通过 Yarn portable shell 进入子模块，再由 Corepack 调用上游固定的 pnpm 版本。
 
-普通桌面构建从 npm registry 解析已发布的 DSH 包，不从子模块链接源码。`upstream.json` 分别记录源码版本和运行时包 family。固定的 GitHub 公开源码和桌面运行时现在都使用已发布的 `0.1.0-rc.7` family；当 npm artifact 没有发布对应源码提交时，仓库不会虚构两者的对应关系。
+普通桌面构建从 npm registry 解析已发布的 DSH 包，不从子模块链接源码。`upstream.json` 分别记录源码版本和运行时包 family。固定的 GitHub 公开源码和桌面运行时现在都使用已发布的 `0.1.0-rc.8` family；当 npm artifact 没有发布对应源码提交时，仓库不会虚构两者的对应关系。
 
 `yarn check:layout` 会拒绝变化的子模块 URL、提交、工作树、包管理边界、自有 workspace 成员列表或 DSH 运行时 family。根检查会先运行轻量的 Fabric 和 Market 文档门禁，再运行完整 Desktop 门禁。CI 会初始化子模块，以 immutable 模式安装外层工作区，运行自有 package 检查，并在 Windows 上执行上游命令路径。
 

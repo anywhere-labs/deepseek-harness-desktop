@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -80,5 +80,40 @@ describe('desktop crash evidence', () => {
 
     expect(run.previousRun).toEqual({ unreadable: true })
     expect(() => run.markClean()).not.toThrow()
+  })
+
+  it('only clears the marker owned by the current run', () => {
+    const statePath = join(mkdtempSync(join(tmpdir(), 'dsh-run-')), 'active-run.json')
+    const first = beginDesktopRun(statePath, {
+      startedAt: '2026-08-18T00:00:00.000Z',
+      pid: 41,
+      version: '2.0.1',
+    })
+    const second = beginDesktopRun(statePath, {
+      startedAt: '2026-08-18T00:01:00.000Z',
+      pid: 42,
+      version: '2.0.1',
+    })
+
+    first.markClean()
+
+    expect(JSON.parse(readFileSync(statePath, 'utf8'))).toMatchObject({ pid: 42 })
+    expect(() => second.markClean()).not.toThrow()
+    expect(existsSync(statePath)).toBe(false)
+  })
+
+  it('does not read or overwrite a linked marker', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-run-'))
+    const target = join(directory, 'outside.json')
+    const statePath = join(directory, 'active-run.json')
+    writeFileSync(target, '{"outside":true}\n', 'utf8')
+    linkSync(target, statePath)
+
+    expect(() => beginDesktopRun(statePath, {
+      startedAt: '2026-08-18T00:01:00.000Z',
+      pid: 42,
+      version: '2.0.1',
+    })).toThrow('active run marker is invalid')
+    expect(readFileSync(target, 'utf8')).toBe('{"outside":true}\n')
   })
 })

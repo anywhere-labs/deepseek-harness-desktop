@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const readJson = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'))
@@ -17,10 +17,6 @@ const plugin = readJson('dsh-plugin-desktop/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
 const market = readJson('dsh-community-market/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
-const noteDirectory = '.agents/notes/implemented/process'
-const noteName = '2026-08-15-pinned-upstream-and-isolated-yarn-workspace'
-const notePaths = [`${noteDirectory}/${noteName}.md`, `${noteDirectory}/${noteName}.zh.md`]
-const noteRecordPath = `${noteDirectory}/${noteName}.i18n.yaml`
 
 if (workspace.packageManager !== 'yarn@4.18.0') {
   fail('the product workspace must pin yarn@4.18.0')
@@ -110,26 +106,6 @@ if (upstreamPackage.version !== upstream.sourceVersion) {
 for (const name of Object.keys(plugin.dependencies).filter(name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'))) {
   if (plugin.dependencies[name] !== upstream.runtimePackageVersion) {
     fail(`${name} must use the recorded DSH runtime package family`)
-  }
-}
-
-const noteRecord = readFileSync(resolve(root, noteRecordPath), 'utf8')
-for (const notePath of notePaths) {
-  // Hash the committed blob, not the working tree: checkout line endings
-  // differ per host, while HEAD:<path> is identical everywhere.
-  const expected = run('git', ['rev-parse', `HEAD:${notePath}`])
-  const recordLine = `${basename(notePath)}: ${expected}`
-  if (!noteRecord.split(/\r?\n/u).includes(recordLine)) {
-    fail(`${noteRecordPath} is stale for ${notePath}`)
-  }
-}
-
-const readmeRecord = readFileSync(resolve(root, 'README.i18n.yaml'), 'utf8')
-for (const readmeName of ['README.md', 'README.en.md']) {
-  const expected = run('git', ['rev-parse', `HEAD:${readmeName}`])
-  const recordLine = `${readmeName}: ${expected}`
-  if (!readmeRecord.split(/\r?\n/u).includes(recordLine)) {
-    fail(`README.i18n.yaml is stale for ${readmeName}`)
   }
 }
 

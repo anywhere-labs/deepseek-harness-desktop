@@ -31,7 +31,7 @@ Host 会在 cache 过期前复用已经完成的索引（当前默认五分钟�
 
 [dshfind](https://dshfind.com) 是另一个可选合作目录来源。只有用户添加并选择它之后，经审查的 adapter 才会读取其公开 REST 目录。Adapter 会把首页的 `data_version` 固定到所有后续分页，再从完成的本地索引提供搜索、分类和分页。由于 dshfind 公布的匿名配额限制，首次完整同步会主动节流，可能明显慢于普通页面加载。它不会被默认选择、优先排序、推荐或用作兜底。
 
-dshfind 当前会返回由提供方维护的安装结论和命令文本，但没有提供符合 Market 受管安装边界的精确稳定 npm 版本。Adapter 不展示也不执行 `install.cmd`，不会从命令中猜测版本，并且会让所有 dshfind 条目保持仅浏览、不能进入**可安装**。dshfind 的分数、等级、精选/官方标记、风险标记与安装探测都只是 provider claim；它们都不代表 Anywhere Labs 完成了安全审核或作出推荐。
+dshfind 可以提供包含精确稳定版本和 `repository_backlink` 证据、由提供方复核的 npm method。只有恰好一个 method 同时满足 `npm`、`verified`、`repository_backlink`、无需 build allowance，并且与已提供的 `install.pkg_name` 一致时，adapter 才会输出 `package` 和 `latestVersion`；其他条目仍然只能浏览。Adapter 不展示也不执行 `install.cmd`，也绝不会从命令文本中推断身份。进入**可安装**仍只代表结构候选；Host 会在 preview 和执行阶段独立复核 npm、仓库、integrity、runtime、lifecycle、bundle 与 profile 事实。dshfind 的分数、等级、精选/官方标记、风险标记与安装探测都只是 provider claim；它们都不代表 Anywhere Labs 完成了安全审核或作出推荐。
 
 所有目录数据都是远程、且不可信的输入。项目被收录只表示提供方返回了相关元数据；这**不表示** Anywhere Labs 已经审核、推荐或保证该插件。
 
@@ -40,8 +40,8 @@ dshfind 当前会返回由提供方维护的安装结论和命令文本，但没
 - 后台浏览不会安装任何包，也不会执行仓库代码。
 - 只有用户明确点击并确认后，安装才会开始。
 - **可安装**是 Host 从已选目录以 fail-closed 方式生成的结构候选集合，不是 renderer 猜测，也不表示 npm 已经复核。候选必须具有经过审核的 provider 验证与 `repository_backlink`、精确稳定的 npm 目标和规范仓库，而且不能位于产品 blocklist。安装状态、receipt、卸载历史和启用/禁用状态都不会授予或移除目录成员资格。Preview 才会针对这个 package 首次执行官方 registry 与本地操作权威复核；执行前会再检查可变状态。
-- 受管安装器只接受精确、稳定的 npm 版本。GitHub URL、可变版本范围或 tag、deprecated package、目标 manifest 中定义了 `preinstall`、`install`、`postinstall` 或 `prepare` 的 package，以及不兼容内置 DSH rc.7 或 Node.js runtime 的 package，都会被拒绝。
-- 目录提供方返回的命令字符串、安装片段和仓库安装指令都会被丢弃，既不会作为 Host 手动提示展示，也绝不会执行。可用时，Host 会根据规范化身份单独重建一条精确 npm 手动提示；它会明确标为未完成全部验证，只供用户自行决定是否执行。dshfind 当前没有提供可用于重建该提示的精确版本。
+- 受管安装器只接受精确、稳定的 npm 版本。GitHub URL、可变版本范围或 tag、deprecated package、目标 manifest 中定义了 `preinstall`、`install`、`postinstall` 或 `prepare` 的 package，以及不兼容内置 DSH rc.8 或 Node.js runtime 的 package，都会被拒绝。
+- 目录提供方返回的命令字符串、安装片段和仓库安装指令都会被丢弃，既不会作为 Host 手动提示展示，也绝不会执行。可用时，Host 会根据规范化身份单独重建一条精确 npm 手动提示；它会明确标为未完成全部验证，只供用户自行决定是否执行。对于符合条件的 dshfind 条目，该规范化身份只能来自受审的结构化 npm method，绝不会来自 `install.cmd`。
 - 受管操作中，renderer 只提交来源/条目或 receipt 标识。“打开 DSH 终端”提交的是空请求，不会接收、复制或执行界面展示的手动命令。
 - 确认框会展示精确 npm package 与版本，以及当前 profile。插件变更使用 Desktop 已有的受管 DSH 插件服务，并且一次只执行一个操作；成功后可以选择**稍后重启**或**立即重启**。
 - Market 安装或内置终端中的 `dsh plugin add` 开始前，Desktop 只会为当前 profile 的 `package.json`、`pnpm-lock.yaml` 和 `pnpm-workspace.yaml` 创建私有恢复快照。它不会备份或主动回滚 `node_modules`，也不会读取环境变量或另行收集凭据存储；这三个白名单文件会按原内容复制，因此其中不应写入凭据。

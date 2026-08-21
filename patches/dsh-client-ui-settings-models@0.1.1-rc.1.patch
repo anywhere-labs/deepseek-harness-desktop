@@ -1,0 +1,9 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1531,0 +1532,2 @@ window.__ModuleLoader__.load({
++				const baseURLOverridden = schema.hasPath(draft, ["baseURL"]);
++				const canCustomizeApi = ownsIdentity || baseURLOverridden;
+@@ -1620 +1622 @@ window.__ModuleLoader__.load({
+-							ownsIdentity ? (0, react_jsx_runtime.jsxs)("div", {
++							canCustomizeApi ? (0, react_jsx_runtime.jsxs)("div", {

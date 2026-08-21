@@ -21,6 +21,7 @@ describe('desktop profiles Host plugin', () => {
     } as unknown as DesktopRuntime
     const profiles: DesktopProfiles = {
       current: { name: 'desktop', dir: '/profiles/desktop' },
+      create: vi.fn(),
       list: () => [
         { name: 'desktop', dir: '/profiles/desktop', exists: true, bundles: [], webCapable: true },
         { name: '工作 profile', dir: '/profiles/work', exists: true, bundles: [], webCapable: true },

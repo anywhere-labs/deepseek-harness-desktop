@@ -21,11 +21,18 @@ If a plugin only makes sense in Desktop, declare the services as required inject
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
+import { randomUUID } from 'node:crypto'
 import type {} from 'dsh-plugin-desktop/profile-service'
 import type { DesktopPnpmHandle } from 'dsh-plugin-desktop/pnpm'
 
 export const name = 'example-desktop-plugin'
 export const inject = ['desktopProfiles', 'desktopPnpm']
+
+declare function persistPendingReceipt(recovery: {
+  readonly packageName: string
+  readonly packageVersion: string
+  readonly receiptId: string
+}): Promise<void>
 
 export function apply(ctx: Context): void {
   ctx.logger.info(`profile: ${ctx.desktopProfiles.current.name}`)
@@ -33,10 +40,16 @@ export function apply(ctx: Context): void {
 
   // Connect this function to an explicit user action in the plugin UI.
   async function installExample(): Promise<void> {
-    active = ctx.desktopPnpm.runPlugin(
-      ['add', 'example-plugin'],
-      process.cwd(),
-    )
+    const recovery = {
+      packageName: 'example-plugin',
+      packageVersion: '1.0.0',
+      receiptId: randomUUID(),
+    }
+    await persistPendingReceipt(recovery)
+    active = await ctx.desktopPnpm.installPlugin({
+      invokingDir: process.cwd(),
+      recovery,
+    })
     await active.done
   }
 
@@ -49,7 +62,7 @@ export function apply(ctx: Context): void {
 }
 ```
 
-Production code should invoke package operations from an explicit user action, validate the target, read stdout/stderr, set its own timeout, and check both `exitCode` and `signal`. A generation allows only one `desktopPnpm` package operation at a time; dispose must cancel and await it.
+Production code should invoke package operations from an explicit user action, validate the target, durably persist the recovery receipt before installation, reconcile recovered receipt ids on startup, read stdout/stderr, set its own timeout, and check both `exitCode` and `signal`. A generation allows only one `desktopPnpm` package operation at a time; dispose must cancel and await it.
 
 ## Plugins that work in Desktop and ordinary DSH
 
@@ -77,14 +90,19 @@ export function apply(ctx: Context, config: { profile?: string }): void {
 
 The ordinary DSH fallback remains the plugin's authoritative implementation. Do not infer the Desktop profile from `process.argv`, `ctx.baseUrl`, settings, or `$DSH_HOME`; in Desktop, use `desktopProfiles.current`.
 
-## `run()` versus `runPlugin()`
+## `run()`, `runPlugin()`, and `installPlugin()`
 
 `desktopPnpm.run(args)` is a low-level pnpm operation with the active profile as its cwd. It does not promise DSH profile initialization, caller-relative `file:`/`link:` anchoring, or `dsh.profile.bundles` reconciliation.
 
-`desktopPnpm.runPlugin(args, invokingDir)` runs packaged `dsh plugin --profile <active>` and preserves upstream plugin-management semantics. Use it for install, remove, update, and dependency repair:
+`desktopPnpm.runPlugin(args, invokingDir)` runs packaged `dsh plugin --profile <active>` for non-install mutations and preserves upstream plugin-management semantics. It rejects `add`. `installPlugin(request)` is the recoverable install path: it generates the exact package target from receipt metadata and owns the profile snapshot/WAL lifecycle.
 
 ```ts
-desktopPnpm.runPlugin(['add', target], invokingDir, signal)
+await desktopPnpm.installPlugin({
+  invokingDir,
+  pnpmOptions: ['--save-exact'],
+  recovery: { packageName, packageVersion, receiptId },
+  signal,
+})
 desktopPnpm.runPlugin(['remove', packageName], invokingDir, signal)
 desktopPnpm.runPlugin(['update'], invokingDir, signal)
 desktopPnpm.runPlugin(['install', '--no-frozen-lockfile'], invokingDir, signal)

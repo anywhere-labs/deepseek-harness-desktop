@@ -269,6 +269,40 @@ describe('MarketSettingsTab', () => {
     )
   })
 
+  it('shows a persisted first page while refreshing it for the new Host generation', async () => {
+    const persisted = {
+      ...catalog,
+      results: catalog.results.map(result => ({ ...result, stale: true })),
+      metadata: {
+        scannedAt: '2026-08-18T03:00:00.000Z',
+        expiresAt: '2026-08-18T03:05:00.000Z',
+        cacheStatus: 'cached' as const,
+      },
+    }
+    let resolveRefresh: ((value: MarketCatalogResponse) => void) | undefined
+    vi.mocked(readMarketState).mockResolvedValue(enabledState)
+    vi.mocked(readMarketCatalog)
+      .mockResolvedValueOnce(persisted)
+      .mockImplementationOnce(() => new Promise(resolve => { resolveRefresh = resolve }))
+
+    render(<MarketSettingsTab {...props} />)
+
+    expect(await screen.findByRole('button', { name: /Fixture Plugin/u })).toBeTruthy()
+    await waitFor(() => expect(readMarketCatalog).toHaveBeenCalledTimes(2))
+    expect(readMarketCatalog).toHaveBeenNthCalledWith(
+      2,
+      firstSource.sourceRecordId,
+      '',
+      'en',
+      [],
+      expect.any(AbortSignal),
+      true,
+    )
+
+    await act(async () => { resolveRefresh?.(catalog) })
+    await waitFor(() => expect(screen.getByRole('button', { name: en.refresh }).hasAttribute('disabled')).toBe(false))
+  })
+
   it('loads source state on mount and avoids catalog I/O when none are selected', async () => {
     vi.mocked(readMarketState).mockResolvedValue(emptyState)
     render(<MarketSettingsTab {...props} />)
@@ -578,7 +612,7 @@ describe('MarketSettingsTab', () => {
       previewId: 'opaque-retry-install-preview',
     })
     vi.mocked(executeMarketOperation)
-      .mockRejectedValueOnce(new Error('install failed'))
+      .mockRejectedValueOnce(new Error('The package manager failed after changing the active profile, so the partial installation was rolled back.'))
       .mockResolvedValueOnce({
         action: 'install',
         receipt,
@@ -595,7 +629,9 @@ describe('MarketSettingsTab', () => {
       'opaque-retry-install-preview',
       expect.any(AbortSignal),
     ))
-    expect((await screen.findByRole('alert')).textContent).toContain(en.executeError)
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The package manager failed after changing the active profile, so the partial installation was rolled back.',
+    )
     expect(within(screen.getByRole('dialog', { name: en.confirmInstallTitle }))
       .getByRole('button', { name: en.confirmInstall })).toBeTruthy()
 
@@ -663,7 +699,7 @@ describe('MarketSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: en.installable }))
     fireEvent.click(await screen.findByRole('button', { name: `${en.install}: ${item.displayName}` }))
 
-    expect(await screen.findByText(en.previewError)).toBeTruthy()
+    expect(await screen.findByText('not a standard plugin')).toBeTruthy()
     const details = screen.getByRole('link', { name: en.verificationDetails }) as HTMLAnchorElement
     expect(details.href).toBe(
       'https://github.com/anywhere-labs/deepseek-harness-desktop/blob/master/dsh-community-market/docs/install-and-uninstall.md',
@@ -1466,6 +1502,20 @@ describe('MarketSettingsTab', () => {
     await waitFor(() => { expect(signal).toBeDefined() })
     await act(async () => { pending.unmount() })
     expect(signal?.aborted).toBe(true)
+  })
+
+  it('identifies the selected source and a bounded catalog failure reason', async () => {
+    vi.mocked(readMarketState).mockResolvedValue(enabledState)
+    vi.mocked(readMarketCatalog).mockRejectedValue({
+      status: 504,
+      code: 'catalog-timeout',
+      message: 'private upstream URL and response detail',
+    })
+    render(<MarketSettingsTab {...props} />)
+
+    expect(await screen.findByRole('heading', { name: en.catalogError })).toBeTruthy()
+    expect(screen.getByText('Source: Fixture catalog. The catalog request timed out.')).toBeTruthy()
+    expect(screen.queryByText(/private upstream URL/u)).toBeNull()
   })
 
   it('does not let reads interrupt a pending source selection and aborts it on unmount', async () => {

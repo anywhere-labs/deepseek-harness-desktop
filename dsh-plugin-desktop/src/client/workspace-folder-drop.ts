@@ -7,6 +7,7 @@ export const WORKSPACE_DROP_TARGET = '[data-dsh-workspace-drop-target]'
 export interface WorkspaceFolderDropActions {
   create(input: { path: string }): Promise<WorkspaceView>
   startSession(workspaceId: WorkspaceId): void
+  validateDirectory?(path: string): Promise<boolean>
 }
 
 type DropState = 'ready' | 'busy' | 'error'
@@ -62,6 +63,9 @@ export async function adoptWorkspaceFolder(
 ): Promise<void> {
   const path = bridge.getPathForFile(file).trim()
   if (path.length === 0) throw new Error('DSH Desktop could not read this folder path')
+  if (actions.validateDirectory !== undefined && !await actions.validateDirectory(path)) {
+    throw new Error('DSH Desktop rejected this workspace location')
+  }
   const workspace = await actions.create({ path })
   actions.startSession(workspace.workspaceId)
 }

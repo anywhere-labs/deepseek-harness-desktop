@@ -168,6 +168,9 @@ export interface DesktopRuntime {
   /** Reveal and focus the current window, if mounted. */
   show(): void
 
+  /** Request native attention for background activity while the window is unfocused. */
+  notifyAttention(notification: DesktopNotification): void
+
   /**
    * Contribute one command to the native tray for the current Cordis lifetime.
    * @param item - dynamic label, state, and invocation owned by the caller.

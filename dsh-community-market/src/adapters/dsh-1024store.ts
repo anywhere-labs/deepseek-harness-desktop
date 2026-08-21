@@ -39,6 +39,7 @@ interface Dsh1024StoreMeta {
   readonly updated?: unknown
   readonly generatedAt?: unknown
   readonly revision?: unknown
+  readonly total?: unknown
 }
 
 interface Dsh1024StoreCatalog {
@@ -70,6 +71,22 @@ function plainText(value: unknown, max: number, fallback: string): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > max
     || /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value)) return fallback
   return value
+}
+
+function completeCatalogQuery(query: CatalogQuery): boolean {
+  return query.q === undefined
+    && (query.category === undefined || query.category.length === 0)
+    && (query.capability === undefined || query.capability.length === 0)
+}
+
+function providerTotal(meta: Dsh1024StoreMeta, receivedPackages: number): number | undefined {
+  const total = meta.total
+  if (total === undefined) return undefined
+  if (typeof total !== 'number' || !Number.isSafeInteger(total) || total > 10_000) {
+    throw new Error('1024Store provider total is inconsistent')
+  }
+  if (total < receivedPackages) return undefined
+  return total
 }
 
 /**
@@ -312,6 +329,9 @@ function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: s
     ? new Date(generatedAt).toISOString()
     : undefined
   const providerRevision = plainText(meta.revision, 160, '') || undefined
+  const total = completeCatalogQuery(query)
+    ? providerTotal(meta, raw.packages.length) ?? candidates.length
+    : candidates.length
   return parseCatalogSnapshot({
     schemaVersion: '1.0.0',
     source: {
@@ -329,8 +349,8 @@ function buildSnapshot(value: unknown, context: CatalogFetchContext, finalUrl: s
       return media === undefined ? candidate.item : { ...candidate.item, media }
     }),
     page: end < candidates.length
-      ? { nextCursor: String(end), total: candidates.length }
-      : { total: candidates.length },
+      ? { nextCursor: String(end), total }
+      : { total },
   })
 }
 
@@ -386,6 +406,8 @@ function buildCatalogScanSnapshots(
     ? new Date(generatedAt).toISOString()
     : undefined
   const providerRevision = plainText(meta.revision, 160, '') || undefined
+  const total = providerTotal(meta, raw.packages.length) ?? items.length
+  if (total !== items.length) throw new Error('1024Store scan did not reach the provider total')
   const fetchedAt = new Date().toISOString()
   const snapshots: CatalogSnapshot[] = []
   for (let offset = 0; offset < items.length; offset += 100) {
@@ -402,7 +424,7 @@ function buildCatalogScanSnapshots(
         ...(providerRevision === undefined ? {} : { providerRevision }),
       },
       items: items.slice(offset, offset + 100),
-      page: { total: items.length },
+      page: { total },
     }))
   }
   if (snapshots.length === 0) {

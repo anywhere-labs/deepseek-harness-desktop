@@ -1,0 +1,8 @@
+diff --git a/lib/index.js b/lib/index.js
+index 66a9068..e1c9463 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -841 +841,2 @@ function parsePatchList(binName, file, content, label) {
+-	if (!Array.isArray(parsed)) throw new Error(`${binName}: ${label} ${file} must be a top-level YAML array of loader patch entries`);
++	if (parsed === void 0 || parsed === null) return [];
++	if (!Array.isArray(parsed)) throw new Error(`${binName}: ${label} ${file} must be a top-level YAML array of loader patch entries`);

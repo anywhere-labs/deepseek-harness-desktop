@@ -11,7 +11,6 @@ import type {
 } from '@deepseek-ai/dsh-subprocess'
 import {
   DesktopInstallRecoveryStore,
-  type BeginDesktopInstallRecoveryInput,
 } from './install-recovery.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
 
@@ -65,6 +64,41 @@ export interface DesktopPnpmHandle {
   readonly done: Promise<DesktopPnpmOutcome>
   /** Begin termination of the complete operation process tree. */
   cancel(): void
+}
+
+/** Receipt identity tied to one recoverable plugin installation. */
+export interface DesktopPluginInstallRecovery {
+  readonly packageName: string
+  readonly packageVersion: string
+  /** Host-generated before installation so every crash window can reconcile the receipt. */
+  readonly receiptId: string
+}
+
+/** Complete request for one Desktop-owned, recoverable plugin installation. */
+export interface DesktopPluginInstallRequest {
+  /** pnpm flags after the enforced `add` command and before the exact generated target. */
+  readonly pnpmOptions?: readonly string[]
+  /** Absolute caller directory used to anchor relative package specifications. */
+  readonly invokingDir: string
+  readonly recovery: DesktopPluginInstallRecovery
+  readonly signal?: AbortSignal
+}
+
+/** Public package-operation interface for one immutable Desktop profile generation. */
+export interface DesktopPnpm {
+  run(args: readonly string[], signal?: AbortSignal): DesktopPnpmHandle
+  runPlugin(args: readonly string[], invokingDir: string, signal?: AbortSignal): DesktopPnpmHandle
+  /** @deprecated Use `installPlugin()` so Desktop constructs the exact package target. */
+  runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: DesktopPluginInstallRecovery,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle>
+  installPlugin(request: DesktopPluginInstallRequest): Promise<DesktopPnpmHandle>
+  recoveredInstallReceiptIds(): Promise<readonly string[]>
+  acknowledgeRecoveredInstall(receiptId: string): Promise<void>
+  rollbackPluginInstall(receiptId: string): Promise<boolean>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -130,8 +164,8 @@ function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
   }
 }
 
-/** Host service providing one managed pnpm operation at a time. */
-export class DesktopPnpm extends Service {
+/** Cordis adapter implementing the public Desktop package-operation interface. */
+class DesktopPnpmService extends Service implements DesktopPnpm {
   private active: ActiveOperation | undefined
   private installPreparationActive = false
   private closed = false
@@ -216,30 +250,49 @@ export class DesktopPnpm extends Service {
     })
   }
 
+  /** Preserve the v2.0.1 install surface without allowing callers to choose another target. */
+  async runPluginInstall(
+    args: readonly string[],
+    invokingDir: string,
+    recovery: DesktopPluginInstallRecovery,
+    signal?: AbortSignal,
+  ): Promise<DesktopPnpmHandle> {
+    const resolvedArgs = validatedArgs(args)
+    const expectedTarget = `${recovery.packageName}@${recovery.packageVersion}`
+    if (
+      resolvedArgs[0] !== 'add'
+      || resolvedArgs.at(-1) !== expectedTarget
+      || resolvedArgs.slice(1, -1).some(argument => !argument.startsWith('-'))
+    ) {
+      throw new Error(`${BIN_NAME}: recoverable plugin install requires the exact receipt target`)
+    }
+    return await this.installPlugin({
+      pnpmOptions: resolvedArgs.slice(1, -1),
+      invokingDir,
+      recovery,
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
   /**
    * Snapshot the active profile before running one `dsh plugin add` operation.
    * The returned handle seals the post-install image before `done` resolves.
    */
-  async runPluginInstall(
-    args: readonly string[],
-    invokingDir: string,
-    recovery: BeginDesktopInstallRecoveryInput,
-    signal?: AbortSignal,
-  ): Promise<DesktopPnpmHandle> {
-    const resolvedArgs = validatedArgs(args)
-    if (resolvedArgs[0] !== 'add') {
-      throw new Error(`${BIN_NAME}: recoverable plugin install requires the add command`)
+  async installPlugin(request: DesktopPluginInstallRequest): Promise<DesktopPnpmHandle> {
+    const resolvedOptions = request.pnpmOptions === undefined ? [] : [...request.pnpmOptions]
+    if (resolvedOptions.some(argument => argument.includes('\0'))) {
+      throw new Error(`${BIN_NAME}: desktop pnpm arguments must not contain NUL`)
     }
-    assertAbsolutePath('plugin invoking directory', invokingDir)
+    assertAbsolutePath('plugin invoking directory', request.invokingDir)
     if (this.closed) throw new Error(`${BIN_NAME}: desktop pnpm generation is closed`)
     if (this.active !== undefined || this.installPreparationActive) {
       throw new Error(`${BIN_NAME}: another desktop pnpm operation is already running`)
     }
-    signal?.throwIfAborted()
+    request.signal?.throwIfAborted()
     this.installPreparationActive = true
     let transaction: Awaited<ReturnType<DesktopInstallRecoveryStore['begin']>> | undefined
     try {
-      transaction = await this.installRecovery.begin(recovery)
+      transaction = await this.installRecovery.begin(request.recovery)
       const handle = this.start({
         argv: [
           this.bootstrap.appExecutable,
@@ -248,12 +301,14 @@ export class DesktopPnpm extends Service {
           'plugin',
           '--profile',
           this.bootstrap.activeProfileName,
-          ...resolvedArgs,
+          'add',
+          ...resolvedOptions,
+          `${request.recovery.packageName}@${request.recovery.packageVersion}`,
         ],
-        cwd: invokingDir,
+        cwd: request.invokingDir,
         recoveryTransactionId: transaction.transactionId,
         allowInstallPreparation: true,
-        ...(signal === undefined ? {} : { signal }),
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
       })
       this.installPreparationActive = false
       return handle
@@ -404,5 +459,5 @@ export const inject = ['desktopPnpmBootstrap', 'subprocess']
  * @param ctx - Host context carrying launcher bootstrap values and subprocess ownership.
  */
 export function apply(ctx: Context): void {
-  new DesktopPnpm(ctx, ctx.desktopPnpmBootstrap)
+  new DesktopPnpmService(ctx, ctx.desktopPnpmBootstrap)
 }

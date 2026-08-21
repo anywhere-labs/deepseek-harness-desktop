@@ -2,7 +2,7 @@
 
 [中文](catalog-provider-contract.zh.md)
 
-Status: **Implemented public v1 contract.** The versioned Schemas, generated types, strict validation, source persistence, constrained network and media boundaries, standard HTTP adapter, reviewed DSH 1024Store and browse-only dshfind adapters, complete local indexing, and loadable Host/Client entries are implemented and tested in DSH Desktop. This document and its fixtures are the public interoperability contract for `manifestVersion` and `schemaVersion` `1.x`.
+Status: **Implemented public v1 contract.** The versioned Schemas, generated types, strict validation, source persistence, constrained network and media boundaries, standard HTTP adapter, reviewed DSH 1024Store and dshfind adapters, complete local indexing, and loadable Host/Client entries are implemented and tested in DSH Desktop. This document and its fixtures are the public interoperability contract for `manifestVersion` and `schemaVersion` `1.x`.
 
 ## Decision summary
 
@@ -12,7 +12,7 @@ Status: **Implemented public v1 contract.** The versioned Schemas, generated typ
 - The catalog ecosystem is open: any person, community, or service may publish a conforming source and any user may register its manifest URL. No Market code change or partnership approval is required for the standard path.
 - Providers with an existing public API that cannot emit the standard page shape may propose a reviewed adapter integration. Cooperation adds local, tested Market code; it never allows a provider to send executable adapter code.
 - DSH 1024Store is one of the catalog providers currently cooperating with this project. A reviewed built-in adapter is included; it does not select or fall back to 1024Store automatically.
-- dshfind is another optional cooperating provider. Its reviewed adapter is browse-only and is neither selected by default nor used as a preferred, recommended, or fallback source.
+- dshfind is another optional cooperating provider. Its reviewed adapter accepts only unambiguous structured npm evidence for structural install candidacy; other entries remain browse-only. It is neither selected by default nor used as a preferred, recommended, or fallback source.
 - A source being bundled as a choice or supported by an adapter does not mean that Anywhere Labs has recommended, audited, or endorsed the source or the plugins it lists.
 - Every provider is converted into one normalized model before data reaches the market UI or installation boundary.
 
@@ -233,7 +233,7 @@ This relationship makes 1024Store a supported source choice. It does **not** mak
 
 dshfind documents an anonymous quota of 30 requests per minute with a burst of 10, while its current catalog requires more than 30 pages at 100 items per page. The adapter therefore uses a fixed sequential delay below the published sustained rate and makes the slower first synchronization visible as source loading rather than parallelizing around the provider limit. A rate-limit response rejects the whole scan and the ordinary source Retry action may start it again. A completed local index remains subject to the ordinary bounded cache; explicit refresh starts a new consistent full scan.
 
-The dshfind response may contain `install.cmd`, `install.kind`, `install.pkg_name`, `install.npm_published`, and `install.probed_at`, but it does not currently provide an exact stable npm version or equivalent `repository_backlink` evidence. These are untrusted provider claims, not execution authority. The adapter discards `install.cmd` before normalization, never displays or executes it, never parses a package/version from it, and does not emit `package` or `latestVersion` for dshfind. Consequently every dshfind item is browse-only and excluded from **Installable** and Host-reconstructed manual hints.
+The dshfind response may contain `install.cmd`, other installation claims, and `install.methods`. Command text and ordinary claims are not execution authority: the adapter discards `install.cmd` before normalization, never displays or executes it, and never parses package identity from it. The adapter emits `package` and `latestVersion` only when `install.methods` contains exactly one distinct target whose `kind` is `npm`, `verification` is `verified`, `code` is `repository_backlink`, `requiresBuildAllowance` is false, `spec` is a bounded valid npm name, `revision` is a bounded exact stable version, and `spec` agrees with a supplied `install.pkg_name`. Duplicate copies of that same target do not create ambiguity; multiple distinct targets fail closed. Entries without this evidence remain browse-only. A qualifying result is still non-executable normalized identity, not a security review or install authorization: preview and execution independently revalidate official npm metadata, canonical repository, integrity, lifecycle scripts, runtime, bundle, and active-profile state.
 
 The adapter may normalize bounded plain-text identity, description, tags/category, update time, and a canonical credential-free `https://github.com/owner/repository` link. The current API exposes no plugin icon or README field. Any owner-avatar fallback must be labelled `publisher-avatar` and resolved through the Host media boundary; the adapter does not fetch or render remote README content. dshfind scores, grades, `official`/featured labels, risk labels, and installation conclusions remain provider-owned operational claims and never become an Anywhere Labs security review, recommendation, or verification signal.
 
@@ -345,7 +345,7 @@ The current package implements and tests every capability below.
 
 - [x] Share one constrained HTTP client across standard and reviewed provider adapters.
 - [x] Implement standard GET `/v1/plugins`, exact query serialization, full cursor scans, and complete local indexing.
-- [x] Ship reviewed optional DSH 1024Store and browse-only dshfind adapters.
+- [x] Ship reviewed optional DSH 1024Store and dshfind adapters with fail-closed structural install evidence.
 - [x] Enforce abort, deadlines, bounded caches, force refresh, Schema-bounded network pages, and local UI pages of at most 50.
 - [x] Validate untrusted wire data before normalization and validate every normalized snapshot again.
 - [x] Preserve provenance through scanning, local filtering, pagination, cache, details, and installation confirmation.

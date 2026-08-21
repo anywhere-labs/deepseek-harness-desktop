@@ -2,15 +2,11 @@
 
 import {
   app,
-  BrowserWindow,
   dialog,
-  Menu,
-  nativeImage,
   nativeTheme,
   net,
   Notification,
   shell,
-  Tray,
 } from 'electron'
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -19,6 +15,8 @@ import { fileURLToPath } from 'node:url'
 import { desktopTerminalStateDirectory, openDesktopTerminal } from './desktop-terminal.ts'
 import { desktopInstallRecoveryStatePath } from './install-recovery.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
+import { ElectronShellGeneration } from './electron-shell-generation.ts'
+import { electronPlatformStrategy, type ElectronPlatformStrategy } from './electron-platform.ts'
 import type {
   DesktopNotification,
   DesktopLocale,
@@ -33,22 +31,32 @@ import type {
   DesktopUpdateAdapter,
 } from './runtime.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
-import { formatDesktopExitCode, type DesktopLogger } from './desktop-logger.ts'
+import {
+  DesktopRendererHealthGate,
+  type DesktopRendererHealthGateOptions,
+  type RendererHealthFailureReason,
+  type RendererHealthVerdict,
+} from './renderer-health.ts'
+import type { DesktopLogger } from './desktop-logger.ts'
 import { exportDesktopDiagnostics } from './diagnostic-export.ts'
-import { prepareTrayIcon } from './tray-icons.ts'
 import {
   desktopDiagnosticsPrivacyCopy,
   desktopLocaleFromLanguageTag,
   desktopTrayLabel,
 } from './tray-locale.ts'
-import { downloadDesktopUpdate } from './update-download.ts'
+import {
+  desktopUpdateFilename,
+  downloadDesktopUpdate,
+  pendingDesktopUpdateArtifact,
+  recordDesktopUpdateArtifact,
+  resolveDesktopUpdateArtifact,
+  type DesktopUpdateArtifact,
+} from './update-download.ts'
 import type { UpdateCheckResult } from './update-checker.ts'
 import {
-  evaluateWindowsWorkspaceVolume,
-  formatWindowsVolumeConcern,
   type WindowsVolumeQuery,
 } from './windows-volume-diagnostics.ts'
-import { desktopWindowOptions } from './window-options.ts'
+import { ElectronWorkspaceAdmission } from './workspace-admission.ts'
 
 /** Return the presentation mode opposite the active generation. */
 export function nextDesktopShellMode(mode: DesktopShellSpec['mode']): DesktopShellSpec['mode'] {
@@ -81,68 +89,59 @@ export function desktopPreloadPath(moduleUrl: string = import.meta.url): string 
 }
 
 const PRODUCT_VERSION = desktopProductVersion()
-const MIN_ZOOM_LEVEL = -4
-const MAX_ZOOM_LEVEL = 4
 
 /** Main-process deadline for one Renderer generation to settle its client Loader. */
 export const RENDERER_BOOT_TIMEOUT_MS = 30_000
 
-/** Failure class used by startup recovery to distinguish a hung Renderer. */
-export type RendererBootFailureReason = 'renderer-failed' | 'renderer-timeout'
-
-function clampedZoomLevel(level: number): number {
-  return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level))
-}
-
-function isZoomShortcut(input: Electron.Input): 'in' | 'out' | 'reset' | undefined {
-  if (input.type !== 'keyDown' || input.alt || (!input.control && !input.meta)) return undefined
-  if (input.key === '+' || input.key === '=') return 'in'
-  if (input.key === '-' || input.key === '_') return 'out'
-  if (input.key === '0') return 'reset'
-  return undefined
-}
-
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
   readonly platform: DesktopPlatform
-  readonly updates: DesktopUpdateAdapter = {
-    get isPackaged() { return app.isPackaged },
-    get canDownload() { return app.isPackaged && (process.platform === 'darwin' || process.platform === 'win32') },
-    get currentVersion() { return PRODUCT_VERSION },
-    get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },
-    request: (url, init) => net.fetch(url, init),
-    confirmDownload: version => this.confirmUpdateDownload(version),
-    showManualCheckResult: result => this.showManualUpdateCheckResult(result),
-    downloadAndOpen: (version, signal) => this.downloadAndOpenUpdate(version, signal),
-    notify: notification => { this.showNotification(notification) },
-  }
+  private readonly platformStrategy: ElectronPlatformStrategy
+  readonly updates: DesktopUpdateAdapter
 
-  private window: BrowserWindow | undefined
+  private generation: ElectronShellGeneration | undefined
   private currentLocale: DesktopLocale = 'en'
-  private tray: Tray | undefined
   private scheduled: DesktopShellSpec | undefined
   private mountTask: Promise<void> | undefined
-  private release: (() => Promise<void>) | undefined
   private quitting = false
   private readonly trayItems = new Map<symbol, DesktopTrayItem>()
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
-  private directoryPickTask: Promise<string | null> | undefined
-  private rendererBootReported = false
-  private rendererBootMonitoring = false
-  private rendererBootTimer: NodeJS.Timeout | undefined
-  private bootFailureReason: RendererBootFailureReason | undefined
+  private readonly workspaceAdmission: ElectronWorkspaceAdmission
+  private updateCleanupTask: Promise<void> | undefined
+  private rendererHealthGate: DesktopRendererHealthGate | undefined
 
   constructor(
     private readonly restart: () => Promise<void>,
     private readonly onRendererBoot: (report: RendererBootReport) => boolean | void = () => {},
     private readonly logger: DesktopLogger | undefined = undefined,
-    private readonly workspaceVolumeQuery: WindowsVolumeQuery | undefined = undefined,
+    workspaceVolumeQuery: WindowsVolumeQuery | undefined = undefined,
   ) {
-    if (process.platform !== 'darwin' && process.platform !== 'win32' && process.platform !== 'linux') {
-      throw new Error(`dsh-plugin-desktop: unsupported Electron platform ${process.platform}`)
+    this.platformStrategy = electronPlatformStrategy()
+    this.platform = this.platformStrategy.platform
+    const platformStrategy = this.platformStrategy
+    this.workspaceAdmission = new ElectronWorkspaceAdmission({
+      platform: this.platform,
+      canPickDirectory: platformStrategy.canPickDirectory,
+      locale: () => this.currentLocale,
+      showOpenDialog: async options => this.generation === undefined
+        ? await dialog.showOpenDialog(options)
+        : await this.generation.showOpenDialog(options),
+      showMessageBox: async options => await dialog.showMessageBox(options),
+      logError: message => { this.logError(message) },
+      ...(workspaceVolumeQuery === undefined ? {} : { volumeQuery: workspaceVolumeQuery }),
+    })
+    this.updates = {
+      get isPackaged() { return app.isPackaged },
+      get canDownload() { return app.isPackaged && platformStrategy.updateDownloadPlatform !== undefined },
+      get currentVersion() { return PRODUCT_VERSION },
+      get statePath() { return join(app.getPath('userData'), 'updates', 'state.json') },
+      request: (url, init) => net.fetch(url, init),
+      confirmDownload: version => this.confirmUpdateDownload(version),
+      showManualCheckResult: result => this.showManualUpdateCheckResult(result),
+      downloadAndOpen: (version, signal) => this.downloadAndOpenUpdate(version, signal),
+      notify: notification => { this.showNotification(notification) },
     }
-    this.platform = process.platform
   }
 
   /** Log an Electron-scope error to the sink, falling back to stderr without a logger. */
@@ -157,33 +156,29 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   }
 
   /** Terminal failure class for the first Renderer boot report, when it failed. */
-  get rendererBootFailureReason(): RendererBootFailureReason | undefined {
-    return this.bootFailureReason
+  get rendererBootFailureReason(): RendererHealthFailureReason | undefined {
+    return this.rendererHealthGate?.failureReason
   }
 
-  /** Arm one main-process deadline immediately before the native shell starts loading. */
-  beginRendererBootMonitoring(timeoutMs: number = RENDERER_BOOT_TIMEOUT_MS): void {
-    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-      throw new Error('dsh-plugin-desktop: renderer boot timeout must be a positive integer')
-    }
-    if (this.rendererBootReported || this.rendererBootMonitoring) {
+  /** Arm the health gate immediately before the native shell starts loading. */
+  beginRendererBootMonitoring(
+    options: DesktopRendererHealthGateOptions,
+    timeoutMs: number = RENDERER_BOOT_TIMEOUT_MS,
+  ): Promise<RendererHealthVerdict> {
+    if (this.rendererHealthGate !== undefined) {
       throw new Error('dsh-plugin-desktop: renderer boot monitoring already started')
     }
-    this.rendererBootMonitoring = true
-    this.rendererBootTimer = setTimeout(() => {
-      this.failRendererBoot(
-        'renderer-timeout',
-        `The Renderer did not report boot health within ${String(timeoutMs)}ms.`,
-      )
-    }, timeoutMs)
-    this.rendererBootTimer.unref()
+    const gate = new DesktopRendererHealthGate(options)
+    this.rendererHealthGate = gate
+    return gate.begin(timeoutMs).then((verdict) => {
+      this.handleRendererBootVerdict(verdict.report)
+      return verdict
+    })
   }
 
   /** Stop a pending deadline while startup is being torn down for another failure. */
   stopRendererBootMonitoring(): void {
-    this.rendererBootMonitoring = false
-    if (this.rendererBootTimer !== undefined) clearTimeout(this.rendererBootTimer)
-    this.rendererBootTimer = undefined
+    this.rendererHealthGate?.stop()
   }
 
   /** @inheritdoc */
@@ -201,9 +196,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         await this.mountTask
       } finally {
         try {
-          await this.release?.()
+          await this.generation?.release()
         } finally {
-          this.release = undefined
+          this.generation = undefined
           this.mountTask = undefined
           if (this.scheduled === spec) {
             if (spec.mode === 'advanced') nativeTheme.themeSource = previousThemeSource
@@ -220,89 +215,51 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     if (spec === undefined) {
       return Promise.reject(new Error('dsh-plugin-desktop: the Cordis shell plugin did not register a window'))
     }
-    this.mountTask ??= this.mount(spec, beforeInteractive).then((release) => { this.release = release })
+    if (this.mountTask === undefined) {
+      this.setLocalePreference(spec.readLocalePreference())
+      const generation = new ElectronShellGeneration({
+        platform: this.platformStrategy,
+        spec,
+        preloadPath: desktopPreloadPath(),
+        isQuitting: () => this.quitting,
+        buildTrayTemplate: () => this.buildTrayTemplate(spec),
+        stopRendererBootMonitoring: () => { this.stopRendererBootMonitoring() },
+        abortRendererBootMonitoring: cause => { this.rendererHealthGate?.stop(cause) },
+        failRendererBoot: error => { this.failRendererBoot('renderer-failed', error) },
+        logError: message => { this.logError(message) },
+      })
+      this.generation = generation
+      this.mountTask = generation.mount(beforeInteractive).then(() => {
+        this.rendererHealthGate?.acceptNativeMount()
+        void this.offerUpdateArtifactCleanup().catch((cause: unknown) => {
+          this.logError(`dsh-plugin-desktop: failed to resolve update installer cleanup: ${cause instanceof Error ? cause.message : String(cause)}`)
+        })
+      }).catch((cause: unknown) => {
+        if (this.generation === generation) this.generation = undefined
+        throw cause
+      })
+    }
     return this.mountTask
   }
 
   /** @inheritdoc */
   show(): void {
-    const window = this.window
-    if (window === undefined || window.isDestroyed()) return
-    if (window.isMinimized()) window.restore()
-    window.show()
-    window.focus()
+    this.generation?.show()
+  }
+
+  /** @inheritdoc */
+  notifyAttention(notification: DesktopNotification): void {
+    this.generation?.notifyAttention(notification)
   }
 
   /** @inheritdoc */
   async pickDirectory(): Promise<string | null> {
-    if (this.platform !== 'win32') {
-      throw new Error(`dsh-plugin-desktop: native workspace picker is unavailable on ${this.platform}`)
-    }
-    if (this.directoryPickTask !== undefined) return await this.directoryPickTask
-    const task = this.showDirectoryPicker()
-    this.directoryPickTask = task
-    try {
-      return await task
-    } finally {
-      if (this.directoryPickTask === task) this.directoryPickTask = undefined
-    }
-  }
-
-  private async showDirectoryPicker(): Promise<string | null> {
-    const options: Electron.OpenDialogOptions = {
-      title: this.currentLocale === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
-      properties: ['openDirectory', 'dontAddToRecent'],
-    }
-    const window = this.window
-    const result = window === undefined || window.isDestroyed()
-      ? await dialog.showOpenDialog(options)
-      : await dialog.showOpenDialog(window, options)
-    return result.canceled ? null : result.filePaths[0] ?? null
+    return await this.workspaceAdmission.pickDirectory()
   }
 
   /** @inheritdoc */
   async validateDirectory(path: string): Promise<boolean> {
-    const decision = evaluateWindowsWorkspaceVolume(this.platform, path, this.workspaceVolumeQuery)
-    if (decision.action === 'allow') return true
-
-    this.logError(`dsh-plugin-desktop: unsafe workspace volume: ${formatWindowsVolumeConcern(decision.concern)}`)
-    const zh = this.currentLocale === 'zh'
-    if (decision.action === 'confirm') {
-      const result = await dialog.showMessageBox({
-        type: 'warning',
-        title: zh ? '外接工作区' : 'Removable Workspace',
-        message: zh
-          ? '这个工作区位于可移除的 NTFS/ReFS 磁盘上。'
-          : 'This workspace is on a removable NTFS/ReFS drive.',
-        detail: zh
-          ? `使用过程中拔出磁盘会导致命令或插件操作失败。请保持磁盘连接。\n\n${path}`
-          : `Disconnecting the drive while DSH Desktop is running can break commands or plugin operations. Keep it connected.\n\n${path}`,
-        buttons: zh ? ['使用此文件夹', '选择其他文件夹'] : ['Use This Folder', 'Choose Another Folder'],
-        defaultId: 1,
-        cancelId: 1,
-        noLink: true,
-      })
-      const accepted = result.response === 0
-      this.logError(`dsh-plugin-desktop: workspace volume decision=${accepted ? 'confirmed' : 'cancelled'} path=${path}`)
-      return accepted
-    }
-
-    await dialog.showMessageBox({
-      type: 'error',
-      title: zh ? '不支持的工作区存储' : 'Unsupported Workspace Storage',
-      message: zh
-        ? `${decision.concern.fileSystem ?? '当前文件系统'} 不能安全用作 DSH Desktop 工作区。`
-        : `${decision.concern.fileSystem ?? 'This filesystem'} cannot safely host a DSH Desktop workspace.`,
-      detail: zh
-        ? `请选择本地 NTFS 或 ReFS 磁盘上的文件夹。exFAT、FAT32、网络盘和无法检测的磁盘不会被保存为工作区。\n\n${path}`
-        : `Choose a folder on a local NTFS or ReFS volume. exFAT, FAT32, network drives, and uninspectable volumes are not persisted as workspaces.\n\n${path}`,
-      buttons: [zh ? '选择其他文件夹' : 'Choose Another Folder'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    })
-    this.logError(`dsh-plugin-desktop: workspace volume decision=blocked path=${path}`)
-    return false
+    return await this.workspaceAdmission.validateDirectory(path)
   }
 
   /** @inheritdoc */
@@ -402,10 +359,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** @inheritdoc */
   reportRendererBoot(report: RendererBootReport): void {
-    if (this.rendererBootReported) return
-    this.rendererBootReported = true
-    this.stopRendererBootMonitoring()
-    if (report.status === 'failed') this.bootFailureReason ??= 'renderer-failed'
+    this.rendererHealthGate?.report(report)
+  }
+
+  private handleRendererBootVerdict(report: RendererBootReport): void {
     if (report.status === 'failed') {
       const plugins = report.plugins.length === 0 ? 'Unknown client plugin' : report.plugins.join(', ')
       const error = report.error === undefined ? 'The client Loader did not provide an error message.' : report.error
@@ -434,12 +391,12 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** @inheritdoc */
   setThemeSource(source: DesktopThemeSource): void {
-    if (this.scheduled?.mode === 'advanced' && this.window !== undefined) {
+    if (this.scheduled?.mode === 'advanced' && this.generation !== undefined) {
       nativeTheme.themeSource = source
       // Windows can retain the preceding DWM Mica palette until the window is
       // recomposed (for example after minimize/restore). Reapplying the active
       // material invalidates the backdrop immediately after a live theme change.
-      if (this.platform === 'win32') this.window.setBackgroundMaterial('mica')
+      this.generation.refreshThemeMaterial()
     }
   }
 
@@ -454,10 +411,8 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     this.stopRendererBootMonitoring()
   }
 
-  private failRendererBoot(reason: RendererBootFailureReason, error: string): void {
-    if (!this.rendererBootMonitoring || this.rendererBootReported) return
-    this.bootFailureReason = reason
-    this.reportRendererBoot({ status: 'failed', plugins: [], error })
+  private failRendererBoot(reason: RendererHealthFailureReason, error: string): void {
+    this.rendererHealthGate?.fail(reason, error)
   }
 
   private async showRendererBootRecovery(report: Extract<RendererBootReport, { status: 'failed' }>): Promise<void> {
@@ -581,19 +536,29 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
 
   /** Download a confirmed installer and hand it to the native installation flow. */
   private async downloadAndOpenUpdate(version: string, signal: AbortSignal): Promise<void> {
-    if (this.platform !== 'darwin' && this.platform !== 'win32') {
+    const platform = this.platformStrategy.updateDownloadPlatform
+    if (platform === undefined) {
       throw new Error(`dsh-plugin-desktop: updates are unavailable on ${this.platform}`)
     }
+    const destinationPath = await this.chooseUpdateDestination(version)
+    if (destinationPath === undefined) return
+    signal.throwIfAborted()
     const artifactPath = await downloadDesktopUpdate({
-      platform: this.platform,
+      platform,
       version,
-      userDataPath: app.getPath('userData'),
+      destinationPath,
       request: (url, init) => net.fetch(url, init),
       signal,
     })
     signal.throwIfAborted()
+    const artifact: DesktopUpdateArtifact = { platform, version, path: artifactPath }
+    try {
+      await recordDesktopUpdateArtifact(app.getPath('userData'), artifact)
+    } catch (cause) {
+      this.logError(`dsh-plugin-desktop: failed to remember update installer for cleanup: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
 
-    if (this.platform === 'darwin') {
+    if (platform === 'darwin') {
       const openError = await shell.openPath(artifactPath)
       if (openError !== '') throw new Error(`dsh-plugin-desktop: failed to open update disk image: ${openError}`)
       signal.throwIfAborted()
@@ -627,6 +592,58 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     await this.launchWindowsUpdateInstaller(artifactPath)
     this.quitting = true
     spec.requestQuit(0)
+  }
+
+  private async chooseUpdateDestination(version: string): Promise<string | undefined> {
+    if (this.platform !== 'darwin' && this.platform !== 'win32') return undefined
+    const zh = this.currentLocale === 'zh'
+    const filename = desktopUpdateFilename(this.platform, version)
+    const extension = this.platform === 'darwin' ? 'dmg' : 'exe'
+    const result = await dialog.showSaveDialog({
+      title: zh ? '保存更新安装包' : 'Save Update Installer',
+      defaultPath: join(app.getPath('downloads'), filename),
+      buttonLabel: zh ? '保存并下载' : 'Save and Download',
+      filters: [{
+        name: this.platform === 'darwin'
+          ? zh ? '磁盘映像' : 'Disk Image'
+          : zh ? 'Windows 安装程序' : 'Windows Installer',
+        extensions: [extension],
+      }],
+      properties: ['createDirectory', 'showOverwriteConfirmation', 'dontAddToRecent'],
+    })
+    return result.canceled ? undefined : result.filePath
+  }
+
+  private offerUpdateArtifactCleanup(): Promise<void> {
+    if (this.updateCleanupTask !== undefined) return this.updateCleanupTask
+    const task = this.performUpdateArtifactCleanup().finally(() => {
+      if (this.updateCleanupTask === task) this.updateCleanupTask = undefined
+    })
+    this.updateCleanupTask = task
+    return task
+  }
+
+  private async performUpdateArtifactCleanup(): Promise<void> {
+    if (this.platform !== 'darwin' && this.platform !== 'win32') return
+    const userDataPath = app.getPath('userData')
+    const artifact = await pendingDesktopUpdateArtifact(userDataPath, PRODUCT_VERSION, this.platform)
+    if (artifact === undefined) return
+    const zh = this.currentLocale === 'zh'
+    const result = await dialog.showMessageBox({
+      type: 'question',
+      title: zh ? '删除更新安装包' : 'Remove Update Installer',
+      message: zh
+        ? `DSH Desktop ${artifact.version} 已安装。`
+        : `DSH Desktop ${artifact.version} has been installed.`,
+      detail: zh
+        ? `是否删除下载的安装包以释放磁盘空间？\n\n${artifact.path}`
+        : `Delete the downloaded installer to free disk space?\n\n${artifact.path}`,
+      buttons: zh ? ['删除安装包', '保留安装包'] : ['Delete Installer', 'Keep Installer'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    })
+    await resolveDesktopUpdateArtifact(userDataPath, artifact, result.response === 0)
   }
 
   /** Start the downloaded NSIS installer before releasing the current process. */
@@ -679,11 +696,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     }
   }
 
-  private rebuildTrayMenu(): void {
-    const tray = this.tray
-    const spec = this.scheduled
-    if (tray === undefined || spec === undefined) return
-
+  private buildTrayTemplate(spec: DesktopShellSpec): Electron.MenuItemConstructorOptions[] {
     const show = (): void => { this.show() }
     const tools = this.contributedTrayItems('tools')
     const profiles = this.contributedTrayItems('profiles')
@@ -698,7 +711,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       { type: 'separator' },
       {
         label: modeToggleLabel(spec.mode, this.locale),
-        enabled: this.platform !== 'linux',
+        enabled: this.platformStrategy.canToggleShellMode,
         click: () => {
           void spec.requestModeChange(nextDesktopShellMode(spec.mode)).catch((cause: unknown) => {
             this.logError(`dsh-plugin-desktop: failed to change shell mode: ${cause instanceof Error ? cause.message : String(cause)}`)
@@ -708,132 +721,12 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       { type: 'separator' },
       { label: desktopTrayLabel(this.locale, 'quit'), click: () => { spec.requestQuit(0) } },
     )
-    tray.setContextMenu(Menu.buildFromTemplate(template))
+    return template
   }
 
-  private async mount(
-    spec: DesktopShellSpec,
-    beforeInteractive: (() => void) | undefined,
-  ): Promise<() => Promise<void>> {
-    this.setLocalePreference(spec.readLocalePreference())
-    const icon = nativeImage.createFromPath(spec.iconPath)
-    if (icon.isEmpty()) {
-      throw new Error(`dsh-plugin-desktop: failed to load application icon ${spec.iconPath}`)
-    }
-    if (this.platform === 'darwin') app.dock?.setIcon(icon)
-    const origin = new URL(spec.url).origin
-    if (spec.mode === 'advanced') nativeTheme.themeSource = spec.readThemeSource()
-    const window = new BrowserWindow(desktopWindowOptions(spec, icon, this.platform, desktopPreloadPath()))
-    window.accessibleTitle = spec.windowTitle
-    if (this.platform === 'win32') window.removeMenu()
-    this.window = window
-
-    const show = (): void => { this.show() }
-    const close = (event: Electron.Event): void => {
-      if (this.quitting) return
-      event.preventDefault()
-      window.hide()
-    }
-    const preserveBlankTitle = (event: Electron.Event): void => { event.preventDefault() }
-    const handleZoomShortcut = (event: Electron.Event, input: Electron.Input): void => {
-      const action = isZoomShortcut(input)
-      if (action === undefined) return
-      event.preventDefault()
-      if (action === 'reset') {
-        window.webContents.setZoomLevel(0)
-        return
-      }
-      const step = action === 'in' ? 1 : -1
-      window.webContents.setZoomLevel(clampedZoomLevel(window.webContents.getZoomLevel() + step))
-    }
-    const navigate = (event: Electron.Event<{ url: string }>): void => {
-      let targetOrigin: string | undefined
-      try {
-        targetOrigin = new URL(event.url).origin
-      } catch {
-        targetOrigin = undefined
-      }
-      if (targetOrigin !== origin) event.preventDefault()
-    }
-
-    app.on('activate', show)
-    window.on('close', close)
-    window.on('page-title-updated', preserveBlankTitle)
-    window.webContents.on('before-input-event', handleZoomShortcut)
-    window.webContents.on('will-frame-navigate', navigate)
-    window.webContents.on('will-redirect', navigate)
-    window.webContents.on('render-process-gone', (_event, details) => {
-      const detail = `renderer process gone (reason: ${details.reason}, exitCode: ${formatDesktopExitCode(details.exitCode)})`
-      this.logError(`dsh-plugin-desktop: ${detail}`)
-      this.failRendererBoot('renderer-failed', detail)
-    })
-    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _validatedUrl, isMainFrame) => {
-      this.logError(`dsh-plugin-desktop: renderer failed to load (${errorCode}: ${errorDescription})`)
-      if (isMainFrame === true && errorCode !== -3) {
-        this.failRendererBoot(
-          'renderer-failed',
-          `renderer main frame failed to load (${String(errorCode)}: ${errorDescription})`,
-        )
-      }
-    })
-    window.webContents.setWindowOpenHandler(({ url }) => {
-      try {
-        const target = new URL(url)
-        if (target.protocol === 'https:' || target.protocol === 'http:' || target.protocol === 'mailto:') {
-          void shell.openExternal(target.href).catch((cause: unknown) => {
-            this.logError(`dsh-plugin-desktop: failed to open external link: ${cause instanceof Error ? cause.message : String(cause)}`)
-          })
-        }
-      } catch {
-        // A malformed target is rejected with the same deny result.
-      }
-      return { action: 'deny' }
-    })
-
-    window.once('ready-to-show', show)
-    let tray: Tray | undefined
-    try {
-      await window.loadURL(spec.url)
-      tray = new Tray(prepareTrayIcon(spec.trayIcons, this.platform))
-      this.tray = tray
-      tray.setToolTip(spec.productName)
-      this.rebuildTrayMenu()
-      tray.on('click', show)
-      beforeInteractive?.()
-    } catch (cause) {
-      this.stopRendererBootMonitoring()
-      app.off('activate', show)
-      window.off('page-title-updated', preserveBlankTitle)
-      window.webContents.off('before-input-event', handleZoomShortcut)
-      tray?.off('click', show)
-      tray?.destroy()
-      window.destroy()
-      this.tray = undefined
-      this.window = undefined
-      throw cause
-    }
-
-    if (tray === undefined) {
-      throw new Error('dsh-plugin-desktop: native tray did not mount')
-    }
-    const mountedTray = tray
-
-    let released = false
-    return async () => {
-      if (released) return
-      released = true
-      this.stopRendererBootMonitoring()
-      app.off('activate', show)
-      window.off('close', close)
-      window.off('page-title-updated', preserveBlankTitle)
-      window.webContents.off('before-input-event', handleZoomShortcut)
-      window.webContents.off('will-frame-navigate', navigate)
-      window.webContents.off('will-redirect', navigate)
-      mountedTray.off('click', show)
-      mountedTray.destroy()
-      if (!window.isDestroyed()) window.destroy()
-      if (this.tray === mountedTray) this.tray = undefined
-      if (this.window === window) this.window = undefined
-    }
+  private rebuildTrayMenu(): void {
+    const spec = this.scheduled
+    if (spec === undefined) return
+    this.generation?.refreshTrayMenu()
   }
 }

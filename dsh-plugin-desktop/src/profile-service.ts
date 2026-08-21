@@ -15,6 +15,8 @@ export interface DesktopCurrentProfile {
 export interface DesktopProfiles {
   /** Immutable identity of the profile backing this Cordis generation. */
   readonly current: DesktopCurrentProfile
+  /** Create a safe Web profile without selecting or restarting it. */
+  create(name: string): DesktopProfileSummary
   /** Re-read the available profile manifests without changing them. */
   list(): readonly DesktopProfileSummary[]
   /** Persist a compatible profile and request an orderly application restart. */
@@ -32,6 +34,8 @@ declare module '@deepseek-ai/cordis' {
 export interface DesktopProfileServiceBootstrap {
   /** Profile that produced the current Cordis generation. */
   readonly current: DesktopCurrentProfile
+  /** Create a safe Web profile without selecting or restarting it. */
+  create?: (name: string) => DesktopProfileSummary
   /** Re-read the available profile manifests without changing them. */
   list(): readonly DesktopProfileSummary[]
   /** Persist one validated profile as pending for the next startup. */
@@ -81,6 +85,15 @@ export class DesktopProfileService extends Service implements DesktopProfiles {
     return this.fixedCurrent
   }
 
+  /** Create a profile through the launcher-owned implementation. */
+  create(name: string): DesktopProfileSummary {
+    this.assertActive()
+    if (this.bootstrap.create === undefined) {
+      throw new Error('dsh-plugin-desktop: profile creation is unavailable')
+    }
+    return this.bootstrap.create(name)
+  }
+
   /** Re-read profile discovery through the launcher-owned implementation. */
   list(): readonly DesktopProfileSummary[] {
     this.assertActive()
@@ -112,7 +125,6 @@ export class DesktopProfileService extends Service implements DesktopProfiles {
         return this.runExclusive(name, async () => {
           this.assertActive()
           await this.bootstrap.requestRestart()
-          this.assertActive()
           this.restartCompleted = true
         })
       }
@@ -122,7 +134,6 @@ export class DesktopProfileService extends Service implements DesktopProfiles {
         this.committedName = name
         this.assertActive()
         await this.bootstrap.requestRestart()
-        this.assertActive()
         this.restartCompleted = true
       })
     } catch (cause) {

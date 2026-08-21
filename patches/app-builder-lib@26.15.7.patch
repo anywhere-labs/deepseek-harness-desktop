@@ -22,3 +22,15 @@ index 3bde9755d703a70fc3a45c048c249559fef78d82..9db6a66ee59dbe28a167683b791d8357
      }
      return {
          keychainFile,
+diff --git a/templates/nsis/installer.nsi b/templates/nsis/installer.nsi
+index 2f5d5cf1240c5219217498f1f1a0530deab435a6..821e1d1c9b97dce3fd8e847132508384968072a0 100644
+--- a/templates/nsis/installer.nsi
++++ b/templates/nsis/installer.nsi
+@@ -28,0 +29 @@
++ManifestLongPathAware true
+diff --git a/templates/nsis/portable.nsi b/templates/nsis/portable.nsi
+index 8d2992afbe79af270a0d08c38203166d3afc03f1..bd8dc7fd2bc01a4ec9ade821bbd5d7bd37265caf 100644
+--- a/templates/nsis/portable.nsi
++++ b/templates/nsis/portable.nsi
+@@ -8,0 +9 @@
++ManifestLongPathAware true

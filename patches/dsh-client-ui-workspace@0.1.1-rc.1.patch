@@ -1,0 +1,8 @@
+diff --git a/lib/client.js b/lib/client.js
+index 7ca5fd3..7922a98 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1854 +1854,2 @@ window.__ModuleLoader__.load({
+-				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
++				className: clsx(WorkspaceBrowser_module_css_default.root, !wide && WorkspaceBrowser_module_css_default.rail),
++				"data-dsh-workspace-drop-target": "",
