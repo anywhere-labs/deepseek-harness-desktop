@@ -2,7 +2,9 @@
 
 ## Installation and first launch
 
-Download the macOS or Windows installer from the product download page. DSH Desktop includes Electron, Node, and its pinned DSH dependencies, so normal users do not need to install Node.js or pnpm separately.
+Download the macOS, Windows, or Linux installer from the product download page. DSH Desktop includes Electron, Node, and its pinned DSH dependencies, so normal users do not need to install Node.js or pnpm separately.
+
+Linux users can download the deb, rpm, or AppImage package from GitHub Releases: on Debian/Ubuntu, run `sudo apt install ./DSH-Desktop-<version>-linux-amd64.deb`; on Fedora/RHEL/openSUSE, run `sudo dnf install ./DSH-Desktop-<version>-linux-x86_64.rpm`; on other distributions, or when you would rather not install through a system package manager, download the AppImage and run `chmod +x DSH-Desktop-<version>-linux-x86_64.AppImage` before launching it directly. The deb and rpm packages both install to `/opt/DSH Desktop` and provide the `dsh-desktop` command. To upgrade, download and install the new package again; Linux has no in-app update download and no passive update notification, so use **Check for Updates…** in the tray to see whether a newer version is available.
 
 On first launch, the application prepares the default profile and starts the official DSH Web surface locally. Closing the window normally hides it; use **Quit** from the tray when you want to stop the application and Host process.
 
@@ -62,7 +64,7 @@ The welcome text shows the application version, active profile, profile director
 
 ## Updates
 
-Packaged macOS and Windows applications check `https://www.dshdesktop.cn/api/desktop/version` in the background. Startup is not blocked; network errors, non-200 responses, invalid versions, and a server version that is not newer remain silent in the background.
+Packaged macOS, Windows, and Linux applications all check `https://www.dshdesktop.cn/api/desktop/version` in the background. Startup is not blocked; network errors, non-200 responses, invalid versions, and a server version that is not newer remain silent in the background. The Linux build has no in-app download and no passive update notification; use **Check for Updates…** in the tray to see whether a newer version exists.
 
 **Check for Updates…** in the tray is a manual check. It shows a result even when the installed version is current, and reports a retry message when the check fails. Only a server version strictly newer than the local version produces a download confirmation. Cancelling never requests the counted download endpoint.
 

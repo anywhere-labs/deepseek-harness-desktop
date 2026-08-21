@@ -174,7 +174,7 @@ Closing the window hides it while the Host Cordis tree continues running. The tr
 
 ## Packaging
 
-`yarn package:dir` creates an unpacked directory for the current host platform. The packaged-runtime gate rejects an application archive that omits the desktop update and terminal modules, the DSH CLI bootstrap, the bundled pnpm entry, or the physical deployment package. Electron Builder emits the root manifest, desktop runtime, and complete dependency tree under `app.asar.unpacked`; both Host profile boot and the CLI bootstrap use this physical tree so DSH profile-fallback symlinks never target a virtual ASAR directory. `build/app-icon.png` remains the unmodified iOS Default source and the Windows/Linux application icon. The build runs `scripts/generate-mac-app-icon.mjs` to center that artwork at 824 by 824 pixels on a transparent 1024 by 1024 canvas; macOS packaging and the live Dock both use the generated `build/app-icon-mac.png`. `build/tray-icon.svg` is the brand-blue tray source: the build derives a macOS template image that the system colors automatically and fixed brand-blue Windows and Linux tray images.
+`yarn package:dir` creates an unpacked directory for the current host platform. The packaged-runtime gate rejects an application archive that omits the desktop update and terminal modules, the DSH CLI bootstrap, the bundled pnpm entry, or the physical deployment package. Electron Builder emits the root manifest, desktop runtime, and complete dependency tree under `app.asar.unpacked`; both Host profile boot and the CLI bootstrap use this physical tree so DSH profile-fallback symlinks never target a virtual ASAR directory. `build/app-icon.png` remains the unmodified iOS Default source and the Windows application icon. The build runs `scripts/generate-mac-app-icon.mjs` to center that artwork at 824 by 824 pixels on a transparent 1024 by 1024 canvas; macOS packaging and the live Dock both use the generated `build/app-icon-mac.png`. The build separately runs `scripts/generate-linux-icons.mjs` against the same source to produce `build/icons/NxN.png` for N from 16 to 512; Linux packaging uses that directory instead of a single icon file. The icon set deliberately stops at 512x512: freedesktop's hicolor `index.theme` only declares sizes up to that value, so a single 1024 PNG would land in an undeclared directory and leave the installed deb/rpm launcher without an icon. `build/tray-icon.svg` is the brand-blue tray source: the build derives a macOS template image that the system colors automatically and fixed brand-blue Windows and Linux tray images.
 
 ### WSL Linux headless checks
 
@@ -221,6 +221,29 @@ The output is `dsh-plugin-desktop\\dist\\DSH-Desktop-2.0.1-x64-Portable.zip`. Ex
 
 `yarn dist:mac-smoke` builds one unsigned universal DMG on a native macOS host. The same package runs natively on Intel and Apple Silicon Macs. The command refuses non-macOS hosts and runs the complete product gate before packaging: repository layout and community-contract checks, the Market build and check, then the Desktop build, every TypeScript compiler face, the full unit-test suite, runtime-closure verification, CLI/Loader/profile headless smokes, and the license audit. This includes the real login-shell tests for each supported shell installed on the macOS runner. It then packages without code-signing material, mounts the DMG, and verifies the property list, executable bit, both `x86_64` and `arm64` slices, and `app.asar`. It mirrors `dist:win`'s secret discipline by stripping every Electron Builder macOS signing and notarization variable, sets `CSC_IDENTITY_AUTO_DISCOVERY=false`, disables notarization, and never publishes. The artifact has no Developer ID signature, so Gatekeeper will block it on other machines; it exists so packaging regressions fail in CI before a manual release. The signed and notarized universal release remains `yarn dist:mac` on a credentialed macOS machine and writes its artifact to `dsh-plugin-desktop/dist/mac-release/`.
 
+### Local Linux packages
+
+Use a native Linux x64 host with Git and Node `22.19+` or `24.x`; the packaging command rejects non-Linux hosts, non-x64 architectures, and any other Node release. From the repository root, run:
+
+```sh
+corepack yarn dist:linux
+```
+
+The command first runs `check:linux-package` — the build, every TypeScript compiler face, the packaging- and runtime-focused test files, and the runtime-closure verifier — then invokes Electron Builder once with `--linux deb rpm AppImage --x64`, and finally verifies all four resulting artifact paths and their file-format magic numbers. Version `2.0.1` is written to `dsh-plugin-desktop/dist/DSH-Desktop-2.0.1-linux-amd64.deb`, `DSH-Desktop-2.0.1-linux-x86_64.rpm`, and `DSH-Desktop-2.0.1-linux-x86_64.AppImage`; the unpacked executable remains at `dsh-plugin-desktop/dist/linux-unpacked/dsh-desktop`.
+
+The rpm target requires `rpmbuild` on the host, which the apt `rpm` package provides. A development machine without it can use the Docker harness in `docker/linux-package/` instead, which also performs install-level verification for both deb and rpm in disposable Ubuntu and Fedora containers:
+
+```sh
+docker compose -f docker/linux-package/compose.yml build package
+docker compose -f docker/linux-package/compose.yml run --rm package
+docker compose -f docker/linux-package/compose.yml run --rm verify-deb
+docker compose -f docker/linux-package/compose.yml run --rm verify-rpm
+```
+
+Linux has no code signing; all three artifacts are unsigned. CI builds the same three artifacts on a version-pinned `ubuntu-24.04` runner. AppImage packaging uses `toolsets.appimage: "1.0.3"`'s static runtime, so the artifact neither injects `--no-sandbox` nor requires users to install `libfuse2`; electron-builder's schema lists this value under a `Betas:` heading rather than as its default (`"0.0.0"`, the legacy FUSE2 path), so this is a deliberate, verified choice rather than the vendor's stable default. This schema (the enum, the `"0.0.0"` default, and the `Betas:` grouping) was confirmed unchanged when the pinned `electron-builder` version moved from 26.15.3 to 26.15.7.
+
+Linux artifacts deliberately bundle Electron 42.9.3 through an `electronVersion` override in `scripts/package-linux.ts`, while development, tests, and the Windows and macOS packages keep the workspace Electron pin. Electron 43.x tray icons die on the GNOME AppIndicator extension v58 that Ubuntu 24.04 LTS ships by default: 43.4.0's SNI `IconPixmap` property `Get` fails, so the extension drops the icon after about three seconds, and 43.4.1's combined name-and-path registration string is rejected outright. Electron 42.9.3 registers cleanly and embeds the same Node 24.18.1 as the workspace pin. Remove the override once an Electron release restores tray compatibility with extension v58.
+
 ## Model Experience
 
 None. The desktop package changes application composition and native presentation; it does not add model-visible instructions, tools, events, or request fields.
@@ -241,3 +264,6 @@ None. The same DSH Host and client feature plugins assemble model requests.
 - The shared carrier is loopback HTTP and WebSocket, not Electron IPC. Replacing it requires transport extension points in upstream DSH and is outside this standalone package.
 - This project pins both the published DSH `0.1.1-rc.2` family and the corresponding official `deepseek-harness/` release source. Product builds still resolve published package interfaces rather than linking the source checkout.
 - `package:dir` is an unpacked smoke artifact. `dist:win` adds an unsigned NSIS test installer but does not establish Authenticode identity or SmartScreen reputation. Installation and upgrade behavior, native notifications and terminals, the Windows ACL sandbox, and native-material appearance remain target-platform verification boundaries.
+- The deb and rpm installers place the application under `/opt/DSH Desktop`, a directory name that contains a space. This path is fixed by `sanitizedProductName`; Electron Builder 26.x exposes no installation-prefix option. The `.desktop` file's `Exec` line is quoted correctly and the application works, but the path does not follow the usual Debian path convention.
+- The deb and rpm `depends` lists use Electron Builder's own defaults rather than an override. The default set's full transitive closure does not include `libasound2`, `libgbm1`, `libdrm2`, or `libgl1`; an ordinary desktop already has them preinstalled, but a minimal system or container image needs to add them manually.
+- AppImage mounting requires FUSE, which is unavailable inside containers, so AppImage's graphical launch can only be verified on a host graphical session. The `docker/linux-package` harness performs artifact-level checks plus deb/rpm install-level verification only.

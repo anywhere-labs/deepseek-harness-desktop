@@ -27,7 +27,7 @@ DSH Desktop 的目标不是重新实现 Harness，而是把同一个运行时放
 
 当前 Desktop 主要提供：
 
-- macOS 和 Windows 原生窗口、托盘和单实例生命周期。
+- macOS、Windows 和 Linux 原生窗口、托盘和单实例生命周期。
 - 兼容模式和高级模式。兼容模式保留上游默认客户端；高级模式提供 Desktop 自有的布局、窗口材质和原生拖动区域。
 - 多 profile 选择。当前 generation 的 profile 身份由 Desktop 明确提供，切换通过有序重启生效。
 - 内置终端和固定版本 pnpm 环境。它们只作用于 Desktop 自己创建的进程，不修改用户的全局 PATH。

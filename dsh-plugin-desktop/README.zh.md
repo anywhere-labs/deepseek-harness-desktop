@@ -174,7 +174,7 @@ DSH Desktop 将 UTF-8 日志写入 Electron 用户数据目录：Windows 位于 
 
 ## 打包
 
-`yarn package:dir` 为当前宿主平台创建未封装目录。如果应用归档缺少 desktop 更新与终端模块、DSH CLI bootstrap、内置 pnpm 入口或物理 deployment package，packaged-runtime gate 会拒绝该产物。Electron Builder 会把根 manifest、desktop runtime 与完整依赖树输出到 `app.asar.unpacked`；Host profile boot 与 CLI bootstrap 都会使用这棵物理树，因此 DSH profile fallback 的符号链接不会指向虚拟 ASAR 目录。`build/app-icon.png` 保持为未经修改的 iOS Default 源图，并继续作为 Windows 与 Linux 应用图标。构建过程会运行 `scripts/generate-mac-app-icon.mjs`，把该图缩放为 824 × 824 像素并居中放入透明的 1024 × 1024 画布；macOS 打包与运行中的 Dock 都使用生成的 `build/app-icon-mac.png`。`build/tray-icon.svg` 是品牌蓝托盘源文件：构建过程会派生由 macOS 系统自动着色的模板图，以及固定品牌蓝的 Windows 与 Linux 托盘图。
+`yarn package:dir` 为当前宿主平台创建未封装目录。如果应用归档缺少 desktop 更新与终端模块、DSH CLI bootstrap、内置 pnpm 入口或物理 deployment package，packaged-runtime gate 会拒绝该产物。Electron Builder 会把根 manifest、desktop runtime 与完整依赖树输出到 `app.asar.unpacked`；Host profile boot 与 CLI bootstrap 都会使用这棵物理树，因此 DSH profile fallback 的符号链接不会指向虚拟 ASAR 目录。`build/app-icon.png` 保持为未经修改的 iOS Default 源图，继续作为 Windows 应用图标。构建过程会运行 `scripts/generate-mac-app-icon.mjs`，把该图缩放为 824 × 824 像素并居中放入透明的 1024 × 1024 画布；macOS 打包与运行中的 Dock 都使用生成的 `build/app-icon-mac.png`。构建过程还会另外对同一源图运行 `scripts/generate-linux-icons.mjs`，产出 `build/icons/NxN.png`（N 从 16 到 512）；Linux 打包改用该目录，而不是单张图标文件。图标集刻意止步于 512×512：freedesktop 的 hicolor `index.theme` 只声明到这个尺寸，单张 1024 PNG 会落进未声明的目录，导致装好的 deb/rpm 启动器没有图标。`build/tray-icon.svg` 是品牌蓝托盘源文件：构建过程会派生由 macOS 系统自动着色的模板图，以及固定品牌蓝的 Windows 与 Linux 托盘图。
 
 ### WSL Linux 无界面检查
 
@@ -221,6 +221,29 @@ corepack.cmd yarn dist:win-portable
 
 `yarn dist:mac-smoke` 会在原生 macOS 宿主机上构建一个未签名的 universal DMG，同一个安装包可以在 Intel 和 Apple Silicon Mac 上原生运行。该命令拒绝非 macOS 宿主，并在打包前运行完整产品 gate：仓库布局与社区契约检查、Market 的 build 与 check，然后再运行 Desktop build、全部 TypeScript compiler face、完整 unit-test suite、runtime-closure 验证、CLI/Loader/profile headless smoke 与 license audit；其中包括对 macOS runner 上已安装的每种受支持 shell 执行真实 login-shell 测试。随后它会在不接触任何签名材料的情况下打包，挂载 DMG，并检查属性列表、主程序执行权限、`x86_64` 与 `arm64` 两个架构切片，以及 `app.asar`。该命令与 `dist:win` 的密钥纪律一致：剥离 Electron Builder 能识别的全部 macOS 签名与公证变量、设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`、关闭 notarization，且从不发布。产物没有 Developer ID 签名，因此 Gatekeeper 会在其他机器上拦截它；它的存在是为了让打包回归在人工发布之前就在 CI 中失败。签名并公证的 universal 正式发布仍是在持有凭证的 macOS 机器上执行 `yarn dist:mac`，产物写入 `dsh-plugin-desktop/dist/mac-release/`。
 
+### 本地 Linux 安装包
+
+请使用原生 Linux x64 主机，安装 Git 与 Node `22.19+` 或 `24.x`；打包命令会拒绝非 Linux 宿主、非 x64 架构，以及其他 Node 版本。在仓库根目录执行：
+
+```sh
+corepack yarn dist:linux
+```
+
+该命令先执行 `check:linux-package`——build、全部 TypeScript compiler face、打包与运行时相关的测试文件，以及 runtime-closure verifier——随后一次性调用 Electron Builder 的 `--linux deb rpm AppImage --x64`，最后校验全部四个产物路径及其文件格式魔数。版本 `2.0.1` 会写出到 `dsh-plugin-desktop/dist/DSH-Desktop-2.0.1-linux-amd64.deb`、`DSH-Desktop-2.0.1-linux-x86_64.rpm` 与 `DSH-Desktop-2.0.1-linux-x86_64.AppImage`；未封装的可执行文件仍位于 `dsh-plugin-desktop/dist/linux-unpacked/dsh-desktop`。
+
+rpm 目标要求宿主具备 `rpmbuild`，apt 的 `rpm` 包可以提供它。开发机若没有，可改用 `docker/linux-package/` 里的 Docker 工具集，它还会在一次性的 Ubuntu 与 Fedora 容器中为 deb 与 rpm 做安装级验证：
+
+```sh
+docker compose -f docker/linux-package/compose.yml build package
+docker compose -f docker/linux-package/compose.yml run --rm package
+docker compose -f docker/linux-package/compose.yml run --rm verify-deb
+docker compose -f docker/linux-package/compose.yml run --rm verify-rpm
+```
+
+Linux 没有 code signing，三个产物均未签名。CI 会在钉版本的 `ubuntu-24.04` runner 上构建同样的三个产物。AppImage 打包使用 `toolsets.appimage: "1.0.3"` 的静态运行时，因此产物既不会注入 `--no-sandbox`，也不要求用户安装 `libfuse2`；electron-builder 的 schema 把这个值归在 `Betas:` 分组下，而非默认值（`"0.0.0"`，旧版 FUSE2 路径），因此这是一次刻意的、已验证过的选择，而非沿用了官方的稳定默认值。这个 schema（枚举值、`"0.0.0"` 默认值、`Betas:` 分组）在钉定的 `electron-builder` 从 26.15.3 升到 26.15.7 后经确认保持不变。
+
+Linux 产物通过 `scripts/package-linux.ts` 中的 `electronVersion` 覆盖刻意捆绑 Electron 42.9.3；开发、测试以及 Windows 与 macOS 安装包继续使用工作区钉定的 Electron 版本。Electron 43.x 的托盘图标在 Ubuntu 24.04 LTS 默认附带的 GNOME AppIndicator 扩展 v58 上无法存活：43.4.0 的 SNI `IconPixmap` 属性 `Get` 会报错，扩展约三秒后丢弃图标；43.4.1 改用的"名称加路径"合并注册字符串则被直接拒绝。Electron 42.9.3 可正常注册，且内嵌与工作区钉定版本相同的 Node 24.18.1。待后续 Electron 版本恢复与扩展 v58 的托盘兼容后，应移除该覆盖。
+
 ## 模型体验
 
 无。desktop package 只改变应用组合与原生呈现，不增加任何模型可见的指令、工具、事件或请求字段。
@@ -241,3 +264,6 @@ corepack.cmd yarn dist:win-portable
 - 共享 carrier 使用 loopback HTTP 与 WebSocket，而不是 Electron IPC。替换它需要上游 DSH 提供 transport 扩展点，不属于该独立包的范围。
 - 该项目同时固定到已发布的 DSH `0.1.1-rc.2` family 及其对应的官方 `deepseek-harness/` release 源码。产品构建仍解析已发布包接口，不会直接链接源码 checkout。
 - `package:dir` 是用于 smoke 的未封装产物。`dist:win` 会额外生成未签名的 NSIS 测试安装包，但不会建立 Authenticode 身份或 SmartScreen 信誉。安装与升级行为、原生通知与终端、Windows ACL sandbox，以及每台目标机器上的原生材质外观仍属于目标平台验证边界。
+- deb 与 rpm 安装包会把应用装到 `/opt/DSH Desktop`，目录名带有空格。该路径由 `sanitizedProductName` 决定，Electron Builder 26.x 未开放安装前缀选项；`.desktop` 的 `Exec` 行会被正确加引号，功能正常，但不符合 Debian 惯常的路径习惯。
+- deb 与 rpm 的 `depends` 列表使用 Electron Builder 自身的默认值，而非覆盖值。默认集合的完整传递闭包不包含 `libasound2`、`libgbm1`、`libdrm2`、`libgl1`；普通桌面环境已预装这些库，但极简系统或容器镜像需要自行补齐。
+- AppImage 的挂载需要 FUSE，容器内不可用，因此 AppImage 的图形界面启动只能在宿主图形会话中验证。`docker/linux-package` 工具集只做产物级检查，以及 deb/rpm 的安装级验证。

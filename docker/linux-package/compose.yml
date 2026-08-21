@@ -1,0 +1,103 @@
+# Local Linux packaging and install verification for DSH Desktop.
+#
+#   docker compose -f docker/linux-package/compose.yml build package
+#   docker compose -f docker/linux-package/compose.yml run --rm package
+#   docker compose -f docker/linux-package/compose.yml run --rm verify-deb
+#   docker compose -f docker/linux-package/compose.yml run --rm verify-rpm
+#
+# Override the packaging account with DSH_UID / DSH_GID when the host account is
+# not 1000:1000.
+name: dsh-linux-package
+
+services:
+  # Build deb, rpm, and AppImage. The repository is mounted read-write because
+  # yarn install and electron-builder write node_modules/, lib/, and dist/.
+  #
+  # `yarn rebuild` is not redundant next to `yarn install --immutable`: the host
+  # and the container share one node_modules through the bind mount, and an
+  # immutable install leaves an already-satisfied tree untouched. node-pty and
+  # the other dependenciesMeta built:true packages compile from source, so a tree
+  # built against a newer host glibc can fail inside bookworm (glibc 2.36).
+  # Rebuilding in the container makes the native modules match the runtime that
+  # is about to package them, and the result stays forward-compatible on the
+  # host's newer glibc.
+  package:
+    build:
+      context: ../..
+      dockerfile: docker/linux-package/Dockerfile
+      args:
+        NODE_VERSION: '22.23.2'
+        UID: '${DSH_UID:-1000}'
+        GID: '${DSH_GID:-1000}'
+    image: dsh-linux-package:local
+    working_dir: /repo
+    environment:
+      HOME: /home/builder
+      DSH_TELEMETRY_DISABLED: '1'
+      YARN_CACHE_FOLDER: /cache/yarn
+      ELECTRON_BUILDER_CACHE: /cache/electron-builder
+    volumes:
+      - ../..:/repo
+      - dsh-cache:/cache
+      - dsh-home:/home/builder
+    command:
+      - bash
+      - -lc
+      - corepack enable && corepack yarn install --immutable && corepack yarn rebuild && corepack yarn dist:linux
+
+  # Install the deb in a clean Ubuntu 24.04 and assert the installed layout.
+  # Runs as root because installing packages requires it; the repository is
+  # mounted read-only so nothing leaks back to the host.
+  verify-deb:
+    image: ubuntu:24.04
+    working_dir: /repo
+    volumes:
+      - ../..:/repo:ro
+    command:
+      - bash
+      - -lc
+      - |
+        set -eux
+        apt-get update
+        apt-get install --no-install-recommends -y ./dsh-plugin-desktop/dist/*.deb
+        test -x '/opt/DSH Desktop/dsh-desktop'
+        test -L /usr/bin/dsh-desktop
+        test -f /usr/share/icons/hicolor/512x512/apps/dsh-desktop.png
+        test ! -e /usr/share/icons/hicolor/1024x1024/apps/dsh-desktop.png
+        desktop="$(ls /usr/share/applications/*.desktop | head -1)"
+        cat "$$desktop"
+        grep -q 'Icon=dsh-desktop' "$$desktop"
+        grep -q 'Categories=Development;' "$$desktop"
+        grep -qF 'Exec="/opt/DSH Desktop/dsh-desktop"' "$$desktop"
+        ls -l '/opt/DSH Desktop/chrome-sandbox'
+        dpkg-query -W -f='$${Package} $${Maintainer}\n' "$(dpkg-deb -f ./dsh-plugin-desktop/dist/*.deb Package)"
+
+  # Install the rpm in a current Fedora and assert the same layout. The tag is
+  # `latest` on purpose: dnf needs live repositories, and an EOL Fedora tag's
+  # repos move to the archive and stop resolving.
+  verify-rpm:
+    image: fedora:latest
+    working_dir: /repo
+    volumes:
+      - ../..:/repo:ro
+    command:
+      - bash
+      - -lc
+      - |
+        set -eux
+        cat /etc/fedora-release
+        rpm -qpi ./dsh-plugin-desktop/dist/*.rpm
+        rpm -qpi ./dsh-plugin-desktop/dist/*.rpm \
+          | grep -F 'anywhere-labs <anywhere-labs@users.noreply.github.com>'
+        dnf install -y ./dsh-plugin-desktop/dist/*.rpm
+        test -x '/opt/DSH Desktop/dsh-desktop'
+        test -L /usr/bin/dsh-desktop
+        test -f /usr/share/icons/hicolor/512x512/apps/dsh-desktop.png
+        test ! -e /usr/share/icons/hicolor/1024x1024/apps/dsh-desktop.png
+        desktop="$(ls /usr/share/applications/*.desktop | head -1)"
+        cat "$$desktop"
+        grep -q 'Icon=dsh-desktop' "$$desktop"
+
+volumes:
+  dsh-cache:
+  dsh-home:

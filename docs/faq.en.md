@@ -6,7 +6,7 @@ This page answers common questions about installation, supported platforms, the 
 
 ## What is DSH Desktop?
 
-DSH Desktop is an open-source DeepSeek Harness desktop client for Windows and macOS. It packages the official Harness local Web UI, Host service, and plugin system into a native desktop application with a window, system tray, terminal, updates, and profile management.
+DSH Desktop is an open-source DeepSeek Harness desktop client for Windows, macOS, and Linux. It packages the official Harness local Web UI, Host service, and plugin system into a native desktop application with a window, system tray, terminal, updates, and profile management.
 
 ## Is this an official DeepSeek product?
 
@@ -14,7 +14,7 @@ No. DSH Desktop is an independent, community-maintained open-source project. It 
 
 ## Which operating systems are supported?
 
-Current release installers support Windows x64 and universal macOS (Intel and Apple Silicon). There is currently no Linux installer. Cross-platform compatibility code in the source tree does not imply that an installer has been released for that platform.
+Current release installers support Windows x64, universal macOS (Intel and Apple Silicon), and Linux x64 (deb, rpm, and AppImage). Linux arm64 is not supported; cross-platform compatibility code in the source tree does not imply that an installer has been released for that platform. The Linux build only offers compatibility mode, does not include a packaged terminal, and has no in-app update download and no passive update notification; use **Check for Updates…** in the tray to see whether a newer version exists. Minimal desktop environments or container images may be missing `libasound2`, `libgbm1`, `libdrm2`, and `libgl1`; ordinary desktop distributions normally have these preinstalled.
 
 ## Do I need to install Node.js, pnpm, or DSH?
 
