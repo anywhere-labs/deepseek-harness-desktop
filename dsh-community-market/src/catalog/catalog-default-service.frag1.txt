@@ -1,0 +1,181 @@
+import { randomUUID } from 'node:crypto'
+import type { CatalogQuery, CatalogSnapshot } from '../contracts/index.js'
+import { applyScopedCatalogCursor, normalizeCatalogQuery, scopeCatalogCursor } from '../contracts/query.js'
+import { parseCatalogSnapshot } from '../contracts/validate.js'
+import type { CatalogHttpClient, CatalogMediaRegistry, LocalSourceRecord, ScopedCatalogCursor } from '../contracts/types.js'
+import type { MarketCatalogSourceResult, MarketSourceView } from '../api-types.js'
+import { DSH_1024STORE_ADAPTER_ID } from '../adapters/dsh-1024store.js'
+import { catalogAdapters } from './built-in-providers.js'
+import {
+  sourceView,
+  catalogScanKey,
+  cachedScanView,
+  completeItems,
+  localSourceFromView,
+  chunkCatalogItems,
+  matchesCatalogQuery,
+  sortCatalogItems,
+  validateCompleteCatalogScan,
+  unavailableMedia,
+  MAX_CATALOG_ITEMS,
+  MAX_CATALOG_PAGES,
+  DEFAULT_CATALOG_SCAN_CACHE_TTL_MS,
+  ConcurrencyGate,
+  type CatalogFullIndexCacheEntry,
+  type CatalogCursorEntry,
+  type CatalogService,
+  type CatalogScanOptions,
+  type CatalogFullIndex,
+  type CatalogFetchScope,
+  type CatalogServiceOptions,
+} from './catalog-service-part1.js'
+
+const adapters = catalogAdapters
+
+export class DefaultCatalogService implements CatalogService {
+  private readonly catalogScanCache = new Map<string, CatalogFullIndexCacheEntry>()
+  private readonly cursors = new Map<string, CatalogCursorEntry>()
+  private readonly sourceGenerations = new Map<string, number>()
+  private readonly catalogScanGenerations = new Map<string, number>()
+  private readonly catalogScanControllers = new Map<string, Set<AbortController>>()
+  private readonly catalogScanGates = new Map<string, ConcurrencyGate>()
+  private readonly cursorTtlMs: number
+  private readonly maxCursorEntries: number
+  private readonly catalogScanCacheTtlMs: number
+  private readonly sourceConcurrency: ConcurrencyGate
+  private readonly now: () => number
+  private readonly adapterHttpClients: ReadonlyMap<string, CatalogHttpClient>
+  private readonly media: CatalogMediaRegistry
+  private readonly observeSnapshot: ((snapshot: CatalogSnapshot) => void) | undefined
+
+  constructor(
+    private readonly store: { load(): Promise<readonly LocalSourceRecord[]> },
+    private readonly http: CatalogHttpClient,
+    options: CatalogServiceOptions = {},
+  ) {
+    this.cursorTtlMs = options.cursorTtlMs ?? 30 * 60 * 1000
+    this.maxCursorEntries = options.maxCursorEntries ?? 512
+    this.catalogScanCacheTtlMs = options.catalogScanCacheTtlMs ?? options.cacheTtlMs ?? DEFAULT_CATALOG_SCAN_CACHE_TTL_MS
+    const maxConcurrentSources = options.maxConcurrentSources ?? 4
+    const maxCacheEntries = options.maxCacheEntries ?? 256
+    if (!Number.isSafeInteger(maxCacheEntries) || maxCacheEntries < 1) {
+      throw new TypeError('invalid catalog cache entry limit')
+    }
+    if (!Number.isSafeInteger(this.maxCursorEntries) || this.maxCursorEntries < 1) {
+      throw new TypeError('invalid catalog cursor entry limit')
+    }
+    if (!Number.isFinite(this.cursorTtlMs) || this.cursorTtlMs <= 0) {
+      throw new TypeError('invalid catalog cursor TTL')
+    }
+    if (!Number.isFinite(this.catalogScanCacheTtlMs) || this.catalogScanCacheTtlMs <= 0) {
+      throw new TypeError('invalid catalog scan cache TTL')
+    }
+    if (!Number.isSafeInteger(maxConcurrentSources) || maxConcurrentSources < 1) {
+      throw new TypeError('invalid catalog source concurrency limit')
+    }
+    this.sourceConcurrency = new ConcurrencyGate(maxConcurrentSources)
+    this.now = options.now ?? Date.now
+    this.adapterHttpClients = options.adapterHttpClients ?? new Map()
+    this.media = options.media ?? unavailableMedia
+    this.observeSnapshot = options.observeSnapshot
+  }
+
+  async listSources(): Promise<readonly MarketSourceView[]> {
+    const records = await this.store.load()
+    return [...records].sort((left, right) => left.order - right.order).map(sourceView)
+  }
+
+  invalidateSource(sourceRecordId: string): void {
+    this.sourceGenerations.set(sourceRecordId, (this.sourceGenerations.get(sourceRecordId) ?? 0) + 1)
+    for (const [key, controllers] of this.catalogScanControllers) {
+      if (!key.startsWith(`${sourceRecordId}\0`)) continue
+      for (const controller of controllers) {
+        controller.abort(new DOMException('Catalog source was disabled or removed', 'AbortError'))
+      }
+      this.catalogScanControllers.delete(key)
+    }
+    for (const [key, entry] of this.catalogScanCache) {
+      if (entry.sourceRecordId === sourceRecordId) this.catalogScanCache.delete(key)
+    }
+    this.revokeSourceCursors(sourceRecordId)
+    this.media.unregisterSource(sourceRecordId)
+  }
+
+  private purgeExpiredCursors(): void {
+    const now = this.now()
+    for (const [token, entry] of this.cursors) {
+      if (now - entry.savedAt >= this.cursorTtlMs) this.cursors.delete(token)
+    }
+  }
+
+  private issueCursor(
+    rawCursor: string,
+    sourceRecordId: string,
+    query: CatalogQuery,
+    generation: number,
+  ): string {
+    this.purgeExpiredCursors()
+    let token = randomUUID()
+    while (this.cursors.has(token)) token = randomUUID()
+    this.cursors.set(token, {
+      cursor: scopeCatalogCursor(rawCursor, sourceRecordId, query),
+      generation,
+      savedAt: this.now(),
+    })
+    while (this.cursors.size > this.maxCursorEntries) {
+      const oldest = this.cursors.keys().next().value as string | undefined
+      if (oldest === undefined) break
+      this.cursors.delete(oldest)
+    }
+    return token
+  }
+
+  private applyCursor(
+    token: string,
+    sourceRecordId: string,
+    query: CatalogQuery,
+    generation: number,
+  ): CatalogQuery {
+    this.purgeExpiredCursors()
+    const entry = this.cursors.get(token)
+    if (entry === undefined || entry.generation !== generation) {
+      if (entry !== undefined) this.cursors.delete(token)
+      throw new Error('catalog cursor is unknown or expired')
+    }
+    return applyScopedCatalogCursor(entry.cursor, sourceRecordId, query)
+  }
+
+  private exposeSnapshot(
+    snapshot: CatalogSnapshot,
+    sourceRecordId: string,
+    query: CatalogQuery,
+    generation: number,
+  ): CatalogSnapshot {
+    const rawCursor = snapshot.page.nextCursor
+    if (rawCursor === undefined) return snapshot
+    return {
+      ...snapshot,
+      page: {
+        ...snapshot.page,
+        nextCursor: this.issueCursor(rawCursor, sourceRecordId, query, generation),
+      },
+    }
+  }
+
+  private revokeSourceCursors(sourceRecordId: string): void {
+    for (const [token, entry] of this.cursors) {
+      if (entry.cursor.sourceRecordId === sourceRecordId) this.cursors.delete(token)
+    }
+  }
+
+  private resetCatalogScan(key: string, sourceRecordId: string): number {
+    const generation = (this.catalogScanGenerations.get(key) ?? 0) + 1
+    this.catalogScanGenerations.set(key, generation)
+    this.catalogScanCache.delete(key)
+    for (const controller of this.catalogScanControllers.get(key) ?? []) {
+      controller.abort(new DOMException('Catalog refresh replaced this scan', 'AbortError'))
+    }
+    this.catalogScanControllers.delete(key)
+    this.revokeSourceCursors(sourceRecordId)
+    return generation
+  }
