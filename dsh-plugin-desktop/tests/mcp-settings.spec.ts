@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   apply,
@@ -14,6 +15,11 @@ import {
 } from '../src/mcp-settings.ts'
 
 describe('desktop MCP settings', () => {
+  it('keeps shared MCP helpers off the client schemastery import graph', () => {
+    expect(readFileSync(new URL('../src/mcp-settings.ts', import.meta.url), 'utf8'))
+      .not.toMatch(/schemastery/)
+  })
+
   it('starts with no servers and no official GitHub token template', () => {
     expect(parseDesktopMcpSettings(undefined)).toEqual({ servers: [] })
     expect(DESKTOP_MCP_CLIENT_PACKAGE).toBe('@deepseek-ai/dsh-mcp-client')

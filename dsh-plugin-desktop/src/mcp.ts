@@ -4,12 +4,34 @@ import type { Context } from '@deepseek-ai/cordis'
 import * as mcpClient from '@deepseek-ai/dsh-mcp-client'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-tools'
+import z from '@deepseek-ai/schemastery'
 import {
   createMcpClientConfig,
   DESKTOP_MCP_SETTINGS_KEY,
-  DesktopMcpSettingsSchema,
+  MCP_SERVER_NAME_PATTERN,
   parseDesktopMcpSettings,
+  type DesktopMcpServerSettings,
+  type DesktopMcpSettings,
 } from './mcp-settings.ts'
+
+const stringRecord = z.dict(String).default({})
+
+const DesktopMcpServerSettingsSchema: z<DesktopMcpServerSettings> = z.object({
+  id: z.string().required(),
+  enabled: z.boolean().default(false),
+  serverName: z.string().required().pattern(MCP_SERVER_NAME_PATTERN),
+  transport: z.union(['stdio', 'streamable-http'] as const).default('stdio'),
+  command: z.string().default(''),
+  args: z.array(String).default([]),
+  env: stringRecord,
+  cwd: z.string().default(''),
+  url: z.string().default(''),
+  headers: stringRecord,
+})
+
+const DesktopMcpSettingsSchema: z<DesktopMcpSettings> = z.object({
+  servers: z.array(DesktopMcpServerSettingsSchema).default([]),
+})
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-mcp'

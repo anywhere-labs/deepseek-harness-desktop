@@ -1,7 +1,5 @@
 /** Shared MCP settings types. The official client is mounted one server at a time. */
 
-import z from '@deepseek-ai/schemastery'
-
 /** Settings document key owned by the desktop MCP host plugin. */
 export const DESKTOP_MCP_SETTINGS_KEY = 'dsh-desktop-mcp'
 
@@ -39,25 +37,6 @@ export interface DesktopMcpServerSettings {
 export interface DesktopMcpSettings {
   servers: DesktopMcpServerSettings[]
 }
-
-const stringRecord = z.dict(String).default({})
-
-export const DesktopMcpServerSettingsSchema: z<DesktopMcpServerSettings> = z.object({
-  id: z.string().required(),
-  enabled: z.boolean().default(false),
-  serverName: z.string().required().pattern(MCP_SERVER_NAME_PATTERN),
-  transport: z.union(['stdio', 'streamable-http'] as const).default('stdio'),
-  command: z.string().default(''),
-  args: z.array(String).default([]),
-  env: stringRecord,
-  cwd: z.string().default(''),
-  url: z.string().default(''),
-  headers: stringRecord,
-})
-
-export const DesktopMcpSettingsSchema: z<DesktopMcpSettings> = z.object({
-  servers: z.array(DesktopMcpServerSettingsSchema).default([]),
-})
 
 /** Recommended templates. None are enabled until the user adds them. */
 export interface DesktopMcpServerTemplate {
