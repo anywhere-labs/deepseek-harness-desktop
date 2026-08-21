@@ -350,13 +350,7 @@
         }
       ],
       "icon": "build/app-icon.png",
-      "category": "Development",
-      "synopsis": "DSH Desktop — DeepSeek Harness desktop shell",
-      "desktop": {
-        "Name": "DSH Desktop",
-        "Comment": "Desktop shell for DeepSeek Harness (DSH)",
-        "StartupWMClass": "dsh-desktop"
-      }
+      "category": "Development"
     }
   }
 }
