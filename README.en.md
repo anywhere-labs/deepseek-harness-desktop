@@ -22,7 +22,9 @@
 </p>
 
 <p align="center">
-  <img src="assets/desktop-preview.png" alt="AI Buddy preview" width="100%">
+  <img src="assets/desktop-preview.png" alt="Upstream DeepSeek Harness Web UI preview in compatibility mode" width="100%">
+</p>
+<p align="center"><sub>The preview shows the upstream Web UI in compatibility mode. The application name, window, and icon are already AI Buddy; advanced mode adds Desktop-owned layout.</sub>
 </p>
 
 AI Buddy integrates the local Web UI, Host service, and plugin system from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) into a native desktop application. It runs a pinned upstream version unchanged, while AI Buddy provides the window, tray, terminal, updates, and work profiles through the plugin mechanism provided by DeepSeek Harness.
@@ -73,12 +75,12 @@ Ordinary users can start with the [user guide](docs/user-guide.en.md); the devel
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>Desktop</h3>
-      <p>Bring the upstream DeepSeek Harness local Web UI to a native desktop application. The app starts and manages the local Harness service, integrates the system tray and desktop window, and requires no Node.js installation or command-line setup.</p>
+      <h3>Native desktop</h3>
+      <p>Bring the upstream DeepSeek Harness local Web UI to a native desktop application. AI Buddy starts and manages the local Harness service, integrates the system tray and desktop window, and requires no Node.js installation or command-line setup.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Mobile Remote Control <img src="https://img.shields.io/badge/COMING_SOON-F59E0B?style=flat-square" alt="Coming Soon"></h3>
-      <p>Connect to Desktop from iOS and Android to start tasks, monitor Agent progress, and send follow-ups from your phone.</p>
+      <p>Connect to AI Buddy from iOS and Android to start tasks, monitor Agent progress, and send follow-ups from your phone.</p>
     </td>
   </tr>
   <tr>

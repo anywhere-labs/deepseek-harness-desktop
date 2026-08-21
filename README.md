@@ -22,7 +22,9 @@
 </p>
 
 <p align="center">
-  <img src="assets/desktop-preview.png" alt="AI Buddy 界面预览" width="100%">
+  <img src="assets/desktop-preview.png" alt="兼容模式下的上游 DeepSeek Harness Web UI 预览" width="100%">
+</p>
+<p align="center"><sub>预览为兼容模式中的上游 Web UI。应用名称、窗口和图标已是 AI Buddy；高级模式会叠加 Desktop 自有布局。</sub>
 </p>
 
 AI Buddy 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的本地 Web UI、Host 服务和插件系统集成到原生桌面应用中。项目固定并原样运行特定上游版本；AI Buddy 提供窗口、托盘、终端、更新和工作配置，并通过 DeepSeek Harness 提供的插件机制与上游能力组合。
@@ -73,12 +75,12 @@ AI Buddy 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>Desktop</h3>
-      <p>把上游 DeepSeek Harness 的本地 Web UI 带到原生桌面。应用自动启动和管理本地 Harness 服务，集成系统托盘与桌面窗口，无需安装 Node.js 或执行命令。</p>
+      <h3>原生桌面</h3>
+      <p>把上游 DeepSeek Harness 的本地 Web UI 带到原生桌面。AI Buddy 自动启动和管理本地 Harness 服务，集成系统托盘与桌面窗口，无需安装 Node.js 或执行命令。</p>
     </td>
     <td width="50%" valign="top">
       <h3>手机远程控制 <img src="https://img.shields.io/badge/%E5%8D%B3%E5%B0%86%E6%8E%A8%E5%87%BA-F59E0B?style=flat-square" alt="即将推出"></h3>
-      <p>通过 iOS 和 Android 远程连接 Desktop，在手机上发起任务、查看 Agent 进度，并在需要时继续跟进。</p>
+      <p>通过 iOS 和 Android 远程连接 AI Buddy，在手机上发起任务、查看 Agent 进度，并在需要时继续跟进。</p>
     </td>
   </tr>
   <tr>

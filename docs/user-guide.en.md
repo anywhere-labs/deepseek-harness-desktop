@@ -36,7 +36,9 @@ The port must be an integer from `0` through `65535`. Changing it performs an or
 
 Plugins are extensions that add capabilities to DSH, such as models, tools, interfaces, and workflows. AI Buddy uses the same plugin system as official Harness, so official plugins install and work directly; multiple plugins follow the same conventions and can be installed and used together.
 
-Ordinary DSH plugins use the upstream CLI semantics:
+For everyday installs, start with the built-in [plugin marketplace](../dsh-community-market/README.md): open the **Plugin market** tab under **Settings > Plugins**, or use the sidebar launcher. The market can browse catalog sources, preview plugins, and perform Host-managed install, uninstall, or enable/disable for npm packages that pass its checks. Listing only means a catalog returned metadata; it is not a security review. Installed plugins run as local code with the user's privileges.
+
+The official CLI remains available. Ordinary DSH plugins use the upstream CLI semantics:
 
 ```sh
 dsh plugin --profile desktop add <plugin>
@@ -80,7 +82,8 @@ After confirmation, the app first opens the native **Save Update Installer** dia
   If the npm desktop launcher is installed, `dsh-desktop --export-diagnostics` provides the same archive. This command does not start Host, profiles, plugins, or a window. It prints the absolute diagnostics ZIP path when complete.
 - **Diagnostic archive contents**: recent application logs, local Crashpad `.dmp` files, the active-run marker, and `system-info.txt`. System information records Desktop, Electron, Node, platform, and architecture versions. Recognized credentials are masked in logs, but local paths, workspace IDs, session IDs, and crash-time memory fragments may remain. Review the archive before public upload and send sensitive dumps only through a trusted channel.
 - **The window disappeared**: check the system tray; closing the window is not quitting.
-- **A plugin is missing**: confirm the command targeted the intended profile and restart the application.
+- **A plugin is missing**: confirm the command or marketplace action targeted the intended profile and restart the application.
+- **The plugin marketplace will not open**: confirm you are in the AI Buddy desktop composition. The market lives under **Settings > Plugins**; the sidebar button opens the same surface.
 - **A terminal command is missing**: open a fresh Desktop terminal from the tray; Desktop does not modify the global PATH.
 - **No update notification appeared**: background failures are silent; use the manual tray check to see the result.
 
