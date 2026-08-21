@@ -121,6 +121,10 @@ describe('published package surface', () => {
       types: './lib/types/mcp.d.ts',
       default: './lib/mcp.js',
     })
+    expect(manifest.exports).toHaveProperty('./workbench', {
+      types: './lib/types/workbench.d.ts',
+      default: './lib/workbench.js',
+    })
     expect(manifest.exports).not.toHaveProperty('./windows-acl-runner')
     expect(manifest.exports).not.toHaveProperty('./desktop-cli')
     expect(manifest.exports).not.toHaveProperty('./desktop-runtime-environment')
@@ -147,6 +151,7 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/mcp')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/workbench')
   })
 
   it('keeps unaudited marketplace packages out of the published runtime', () => {
@@ -326,6 +331,7 @@ describe('published package surface', () => {
     expect(config).toContain("'update-download': 'src/update-download.ts'")
     expect(config).toContain("updates: 'src/updates.ts'")
     expect(config).toContain("mcp: 'src/mcp.ts'")
+    expect(config).toContain("workbench: 'src/workbench.ts'")
   })
 
   it('installs Host command PATHs after the launch snapshot and before profile boot', () => {

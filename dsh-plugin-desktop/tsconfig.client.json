@@ -4,6 +4,8 @@
     "src/client/**/*.ts",
     "src/client/**/*.tsx",
     "src/mcp-settings.ts",
-    "src/worker-pack.ts"
+    "src/worker-pack.ts",
+    "src/workbench-settings.ts",
+    "src/command-palette.ts"
   ]
 }

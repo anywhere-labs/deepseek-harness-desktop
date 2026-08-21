@@ -1,6 +1,6 @@
 # Agent Note: 插件优先的工作台优化计划
 
-Status: proposed
+Status: implemented
 
 [English](2026-08-21-plugin-first-workbench-plan.md) | 中文
 
@@ -81,3 +81,5 @@ AI Buddy 已经有一批官方质量的默认项：Code 预设、工作套件推
 ## Consequences
 
 桌面继续作为窗口、托盘、更新、MCP 设置和打包运行时的官方 Host。抄来的工作台能力以插件形式到达，市场可以替换它们。官方默认只是起点，因此后续 Host 工作之后，社区插件仍然可用。
+
+工作台 Host 现在在 `dsh-plugin-desktop/workbench`。兼容模式仍把官方 layout、sidebar 和 conversation 留在原位。Command Palette 占用 `shell.overlay`。本机模型发现、数据目录合并和远程控制面默认关闭，也不预置密钥。办公 IM 仍是社区推荐，不是第一方锁定。远程入口同步会话、文件和本机 shell，不把 Electron 窗口编码成像素流。DSH 仍只监听 `127.0.0.1`。

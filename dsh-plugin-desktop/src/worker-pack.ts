@@ -10,7 +10,7 @@ export const WORKER_PACK_CATALOG_SOURCE_KEY = 'dsh-1024store'
 export interface WorkerPackRecommendedPlugin {
   readonly packageName: string
   readonly displayName: string
-  readonly role: 'workspace-shell' | 'workspace-context' | 'office-dingtalk' | 'office-wecom'
+  readonly role: 'workspace-shell' | 'workspace-context' | 'workspace-mobile' | 'office-dingtalk' | 'office-wecom'
   readonly repositoryUrl: string
 }
 
@@ -27,6 +27,19 @@ export const WORKER_PACK_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlug
     displayName: 'dsh-context',
     role: 'workspace-context',
     repositoryUrl: 'https://github.com/bowenliang123/dsh-context',
+  },
+])
+
+/**
+ * Later, non-default recommendation for narrow screens.
+ * Not part of the default workbench install path and never preinstalled.
+ */
+export const WORKBENCH_LATER_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlugin[] = Object.freeze([
+  {
+    packageName: 'dsh-web-mobile',
+    displayName: 'dsh-web-mobile',
+    role: 'workspace-mobile',
+    repositoryUrl: 'https://github.com/mexiaosqwq/dsh-web-mobile',
   },
 ])
 

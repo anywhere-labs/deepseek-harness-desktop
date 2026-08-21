@@ -36,6 +36,10 @@ import {
   readDesktopDisabledBundles,
 } from './desktop-plugins.ts'
 import { desktopAgentPresetConfig } from './worker-pack.ts'
+import {
+  parseDesktopWorkbenchSettings,
+  trustedHostsForWebRuntime,
+} from './workbench-settings.ts'
 
 /** Persistent profile managed by the desktop launcher and the ordinary dsh plugin command. */
 export const DESKTOP_PROFILE_NAME = 'desktop'
@@ -68,6 +72,7 @@ const DEFAULT_DESKTOP_SHELL_MODE: DesktopShellMode = 'compatibility'
 const DEFAULT_DESKTOP_PORT = 0
 const SETTINGS_FILE_PACKAGE = '@deepseek-ai/dsh-settings-file'
 const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
+const DESKTOP_WORKBENCH_SETTINGS_NAMESPACE = 'dsh-desktop-workbench'
 const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
 const UI_SIDEBAR_PACKAGE = '@deepseek-ai/dsh-client-ui-sidebar'
 const UI_CONVERSATION_PACKAGE = '@deepseek-ai/dsh-client-ui-conversation'
@@ -94,6 +99,17 @@ export function parseDesktopPort(value: unknown): number {
 export interface DesktopStartupSettings {
   mode: DesktopShellMode
   port: number
+  /** Remote control plane stays off unless the user enabled a trusted host. */
+  remoteEnabled: boolean
+  /** Bare host projected into web-runtime trustedHosts when remote is enabled. */
+  remoteTrustedHost: string
+}
+
+const DEFAULT_STARTUP_SETTINGS: DesktopStartupSettings = {
+  mode: DEFAULT_DESKTOP_SHELL_MODE,
+  port: DEFAULT_DESKTOP_PORT,
+  remoteEnabled: false,
+  remoteTrustedHost: '',
 }
 
 /**
@@ -106,16 +122,18 @@ export function desktopStartupSettingsFromSettings(document: unknown): DesktopSt
     throw new Error(`${BIN_NAME}: settings document must be a map of namespace sections`)
   }
   const section = (document as Record<string, unknown>)[DESKTOP_SETTINGS_NAMESPACE]
-  if (section === undefined) {
-    return { mode: DEFAULT_DESKTOP_SHELL_MODE, port: DEFAULT_DESKTOP_PORT }
-  }
-  if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+  if (section !== undefined && (typeof section !== 'object' || section === null || Array.isArray(section))) {
     throw new Error(`${BIN_NAME}: ${DESKTOP_SETTINGS_NAMESPACE} settings must be a map`)
   }
-  const values = section as Record<string, unknown>
+  const values = section === undefined ? {} : section as Record<string, unknown>
+  const workbench = parseDesktopWorkbenchSettings(
+    (document as Record<string, unknown>)[DESKTOP_WORKBENCH_SETTINGS_NAMESPACE],
+  )
   return {
     mode: parseDesktopShellMode(values.mode),
     port: parseDesktopPort(values.port),
+    remoteEnabled: workbench.remote.enabled,
+    remoteTrustedHost: workbench.remote.trustedHost,
   }
 }
 
@@ -136,7 +154,7 @@ export function readDesktopStartupSettings(config: SettingsFileConfig): DesktopS
     text = readFileSync(spec.filename, 'utf8')
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { mode: DEFAULT_DESKTOP_SHELL_MODE, port: DEFAULT_DESKTOP_PORT }
+      return { ...DEFAULT_STARTUP_SETTINGS }
     }
     throw cause
   }
@@ -472,7 +490,7 @@ export function prepareDesktopProfile(
     dshHome: home,
     ...rowConfig(settings),
   } as SettingsFileConfig)
-  const { mode, port } = readDesktopStartupSettings(settingsConfig)
+  const { mode, port, remoteEnabled, remoteTrustedHost } = readDesktopStartupSettings(settingsConfig)
   patches.push({
     id: 'settings',
     config: settingsConfig,
@@ -574,6 +592,16 @@ export function prepareDesktopProfile(
     disabled: false,
     config: { host: '127.0.0.1', port },
   })
+  const trustedHosts = trustedHostsForWebRuntime({
+    enabled: remoteEnabled,
+    trustedHost: remoteTrustedHost,
+  })
+  if (trustedHosts.length > 0) {
+    patches.push({
+      id: 'web-runtime',
+      config: { trustedHosts },
+    })
+  }
   if ((telemetryDisabled ?? '') !== '' && rows.has('session-telemetry-otel')) {
     patches.push({ id: 'session-telemetry-otel', disabled: true })
   }

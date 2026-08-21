@@ -5,6 +5,7 @@ import {
   desktopAgentPresetConfig,
   OFFICE_IM_RECOMMENDED_PLUGINS,
   WORKER_PACK_CATALOG_SOURCE_KEY,
+  WORKBENCH_LATER_RECOMMENDED_PLUGINS,
   WORKER_PACK_RECOMMENDED_PLUGINS,
   workerPackBlocksCommunityPackage,
   workerPackCatalogSelected,
@@ -25,6 +26,9 @@ describe('desktop worker pack', () => {
       'dsh-context',
     ])
     expect(WORKER_PACK_CATALOG_SOURCE_KEY).toBe('dsh-1024store')
+    expect(WORKBENCH_LATER_RECOMMENDED_PLUGINS.map(plugin => plugin.packageName)).toEqual([
+      'dsh-web-mobile',
+    ])
   })
 
   it('starts office IM from official DingTalk Stream and WeCom without gating community installs', () => {

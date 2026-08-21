@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   OFFICE_IM_RECOMMENDED_PLUGINS,
+  WORKBENCH_LATER_RECOMMENDED_PLUGINS,
   WORKER_PACK_RECOMMENDED_PLUGINS,
   type WorkerPackRecommendedPlugin,
 } from '../worker-pack.ts'
@@ -38,6 +39,7 @@ function RecommendedPluginCard({
 const ROLE_KEY: Record<WorkerPackRecommendedPlugin['role'], DesktopLocaleKey> = {
   'workspace-shell': 'pluginWorkspaceShell',
   'workspace-context': 'pluginWorkspaceContext',
+  'workspace-mobile': 'pluginWorkspaceMobile',
   'office-dingtalk': 'pluginOfficeDingtalk',
   'office-wecom': 'pluginOfficeWecom',
 }
@@ -84,6 +86,13 @@ export function WorkerPackTab({ t }: WorkerPackTabProps): ReactNode {
         <h2>{t('pluginsTitle')}</h2>
         <p>{t('pluginsBody')}</p>
         {WORKER_PACK_RECOMMENDED_PLUGINS.map(plugin => (
+          <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
+        ))}
+      </div>
+      <div className="dshWorkerSection">
+        <h2>{t('laterTitle')}</h2>
+        <p>{t('laterBody')}</p>
+        {WORKBENCH_LATER_RECOMMENDED_PLUGINS.map(plugin => (
           <RecommendedPluginCard key={plugin.packageName} plugin={plugin} t={t} />
         ))}
       </div>
