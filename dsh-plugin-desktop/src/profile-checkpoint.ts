@@ -33,6 +33,7 @@ const MANIFEST_FILENAME = 'manifest.json'
 const MARKER_FILENAME = 'restore-marker.json'
 const FILE_MODE = 0o600
 const DIRECTORY_MODE = 0o700
+const CHECK_POSIX_MODE = process.platform !== 'win32'
 const HASH_PATTERN = /^[0-9a-f]{64}$/u
 const ID_PATTERN = /^[A-Za-z0-9._:@/-]{1,256}$/u
 
@@ -193,7 +194,7 @@ function ensureDirectory(path: string): void {
   const item = lstatSync(path)
   if (!item.isDirectory() || item.isSymbolicLink()) fail(`checkpoint directory is not a real directory: ${path}`)
   // chmod is intentional: an existing directory may have inherited a wider mode.
-  if ((item.mode & 0o777) !== DIRECTORY_MODE) {
+  if (CHECK_POSIX_MODE && (item.mode & 0o777) !== DIRECTORY_MODE) {
     // The caller owns this private directory; narrowing it is safe and avoids
     // exposing a checkpoint through a permissive umask/previous installation.
     chmodSync(path, DIRECTORY_MODE)
@@ -226,7 +227,7 @@ function writeDurable(path: string, bytes: Uint8Array, mode = FILE_MODE): void {
 
 function readJson(path: string): unknown {
   const item = lstatSync(path)
-  if (!item.isFile() || item.isSymbolicLink() || (item.mode & 0o777) !== FILE_MODE) {
+  if (!item.isFile() || item.isSymbolicLink() || (CHECK_POSIX_MODE && (item.mode & 0o777) !== FILE_MODE)) {
     fail(`checkpoint file has unsafe type or mode: ${path}`)
   }
   return JSON.parse(readFileSync(path, 'utf8')) as unknown
@@ -453,7 +454,8 @@ export class DesktopProfileCheckpoint {
       const candidate = join(parent, name)
       try {
         const item = lstatSync(candidate)
-        if (!item.isDirectory() || item.isSymbolicLink() || (item.mode & 0o777) !== DIRECTORY_MODE) continue
+        if (!item.isDirectory() || item.isSymbolicLink()
+          || (CHECK_POSIX_MODE && (item.mode & 0o777) !== DIRECTORY_MODE)) continue
         renameSync(candidate, this.snapshotDirectory)
         return
       } catch (cause) {
@@ -480,7 +482,8 @@ export class DesktopProfileCheckpoint {
   private readSnapshot(requireComplete: boolean): { readonly directory: string; readonly manifest: ProfileCheckpointManifest } | undefined {
     try {
       const directoryItem = lstatSync(this.snapshotDirectory)
-      if (!directoryItem.isDirectory() || directoryItem.isSymbolicLink() || (directoryItem.mode & 0o777) !== DIRECTORY_MODE) {
+      if (!directoryItem.isDirectory() || directoryItem.isSymbolicLink()
+        || (CHECK_POSIX_MODE && (directoryItem.mode & 0o777) !== DIRECTORY_MODE)) {
         fail('latest checkpoint directory has unsafe type or mode')
       }
       const value = readJson(join(this.snapshotDirectory, MANIFEST_FILENAME))
@@ -503,7 +506,8 @@ export class DesktopProfileCheckpoint {
         const backup = filePath(this.snapshotDirectory, expected)
         if (item.present) {
           const backupItem = lstatSync(backup)
-          if (!backupItem.isFile() || backupItem.isSymbolicLink() || (backupItem.mode & 0o777) !== FILE_MODE) fail(`checkpoint backup is unsafe: ${expected}`)
+          if (!backupItem.isFile() || backupItem.isSymbolicLink()
+            || (CHECK_POSIX_MODE && (backupItem.mode & 0o777) !== FILE_MODE)) fail(`checkpoint backup is unsafe: ${expected}`)
           const bytes = readFileSync(backup)
           if (bytes.byteLength !== item.size || hash(bytes) !== item.sha256) fail(`checkpoint backup is incomplete: ${expected}`)
         } else if (existsSync(backup)) {
