@@ -36,7 +36,11 @@ The Desktop Host, profiles, and DSH home live on the local machine. Whether cont
 
 Yes. AI Buddy uses the official Harness plugin system. For everyday installs, open the **Plugin market** tab under **Settings > Plugins**, or use the sidebar launcher. You can also open AI Buddy Terminal from the tray and run `dsh plugin add`, `dsh plugin remove`, or `dsh plugin update`. Both the market and these commands default to the active profile, and Desktop must be restarted after plugin changes. Catalog inclusion is not a security review.
 
-For a closer workbench setup, open **Settings > Plugins > Worker pack**: the default agent preset is Code, and the recommended workspace plugins install from the market. Configure external MCP servers on the **MCP** tab with the official client; no tokens are shipped.
+For a closer workbench setup, open **Settings > Plugins > Worker pack**: the default agent preset is Code, and the recommended workspace plugins install from the market. Office IM is limited to official DingTalk Stream (`dsh-dingtalk-channel`) and the official WeCom AI Bot (`dsh-wecom`); neither is preinstalled, and no secrets are shipped. Configure external MCP servers on the **MCP** tab with the official client; no tokens are shipped.
+
+## Are there official DingTalk and WeCom channels?
+
+AI Buddy does not ship built-in channels. The worker pack recommends two community plugins that use official platform protocols: DingTalk official Stream (`dsh-dingtalk-channel`, internal-app Client ID + Secret, no public callback) and the official WeCom AI Bot long connection (`dsh-wecom`, Bot ID + Secret). Webhook notify bots, Feishu, and multi-IM aggregators stay off the list. After installing, put credentials in the plugin config or the local credential store, then restart AI Buddy.
 
 ## Does the Desktop profile automatically sync with an existing web profile?
 

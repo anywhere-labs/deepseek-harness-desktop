@@ -36,7 +36,7 @@ The port must be an integer from `0` through `65535`. Changing it performs an or
 
 New sessions default to the upstream **Code** (PTC) preset: standard file, terminal, search, skill, plan, subagent, and Ralph tools, plus TypeScript Code Mode presentation. You can switch back to `standard` in settings. Windows still hides the incompatible `minimal` preset.
 
-**Settings > Plugins > Worker pack** lists recommended workspace plugins such as `dsh-better-sidebar` and `dsh-context`. They are not preinstalled, and catalog listing is not a security review. The plugin market does not preselect a source; the Worker pack page can add and select DSH 1024Store in one click, then search those npm names under **Plugin market**. Restart AI Buddy after installing or enabling plugins.
+**Settings > Plugins > Worker pack** lists recommended workspace plugins such as `dsh-better-sidebar` and `dsh-context`, plus official office IM: DingTalk is limited to the official Stream channel `dsh-dingtalk-channel`, and WeCom uses the official AI Bot channel `dsh-wecom`. They are not preinstalled, and catalog listing is not a security review. Webhook notify bots, Feishu, and multi-IM aggregators stay off this list. The plugin market does not preselect a source; the Worker pack page can add and select DSH 1024Store in one click, then search those npm names under **Plugin market**. Restart AI Buddy after installing or enabling plugins. Put credentials in the plugin config or the local credential store; do not commit secrets.
 
 External MCP servers use the official `@deepseek-ai/dsh-mcp-client`. Add stdio or HTTP servers under **Settings > Plugins > MCP**. AI Buddy does not ship tokens or default child processes. Saving also requires a restart.
 

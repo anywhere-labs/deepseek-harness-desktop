@@ -18,7 +18,7 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 - Run upstream operations through the root scripts, such as `corepack yarn upstream:build`.
 
 - `deepseek-harness/` is a pinned upstream Git submodule. Never edit files inside it from a desktop feature branch.
-- `dsh-plugin-desktop/` owns the Cordis Host and Client faces, Electron bootstrap, packaging, and release tests. It also owns the worker-pack recommendations and official MCP settings (`dsh-plugin-desktop/mcp`); it must not silently npm-install community plugins or ship MCP tokens.
+- `dsh-plugin-desktop/` owns the Cordis Host and Client faces, Electron bootstrap, packaging, and release tests. It also owns the worker-pack recommendations (workspace plugins plus official DingTalk Stream and WeCom AI Bot channels) and official MCP settings (`dsh-plugin-desktop/mcp`); it must not silently npm-install community plugins or ship MCP, DingTalk, or WeCom tokens.
 - `dsh-community-fabric/` owns the community interoperability RFC. Until schemas and a reviewed reference adapter exist, it remains a private documentation scaffold and must not declare loadable DSH or package entry points.
 - `dsh-community-market/` owns the built-in community plugin market. It provides loadable Host and Client entries composed into the desktop profile; catalog inclusion is not a security review.
 - The outer repository and all owned packages use the root Yarn release with `nodeLinker: node-modules`.

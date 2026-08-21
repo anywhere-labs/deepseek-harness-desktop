@@ -10,7 +10,7 @@ export const WORKER_PACK_CATALOG_SOURCE_KEY = 'dsh-1024store'
 export interface WorkerPackRecommendedPlugin {
   readonly packageName: string
   readonly displayName: string
-  readonly role: 'workspace-shell' | 'workspace-context'
+  readonly role: 'workspace-shell' | 'workspace-context' | 'office-dingtalk' | 'office-wecom'
   readonly repositoryUrl: string
 }
 
@@ -27,6 +27,25 @@ export const WORKER_PACK_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlug
     displayName: 'dsh-context',
     role: 'workspace-context',
     repositoryUrl: 'https://github.com/bowenliang123/dsh-context',
+  },
+])
+
+/**
+ * Official-platform office IM channels only: DingTalk Stream and WeCom AI Bot.
+ * Webhook notify bots, Feishu, and multi-IM aggregators stay out of this list.
+ */
+export const OFFICE_IM_RECOMMENDED_PLUGINS: readonly WorkerPackRecommendedPlugin[] = Object.freeze([
+  {
+    packageName: 'dsh-dingtalk-channel',
+    displayName: 'dsh-dingtalk-channel',
+    role: 'office-dingtalk',
+    repositoryUrl: 'https://github.com/ttmouse/dsh-dingtalk-channel',
+  },
+  {
+    packageName: 'dsh-wecom',
+    displayName: 'dsh-wecom',
+    role: 'office-wecom',
+    repositoryUrl: 'https://github.com/TtTRz/dsh-wecom',
   },
 ])
 
