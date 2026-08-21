@@ -658,7 +658,23 @@ describe('published package surface', () => {
       .update(readFileSync(new URL('build/app-icon.png', packageRoot)))
       .digest('hex')
 
-    expect(digest).toBe('5d43c040132397b04a9df39db7043e038bc17e8d50705efe3cd258001ccdafdc')
+    expect(digest).toBe('5840129c8be4e5d20e83bf5057a6e47938db96e250adcad963f3e8ccb802f583')
+  })
+
+  it('keeps the app icon sphere on a transparent canvas', async () => {
+    const { data, info } = await sharp(readFileSync(new URL('build/app-icon.png', packageRoot)))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    const corners = [
+      [0, 0],
+      [info.width - 1, 0],
+      [0, info.height - 1],
+      [info.width - 1, info.height - 1],
+    ]
+    for (const [x, y] of corners) {
+      expect(data[(y * info.width + x) * 4 + 3]).toBe(0)
+    }
   })
 
   it('generates a centered macOS icon with a 100-pixel visual inset', async () => {
