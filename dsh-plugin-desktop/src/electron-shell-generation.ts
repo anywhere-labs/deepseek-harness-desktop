@@ -13,11 +13,14 @@ import { formatDesktopExitCode } from './desktop-logger.ts'
 import { applicationNeedsReveal, revealApplication } from './electron-reveal.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
+import { parseDesktopStartupRecoveryAction } from './startup-recovery-window.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
 
 const MIN_ZOOM_LEVEL = -4
 const MAX_ZOOM_LEVEL = 4
+/** Recovery-bus scheme owned by the launcher; the main-window banner links here. */
+const RECOVERY_SCHEME = 'dsh-recovery:'
 
 function clampedZoomLevel(level: number): number {
   return Math.min(MAX_ZOOM_LEVEL, Math.max(MIN_ZOOM_LEVEL, level))
@@ -42,6 +45,8 @@ export interface ElectronShellGenerationOptions {
   readonly abortRendererBootMonitoring: (cause: unknown) => void
   readonly failRendererBoot: (error: string) => void
   readonly logError: (message: string) => void
+  /** Route a main-window recovery-bus action (for example `restart`) to the launcher. */
+  readonly handleRecoveryAction?: (action: string) => void
 }
 
 /** Own one BrowserWindow and Tray generation, including every native listener. */
@@ -95,8 +100,18 @@ export class ElectronShellGeneration {
       const step = action === 'in' ? 1 : -1
       window.webContents.setZoomLevel(clampedZoomLevel(window.webContents.getZoomLevel() + step))
     }
+    const handleRecoveryScheme = (event: { preventDefault(): void }, url: string): boolean => {
+      if (!url.startsWith(RECOVERY_SCHEME)) return false
+      // The recovery bus runs before the origin guard: its scheme origin never
+      // matches the Web origin, so a raw navigate would otherwise be blocked.
+      event.preventDefault()
+      const action = parseDesktopStartupRecoveryAction(url)
+      if (action !== undefined) this.options.handleRecoveryAction?.(action.action)
+      return true
+    }
     const navigate = (event: Electron.Event<Electron.WebContentsWillFrameNavigateEventParams>): void => {
       if (!event.isMainFrame) return
+      if (handleRecoveryScheme(event, event.url)) return
       let targetOrigin: string | undefined
       try {
         targetOrigin = new URL(event.url).origin
@@ -112,6 +127,7 @@ export class ElectronShellGeneration {
       isMainFrame: boolean,
     ): void => {
       if (!isMainFrame) return
+      if (handleRecoveryScheme(event, url)) return
       let targetOrigin: string | undefined
       try {
         targetOrigin = new URL(url).origin

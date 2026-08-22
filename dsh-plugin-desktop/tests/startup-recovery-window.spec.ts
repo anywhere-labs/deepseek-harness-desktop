@@ -29,6 +29,7 @@ function viewModel(
     busy: false,
     restartReady: false,
     configurationAvailable: false,
+    aiAnalysis: {},
     ...overrides,
   }
 }
@@ -45,7 +46,7 @@ describe('Desktop startup recovery document', () => {
     expect(html).toContain("connect-src 'none'")
     expect(html).toContain("object-src 'none'")
     expect(html).toContain("base-uri 'none'")
-    expect(html).toContain("form-action 'none'")
+    expect(html).toContain('form-action dsh-recovery:')
     expect(html).toContain("frame-ancestors 'none'")
     expect(html).not.toMatch(/<script\b/iu)
     expect(html).not.toMatch(/\son[a-z]+\s*=/iu)
@@ -164,6 +165,80 @@ describe('Desktop startup recovery document', () => {
     expect(html).toContain('example-plugin')
     expect(html).toContain('安装前配置已恢复。请重新启动 Desktop。')
     expect(html).toContain('class="button primary" href="dsh-recovery://restart"')
+  })
+
+  it('renders the no-script radio repair form with a GET action to the action bus', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel())
+
+    expect(html).toContain('AI 辅助故障分析')
+    expect(html).toContain('name="option"')
+    expect(html).toContain('value="A"')
+    expect(html).toContain('临时禁用故障插件')
+    expect(html).toContain('value="D"')
+    expect(html).toContain('恢复默认配置')
+    expect(html).toContain('action="dsh-recovery://execute-repair"')
+    expect(html).toContain('type="submit"')
+    expect(html).toContain('执行修复')
+    expect(html).not.toMatch(/<script\b/iu)
+  })
+
+  it('marks repair plans B and C as disabled and unavailable in the radio list', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel())
+
+    expect(html).toContain('value="B" disabled')
+    expect(html).toContain('回滚子模块版本')
+    expect(html).toContain('value="C" disabled')
+    expect(html).toContain('重置插件加载清单')
+    expect(html).toContain('暂不可用')
+    expect(html).not.toContain('value="A" disabled')
+    expect(html).not.toContain('value="D" disabled')
+  })
+
+  it('never checks a disabled repair option even when it is preselected', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel({
+      aiAnalysis: { selectedOption: 'B' },
+    }))
+
+    expect(html).toContain('value="B" disabled')
+    expect(html).not.toContain('value="B" checked')
+    expect(html).not.toContain('value="C" checked')
+  })
+
+  it('renders the analyzed root cause, risk badge, and self-check report', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel({
+      aiAnalysis: {
+        selectedOption: 'A',
+        diagnosis: {
+          rootCause: '依赖解析失败：缺失模块 plugin-x。', severity: 'medium',
+          options: [], recommendation: '建议先尝试方案 A。', disclaimer: 'AI 辅助建议，仅供参考。',
+        },
+        selfCheck: { ok: true, checks: [{ name: 'core import', passed: true, detail: 'ok' }],
+          recommendation: '✅ 修复成功，点击【重新启动 DSH Desktop】生效。' },
+      },
+    }))
+    expect(html).toContain('缺失模块 plugin-x')
+    expect(html).toContain('medium')
+    expect(html).toContain('重新启动 DSH Desktop')
+  })
+
+  it('surfaces a restart CTA after a passing self-check', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel({
+      restartReady: true,
+      aiAnalysis: { result: { planId: 'A', status: 'degraded', message: '已启用降级。' } },
+    }))
+    expect(html).toContain('dsh-recovery://restart')
+    expect(html).toContain('重新启动 DSH Desktop')
+  })
+
+  it('appends an in-card restart CTA when the post-repair self-check passed', () => {
+    const html = renderDesktopStartupRecoveryHtml(viewModel({
+      aiAnalysis: {
+        result: { planId: 'A', status: 'degraded', message: '已启用降级模式。' },
+        selfCheck: { ok: true, checks: [{ name: 'degraded bundle resolvable', passed: true, detail: 'resolved plugin-x' }],
+          recommendation: '✅ 修复成功，点击【重新启动 DSH Desktop】生效。' },
+      },
+    }))
+    expect((html.match(/dsh-recovery:\/\/restart/g) ?? []).length).toBeGreaterThanOrEqual(2)
   })
 })
 
@@ -344,6 +419,7 @@ describe('Desktop startup recovery action parser', () => {
       'open-profile-directory',
       'restart',
       'quit',
+      'ai-analyze',
     ]) {
       expect(parseDesktopStartupRecoveryAction(`dsh-recovery://${action}`)).toEqual({ action })
     }
@@ -360,6 +436,11 @@ describe('Desktop startup recovery action parser', () => {
         `dsh-recovery://${action}?id=opaque-id_0001`,
       )).toEqual({ action, id: 'opaque-id_0001' })
     }
+
+    expect(parseDesktopStartupRecoveryAction('dsh-recovery://execute-repair?option=A'))
+      .toEqual({ action: 'execute-repair', option: 'A' })
+    expect(parseDesktopStartupRecoveryAction('dsh-recovery://execute-repair?option=D'))
+      .toEqual({ action: 'execute-repair', option: 'D' })
   })
 
   it.each([
@@ -377,6 +458,11 @@ describe('Desktop startup recovery action parser', () => {
     'dsh-recovery://preview-disable?id=opaque-id_0001&id=opaque-id_0002',
     'dsh-recovery://preview-disable?id=opaque-id_0001&extra=value',
     `dsh-recovery://preview-disable?id=${'x'.repeat(161)}`,
+    'dsh-recovery://execute-repair',
+    'dsh-recovery://execute-repair?option=',
+    'dsh-recovery://execute-repair?option=A&option=B',
+    'dsh-recovery://execute-repair?option=A&extra=x',
+    'dsh-recovery://execute-repair?option=<xss>',
   ])('rejects invalid or over-privileged navigation: %s', href => {
     expect(parseDesktopStartupRecoveryAction(href)).toBeUndefined()
   })

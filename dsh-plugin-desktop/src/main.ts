@@ -32,6 +32,7 @@ import {
   type DesktopRun,
 } from './crash-evidence.ts'
 import { exportDesktopDiagnostics } from './diagnostic-export.ts'
+import { writeDegradedBundles } from './degraded-mode.ts'
 import { createDesktopLifecycleRecorder } from './lifecycle-events.ts'
 import type {
   DesktopLifecycleFailureReason,
@@ -104,6 +105,36 @@ import { desktopLocaleFromLanguageTag } from './tray-locale.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const PRODUCT_NAME = 'DSH Desktop'
+
+/** Best-effort evidence wired into the recovery window's diagnostics export. */
+interface StartupRecoveryExportEvidence {
+  /** Crash stack captured from the failed boot, exported as error-stack.txt. */
+  readonly errorStack?: string
+}
+
+/** Explicit allowlist of non-secret environment keys included in diagnostics. */
+const DIAGNOSTIC_ENV_SNAPSHOT_KEYS = [
+  'DSH_TELEMETRY_DISABLED',
+  'HOME',
+  'USERPROFILE',
+  'LANG',
+  'LC_ALL',
+  'SHELL',
+  'COMSPEC',
+  'TZ',
+  'NODE_ENV',
+] as const
+
+/** Render a small allowlisted env projection for diagnostics, masking per line. */
+function buildDiagnosticEnvSnapshot(environment: NodeJS.ProcessEnv): string {
+  const lines: string[] = []
+  for (const name of DIAGNOSTIC_ENV_SNAPSHOT_KEYS) {
+    const value = environment[name]
+    if (value === undefined) continue
+    lines.push(`${name}=${maskSecrets(value)}`)
+  }
+  return lines.join('\n')
+}
 
 class RendererStartupFailure extends Error {
   constructor(
@@ -284,6 +315,8 @@ async function start(): Promise<void> {
   let protectedInstallVerificationActive = false
   let startupStage: DesktopStartupFailureStage = 'electron-ready'
   const appVersion = desktopProductVersion()
+  /** Durable degraded-mode state shared by the recovery window and the main window. */
+  const degradedStatePath = join(app.getPath('userData'), 'startup-recovery', 'degraded.json')
   try {
     logSink = new LogFileSink(join(app.getPath('userData'), 'logs'), {
       maxFileBytes: 10 * 1024 * 1024,
@@ -391,6 +424,7 @@ async function start(): Promise<void> {
   const openStartupRecoveryWindow = async (
     failureDetail: string,
     controller: DesktopStartupRecoveryController | undefined,
+    evidence: StartupRecoveryExportEvidence = {},
   ): Promise<'restart' | 'quit' | 'unavailable'> => {
     if (!app.isReady()) return 'unavailable'
     try {
@@ -402,11 +436,31 @@ async function start(): Promise<void> {
         locale: desktopLocaleFromLanguageTag(app.getLocale()),
         failureStage: startupStage,
         failureDetail: maskSecrets(failureDetail),
-        exportDiagnostics: async signal => await exportDesktopDiagnostics(app.getPath('userData'), {
-          appVersion,
-          crashDumpsDir: app.getPath('crashDumps'),
-          signal,
-        }),
+        degradedStatePath,
+        exportDiagnostics: async signal => {
+          let profileBundles: string | undefined
+          if (controller !== undefined) {
+            try {
+              const snapshot = await controller.snapshot()
+              profileBundles = JSON.stringify(snapshot.bundles.map(({ packageName, status, owner, action }) => ({
+                packageName,
+                status,
+                owner,
+                action,
+              })))
+            } catch {
+              // Best-effort: an unreadable bundle snapshot must not fail the export.
+            }
+          }
+          return await exportDesktopDiagnostics(app.getPath('userData'), {
+            appVersion,
+            crashDumpsDir: app.getPath('crashDumps'),
+            signal,
+            ...(evidence.errorStack === undefined ? {} : { errorStack: evidence.errorStack }),
+            ...(profileBundles === undefined ? {} : { profileBundles }),
+            envSnapshot: buildDiagnosticEnvSnapshot(process.env),
+          })
+        },
         ...(recoveryTerminalAvailable ? { openTerminal: () => { runtime.openTerminal() } } : {}),
         ...(startupRecoveryProfileActions === undefined ? {} : { profileActions: startupRecoveryProfileActions }),
         ...(restoreLastKnownGoodProfile === undefined ? {} : { rollbackLastKnownGood: restoreLastKnownGoodProfile }),
@@ -559,6 +613,7 @@ async function start(): Promise<void> {
         generationId,
       }),
       installRecovery,
+      degradedStatePath,
     })
     startupStage = 'install-recovery'
     lifecycleRecorder.transitionStartupStage(startupStage)
@@ -616,7 +671,15 @@ async function start(): Promise<void> {
           }
         },
       },
+      degradedStatePath,
     )
+    // The desktop-shell patch config is the validated channel through which the
+    // plugin receives launcher-owned values; degraded mode rides the same path
+    // so index.ts can inject the `dsh-degraded` marker into the renderer URL.
+    const desktopShellPatch = prepared.patches.find(patch => patch.id === 'desktop-shell')
+    if (desktopShellPatch !== undefined && desktopShellPatch.config !== undefined) {
+      desktopShellPatch.config = { ...desktopShellPatch.config, degradedStatePath }
+    }
     if (profileCheckpoint === undefined) {
       try {
         profileCheckpoint = new DesktopProfileCheckpoint({
@@ -992,6 +1055,20 @@ async function start(): Promise<void> {
         }
       },
     })
+    // The main-window degraded banner's one-click exit routes here: clear the
+    // degraded set, then restart into a full plugin profile. No recovery-window
+    // detour is needed for the already-running degraded case.
+    runtime.setRecoveryActionHandler((action) => {
+      if (action !== 'restart') return
+      try {
+        writeDegradedBundles(degradedStatePath, [])
+      } catch (cause) {
+        electronLogger.error(`${BIN_NAME}: failed to clear degraded state: ${cause instanceof Error ? cause.message : String(cause)}`)
+      }
+      void runtime.requestRestart().catch((restartCause: unknown) => {
+        electronLogger.error(`${BIN_NAME}: failed to restart after degraded recovery: ${restartCause instanceof Error ? restartCause.message : String(restartCause)}`)
+      })
+    })
     const [, rendererVerdict] = await Promise.all([
       runtime.mountScheduled(),
       rendererBoot,
@@ -1099,10 +1176,13 @@ async function start(): Promise<void> {
     }
     if (exitCode !== 0
       && (failureRoute === 'protected-install-recovery' || failureRoute === 'startup-recovery')) {
-      const detail = cause instanceof Error ? cause.message : String(cause)
+      // The JS stack begins with the message, so it doubles as the window's
+      // failureDetail and carries the full stack for AI diagnostics.
+      const errorStack = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)
       const recoveryResult = await openStartupRecoveryWindow(
-        detail,
+        errorStack,
         failureCommit.recoveryActionsSafe ? startupRecoveryController : undefined,
+        { errorStack },
       )
       if (recoveryResult === 'restart') {
         nativeExit.requestRelaunch()

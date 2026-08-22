@@ -43,6 +43,18 @@ html:has([aria-modal="true"]) .dshDesktopWindowsCaptionRow::before,
 html:has([aria-modal="true"]) .dshDesktopMacCaptionRow::before,
 html:has([aria-modal="true"]) .dshDesktopSidebarSurface,
 html:has([aria-modal="true"]) .dshDesktopSidebarSurface::before { -webkit-app-region: no-drag !important; }
+/* Safe-degraded-mode notice floats above the conversation in the bottom-right
+   corner so it never displaces the frame's content rows. */
+.dshDesktopDegradedBubble { position: absolute; z-index: 90; right: 16px; bottom: 16px; max-width: 340px; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: #fff7e6; color: #7a4d00; border: 1px solid #f2d9a8; border-radius: 10px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.12); font-size: 13px; line-height: 1.5; -webkit-app-region: no-drag; }
+.dshDesktopDegradedHeader { display: flex; gap: 8px; align-items: center; }
+.dshDesktopDegradedIcon { flex: none; }
+.dshDesktopDegradedTitle { font-weight: 600; }
+.dshDesktopDegradedBody { opacity: 0.92; }
+.dshDesktopDegradedActions { display: flex; gap: 14px; align-items: center; margin-top: 2px; }
+.dshDesktopDegradedDismiss { appearance: none; border: none; background: transparent; color: inherit; opacity: 0.7; cursor: pointer; padding: 0; font-size: 13px; }
+.dshDesktopDegradedDismiss:hover { opacity: 1; }
+.dshDesktopDegradedRecover { color: inherit; font-weight: 600; text-decoration: none; border-bottom: 1px solid currentColor; white-space: nowrap; }
+.dshDesktopDegradedRecover:hover { opacity: 0.85; }
 @media (prefers-reduced-motion: reduce) {
   .dshDesktopFrame,
   .dshDesktopResizeHandle { transition: none !important; }

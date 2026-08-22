@@ -32,9 +32,21 @@ describe('desktop client environment', () => {
 
   it('accepts the Electron-owned kebab query markers', () => {
     expect(parseDesktopClientEnvironment('?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin'))
-      .toEqual({ mode: 'advanced', platform: 'darwin' })
+      .toEqual({ mode: 'advanced', platform: 'darwin', degradedBundles: [] })
     expect(parseDesktopClientEnvironment('?dsh-desktop-platform=win32&dsh-desktop-mode=compatibility'))
-      .toEqual({ mode: 'compatibility', platform: 'win32' })
+      .toEqual({ mode: 'compatibility', platform: 'win32', degradedBundles: [] })
+  })
+
+  it('parses the degraded-bundle marker, defaulting to empty when absent or malformed', () => {
+    expect(parseDesktopClientEnvironment(
+      '?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin&dsh-degraded=plugin-a,plugin-b',
+    )).toEqual({ mode: 'advanced', platform: 'darwin', degradedBundles: ['plugin-a', 'plugin-b'] })
+    expect(parseDesktopClientEnvironment(
+      '?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin&dsh-degraded=%20plugin-a%20,plugin-b',
+    )).toEqual({ mode: 'advanced', platform: 'darwin', degradedBundles: ['plugin-a', 'plugin-b'] })
+    expect(parseDesktopClientEnvironment(
+      '?dsh-desktop-mode=advanced&dsh-desktop-platform=darwin&dsh-degraded=,,,',
+    )).toEqual({ mode: 'advanced', platform: 'darwin', degradedBundles: [] })
   })
 
   it.each([

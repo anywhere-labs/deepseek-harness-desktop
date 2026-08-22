@@ -23,6 +23,18 @@ export interface DiagnosticExportOptions {
   readonly runStatePath?: string
   /** Current-run lifecycle JSONL written by the Electron launcher. */
   readonly lifecycleEvidencePath?: string
+  /** Crash stack text captured from a failed boot, exported as error-stack.txt. */
+  readonly errorStack?: string
+  /** Installed plugin manifest JSON text, exported as plugin-manifest.json. */
+  readonly pluginManifest?: string
+  /** Upstream and component version JSON text, exported as versions.json. */
+  readonly versions?: string
+  /** Active profile bundle JSON text, exported as profile-bundles.json. */
+  readonly profileBundles?: string
+  /** Active profile config file, exported under config/<filename>. */
+  readonly profileConfig?: { readonly filename: string; readonly text: string }
+  /** Environment snapshot text, exported as env-snapshot.txt. */
+  readonly envSnapshot?: string
   /** Cancels the short-lived worker when its owning UI or process operation ends. */
   readonly signal?: AbortSignal
 }
@@ -33,6 +45,18 @@ export interface DesktopDiagnosticExportOptions {
   readonly crashDumpsDir?: string
   readonly maxEvidenceBytes?: number
   readonly signal?: AbortSignal
+  /** Crash stack text captured from a failed boot, exported as error-stack.txt. */
+  readonly errorStack?: string
+  /** Installed plugin manifest JSON text, exported as plugin-manifest.json. */
+  readonly pluginManifest?: string
+  /** Upstream and component version JSON text, exported as versions.json. */
+  readonly versions?: string
+  /** Active profile bundle JSON text, exported as profile-bundles.json. */
+  readonly profileBundles?: string
+  /** Active profile config file, exported under config/<filename>. */
+  readonly profileConfig?: { readonly filename: string; readonly text: string }
+  /** Environment snapshot text, exported as env-snapshot.txt. */
+  readonly envSnapshot?: string
 }
 
 function workerEntryUrl(): URL {
@@ -113,6 +137,12 @@ export function exportDiagnosticsZip(
       ...(options.crashDumpsDir === undefined ? {} : { crashDumpsDir: options.crashDumpsDir }),
       ...(options.runStatePath === undefined ? {} : { runStatePath: options.runStatePath }),
       ...(options.lifecycleEvidencePath === undefined ? {} : { lifecycleEvidencePath: options.lifecycleEvidencePath }),
+      ...(options.errorStack === undefined ? {} : { errorStack: options.errorStack }),
+      ...(options.pluginManifest === undefined ? {} : { pluginManifest: options.pluginManifest }),
+      ...(options.versions === undefined ? {} : { versions: options.versions }),
+      ...(options.profileBundles === undefined ? {} : { profileBundles: options.profileBundles }),
+      ...(options.profileConfig === undefined ? {} : { profileConfig: options.profileConfig }),
+      ...(options.envSnapshot === undefined ? {} : { envSnapshot: options.envSnapshot }),
     },
     resourceLimits: { maxOldGenerationSizeMb: 256 },
   })
@@ -133,5 +163,11 @@ export function exportDesktopDiagnostics(
     lifecycleEvidencePath: desktopLifecycleEvidencePath(userDataDir),
     ...(options.maxEvidenceBytes === undefined ? {} : { maxEvidenceBytes: options.maxEvidenceBytes }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.errorStack === undefined ? {} : { errorStack: options.errorStack }),
+    ...(options.pluginManifest === undefined ? {} : { pluginManifest: options.pluginManifest }),
+    ...(options.versions === undefined ? {} : { versions: options.versions }),
+    ...(options.profileBundles === undefined ? {} : { profileBundles: options.profileBundles }),
+    ...(options.profileConfig === undefined ? {} : { profileConfig: options.profileConfig }),
+    ...(options.envSnapshot === undefined ? {} : { envSnapshot: options.envSnapshot }),
   })
 }

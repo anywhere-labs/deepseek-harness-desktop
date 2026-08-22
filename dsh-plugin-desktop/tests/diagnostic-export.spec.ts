@@ -378,4 +378,57 @@ describe('exportDiagnosticsZip', () => {
     expect(names).not.toContain('dsh-2026-08-14.log')
     expect(zip.readAsText('system-info.txt')).toContain('omitted-log-files: 2')
   })
+
+  it('reports included-evidence-bytes as the true running total including worker evidence', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-dx-worker-evidence-'))
+    const logs = join(root, 'logs')
+    mkdirSync(logs)
+    writeFileSync(join(logs, 'dsh-2026-08-16.log'), 'hello\n')
+    const errorStack = 'Error: Cannot find module \'plugin-x\''
+
+    const out = await exportDiagnosticsZip(logs, root, {
+      appVersion: APP_VERSION,
+      errorStack,
+    })
+
+    const zip = new AdmZip(out)
+    expect(zip.readAsText('error-stack.txt')).toBe(errorStack)
+    const expected = Buffer.byteLength('hello\n', 'utf8') + Buffer.byteLength(errorStack, 'utf8')
+    expect(zip.readAsText('system-info.txt')).toContain(`included-evidence-bytes: ${String(expected)}`)
+  })
+})
+
+import {
+  buildWorkerEvidenceEntries,
+} from '../src/diagnostic-export-worker.ts'
+import type { DiagnosticExportWorkerData } from '../src/diagnostic-export-worker.ts'
+
+it('maps worker evidence data into the archive layout', () => {
+  const data: DiagnosticExportWorkerData = {
+    logsDir: '/logs',
+    userDataDir: '/data',
+    appVersion: '1.0.0',
+    maxEvidenceBytes: 50 * 1024 * 1024,
+    errorStack: 'Error: Cannot find module \'plugin-x\'',
+    pluginManifest: '[]',
+    versions: 'upstream: a1b2c3',
+    profileBundles: '{}',
+    profileConfig: { filename: 'package.json', text: '{}' },
+    envSnapshot: 'DSH_TELEMETRY_DISABLED=1',
+  }
+  expect(buildWorkerEvidenceEntries(data).map(entry => entry.name)).toEqual([
+    'error-stack.txt',
+    'plugin-manifest.json',
+    'versions.json',
+    'profile-bundles.json',
+    'config/package.json',
+    'env-snapshot.txt',
+  ])
+})
+
+it('omits evidence sources that are absent from worker data', () => {
+  const data: DiagnosticExportWorkerData = {
+    logsDir: '/logs', userDataDir: '/data', appVersion: '1.0.0', maxEvidenceBytes: 1,
+  }
+  expect(buildWorkerEvidenceEntries(data)).toEqual([])
 })

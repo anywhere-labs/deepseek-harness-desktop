@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { composeEntries, initProfile, PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
 import {
+  DEFAULT_DESKTOP_MARKET_SNAPSHOT,
   DESKTOP_PACKAGE_NAME,
   desktopShellModeFromSettings,
   desktopStartupSettingsFromSettings,
@@ -435,6 +436,32 @@ describe('desktop profile composition', {
     expect(composeEntries([prepared.patches])).not.toContainEqual(expect.objectContaining({
       id: 'third-party-marker',
     }))
+  })
+
+  it('drops a degraded mutable external bundle but keeps a core bundle', () => {
+    const home = temporaryHome()
+    const packageName = 'plugin-x'
+    installBundle(home, packageName, '- insert:\n    - id: plugin-x-marker\n      name: cordis:example\n')
+    const profileManifestPath = join(ensureDesktopProfile(home), 'package.json')
+    const profileManifest = JSON.parse(readFileSync(profileManifestPath, 'utf8')) as {
+      dsh: { profile: { bundles: string[] } }
+    }
+    profileManifest.dsh.profile.bundles.push(packageName)
+    writeFileSync(profileManifestPath, JSON.stringify(profileManifest) + '\n')
+    const degradedStatePath = join(home, 'user-data', 'degraded-mode', 'degraded.json')
+    mkdirSync(dirname(degradedStatePath), { recursive: true })
+    writeFileSync(degradedStatePath, JSON.stringify({
+      version: 1,
+      bundles: [packageName],
+    }) + '\n')
+
+    const prepared = prepareDesktopProfile(
+      undefined, home, 'darwin', 'desktop', undefined, DEFAULT_DESKTOP_MARKET_SNAPSHOT,
+      undefined, undefined, degradedStatePath,
+    )
+    const layerNames = prepared.profile.layers.map(layer => layer.packageName)
+    expect(layerNames).not.toContain(packageName)
+    expect(layerNames).toContain('@deepseek-ai/dsh-base')
   })
 
   it('filters an unselected dshmarket bundle before resolving or parsing its patch', () => {

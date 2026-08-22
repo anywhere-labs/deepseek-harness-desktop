@@ -6,6 +6,9 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { DesktopLocale } from './runtime.ts'
+import { readDegradedBundles, writeDegradedBundles } from './degraded-mode.ts'
+import type { AiDiagnosis } from './diagnostic-analyzer.ts'
+import type { RepairSelfCheckReport } from './repair-self-check.ts'
 import { applicationNeedsReveal, revealApplication } from './electron-reveal.ts'
 import {
   DesktopStartupRecoveryController,
@@ -16,12 +19,14 @@ import {
 
 const RECOVERY_SCHEME = 'dsh-recovery:'
 const RECOVERY_DOCUMENT = fileURLToPath(new URL('./native-ui/recovery.html', import.meta.url))
-const MAX_FAILURE_DETAIL_LENGTH = 4_000
+const MAX_FAILURE_DETAIL_LENGTH = 16_000
 const DEFAULT_RECOVERY_WIDTH = 800
 const DEFAULT_RECOVERY_HEIGHT = 760
 const DEFAULT_RECOVERY_MIN_WIDTH = 680
 const DEFAULT_RECOVERY_MIN_HEIGHT = 560
 const RECOVERY_WORK_AREA_INSET = 48
+/** Safe token for the user-chosen repair plan carried in the no-script action bus. */
+const REPAIR_OPTION_PATTERN = /^[A-Za-z0-9_-]{1,32}$/u
 
 type RecoveryWindowResult = 'restart' | 'quit'
 type RecoveryNoticeTone = 'info' | 'success' | 'warning' | 'error'
@@ -53,6 +58,21 @@ interface RecoveryDiagnosticsState {
   readonly filename?: string
 }
 
+/** Player-visible result of a user-approved repair plan in this generation. */
+export interface DesktopStartupRecoveryAiResult {
+  readonly planId: string
+  readonly status: string
+  readonly message: string
+}
+
+/** Selection + result state for the AI-assisted repair area. */
+export interface DesktopStartupRecoveryAiAnalysis {
+  readonly selectedOption?: string
+  readonly result?: DesktopStartupRecoveryAiResult
+  readonly diagnosis?: AiDiagnosis
+  readonly selfCheck?: RepairSelfCheckReport
+}
+
 export interface DesktopStartupRecoveryWindowOptions {
   readonly controller?: DesktopStartupRecoveryController
   /** Fixed active-profile paths selected by the main process. */
@@ -67,6 +87,8 @@ export interface DesktopStartupRecoveryWindowOptions {
   readonly profileActions?: DesktopStartupRecoveryProfileActions
   /** Restore the last healthy Profile and its declarative checkpoint. */
   readonly rollbackLastKnownGood?: (token: string) => void | Promise<void>
+  /** Durable degraded-mode state path read at open; absent means no degraded card. */
+  readonly degradedStatePath?: string
 }
 
 export interface DesktopStartupRecoveryProfile {
@@ -173,6 +195,9 @@ export interface DesktopStartupRecoveryViewModel {
   readonly terminalAvailable?: boolean
   readonly profileCreatorAvailable?: boolean
   readonly rollbackLastKnownGoodAvailable?: boolean
+  readonly aiAnalysis: DesktopStartupRecoveryAiAnalysis
+  /** Bundles left degraded; the window offers to restore them when non-empty. */
+  readonly degradedBundles?: readonly string[]
 }
 
 interface RecoveryCopy {
@@ -223,6 +248,19 @@ interface RecoveryCopy {
   readonly openProfilePatch: string
   readonly openProfileManifest: string
   readonly openProfileDirectory: string
+  readonly aiAnalysis: string
+  readonly aiLead: string
+  readonly aiRunAnalysis: string
+  readonly aiLoadDiagnostics: string
+  readonly aiAutoReadGenerated: string
+  readonly aiSelfCheckPassed: string
+  readonly aiSelfCheckFailed: string
+  readonly executeRepair: string
+  readonly repairSelected: string
+  readonly degradedMode: string
+  readonly degradedBody: string
+  readonly restoreFullPlugins: string
+  readonly repairUnavailable: string
 }
 
 const COPY: Record<DesktopLocale, RecoveryCopy> = {
@@ -284,6 +322,19 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     openProfilePatch: 'Edit configuration patch',
     openProfileManifest: 'Edit plugin manifest',
     openProfileDirectory: 'Open configuration folder',
+    aiAnalysis: 'AI-assisted failure analysis',
+    aiLead: 'Pick one repair plan to apply. AI only suggests and marks risk; it never changes your configuration until you confirm.',
+    aiRunAnalysis: 'Run AI failure analysis',
+    aiLoadDiagnostics: 'Load local diagnostics package',
+    aiAutoReadGenerated: 'Auto-read generated package',
+    aiSelfCheckPassed: 'Passed',
+    aiSelfCheckFailed: 'Failed',
+    executeRepair: 'Apply repair',
+    repairSelected: 'Repair plan selected',
+    degradedMode: 'Degraded mode',
+    degradedBody: 'Some plugins could not load and DSH Desktop is running in degraded mode. Restore the full plugin set to restart and reload every plugin.',
+    restoreFullPlugins: 'Restore full plugin set',
+    repairUnavailable: 'Not available',
   },
   zh: {
     title: 'DSH Desktop 恢复',
@@ -343,7 +394,41 @@ const COPY: Record<DesktopLocale, RecoveryCopy> = {
     openProfilePatch: '编辑配置补丁',
     openProfileManifest: '编辑插件加载清单',
     openProfileDirectory: '打开配置目录',
+    aiAnalysis: 'AI 辅助故障分析',
+    aiLead: '选择一项修复方案后执行。AI 只给出建议与风险提示，未经你确认不会修改任何配置。',
+    aiRunAnalysis: '运行 AI 故障分析',
+    aiLoadDiagnostics: '加载本地诊断包',
+    aiAutoReadGenerated: '自动读取已生成包',
+    aiSelfCheckPassed: '通过',
+    aiSelfCheckFailed: '失败',
+    executeRepair: '执行修复',
+    repairSelected: '已选择修复方案',
+    degradedMode: '降级模式',
+    degradedBody: '部分插件未能加载，DSH Desktop 正在降级模式下运行。恢复完整插件集后将重新启动，并重新加载全部插件。',
+    restoreFullPlugins: '恢复完整插件集',
+    repairUnavailable: '暂不可用',
   },
+}
+
+/** Static repair plans offered to the user. AI enriches these with root cause and risk. */
+const REPAIR_PLAN_OPTIONS: Record<DesktopLocale, ReadonlyArray<{
+  readonly id: string
+  readonly title: string
+  readonly risk: string
+  readonly disabled: boolean
+}>> = {
+  en: [
+    { id: 'A', title: 'Temporarily disable the failing plugin', risk: 'Low risk — only that plugin stops loading.', disabled: false },
+    { id: 'B', title: 'Roll back the submodule version', risk: 'High risk (developers) — changes the upstream submodule pin.', disabled: true },
+    { id: 'C', title: 'Reset the plugin manifest', risk: 'Medium risk — may drop custom plugin combinations.', disabled: true },
+    { id: 'D', title: 'Restore the default config', risk: 'Low–medium risk — restores the last healthy profile snapshot.', disabled: false },
+  ],
+  zh: [
+    { id: 'A', title: '临时禁用故障插件', risk: '低风险 —— 仅该插件不再加载。', disabled: false },
+    { id: 'B', title: '回滚子模块版本', risk: '高风险（仅开发者） —— 会改动上游子模块版本锁定。', disabled: true },
+    { id: 'C', title: '重置插件加载清单', risk: '中风险 —— 可能丢失自定义插件组合。', disabled: true },
+    { id: 'D', title: '恢复默认配置', risk: '低~中风险 —— 恢复上次健康配置快照。', disabled: false },
+  ],
 }
 
 function escapeHtml(value: string): string {
@@ -385,6 +470,31 @@ function confirmationHtml(model: DesktopStartupRecoveryViewModel, copy: Recovery
   }
   const rollback = confirmation.kind === 'rollback'
   return `<section class="card confirmation"><h2>${escapeHtml(rollback ? copy.confirmRollback : copy.confirmRetry)}</h2><p><code>${escapeHtml(confirmation.preview.packageName)}@${escapeHtml(confirmation.preview.packageVersion)}</code></p><p>${escapeHtml(rollback ? copy.confirmRollbackBody : copy.confirmRetryBody)}</p><div class="actions">${button(copy.cancel, 'home')}${button(rollback ? copy.rollback : copy.retry, rollback ? 'confirm-rollback' : 'confirm-retry', confirmation.preview.previewId, true)}</div></section>`
+}
+
+/** Repair options rendered as a no-script radio form that submits to the action bus. */
+function aiAnalysisHtml(model: DesktopStartupRecoveryViewModel, copy: RecoveryCopy): string {
+  const plans = REPAIR_PLAN_OPTIONS[model.locale]
+  const selected = model.aiAnalysis.selectedOption ?? plans[0]?.id ?? ''
+  const rows = plans.map(plan =>
+    `<label class="plan-option"><input type="radio" name="option" value="${escapeHtml(plan.id)}"${plan.id === selected && !plan.disabled ? ' checked' : ''}${plan.disabled ? ' disabled' : ''}><span><strong>${escapeHtml(plan.title)}</strong><span class="muted">${escapeHtml(plan.risk)}</span>${plan.disabled ? `<span class="muted">${escapeHtml(copy.repairUnavailable)}</span>` : ''}</span></label>`,
+  ).join('')
+  const diagnosis = model.aiAnalysis.diagnosis
+  const diagnosisHtml = diagnosis === undefined
+    ? ''
+    : `<p><strong>${escapeHtml(diagnosis.rootCause)}</strong></p><p><span class="pill">${escapeHtml(diagnosis.severity)}</span></p><p>${escapeHtml(diagnosis.recommendation)}</p><p class="muted">${escapeHtml(diagnosis.disclaimer)}</p>`
+  const selfCheck = model.aiAnalysis.selfCheck
+  const selfCheckRows = selfCheck?.checks.map(check =>
+    `<li><code>${escapeHtml(check.name)}</code><span class="pill">${escapeHtml(check.passed ? copy.aiSelfCheckPassed : copy.aiSelfCheckFailed)}</span><span class="muted">${escapeHtml(check.detail)}</span></li>`,
+  ).join('') ?? ''
+  const selfCheckHtml = selfCheck === undefined
+    ? ''
+    : `<p>${escapeHtml(selfCheck.recommendation)}</p>${selfCheckRows.length === 0 ? '' : `<ul>${selfCheckRows}</ul>`}`
+  const restartCta = selfCheck?.ok === true ? button(copy.restart, 'restart', undefined, true) : ''
+  const result = model.aiAnalysis.result === undefined
+    ? ''
+    : noticeHtml({ tone: 'info', title: copy.repairSelected, body: model.aiAnalysis.result.message })
+  return `<section class="card"><h2>${escapeHtml(copy.aiAnalysis)}</h2><p>${escapeHtml(copy.aiLead)}</p><div class="actions">${button(copy.aiLoadDiagnostics, 'ai-analyze')}${button(copy.aiAutoReadGenerated, 'ai-analyze')}</div>${diagnosisHtml}${selfCheckHtml}${restartCta}<form method="GET" action="${escapeHtml(recoveryHref('execute-repair'))}">${rows}<div class="actions"><button type="submit" class="button primary">${escapeHtml(copy.executeRepair)}</button></div></form>${result}</section>`
 }
 
 /** Render the complete no-script local recovery document. */
@@ -431,18 +541,23 @@ export function renderDesktopStartupRecoveryHtml(model: DesktopStartupRecoveryVi
   const restart = model.restartReady || pending === undefined
     ? button(copy.restart, 'restart', undefined, model.restartReady)
     : ''
+  const repairAreaHtml = aiAnalysisHtml(model, copy)
+  const degradedHtml = (model.degradedBundles?.length ?? 0) === 0
+    ? ''
+    : `<section class="card degraded"><h2>${escapeHtml(copy.degradedMode)}</h2><p>${escapeHtml(copy.degradedBody)}</p><div class="actions">${button(copy.restoreFullPlugins, 'restore-full-plugins', undefined, true)}</div></section>`
   const body = confirmation.length > 0
     ? confirmation
-    : `${pendingHtml}${bundlesHtml}${profileHtml}${configurationHtml}<section class="card"><h2>${escapeHtml(copy.diagnostics)}</h2><p>${escapeHtml(diagnosticsText)}</p>${model.diagnostics.filename === undefined ? '' : `<p><code>${escapeHtml(model.diagnostics.filename)}</code></p>`}<p class="muted">${escapeHtml(copy.privacy)}</p><div class="actions">${diagnosticAction}${terminalAction}${rollbackAction}</div></section>`
+    : `${degradedHtml}${pendingHtml}${bundlesHtml}${profileHtml}${configurationHtml}<section class="card"><h2>${escapeHtml(copy.diagnostics)}</h2><p>${escapeHtml(diagnosticsText)}</p>${model.diagnostics.filename === undefined ? '' : `<p><code>${escapeHtml(model.diagnostics.filename)}</code></p>`}<p class="muted">${escapeHtml(copy.privacy)}</p><div class="actions">${diagnosticAction}${terminalAction}${rollbackAction}</div></section>${repairAreaHtml}`
   return `<!doctype html>
 <html lang="${model.locale === 'zh' ? 'zh-CN' : 'en'}">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <!-- form-action is limited to the recovery bus scheme so the no-script radio form can submit; the bus always preventDefault()s and allowlists. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action dsh-recovery:; frame-ancestors 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(copy.title)}</title>
   <style>
-    :root{color-scheme:light dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f3f5;color:#202124}*{box-sizing:border-box}body{margin:0}main{width:min(820px,100%);margin:0 auto;padding:34px 30px 28px}h1{font-size:28px;margin:0 0 8px}h2{font-size:17px;margin:0 0 10px}p{margin:7px 0}.lead{color:#5f6368;margin-bottom:20px}.profile{font-size:13px;color:#6b7280}.card,.notice{background:#fff;border:1px solid #dfe1e5;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 1px 2px #0000000d}.error-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:8px;padding:12px}.notice strong{display:block}.notice.error,.notice.warning{border-color:#d97706}.notice.success{border-color:#16a34a}.notice.info{border-color:#2563eb}ul{list-style:none;padding:0;margin:14px 0 0;border-top:1px solid #e5e7eb}li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e5e7eb}.meta{display:block;color:#6b7280;font-size:12px;margin-top:2px}.row-actions,.actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.actions{margin-top:15px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 13px;border:1px solid #9aa0a6;border-radius:9px;color:inherit;text-decoration:none;background:transparent}.button:hover{background:#eef0f2}.button.primary{background:#1a73e8;border-color:#1a73e8;color:white}.pill{font-size:12px;padding:3px 8px;border-radius:999px;background:#e8eaed}.muted{font-size:12px;color:#6b7280}.footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}.busy{opacity:.7;pointer-events:none}@media(max-width:640px){main{padding:22px 16px 18px}h1{font-size:24px}.card,.notice{padding:14px}.footer{justify-content:stretch}.footer .button{flex:1 1 180px}}@media(max-width:420px){main{padding:18px 12px 14px}li{align-items:stretch;flex-direction:column}.row-actions,.actions,.footer{align-items:stretch;flex-direction:column}.button{width:100%}}@media(prefers-color-scheme:dark){:root{background:#202124;color:#f1f3f4}.lead,.profile,.meta,.muted{color:#9aa0a6}.card,.notice{background:#292a2d;border-color:#45464a}.error-detail{background:#202124}.button:hover{background:#35363a}.pill{background:#3c4043}ul,li{border-color:#45464a}}
+    :root{color-scheme:light dark;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f3f5;color:#202124}*{box-sizing:border-box}body{margin:0}main{width:min(820px,100%);margin:0 auto;padding:34px 30px 28px}h1{font-size:28px;margin:0 0 8px}h2{font-size:17px;margin:0 0 10px}p{margin:7px 0}.lead{color:#5f6368;margin-bottom:20px}.profile{font-size:13px;color:#6b7280}.card,.notice{background:#fff;border:1px solid #dfe1e5;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 1px 2px #0000000d}.error-detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:130px;overflow:auto;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:8px;padding:12px}.notice strong{display:block}.notice.error,.notice.warning{border-color:#d97706}.notice.success{border-color:#16a34a}.notice.info{border-color:#2563eb}ul{list-style:none;padding:0;margin:14px 0 0;border-top:1px solid #e5e7eb}li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e5e7eb}.meta{display:block;color:#6b7280;font-size:12px;margin-top:2px}.row-actions,.actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.actions{margin-top:15px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 13px;border:1px solid #9aa0a6;border-radius:9px;color:inherit;text-decoration:none;background:transparent}.button:hover{background:#eef0f2}.button.primary{background:#1a73e8;border-color:#1a73e8;color:white}.pill{font-size:12px;padding:3px 8px;border-radius:999px;background:#e8eaed}.plan-option{display:block;padding:7px 0}.plan-option .muted{display:block;margin-left:22px}button.button{cursor:pointer;font:inherit}.muted{font-size:12px;color:#6b7280}.footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}.busy{opacity:.7;pointer-events:none}@media(max-width:640px){main{padding:22px 16px 18px}h1{font-size:24px}.card,.notice{padding:14px}.footer{justify-content:stretch}.footer .button{flex:1 1 180px}}@media(max-width:420px){main{padding:18px 12px 14px}li{align-items:stretch;flex-direction:column}.row-actions,.actions,.footer{align-items:stretch;flex-direction:column}.button{width:100%}}@media(prefers-color-scheme:dark){:root{background:#202124;color:#f1f3f4}.lead,.profile,.meta,.muted{color:#9aa0a6}.card,.notice{background:#292a2d;border-color:#45464a}.error-detail{background:#202124}.button:hover{background:#35363a}.pill{background:#3c4043}ul,li{border-color:#45464a}}
   </style>
 </head>
 <body><main class="${model.busy ? 'busy' : ''}">
@@ -460,7 +575,7 @@ export function renderDesktopStartupRecoveryHtml(model: DesktopStartupRecoveryVi
 /** Parse only the fixed action origin used by this no-script document. */
 export function parseDesktopStartupRecoveryAction(
   href: string,
-): { readonly action: string; readonly id?: string; readonly name?: string } | undefined {
+): { readonly action: string; readonly id?: string; readonly name?: string; readonly option?: string } | undefined {
   let url: URL
   try { url = new URL(href) } catch { return undefined }
   if (url.protocol !== RECOVERY_SCHEME
@@ -490,8 +605,20 @@ export function parseDesktopStartupRecoveryAction(
     'rollback-last-known-good',
     'restart',
     'quit',
+    'execute-repair',
+    'ai-analyze',
+    'restore-full-plugins',
   ])
   if (!allowed.has(action)) return undefined
+  if (action === 'execute-repair') {
+    const keys = [...url.searchParams.keys()]
+    if (keys.some(key => key !== 'option') || url.searchParams.getAll('option').length !== 1) {
+      return undefined
+    }
+    const option = url.searchParams.get('option') ?? ''
+    if (REPAIR_OPTION_PATTERN.test(option)) return { action, option }
+    return undefined
+  }
   const keys = [...url.searchParams.keys()]
   if (keys.some(key => key !== 'id' && key !== 'name') || url.searchParams.getAll('id').length > 1 || url.searchParams.getAll('name').length > 1) return undefined
   const id = url.searchParams.get('id') ?? undefined
@@ -515,6 +642,8 @@ export class DesktopStartupRecoveryWindow {
   private readonly diagnosticAbort = new AbortController()
   private confirmation: RecoveryConfirmation | undefined
   private notice: RecoveryNotice | undefined
+  private aiAnalysis: DesktopStartupRecoveryAiAnalysis = {}
+  private degradedBundles: readonly string[] = []
   private busy = false
   private restartReady = false
   private profiles: readonly DesktopStartupRecoveryProfile[] | undefined
@@ -532,6 +661,7 @@ export class DesktopStartupRecoveryWindow {
       this.snapshotError = cause instanceof Error ? cause.message : String(cause)
     }
     this.refreshProfiles()
+    this.degradedBundles = this.loadDegradedBundles()
     const window = new BrowserWindow({
       title: COPY[this.options.locale].title,
       ...desktopStartupRecoveryWindowBounds(),
@@ -585,7 +715,7 @@ export class DesktopStartupRecoveryWindow {
     revealApplication(this.window)
   }
 
-  private async handleAction(action: { readonly action: string; readonly id?: string; readonly name?: string }): Promise<void> {
+  private async handleAction(action: { readonly action: string; readonly id?: string; readonly name?: string; readonly option?: string }): Promise<void> {
     if (this.busy || this.settled) return
     try {
       if (action.action === 'home') {
@@ -685,7 +815,30 @@ export class DesktopStartupRecoveryWindow {
         await this.openConfigurationPath('profileManifest')
       } else if (action.action === 'open-profile-directory') {
         await this.openConfigurationPath('profileDirectory')
+      } else if (action.action === 'execute-repair' && action.option !== undefined) {
+        await this.runBusy(async () => {
+          const result = await this.requireController().executeRepair(action.option!)
+          this.aiAnalysis = {
+            selectedOption: result.planId,
+            result: { planId: result.planId, status: result.status, message: result.message },
+            ...(result.selfCheck === undefined ? {} : { selfCheck: result.selfCheck }),
+          }
+        })
+      } else if (action.action === 'ai-analyze') {
+        await this.runBusy(async () => {
+          const analysis = await this.requireController().runAiAnalysis()
+          this.aiAnalysis = analysis
+        })
+      } else if (action.action === 'restore-full-plugins') {
+        const statePath = this.options.degradedStatePath
+        if (statePath === undefined) {
+          throw new Error('Desktop degraded state is unavailable.')
+        }
+        writeDegradedBundles(statePath, [])
+        this.finish('restart')
+        return
       } else if (action.action === 'restart') {
+        // Footer restart keeps the degraded set intact; only restore-full-plugins clears it.
         this.finish('restart')
         return
       } else if (action.action === 'quit') {
@@ -723,6 +876,17 @@ export class DesktopStartupRecoveryWindow {
       this.profiles = this.options.profileActions?.list()
     } catch {
       this.profiles = undefined
+    }
+  }
+
+  private loadDegradedBundles(): readonly string[] {
+    const statePath = this.options.degradedStatePath
+    if (statePath === undefined) return []
+    try {
+      return readDegradedBundles(statePath)
+    } catch {
+      // A broken degraded state must not block recovery; the window just shows no card.
+      return []
     }
   }
 
@@ -777,6 +941,7 @@ export class DesktopStartupRecoveryWindow {
       locale: this.options.locale,
       failureStage: this.options.failureStage,
       failureDetail: this.options.failureDetail,
+      degradedBundles: this.degradedBundles,
       ...(this.snapshot === undefined ? {} : { snapshot: this.snapshot }),
       ...(this.snapshotError === undefined ? {} : { snapshotError: this.snapshotError }),
       diagnostics: this.diagnostics,
@@ -790,6 +955,7 @@ export class DesktopStartupRecoveryWindow {
       ...(this.options.openTerminal === undefined ? {} : { terminalAvailable: true }),
       ...(this.options.profileActions === undefined ? {} : { profileCreatorAvailable: true }),
       ...(this.options.rollbackLastKnownGood === undefined ? {} : { rollbackLastKnownGoodAvailable: true }),
+      aiAnalysis: this.aiAnalysis,
     }
     const state = Buffer.from(JSON.stringify(model), 'utf8').toString('base64url')
     await window.loadFile(RECOVERY_DOCUMENT, { query: { state } })

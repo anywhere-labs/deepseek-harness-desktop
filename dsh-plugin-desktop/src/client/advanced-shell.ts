@@ -1,6 +1,8 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from './contracts.ts'
+import { desktopDegradedNotice } from './degraded-notice.ts'
 import type { DesktopClientEnvironment } from './environment.ts'
 import { AdvancedFrame } from './AdvancedFrame.tsx'
 import { DesktopLayoutState } from './layout-state.ts'
@@ -53,6 +55,13 @@ export function applyAdvancedShell(ctx: ClientContext, environment: DesktopClien
       'details': { kind: 'single', scope: 'session' },
       'shell.overlay': { kind: 'list', scope: 'root' },
     },
-    inject: () => ({ layout: desktopLayout, platform: environment.platform }),
+    inject: () => ({
+      layout: desktopLayout,
+      platform: environment.platform,
+      degradedNotice: desktopDegradedNotice(
+        environment.degradedBundles ?? [],
+        ctx.locale.getLocale().active === 'zh' ? 'zh' : 'en',
+      ),
+    }),
   }, AdvancedFrame), 'desktop: advanced root slot')
 }

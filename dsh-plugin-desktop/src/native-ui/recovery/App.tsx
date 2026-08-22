@@ -12,7 +12,7 @@ import {
   Terminal,
   Undo2,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert.tsx'
 import { buttonVariants } from '../components/ui/button.tsx'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card.tsx'
@@ -76,6 +76,39 @@ interface RecoveryProfile {
   readonly selectable: boolean
 }
 
+interface RecoveryAiResult {
+  readonly planId: string
+  readonly status: string
+  readonly message: string
+}
+
+interface RecoveryAiRepairOption {
+  readonly id: 'A' | 'B' | 'C' | 'D'
+  readonly title: string
+  readonly risk: string
+}
+
+interface RecoveryAiDiagnosis {
+  readonly rootCause: string
+  readonly severity: 'low' | 'medium' | 'high'
+  readonly options: readonly RecoveryAiRepairOption[]
+  readonly recommendation: string
+  readonly disclaimer: string
+}
+
+interface RecoveryAiSelfCheck {
+  readonly ok: boolean
+  readonly checks: readonly { readonly name: string; readonly passed: boolean; readonly detail: string }[]
+  readonly recommendation: string
+}
+
+interface RecoveryAiAnalysis {
+  readonly selectedOption?: string
+  readonly result?: RecoveryAiResult
+  readonly diagnosis?: RecoveryAiDiagnosis
+  readonly selfCheck?: RecoveryAiSelfCheck
+}
+
 interface RecoveryState {
   readonly locale: Locale
   readonly failureStage: FailureStage
@@ -93,6 +126,9 @@ interface RecoveryState {
   readonly terminalAvailable?: boolean
   readonly profileCreatorAvailable?: boolean
   readonly rollbackLastKnownGoodAvailable?: boolean
+  readonly aiAnalysis?: RecoveryAiAnalysis
+  /** Bundles left degraded; the window offers to restore them when non-empty. */
+  readonly degradedBundles?: readonly string[]
 }
 
 interface Copy {
@@ -143,6 +179,18 @@ interface Copy {
   readonly confirmRetry: string
   readonly confirmRetryBody: string
   readonly working: string
+  readonly aiAnalysis: string
+  readonly aiLead: string
+  readonly aiLoadDiagnostics: string
+  readonly aiAutoReadGenerated: string
+  readonly aiSelfCheckPassed: string
+  readonly aiSelfCheckFailed: string
+  readonly executeRepair: string
+  readonly repairSelected: string
+  readonly degradedMode: string
+  readonly degradedBody: string
+  readonly restoreFullPlugins: string
+  readonly repairUnavailable: string
 }
 
 const COPY: Record<Locale, Copy> = {
@@ -204,6 +252,18 @@ const COPY: Record<Locale, Copy> = {
     confirmRetry: 'Retry this configuration once?',
     confirmRetryBody: 'The next Desktop generation will verify the current installation once.',
     working: 'Applying the recovery action…',
+    aiAnalysis: 'AI-assisted failure analysis',
+    aiLead: 'Pick one repair plan to apply. AI only suggests and marks risk; it never changes your configuration until you confirm.',
+    aiLoadDiagnostics: 'Load local diagnostics',
+    aiAutoReadGenerated: 'Auto-read generated package',
+    aiSelfCheckPassed: 'Passed',
+    aiSelfCheckFailed: 'Failed',
+    executeRepair: 'Apply repair',
+    repairSelected: 'Repair plan selected',
+    degradedMode: 'Degraded mode',
+    degradedBody: 'Some plugins could not load and DSH Desktop is running in degraded mode. Restore the full plugin set to restart and reload every plugin.',
+    restoreFullPlugins: 'Restore full plugin set',
+    repairUnavailable: 'Not available',
   },
   zh: {
     title: 'DSH Desktop 恢复助手',
@@ -263,6 +323,18 @@ const COPY: Record<Locale, Copy> = {
     confirmRetry: '确认重试当前配置一次？',
     confirmRetryBody: '下一代 Desktop 会使用当前安装状态再验证一次。',
     working: '正在执行恢复操作…',
+    aiAnalysis: 'AI 辅助故障分析',
+    aiLead: '选择一项修复方案后执行。AI 只给出建议与风险提示，未经你确认不会修改任何配置。',
+    aiLoadDiagnostics: '加载本地诊断包',
+    aiAutoReadGenerated: '自动读取已生成包',
+    aiSelfCheckPassed: '通过',
+    aiSelfCheckFailed: '失败',
+    executeRepair: '执行修复',
+    repairSelected: '已选择修复方案',
+    degradedMode: '降级模式',
+    degradedBody: '部分插件未能加载，DSH Desktop 正在降级模式下运行。恢复完整插件集后将重新启动，并重新加载全部插件。',
+    restoreFullPlugins: '恢复完整插件集',
+    repairUnavailable: '暂不可用',
   },
 }
 
@@ -279,23 +351,25 @@ function decodeState(): RecoveryState | undefined {
   return undefined
 }
 
-function href(action: string, id?: string, name?: string): string {
+function href(action: string, id?: string, name?: string, option?: string): string {
   const url = new URL(`${SCHEME}//${action}`)
   if (id !== undefined) url.searchParams.set('id', id)
   if (name !== undefined) url.searchParams.set('name', name)
+  if (option !== undefined) url.searchParams.set('option', option)
   return url.href
 }
 
-function Action({ action, children, className, icon, id, name, variant = 'outline' }: {
+function Action({ action, children, className, icon, id, name, option, variant = 'outline' }: {
   readonly action: string
   readonly children: ReactNode
   readonly className?: string
   readonly icon?: ReactNode
   readonly id?: string
   readonly name?: string
+  readonly option?: string
   readonly variant?: 'default' | 'outline' | 'secondary' | 'destructive'
 }): JSX.Element {
-  return <a className={cn(buttonVariants({ variant }), className)} href={href(action, id, name)}>{icon}{children}</a>
+  return <a className={cn(buttonVariants({ variant }), className)} href={href(action, id, name, option)}>{icon}{children}</a>
 }
 
 function Owner({ owner, copy }: { readonly owner: RecoveryBundle['owner']; readonly copy: Copy }): JSX.Element {
@@ -324,10 +398,73 @@ function Confirmation({ confirmation, copy }: { readonly confirmation: RecoveryC
   </Card>
 }
 
+/** Static repair plans offered to the user. AI enriches these with root cause and risk. */
+const REPAIR_PLAN_OPTIONS: Record<Locale, readonly { readonly id: string; readonly title: string; readonly risk: string; readonly disabled: boolean }[]> = {
+  en: [
+    { id: 'A', title: 'Temporarily disable the failing plugin', risk: 'Low risk — only that plugin stops loading.', disabled: false },
+    { id: 'B', title: 'Roll back the submodule version', risk: 'High risk (developers) — changes the upstream submodule pin.', disabled: true },
+    { id: 'C', title: 'Reset the plugin manifest', risk: 'Medium risk — may drop custom plugin combinations.', disabled: true },
+    { id: 'D', title: 'Restore the default config', risk: 'Low–medium risk — restores the last healthy profile snapshot.', disabled: false },
+  ],
+  zh: [
+    { id: 'A', title: '临时禁用故障插件', risk: '低风险 —— 仅该插件不再加载。', disabled: false },
+    { id: 'B', title: '回滚子模块版本', risk: '高风险（仅开发者） —— 会改动上游子模块版本锁定。', disabled: true },
+    { id: 'C', title: '重置插件加载清单', risk: '中风险 —— 可能丢失自定义插件组合。', disabled: true },
+    { id: 'D', title: '恢复默认配置', risk: '低~中风险 —— 恢复上次健康配置快照。', disabled: false },
+  ],
+}
+
+function AiAnalysis({ state, copy }: { readonly state: RecoveryState; readonly copy: Copy }): JSX.Element {
+  const analysis = state.aiAnalysis ?? {}
+  const plans = REPAIR_PLAN_OPTIONS[state.locale]
+  const [selected, setSelected] = useState(analysis.selectedOption ?? plans[0]?.id ?? '')
+  const diagnosis = analysis.diagnosis
+  const selfCheck = analysis.selfCheck
+  const result = analysis.result
+  const severityTone = diagnosis?.severity === 'high' ? 'destructive' : diagnosis?.severity === 'medium' ? 'outline' : 'secondary'
+  return <Card>
+    <CardHeader><CardTitle>{copy.aiAnalysis}</CardTitle><CardDescription>{copy.aiLead}</CardDescription></CardHeader>
+    <CardContent className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <Action action="ai-analyze" icon={<RefreshCw />}>{copy.aiLoadDiagnostics}</Action>
+        <Action action="ai-analyze" icon={<RefreshCw />}>{copy.aiAutoReadGenerated}</Action>
+      </div>
+      {diagnosis === undefined ? null : <div className="space-y-2">
+        <p className="text-sm font-medium">{diagnosis.rootCause}</p>
+        <span className={cn('rounded-full px-2 py-1 text-xs', severityTone === 'destructive' && 'bg-destructive/10 text-destructive', severityTone === 'secondary' && 'bg-muted')}>{diagnosis.severity}</span>
+        <p className="text-sm text-muted-foreground">{diagnosis.recommendation}</p>
+        <p className="text-xs text-muted-foreground">{diagnosis.disclaimer}</p>
+      </div>}
+      {selfCheck === undefined ? null : <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">{selfCheck.recommendation}</p>
+        {selfCheck.checks.length === 0 ? null : <div className="divide-y">
+          {selfCheck.checks.map(check => <div className="flex items-center justify-between gap-4 py-2" key={check.name}>
+            <code className="text-xs">{check.name}</code>
+            <div className="flex items-center gap-2"><span className={cn('rounded-full px-2 py-1 text-xs', check.passed ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive')}>{check.passed ? copy.aiSelfCheckPassed : copy.aiSelfCheckFailed}</span><span className="text-xs text-muted-foreground">{check.detail}</span></div>
+          </div>)}
+        </div>}
+        {selfCheck.ok ? <div className="flex justify-end"><Action action="restart" variant="default">{copy.restart}</Action></div> : null}
+      </div>}
+    </CardContent>
+    <CardContent className="divide-y p-0">
+      {plans.map(plan => <div className="flex items-center gap-3 px-6 py-3" key={plan.id}>
+        <input type="radio" name="repair-option" value={plan.id} checked={selected === plan.id} disabled={plan.disabled} onChange={() => setSelected(plan.id)} aria-label={plan.title} />
+        <div className="min-w-0"><p className={cn('text-sm font-medium', plan.disabled && 'text-muted-foreground')}>{plan.title}</p><p className="text-xs text-muted-foreground">{plan.risk}</p>{plan.disabled ? <p className="text-xs text-muted-foreground">{copy.repairUnavailable}</p> : null}</div>
+      </div>)}
+    </CardContent>
+    <CardFooter className="justify-end pt-6"><Action action="execute-repair" option={selected} variant="default">{copy.executeRepair}</Action></CardFooter>
+    {result === undefined ? null : <CardContent className="border-t"><Alert className="border-blue-500/50"><AlertTriangle /><AlertTitle>{copy.repairSelected}</AlertTitle><AlertDescription>{result.message}</AlertDescription></Alert></CardContent>}
+  </Card>
+}
+
 function RecoveryContent({ state, copy }: { readonly state: RecoveryState; readonly copy: Copy }): JSX.Element {
   const pending = state.snapshot?.pendingInstall
   if (state.confirmation !== undefined) return <Confirmation confirmation={state.confirmation} copy={copy} />
   return <>
+    {(state.degradedBundles?.length ?? 0) === 0 ? null : <Card className="border-amber-500/60">
+      <CardHeader><CardTitle>{copy.degradedMode}</CardTitle><CardDescription>{copy.degradedBody}</CardDescription></CardHeader>
+      <CardFooter className="justify-end pt-6"><Action action="restore-full-plugins" icon={<RefreshCw />} variant="default">{copy.restoreFullPlugins}</Action></CardFooter>
+    </Card>}
     {pending === undefined ? null : <Card>
       <CardHeader><CardTitle>{copy.recentInstall}</CardTitle><CardDescription>{pending.packageName}@{pending.packageVersion}</CardDescription></CardHeader>
       <CardContent className="space-y-2"><p className="text-sm text-muted-foreground">{copy.rollbackBody}</p>{pending.retryAvailable ? <p className="text-sm text-muted-foreground">{copy.retryBody}</p> : null}</CardContent>
@@ -377,6 +514,8 @@ function RecoveryContent({ state, copy }: { readonly state: RecoveryState; reado
         {state.rollbackLastKnownGoodAvailable && state.profileActionToken !== undefined ? <Action action="rollback-last-known-good" icon={<RotateCcw />} id={state.profileActionToken} variant="default">{copy.restoreLastSuccessful}</Action> : null}
       </CardFooter>
     </Card>
+
+    <AiAnalysis copy={copy} state={state} />
   </>
 }
 

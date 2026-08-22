@@ -18,6 +18,10 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isMainThread, parentPort, workerData } from 'node:worker_threads'
 import AdmZip from 'adm-zip'
 import {
+  buildDiagnosticEvidenceEntries,
+  type DiagnosticEvidenceEntry,
+} from './diagnostic-evidence.ts'
+import {
   DESKTOP_LIFECYCLE_EVIDENCE_ENTRY,
   DESKTOP_LIFECYCLE_SUMMARY_ENTRY,
   summarizeDesktopLifecycleEvidence,
@@ -28,7 +32,7 @@ const DIAGNOSTIC_ARCHIVE = /^diagnostics-\d+(?:-[0-9a-f-]+)?\.zip$/u
 const MAX_DIAGNOSTIC_ARCHIVES = 3
 const SKIPPABLE_FILE_ERRORS = new Set(['EACCES', 'EBUSY', 'ELOOP', 'ENOENT', 'ENOTDIR', 'EPERM'])
 
-interface DiagnosticExportWorkerData {
+export interface DiagnosticExportWorkerData {
   readonly logsDir: string
   readonly userDataDir: string
   readonly appVersion: string
@@ -36,6 +40,12 @@ interface DiagnosticExportWorkerData {
   readonly crashDumpsDir?: string
   readonly runStatePath?: string
   readonly lifecycleEvidencePath?: string
+  readonly errorStack?: string
+  readonly pluginManifest?: string
+  readonly versions?: string
+  readonly profileBundles?: string
+  readonly profileConfig?: { readonly filename: string; readonly text: string }
+  readonly envSnapshot?: string
 }
 
 export type DiagnosticExportWorkerResult =
@@ -164,6 +174,20 @@ function regularArchive(path: string): { path: string, modifiedAt: number } | un
   }
 }
 
+/** Map worker evidence data onto diagnostic evidence entries, omitting absent sources. */
+export function buildWorkerEvidenceEntries(
+  data: DiagnosticExportWorkerData,
+): readonly DiagnosticEvidenceEntry[] {
+  return buildDiagnosticEvidenceEntries({
+    ...(data.errorStack === undefined ? {} : { errorStack: { text: data.errorStack } }),
+    ...(data.pluginManifest === undefined ? {} : { pluginManifest: { text: data.pluginManifest } }),
+    ...(data.versions === undefined ? {} : { versions: { text: data.versions } }),
+    ...(data.profileBundles === undefined ? {} : { profileBundles: { text: data.profileBundles } }),
+    ...(data.profileConfig === undefined ? {} : { profileConfig: data.profileConfig }),
+    ...(data.envSnapshot === undefined ? {} : { envSnapshot: { text: data.envSnapshot } }),
+  })
+}
+
 async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promise<string> {
   const logsStats = lstatSync(data.logsDir)
   if (logsStats.isSymbolicLink() || !logsStats.isDirectory()) {
@@ -231,6 +255,15 @@ async function createDiagnosticsArchive(data: DiagnosticExportWorkerData): Promi
     if (entry.name.startsWith('crash-dumps/')) includedCrashDumps += 1
     else if (entry.name === 'crash-evidence/active-run.json') includedActiveRunMarker = true
   }
+  for (const entry of buildWorkerEvidenceEntries(data)) {
+    const buf = Buffer.from(entry.content, 'utf8')
+    if (buf.byteLength <= data.maxEvidenceBytes - includedBytes) {
+      zip.addFile(entry.name, buf)
+      includedBytes += buf.byteLength
+    }
+  }
+  // Build the manifest after the worker-evidence budget loop so
+  // included-evidence-bytes reports the true running total.
   const info = [
     'app: dsh-plugin-desktop',
     `desktop-version: ${data.appVersion}`,

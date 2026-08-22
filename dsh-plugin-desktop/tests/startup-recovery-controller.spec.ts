@@ -8,7 +8,20 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const aiAnalyzerState = vi.hoisted(() => ({
+  runTierOneAnalysis: (async () => undefined) as (
+    input: string,
+    signal?: AbortSignal,
+  ) => Promise<AiDiagnosis | undefined>,
+}))
+
+vi.mock('../src/ai-diagnostic-analyzer.ts', () => ({
+  runTierOneAnalysis: (input: string, signal?: AbortSignal) => aiAnalyzerState.runTierOneAnalysis(input, signal),
+}))
+import { readDegradedBundles } from '../src/degraded-mode.ts'
+import type { AiDiagnosis } from '../src/diagnostic-analyzer.ts'
 import { disableDesktopProfileBundle } from '../src/desktop-plugins.ts'
 import type {
   DesktopInstallRecoveryPhase,
@@ -80,6 +93,7 @@ interface Harness {
   readonly generation: { profileName: string; generationId: string }
   readonly statePath: string
   readonly manifestPath: string
+  readonly degradedStatePath: string
 }
 
 function createHarness(
@@ -90,6 +104,9 @@ function createHarness(
     pending?: DesktopInstallRecoveryTransaction
     installRecovery?: DesktopStartupRecoveryControllerOptions['installRecovery']
     now?: () => number
+    failureStack?: string
+    restoreLatest?: DesktopStartupRecoveryControllerOptions['restoreLatest']
+    selfCheckItems?: DesktopStartupRecoveryControllerOptions['selfCheckItems']
   } = {},
 ): Harness {
   const bundles = options.bundles ?? [
@@ -101,6 +118,7 @@ function createHarness(
   ]
   const manifestPath = writeManifest(root, bundles)
   const statePath = join(root, 'user-data', 'plugin-management', 'state.json')
+  const degradedStatePath = join(root, 'user-data', 'startup-recovery', 'degraded.json')
   const generation = {
     profileName: 'desktop',
     generationId: 'current-generation-0001',
@@ -119,9 +137,13 @@ function createHarness(
       restore: async () => { throw new Error('restore not configured') },
       requestRetry: async () => { throw new Error('retry not configured') },
     },
+    degradedStatePath,
     ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.failureStack === undefined ? {} : { failureStack: options.failureStack }),
+    ...(options.restoreLatest === undefined ? {} : { restoreLatest: options.restoreLatest }),
+    ...(options.selfCheckItems === undefined ? {} : { selfCheckItems: options.selfCheckItems }),
   })
-  return { controller, generation, statePath, manifestPath }
+  return { controller, generation, statePath, manifestPath, degradedStatePath }
 }
 
 function errorCode(cause: unknown): string | undefined {
@@ -476,5 +498,129 @@ describe('pre-Host Desktop startup recovery controller', () => {
     const terminalRoot = temporaryRoot()
     const terminal = createHarness(terminalRoot, { pending: transaction('rolled-back') })
     expect((await terminal.controller.snapshot()).pendingInstall).toBeUndefined()
+  })
+
+  it('commits plan A to degraded mode and reports plan D as restored', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root, {
+      restoreLatest: async () => ({ status: 'restored', changedFiles: [], snapshotDirectory: '/s', failureGeneration: 'g' }),
+    })
+
+    const a = await harness.controller.executeRepair('A')
+    expect(a).toEqual(expect.objectContaining({
+      planId: 'A',
+      status: 'degraded',
+      message: '已启用降级模式。请重新启动 Desktop。',
+    }))
+    expect(a.selfCheck.ok).toBe(true)
+
+    await expect(harness.controller.executeRepair('D')).resolves.toEqual(
+      expect.objectContaining({
+        planId: 'D',
+        status: 'restored',
+        message: '已恢复上次健康快照。',
+      }),
+    )
+  })
+
+  it('threads the analysis-identified bundle into the degraded set for plan A', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root, {
+      failureStack: "Error: Cannot find module 'plugin-x'\n  at boot",
+    })
+
+    const result = await harness.controller.executeRepair('A')
+    expect(result.status).toBe('degraded')
+    expect(readDegradedBundles(harness.degradedStatePath)).toEqual(['plugin-x'])
+  })
+
+  it('commits a degraded bundle set for plan A and clears it when bundled empty', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root)
+    const degradedPath = join(root, 'user-data', 'startup-recovery', 'degraded.json')
+
+    const a = await harness.controller.executeRepair('A')
+    expect(a.status).toBe('degraded')
+    const committed = await harness.controller.commitDegraded(['plugin-x'])
+    expect(committed.bundles).toEqual(['plugin-x'])
+    expect(readDegradedBundles(degradedPath)).toEqual(['plugin-x'])
+
+    await harness.controller.commitDegraded([])
+    expect(readDegradedBundles(degradedPath)).toEqual([])
+  })
+
+  it('rejects a repair plan id outside the registry', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root)
+
+    await expect(harness.controller.executeRepair('Z')).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'invalid-target',
+    )
+  })
+
+  it('rejects a repair plan after the launcher changes generation', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root)
+
+    harness.generation.generationId = 'next-generation-0002'
+    await expect(harness.controller.executeRepair('A')).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'generation-changed',
+    )
+  })
+
+  it('analyzes the failure stack into a diagnosis naming the missing module', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root, {
+      failureStack: "Error: Cannot find module 'plugin-x'\n  at boot",
+    })
+
+    const analysis = await harness.controller.runAiAnalysis()
+    expect(analysis.diagnosis).toBeDefined()
+    expect(analysis.diagnosis?.rootCause).toContain('plugin-x')
+    expect(analysis.diagnosis?.rootCause).toContain('缺失模块')
+  })
+
+  it('rejects an ai analysis after the launcher changes generation', async () => {
+    const root = temporaryRoot()
+    const harness = createHarness(root, {
+      failureStack: "Error: Cannot find module 'plugin-x'\n  at boot",
+    })
+
+    harness.generation.generationId = 'next-generation-0002'
+    await expect(harness.controller.runAiAnalysis()).rejects.toSatisfy(
+      (cause: unknown) => errorCode(cause) === 'generation-changed',
+    )
+  })
+
+  it('aborts an in-flight tier-1 analysis when the controller is disposed', async () => {
+    aiAnalyzerState.runTierOneAnalysis = async (_input: string, signal?: AbortSignal) => {
+      await new Promise<void>((_resolve, reject) => {
+        if (signal === undefined) {
+          reject(new Error('expected an abort signal'))
+          return
+        }
+        if (signal.aborted) {
+          reject(new DOMException('Tier-1 analysis aborted.', 'AbortError'))
+          return
+        }
+        signal.addEventListener('abort', () => {
+          reject(new DOMException('Tier-1 analysis aborted.', 'AbortError'))
+        }, { once: true })
+      })
+      return undefined
+    }
+    try {
+      const root = temporaryRoot()
+      const harness = createHarness(root, {
+        failureStack: "Error: Cannot find module 'plugin-x'\n  at boot",
+      })
+
+      const analysis = harness.controller.runAiAnalysis()
+      harness.controller.dispose()
+
+      await expect(analysis).rejects.toMatchObject({ name: 'AbortError' })
+    } finally {
+      aiAnalyzerState.runTierOneAnalysis = async () => undefined
+    }
   })
 })
