@@ -1,6 +1,6 @@
 /** DSH Desktop executable: minimal Electron bootstrap around the Host Cordis root. */
 
-import { app, crashReporter, dialog } from 'electron'
+import { app, crashReporter, dialog, session, systemPreferences } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -431,6 +431,26 @@ async function start(): Promise<void> {
     startupStage = 'shell-environment'
     lifecycleRecorder.transitionStartupStage(startupStage)
     if (process.platform === 'win32') app.setAppUserModelId('ai.deepseek.dsh.desktop')
+    // The web renderer's getUserMedia needs a media permission handler: without
+    // one Electron grants access by default, but the macOS TCC prompt for the
+    // microphone never appears, so users only get a silent audio stream. Ask
+    // for media access explicitly to trigger the native permission prompt.
+    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+      if (permission !== 'media') {
+        callback(true)
+        return
+      }
+      // askForMediaAccess is macOS-only; keep Electron's default grant elsewhere.
+      if (process.platform !== 'darwin') {
+        callback(true)
+        return
+      }
+      const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined
+      const checks: Promise<boolean>[] = []
+      if (!mediaTypes || mediaTypes.includes('audio')) checks.push(systemPreferences.askForMediaAccess('microphone'))
+      if (!mediaTypes || mediaTypes.includes('video')) checks.push(systemPreferences.askForMediaAccess('camera'))
+      void Promise.all(checks).then(results => callback(results.every(Boolean)))
+    })
     if (app.isPackaged && process.cwd() === '/') process.chdir(app.getPath('home'))
     const shellEnvironmentResolution = await resolveDesktopShellEnvironment({
       environment: process.env,
