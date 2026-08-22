@@ -41,6 +41,7 @@ import {
   type DesktopMarketProvider,
   type DesktopMarketSnapshot,
 } from './desktop-market.ts'
+import { readDegradedBundles } from './degraded-mode.ts'
 
 /** Persistent profile managed by the desktop launcher and the ordinary dsh plugin command. */
 export const DESKTOP_PROFILE_NAME = 'desktop'
@@ -78,7 +79,7 @@ const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
 const UI_LAYOUT_PACKAGE = '@deepseek-ai/dsh-client-ui-layout'
 const UI_SIDEBAR_PACKAGE = '@deepseek-ai/dsh-client-ui-sidebar'
 const UI_CONVERSATION_PACKAGE = '@deepseek-ai/dsh-client-ui-conversation'
-const DEFAULT_DESKTOP_MARKET_SNAPSHOT: DesktopMarketSnapshot = Object.freeze({
+export const DEFAULT_DESKTOP_MARKET_SNAPSHOT: DesktopMarketSnapshot = Object.freeze({
   requested: 'disabled',
   effective: 'disabled',
   legacyDefaulted: true,
@@ -579,6 +580,7 @@ export function prepareDesktopProfile(
   marketSelection: DesktopMarketSnapshot = DEFAULT_DESKTOP_MARKET_SNAPSHOT,
   recoveryStatePath?: string,
   hooks: DesktopProfilePreparationHooks = {},
+  degradedStatePath?: string,
 ): PreparedDesktopProfile {
   const profileDir = profileName === DESKTOP_PROFILE_NAME
     ? ensureDesktopProfile(home)
@@ -597,11 +599,15 @@ export function prepareDesktopProfile(
       ? new Set<string>()
       : new Set(managedDisabledBundles))
     : readDesktopDisabledBundles(recoveryStatePath, profileName)
+  const degradedBundles = degradedStatePath === undefined
+    ? new Set<string>()
+    : new Set(readDegradedBundles(degradedStatePath))
   const disabledBundles = new Set(recoveryDisabledBundles)
   if (recoveryStatePath === undefined
     || marketSelection.requested === DESKTOP_MARKET_IDENTITIES.community.provider) {
     for (const packageName of managedDisabledBundles) disabledBundles.add(packageName)
   }
+  for (const packageName of degradedBundles) disabledBundles.add(packageName)
   const loadedProfile = loadRecoveryFilteredProfile(
     profileName,
     profileDir,

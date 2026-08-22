@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-cmdline'
+import { readDegradedBundles } from './degraded-mode.ts'
 import {
   LOCALE_SETTINGS_NAMESPACE,
   type LocaleSettings,
@@ -98,6 +99,8 @@ export interface Config {
   minWidth: number
   /** Minimum window height in CSS pixels. */
   minHeight: number
+  /** Durable degraded-mode state path; when present the renderer is told which bundles are skipped. */
+  degradedStatePath?: string
 }
 
 /** Validated native window configuration. */
@@ -108,6 +111,7 @@ export const Config: z<Config> = z.object({
   height: z.number().step(1).min(600).default(840),
   minWidth: z.number().step(1).min(640).default(900),
   minHeight: z.number().step(1).min(480).default(640),
+  degradedStatePath: z.string(),
 })
 
 /**
@@ -121,10 +125,12 @@ export function desktopRendererUrl(
   port: number,
   mode: DesktopShellMode,
   platform: Context['desktopRuntime']['platform'],
+  degradedBundles: readonly string[] = [],
 ): string {
   const url = new URL(`http://127.0.0.1:${String(port)}/`)
   url.searchParams.set('dsh-desktop-mode', mode)
   url.searchParams.set('dsh-desktop-platform', platform)
+  if (degradedBundles.length > 0) url.searchParams.set('dsh-degraded', degradedBundles.join(','))
   return url.href
 }
 
@@ -287,10 +293,19 @@ export function apply(ctx: Context, config: Config): void {
     if (namespace !== UI_LOCALE_SETTINGS_NAMESPACE) return
     runtime.setLocalePreference((next as LocaleSettings).preference)
   })
+  let degradedBundles: readonly string[] = []
+  if (config.degradedStatePath !== undefined) {
+    try {
+      degradedBundles = readDegradedBundles(config.degradedStatePath)
+    } catch {
+      // A broken degraded state must not fail the shell; the renderer just sees no marker.
+      degradedBundles = []
+    }
+  }
   ctx.effect(
     () => runtime.schedule({
       ...config,
-      url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform),
+      url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform, degradedBundles),
       productName: 'DSH Desktop',
       windowTitle: 'DeepSeek Harness Desktop',
       iconPath,

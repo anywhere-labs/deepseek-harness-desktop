@@ -1,7 +1,16 @@
 /** Pre-Host recovery-window authority over one immutable Desktop generation. */
 
 import { randomBytes } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { isAbsolute } from 'node:path'
+import { writeDegradedBundles } from './degraded-mode.ts'
+import type { RestoreResult } from './profile-checkpoint.ts'
+import { repairPlans, type DesktopRepairPlan } from './repair-plans.ts'
+import {
+  runRepairSelfCheck,
+  type RepairSelfCheckItem,
+  type RepairSelfCheckReport,
+} from './repair-self-check.ts'
 import {
   DesktopPluginsError,
   disableDesktopProfileBundle,
@@ -15,7 +24,10 @@ import type {
   DesktopInstallRecoveryRestoreResult,
   DesktopInstallRecoveryTransaction,
 } from './install-recovery.ts'
+import { analyzeDiagnostics } from './diagnostic-analyzer.ts'
+import { runTierOneAnalysis } from './ai-diagnostic-analyzer.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
+import type { DesktopStartupRecoveryAiAnalysis } from './startup-recovery-window.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const PREVIEW_TTL_MS = 5 * 60 * 1000
@@ -27,6 +39,19 @@ const ROLLBACK_PREVIEW_ID_PATTERN = /^rollback_[A-Za-z0-9_-]{43}$/u
 const RETRY_PREVIEW_ID_PATTERN = /^retry_[A-Za-z0-9_-]{43}$/u
 const OPAQUE_ID_PATTERN = /^[A-Za-z0-9._:-]{8,160}$/u
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u
+const REPAIR_PLAN_IDS = new Set(['A', 'B', 'C', 'D'])
+
+/** Repair plan identifiers offered by the native recovery window. */
+export type DesktopStartupRecoveryRepairPlanId = 'A' | 'B' | 'C' | 'D'
+
+/** Renderer-safe result of a user-approved repair plan. */
+export interface DesktopStartupRecoveryRepairResult {
+  readonly planId: DesktopStartupRecoveryRepairPlanId
+  readonly status: 'acknowledged' | 'degraded' | 'restored' | 'already-attempted'
+  readonly message: string
+  /** Read-only post-repair verification report, always present. */
+  readonly selfCheck: RepairSelfCheckReport
+}
 
 /** Fixed launcher identity checked before every read and again before mutation. */
 export interface DesktopStartupRecoveryGeneration {
@@ -143,8 +168,20 @@ export interface DesktopStartupRecoveryControllerOptions {
   readonly managedPackageNames?: () => readonly string[] | Promise<readonly string[]>
   /** Recovery WAL already bound by its store to the active profile directory. */
   readonly installRecovery: DesktopStartupRecoveryJournalReader
+  /**
+   * Durable degraded-mode state path committed by plan A. Optional until the
+   * main process wires it at the recovery-window close loop; absent here means
+   * degraded commits fail closed as state-unavailable.
+   */
+  readonly degradedStatePath?: string
   /** Injectable clock used only by focused headless tests. */
   readonly now?: () => number
+  /** Launcher-provided failure stack analyzed by the offline AI diagnosis. */
+  readonly failureStack?: string
+  /** Restore the latest healthy snapshot for plan D; absent means plan D fails closed. */
+  readonly restoreLatest?: () => Promise<RestoreResult>
+  /** Injectable read-only self-check probes; defaults to a module-resolution probe. */
+  readonly selfCheckItems?: () => Promise<ReadonlyArray<RepairSelfCheckItem>>
 }
 
 interface DisablePreviewRecord {
@@ -223,6 +260,7 @@ export class DesktopStartupRecoveryController {
   private readonly installPreviews = new Map<string, InstallPreviewRecord>()
   private operationActive = false
   private disposed = false
+  private readonly aiAbort = new AbortController()
 
   constructor(private readonly options: DesktopStartupRecoveryControllerOptions) {
     assertDesktopProfileName(options.pluginState.profileName)
@@ -410,9 +448,71 @@ export class DesktopStartupRecoveryController {
     }
   }
 
+  /** Persist the degraded bundle set atomically and return the committed image. */
+  async commitDegraded(bundles: readonly string[]): Promise<{ readonly bundles: readonly string[] }> {
+    this.assertCurrentGeneration()
+    if (!Array.isArray(bundles) || bundles.some(item => typeof item !== 'string')) throw this.invalidTarget()
+    const degradedStatePath = this.options.degradedStatePath
+    if (degradedStatePath === undefined) {
+      throw new DesktopStartupRecoveryControllerError(
+        'state-unavailable',
+        'Desktop degraded state is unavailable.',
+      )
+    }
+    writeDegradedBundles(degradedStatePath, bundles)
+    return { bundles }
+  }
+
+  /** Enforce one user-approved repair plan id for the active generation. */
+  async executeRepair(planId: string): Promise<DesktopStartupRecoveryRepairResult> {
+    this.assertCurrentGeneration()
+    if (!REPAIR_PLAN_IDS.has(planId as DesktopStartupRecoveryRepairPlanId)) throw this.invalidTarget()
+    if (this.operationActive) {
+      throw new DesktopStartupRecoveryControllerError(
+        'operation-in-progress',
+        'Another Desktop recovery operation is already running.',
+      )
+    }
+    this.operationActive = true
+    try {
+      const degradedStatePath = this.options.degradedStatePath
+      if (planId === 'A' && degradedStatePath === undefined) {
+        throw new DesktopStartupRecoveryControllerError(
+          'state-unavailable',
+          'Degraded state is unavailable; plan A cannot be committed.',
+        )
+      }
+      const plan = this.buildRepairPlans(degradedStatePath).find(p => p.id === planId)
+      if (plan === undefined) throw this.invalidTarget()
+      const outcome = await plan.apply()
+      const selfCheck = await this.runSelfCheck()
+      return {
+        planId: planId as DesktopStartupRecoveryRepairPlanId,
+        status: outcome.status,
+        message: outcome.message,
+        selfCheck,
+      }
+    } finally {
+      this.operationActive = false
+    }
+  }
+
+  /**
+   * Run the offline AI analysis over the launcher-provided failure stack.
+   * Read-only; the recovery window single-flights this via its busy overlay.
+   */
+  async runAiAnalysis(): Promise<DesktopStartupRecoveryAiAnalysis> {
+    this.assertCurrentGeneration()
+    const input = this.lastFailureStack()
+    const tier1 = await runTierOneAnalysis(input, this.aiAbort.signal)
+    const diagnosis = tier1 ?? analyzeDiagnostics(input)
+    return { diagnosis }
+  }
+
   /** Invalidate every generation-local target and confirmation. */
   dispose(): void {
     this.disposed = true
+    this.aiAbort.abort()
     this.packageBundleIds.clear()
     this.bundlePackages.clear()
     this.disablePreviews.clear()
@@ -547,6 +647,50 @@ export class DesktopStartupRecoveryController {
       // Market must never prevent a direct mutable bundle from being disabled.
       return new Set()
     }
+  }
+
+  /**
+   * Identify the faulting bundle from the launcher-provided failure stack so
+   * plan A degrades exactly that bundle instead of silently clearing the set.
+   */
+  private targetDegradedBundle(): readonly string[] {
+    const match = /Cannot find module ['"]([^'"]+)['"]/u.exec(this.lastFailureStack())
+    return match === null ? [] : [match[1]!]
+  }
+
+  private lastFailureStack(): string {
+    return this.options.failureStack ?? ''
+  }
+
+  private buildRepairPlans(degradedStatePath: string | undefined): ReadonlyArray<DesktopRepairPlan> {
+    return repairPlans({
+      degradedStatePath,
+      degradedBundle: this.targetDegradedBundle(),
+      restoreLatest: this.options.restoreLatest ?? (async () => { throw new Error('restore not configured') }),
+    })
+  }
+
+  /** Run the injected or default read-only post-repair self-check probes. */
+  private async runSelfCheck(): Promise<RepairSelfCheckReport> {
+    const items = this.options.selfCheckItems ?? this.defaultSelfCheckItems.bind(this)
+    return runRepairSelfCheck(await items())
+  }
+
+  /** Default probe: resolve the analysis-identified bundle; an empty target passes. */
+  private defaultSelfCheckItems(): ReadonlyArray<RepairSelfCheckItem> {
+    return [{
+      name: 'degraded bundle resolvable',
+      run: async () => {
+        const target = this.targetDegradedBundle()[0] ?? ''
+        if (target === '') return { ok: true, detail: 'no degraded bundle to resolve' }
+        try {
+          createRequire(import.meta.url).resolve(target)
+          return { ok: true, detail: `resolved ${target}` }
+        } catch (cause) {
+          return { ok: false, detail: cause instanceof Error ? cause.message : String(cause) }
+        }
+      },
+    }]
   }
 
   private assertCurrentGeneration(): void {

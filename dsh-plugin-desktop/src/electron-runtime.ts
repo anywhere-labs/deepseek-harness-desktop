@@ -112,6 +112,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private updateCleanupTask: Promise<void> | undefined
   private rendererHealthGate: DesktopRendererHealthGate | undefined
   private profileCreateWindow: ProfileCreateWindow | undefined
+  private recoveryActionHandler: ((action: string) => void) | undefined
 
   constructor(
     private readonly restart: () => Promise<void>,
@@ -232,6 +233,9 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         abortRendererBootMonitoring: cause => { this.rendererHealthGate?.stop(cause) },
         failRendererBoot: error => { this.failRendererBoot('renderer-failed', error) },
         logError: message => { this.logError(message) },
+        ...(this.recoveryActionHandler === undefined
+          ? {}
+          : { handleRecoveryAction: this.recoveryActionHandler }),
       })
       this.generation = generation
       this.mountTask = generation.mount(beforeInteractive).then(() => {
@@ -424,6 +428,11 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   /** @inheritdoc */
   async requestRestart(): Promise<void> {
     await this.restart()
+  }
+
+  /** Route recovery-bus actions from the active main window to the launcher. */
+  setRecoveryActionHandler(handler: (action: string) => void): void {
+    this.recoveryActionHandler = handler
   }
 
   /** @inheritdoc */

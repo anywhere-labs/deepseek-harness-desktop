@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './contracts.ts'
+import type { DesktopDegradedNotice } from './degraded-notice.ts'
 import type { DesktopClientPlatform } from './environment.ts'
 import {
   computeDesktopColumns, DesktopLayoutState, MACOS_SIDEBAR_COLLAPSED,
@@ -13,6 +14,8 @@ export interface AdvancedFrameInjected {
   layout: DesktopLayoutState
   /** Host platform controlling native title-bar spacing. */
   platform: DesktopClientPlatform
+  /** Safe-degraded-mode banner copy; inactive when no bundle is degraded. */
+  degradedNotice: DesktopDegradedNotice
 }
 
 /** Full advanced root slot props. */
@@ -21,12 +24,13 @@ export type AdvancedFrameProps = PropsRuntime<'root'>
   & AdvancedFrameInjected
 
 /** Desktop-owned transparent frame around the unchanged product surfaces. */
-export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: AdvancedFrameProps) {
+export function AdvancedFrame({ layout, platform, degradedNotice, renderSlot, useSessions }: AdvancedFrameProps) {
   const subscribeLayout = useCallback((listener: () => void) => layout.subscribe(listener), [layout])
   const readLayout = useCallback(() => layout.getSnapshot(), [layout])
   const panels = useSyncExternalStore(subscribeLayout, readLayout)
   const frameRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+  const [degradedDismissed, setDegradedDismissed] = useState(false)
   const detailsSession = useSessions((state) => {
     const current = state.current
     return current !== undefined && state.byId[current]?.blank === false ? current : undefined
@@ -105,6 +109,27 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
       data-dragging={dragging || undefined}
       style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }}
     >
+      {degradedNotice.active && !degradedDismissed && (
+        <div className="dshDesktopDegradedBubble" role="status">
+          <div className="dshDesktopDegradedHeader">
+            <svg className="dshDesktopDegradedIcon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor" />
+            </svg>
+            <span className="dshDesktopDegradedTitle">{degradedNotice.title}</span>
+          </div>
+          <span className="dshDesktopDegradedBody">{degradedNotice.body}</span>
+          <div className="dshDesktopDegradedActions">
+            <button
+              type="button"
+              className="dshDesktopDegradedDismiss"
+              onClick={() => { setDegradedDismissed(true) }}
+            >
+              {degradedNotice.dismissLabel}
+            </button>
+            <a className="dshDesktopDegradedRecover" href="dsh-recovery://restart">{degradedNotice.restoreLabel}</a>
+          </div>
+        </div>
+      )}
       {platform === 'darwin' && <div className="dshDesktopMacCaptionRow" aria-hidden="true" />}
       {platform === 'win32' && <div className="dshDesktopWindowsCaptionRow" aria-hidden="true" />}
       <aside className="dshDesktopSidebarSurface">
