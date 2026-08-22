@@ -211,7 +211,6 @@ describe('packaged desktop runtime verification', () => {
     'lib/diagnostic-export-worker.js',
     'lib/pnpm.js',
     'lib/update-download.js',
-    'lib/windows-agent-presets.js',
   ])('fails loud when required runtime entry %s is absent', (missing) => {
     const entries = completeArchiveEntries().filter(entry => entry !== `/${missing}`)
 
@@ -227,7 +226,6 @@ describe('packaged desktop runtime verification', () => {
     'lib/diagnostics.js',
     'lib/diagnostic-export-worker.js',
     'lib/update-download.js',
-    'lib/windows-agent-presets.js',
     'node_modules/@deepseek-ai/dsh/lib/bin.js',
     'node_modules/pnpm/bin/pnpm.mjs',
     'node_modules/node-pty/prebuilds/win32-x64/conpty.node',

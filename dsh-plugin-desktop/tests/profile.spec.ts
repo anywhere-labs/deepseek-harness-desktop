@@ -66,6 +66,16 @@ afterEach(() => {
 describe('desktop profile composition', {
   timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
+  it('ships a PowerShell-backed minimal preset for Windows', () => {
+    const minimalPreset = readFileSync(
+      join(shippedPresetRoot(), 'minimal', 'agent.cordis.yml'),
+      'utf8',
+    )
+
+    expect(minimalPreset).toContain("name: '@deepseek-ai/dsh-tool-pwsh-persistent'")
+    expect(minimalPreset).toContain("disabled: !!js process.platform !== 'win32'")
+  })
+
   it('reads packaged Cordis skills from the physical unpacked preset root', () => {
     const home = temporaryHome()
     const resources = join(home, 'resources')
@@ -238,6 +248,7 @@ describe('desktop profile composition', {
       id: 'subprocess',
       name: '@deepseek-ai/dsh-subprocess-local',
     })
+    expect(rows.map(row => row.id)).not.toContain('desktop-windows-subprocess')
     expect(rows.find(row => row.id === 'sandbox')).toEqual({
       id: 'sandbox',
       name: '@deepseek-ai/dsh-sandbox-local',
@@ -592,7 +603,7 @@ describe('desktop profile composition', {
     )
   })
 
-  it('keeps the Windows browse panel and desktop pwsh provider without replacing process boundaries', () => {
+  it('keeps the Windows browse panel, official agent presets, and desktop pwsh provider', () => {
     const home = temporaryHome()
     writeFileSync(join(home, 'cordis.patch.yml'), [
       '- id: pwsh-sandbox',
@@ -623,18 +634,24 @@ describe('desktop profile composition', {
     expect(rows.find(row => row.id === 'subprocess')).toEqual({
       id: 'subprocess',
       name: '@deepseek-ai/dsh-subprocess-local',
+      disabled: true,
     })
+    expect(rows).toContainEqual(expect.objectContaining({
+      id: 'desktop-windows-subprocess',
+      name: 'dsh-plugin-desktop/windows-subprocess',
+    }))
     expect(rows.find(row => row.id === 'sandbox')).toEqual({
       id: 'sandbox',
       name: '@deepseek-ai/dsh-sandbox-local',
     })
     expect(rows.find(row => row.id === 'agent-presets')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-agent-presets',
-      disabled: true,
+      config: expect.objectContaining({
+        roots: [{ path: shippedPresetRoot(), trust: 'system' }],
+      }),
     }))
-    expect(rows.find(row => row.id === 'desktop-windows-agent-presets')).toEqual(expect.objectContaining({
-      name: 'dsh-plugin-desktop/windows-agent-presets',
-    }))
+    expect(rows.find(row => row.id === 'agent-presets')?.disabled).toBeFalsy()
+    expect(rows.map(row => row.id)).not.toContain('desktop-windows-agent-presets')
     expect(rows.find(row => row.id === 'pwsh-sandbox')).toEqual(expect.objectContaining({
       name: '@deepseek-ai/dsh-pwsh-sandbox',
       disabled: true,
@@ -763,7 +780,7 @@ describe('desktop profile composition', {
     expect(prepared.skippedOptionalEntries).toEqual([])
   })
 
-  it('preserves an explicitly disabled upstream pwsh provider and a third-party replacement', () => {
+  it('preserves explicitly disabled upstream Windows providers and third-party replacements', () => {
     const home = temporaryHome()
     writeFileSync(join(home, 'cordis.patch.yml'), [
       '- id: pwsh-sandbox',
@@ -772,6 +789,12 @@ describe('desktop profile composition', {
       '- insert:',
       '    - id: third-party-pwsh-sandbox',
       "      name: 'third-party-pwsh-sandbox'",
+      '- id: subprocess',
+      "  name: '@deepseek-ai/dsh-subprocess-local'",
+      '  disabled: true',
+      '- insert:',
+      '    - id: third-party-subprocess',
+      "      name: 'third-party-subprocess'",
       '',
     ].join('\n'))
 
@@ -787,5 +810,14 @@ describe('desktop profile composition', {
       name: 'third-party-pwsh-sandbox',
     }))
     expect(rows.map(row => row.id)).not.toContain('desktop-windows-pwsh-sandbox')
+    expect(rows.find(row => row.id === 'subprocess')).toEqual(expect.objectContaining({
+      name: '@deepseek-ai/dsh-subprocess-local',
+      disabled: true,
+    }))
+    expect(rows).toContainEqual(expect.objectContaining({
+      id: 'third-party-subprocess',
+      name: 'third-party-subprocess',
+    }))
+    expect(rows.map(row => row.id)).not.toContain('desktop-windows-subprocess')
   })
 })

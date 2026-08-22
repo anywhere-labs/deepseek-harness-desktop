@@ -39,9 +39,9 @@
       "types": "./lib/types/windows-pwsh-sandbox.d.ts",
       "default": "./lib/windows-pwsh-sandbox.js"
     },
-    "./windows-agent-presets": {
-      "types": "./lib/types/windows-agent-presets.d.ts",
-      "default": "./lib/windows-agent-presets.js"
+    "./windows-subprocess": {
+      "types": "./lib/types/windows-subprocess.d.ts",
+      "default": "./lib/windows-subprocess.js"
     },
     "./terminal": {
       "types": "./lib/types/terminal.d.ts",
@@ -120,10 +120,11 @@
     "verify:cli": "node scripts/verify-cli-runtime.mjs",
     "verify:loader": "node scripts/verify-loader-boot.mjs",
     "verify:profile": "node scripts/verify-profile-boot.mjs",
+    "verify:win-minimal-pty": "node scripts/verify-windows-minimal-pty.mjs",
     "verify:licenses": "node scripts/verify-licenses.mjs",
     "verify:notices": "node scripts/verify-licenses.mjs --notices THIRD_PARTY_NOTICES.md",
     "check": "yarn run build && yarn run typecheck && yarn run test && yarn run verify:closure && yarn run verify:cli && yarn run verify:loader && yarn run verify:profile && yarn run verify:licenses",
-    "check:win-package": "yarn workspace dsh-community-market build && yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-win-portable.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-agent-presets.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:closure",
+    "check:win-package": "yarn workspace dsh-community-market build && yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-win.spec.ts tests/update-checker.spec.ts tests/update-download.spec.ts tests/verify-win-installer.spec.ts tests/verify-win-portable.spec.ts tests/verify-packaged-runtime.spec.ts tests/windows-pwsh-sandbox.spec.ts tests/windows-subprocess.spec.ts tests/windows-volume-diagnostics.spec.ts tests/window-options.spec.ts && yarn run verify:win-minimal-pty && yarn run verify:closure",
     "check:mac-package": "yarn workspace dsh-community-market build && yarn run build && yarn run typecheck && vitest run tests/package.spec.ts tests/package-mac.spec.ts tests/verify-mac-smoke.spec.ts tests/verify-packaged-runtime.spec.ts tests/mac-universal.spec.ts && yarn run verify:closure",
     "start": "node lib/bin.js",
     "dev": "yarn run build && node lib/bin.js",
@@ -203,6 +204,7 @@
     "@deepseek-ai/dsh-pwsh-local": "0.1.1-rc.2",
     "@deepseek-ai/dsh-pwsh-sandbox": "0.1.1-rc.2",
     "@deepseek-ai/dsh-sandbox": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-sandbox-local": "0.1.1-rc.2",
     "@deepseek-ai/dsh-sandbox-policy": "0.1.1-rc.2",
     "@deepseek-ai/dsh-sandbox-windows-acl": "0.1.1-rc.2",
     "@deepseek-ai/dsh-scope": "0.1.1-rc.2",
@@ -226,10 +228,13 @@
     "@deepseek-ai/dsh-subagent": "0.1.1-rc.2",
     "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.1-rc.2",
     "@deepseek-ai/dsh-subprocess": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-subprocess-local": "0.1.1-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.1.1-rc.2",
     "@deepseek-ai/dsh-terminal": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-terminal-bash": "0.1.1-rc.2",
     "@deepseek-ai/dsh-timeout": "0.1.1-rc.2",
     "@deepseek-ai/dsh-token-meter": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-tool-pwsh-persistent": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tool-todo": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tool-workflow": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.1.1-rc.2",

@@ -6,6 +6,12 @@ import {
   desktopWindowsPwshPath,
   type WindowsAclAdaptation,
 } from '../src/windows-pwsh-sandbox.ts'
+import {
+  encodeWindowsAclRelay,
+  WINDOWS_ACL_RELAY_ELECTRON,
+  WINDOWS_ACL_RELAY_PAYLOAD,
+  WINDOWS_ACL_RELAY_TRAMPOLINE,
+} from '../src/windows-acl-relay.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 
@@ -194,6 +200,9 @@ describe('Windows ACL runner trampoline', () => {
   const originalExitCode = process.exitCode
   const originalRunAsNode = process.env[RUN_AS_NODE]
   const originalLowercaseRunAsNode = process.env.electron_run_as_node
+  const originalRelayPayload = process.env[WINDOWS_ACL_RELAY_PAYLOAD]
+  const originalRelayElectron = process.env[WINDOWS_ACL_RELAY_ELECTRON]
+  const originalRelayTrampoline = process.env[WINDOWS_ACL_RELAY_TRAMPOLINE]
 
   afterEach(() => {
     process.argv = originalArgv
@@ -202,6 +211,12 @@ describe('Windows ACL runner trampoline', () => {
     else process.env[RUN_AS_NODE] = originalRunAsNode
     if (originalLowercaseRunAsNode === undefined) delete process.env.electron_run_as_node
     else process.env.electron_run_as_node = originalLowercaseRunAsNode
+    if (originalRelayPayload === undefined) delete process.env[WINDOWS_ACL_RELAY_PAYLOAD]
+    else process.env[WINDOWS_ACL_RELAY_PAYLOAD] = originalRelayPayload
+    if (originalRelayElectron === undefined) delete process.env[WINDOWS_ACL_RELAY_ELECTRON]
+    else process.env[WINDOWS_ACL_RELAY_ELECTRON] = originalRelayElectron
+    if (originalRelayTrampoline === undefined) delete process.env[WINDOWS_ACL_RELAY_TRAMPOLINE]
+    else process.env[WINDOWS_ACL_RELAY_TRAMPOLINE] = originalRelayTrampoline
     vi.restoreAllMocks()
   })
 
@@ -218,6 +233,29 @@ describe('Windows ACL runner trampoline', () => {
 
     expect(process.env[RUN_AS_NODE]).toBeUndefined()
     expect(process.env.electron_run_as_node).toBeUndefined()
+    expect(process.exitCode).toBe(127)
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(
+      'windows-acl-run: desktop trampoline: desktop trampoline received an unexpected ACL runner',
+    ))
+  })
+
+  it('decodes relay mode, removes its environment, and rejects a substituted runner', async () => {
+    process.argv = [process.execPath, 'windows-acl-runner.js']
+    process.env[RUN_AS_NODE] = '1'
+    process.env[WINDOWS_ACL_RELAY_PAYLOAD] = encodeWindowsAclRelay('C:\\other\\runner.js', ['--'])
+    process.env[WINDOWS_ACL_RELAY_ELECTRON] = 'forged-electron'
+    process.env[WINDOWS_ACL_RELAY_TRAMPOLINE] = 'forged-trampoline'
+    const stderr = vi.spyOn(process.stderr, 'write')
+      .mockImplementation((() => true) as typeof process.stderr.write)
+
+    const runnerModule: string = '../src/windows-acl-runner.ts?relay-runner-test'
+    await import(/* @vite-ignore */ runnerModule)
+    await new Promise<void>(resolve => setImmediate(resolve))
+
+    expect(process.env[RUN_AS_NODE]).toBeUndefined()
+    expect(process.env[WINDOWS_ACL_RELAY_PAYLOAD]).toBeUndefined()
+    expect(process.env[WINDOWS_ACL_RELAY_ELECTRON]).toBeUndefined()
+    expect(process.env[WINDOWS_ACL_RELAY_TRAMPOLINE]).toBeUndefined()
     expect(process.exitCode).toBe(127)
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining(
       'windows-acl-run: desktop trampoline: desktop trampoline received an unexpected ACL runner',

@@ -2938,7 +2938,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-sandbox-local@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-sandbox-local@npm:0.1.1-rc.2, @deepseek-ai/dsh-sandbox-local@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-sandbox-local@npm:0.1.1-rc.2"
   dependencies:
@@ -3559,7 +3559,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-subprocess-local@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-subprocess-local@npm:0.1.1-rc.2, @deepseek-ai/dsh-subprocess-local@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-subprocess-local@npm:0.1.1-rc.2"
   dependencies:
@@ -3598,7 +3598,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-terminal-bash@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-terminal-bash@npm:0.1.1-rc.2, @deepseek-ai/dsh-terminal-bash@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-terminal-bash@npm:0.1.1-rc.2"
   dependencies:
@@ -3845,7 +3845,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-tool-pwsh-persistent@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-tool-pwsh-persistent@npm:0.1.1-rc.2, @deepseek-ai/dsh-tool-pwsh-persistent@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-tool-pwsh-persistent@npm:0.1.1-rc.2"
   dependencies:
@@ -8292,6 +8292,7 @@ __metadata:
     "@deepseek-ai/dsh-pwsh-local": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-pwsh-sandbox": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-sandbox": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-sandbox-local": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-sandbox-policy": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-sandbox-windows-acl": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-scope": "npm:0.1.1-rc.2"
@@ -8315,10 +8316,13 @@ __metadata:
     "@deepseek-ai/dsh-subagent": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-subagent-in-process-driver": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-subprocess": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-subprocess-local": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-system-prompt": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-terminal": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-terminal-bash": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-timeout": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-token-meter": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-tool-pwsh-persistent": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-tool-todo": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-tool-workflow": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-tools": "npm:0.1.1-rc.2"
