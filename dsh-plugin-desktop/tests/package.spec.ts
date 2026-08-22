@@ -198,6 +198,27 @@ describe('published package surface', () => {
     }
   })
 
+  it('patches the browse backend to skip unreadable directory-looking entries', () => {
+    const patchPath = './patches/dsh-host-directory-picker-browse@0.1.1-rc.2.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-host-directory-picker-browse@npm:0.1.1-rc.2': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-host-directory-picker-browse@npm:^0.1.1-rc.2': expect.stringContaining(patchPath),
+    })
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedHost = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-host-directory-picker-browse/lib/index.js',
+      packageRoot,
+    ), 'utf8')
+    for (const marker of [
+      'Windows reparse/system directories may appear as directories but fail `stat`',
+      'let enterable = false;',
+      'if (isDirectory || isSymbolicLink) try {',
+    ]) {
+      expect(patch).toContain(marker)
+      expect(installedHost).toContain(marker)
+    }
+  })
+
   it('marks the upstream Workspace browser as the desktop folder-drop target', () => {
     const patchPath = './patches/dsh-client-ui-workspace@0.1.1-rc.2.patch'
     expect(workspaceManifest.resolutions).toMatchObject({

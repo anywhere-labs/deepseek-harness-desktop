@@ -1,0 +1,20 @@
+diff --git a/lib/index.js b/lib/index.js
+index 2b8c76e26a05022d8f24fcfff651bc8c1ee83dec..ffd9b0493d53c76debb08e45fff5579da433161a 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -117,11 +117,13 @@ function messageOf(error) {
+ * One listing row for a dirent, following symlinks to directories; null for
+ * non-directories and broken/cyclic links (skipped silently — the browser
+ * shows what can be entered, and a broken link cannot).
++* Windows reparse/system directories may appear as directories but fail `stat`;
++* treat those the same way so the parent listing stays usable.
+ */
+ async function directoryRow(parent, name, isDirectory, isSymbolicLink, signal) {
+ 	const path = join(parent, name);
+-	let enterable = isDirectory;
+-	if (!enterable && isSymbolicLink) try {
++	let enterable = false;
++	if (isDirectory || isSymbolicLink) try {
+ 		enterable = (await raceAbort(stat(path), signal)).isDirectory();
+ 	} catch {
+ 		/* v8 ignore next 2 -- an abort landing mid-probe needs a stalled stat; the per-candidate check in list covers the settled path. */
