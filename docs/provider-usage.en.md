@@ -6,7 +6,7 @@ DSH Desktop composes a pinned revision of [`dsh-llm-guardian`](https://github.co
 
 ## Provider cards
 
-Each Provider card shows connectivity, locally accumulated tokens, an account balance or plan allowance when supported, and the last refresh time. The heartbeat action tests the endpoint immediately, while the statistics action opens the current Provider's detail view. Existing edit and delete actions remain unchanged.
+Each Provider card shows connectivity, locally accumulated tokens, an account balance or plan allowance when supported, and the last refresh time. When a plan API returns quota windows, the card displays remaining capacity and a live reset countdown for windows such as `5h` and `7d`; utilization at 70% and 90% changes the status to orange and red respectively. The heartbeat action tests the endpoint immediately, while the statistics action opens the current Provider's detail view. Existing edit and delete actions remain unchanged.
 
 ![Provider-card health and usage actions](images/provider-card-overview.png)
 
@@ -29,4 +29,4 @@ The **Settings** tab independently controls API usage queries, the Provider-card
 - Tokens, sessions, messages, and trends are computed only from local session logs; session content and aggregate results are not uploaded.
 - Success, failure, missing configuration, and timeout states include explicit feedback and refresh timestamps.
 
-The plugin is pinned to the validated commit `32db0da4d418a469f625b84582bcf9d93f64fd4f` for reproducible packaging and dependency review.
+The plugin is pinned to the validated commit `cbd5fade93178db82ff6b4b07cd6baaf7fbd509e` for reproducible packaging and dependency review.

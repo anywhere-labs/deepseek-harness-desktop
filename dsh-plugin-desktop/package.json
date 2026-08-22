@@ -243,7 +243,7 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
-    "dsh-llm-guardian": "github:ice-kele/dsh-llm-guardian#bc140288aa24c0f221dc8b0512a5c4fece08514c",
+    "dsh-llm-guardian": "github:ice-kele/dsh-llm-guardian#cbd5fade93178db82ff6b4b07cd6baaf7fbd509e",
     "dshmarket": "1.17.1",
     "koffi": "3.1.5",
     "node-addon-require-builtin": "^0.1.4",
