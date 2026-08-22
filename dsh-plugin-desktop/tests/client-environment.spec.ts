@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
+  IconCheckOutline16: () => null,
+  IconChevronDownOutline14: () => null,
+  IconCloseFill14: () => null,
+  IconWarningOutline16: () => null,
+}))
+
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply } from '../src/client/index.ts'
 import { provideDesktopLayout } from '../src/client/layout-service.ts'

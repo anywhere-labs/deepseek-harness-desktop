@@ -10,6 +10,7 @@
     "tests/client-boot-health.spec.ts",
     "tests/client-desktop-settings.spec.ts",
     "tests/client-environment.spec.ts",
+    "tests/client-vision-experience.spec.ts",
     "tests/theme-presenter.spec.ts",
     "tests/client-workspace-folder-drop.spec.ts"
   ]
