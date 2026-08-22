@@ -11,6 +11,11 @@ const FIRST_BYTE_TIMEOUT_MS = 12_000
 const TOTAL_TIMEOUT_MS = 30_000
 const SYNTHETIC_PROXY_NETWORK = '198.18.0.0'
 const SYNTHETIC_PROXY_PREFIX = 15
+// Default IPv6 fake-IP pool of mihomo and Clash Verge (fake-ip-range6). Reviewed
+// hosts are allowed to resolve here so a local proxy's fake-IP DNS does not
+// break catalog media downloads when IPv6 is enabled.
+const SYNTHETIC_PROXY_NETWORK6 = 'fdfe:dcba:9876::'
+const SYNTHETIC_PROXY_PREFIX6 = 64
 
 export type MarketMediaErrorCode =
   | 'invalid-candidate'
@@ -46,7 +51,7 @@ interface MediaHttpResponse {
 }
 
 export interface RestrictedImageFetcherOptions {
-  /** Exact, product-reviewed hosts allowed to resolve through an RFC 2544 fake-IP proxy. */
+  /** Exact, product-reviewed hosts allowed to resolve through RFC 2544 fake-IP proxy ranges (IPv4 and IPv6). */
   readonly syntheticProxyHostnames?: readonly string[]
   readonly lookupAddresses?: (hostname: string) => Promise<readonly MediaPinnedAddress[]>
   readonly request?: (
@@ -76,6 +81,7 @@ for (const [network, prefix] of [
 
 const syntheticProxyAddresses = new BlockList()
 syntheticProxyAddresses.addSubnet(SYNTHETIC_PROXY_NETWORK, SYNTHETIC_PROXY_PREFIX, 'ipv4')
+syntheticProxyAddresses.addSubnet(SYNTHETIC_PROXY_NETWORK6, SYNTHETIC_PROXY_PREFIX6, 'ipv6')
 for (const [network, prefix] of [
   ['::', 128],
   ['::1', 128],
@@ -133,8 +139,8 @@ function assertSafeAddress(address: string, allowSyntheticProxyAddress = false):
   const family = isIP(normalized)
   const addressFamily = family === 4 ? 'ipv4' : 'ipv6'
   const allowedSyntheticAddress = allowSyntheticProxyAddress
-    && family === 4
-    && syntheticProxyAddresses.check(normalized, 'ipv4')
+    && (family === 4 && syntheticProxyAddresses.check(normalized, 'ipv4')
+      || family === 6 && syntheticProxyAddresses.check(normalized, 'ipv6'))
   if (family === 0 || blockedAddresses.check(normalized, addressFamily) && !allowedSyntheticAddress) {
     throw new MarketMediaError('blocked-address')
   }

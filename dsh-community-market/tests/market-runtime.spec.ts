@@ -1621,6 +1621,63 @@ describe('restricted HTTP boundary', () => {
     )).rejects.toMatchObject({ code: 'blocked-address' })
   })
 
+  it('allows IPv4 and IPv6 fake-IP DNS together for a reviewed hostname', async () => {
+    const lookupAddresses = vi.fn(async () => [
+      { address: '198.18.0.38', family: 4 as const },
+      { address: 'fdfe:dcba:9876::1b', family: 6 as const },
+    ])
+    const request = vi.fn(async () => ({
+      body: Buffer.from('{"packages":[]}'),
+      headers: { 'content-type': 'application/json' },
+      statusCode: 200,
+    }))
+    const trusted = createRestrictedHttpClient({
+      syntheticProxyHostnames: ['deepseek1024.com'],
+      lookupAddresses,
+      request,
+    })
+
+    await expect(trusted.getJson(
+      'https://deepseek1024.com/api/v1/plugins',
+      new AbortController().signal,
+    )).resolves.toMatchObject({ value: { packages: [] } })
+    expect(request).toHaveBeenCalledOnce()
+
+    const strict = createRestrictedHttpClient({ lookupAddresses, request })
+    await expect(strict.getJson(
+      'https://deepseek1024.com/api/v1/plugins',
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'blocked-address' })
+  })
+
+  it('allows a reviewed hostname pinned to an IPv6-only fake-IP address', async () => {
+    const lookupAddresses = vi.fn(async () => [
+      { address: 'fdfe:dcba:9876::2c', family: 6 as const },
+    ])
+    const request = vi.fn(async () => ({
+      body: Buffer.from('{"packages":[]}'),
+      headers: { 'content-type': 'application/json' },
+      statusCode: 200,
+    }))
+    const trusted = createRestrictedHttpClient({
+      syntheticProxyHostnames: ['api.dshfind.com'],
+      lookupAddresses,
+      request,
+    })
+
+    await expect(trusted.getJson(
+      'https://api.dshfind.com/v1/plugins',
+      new AbortController().signal,
+    )).resolves.toMatchObject({ value: { packages: [] } })
+    expect(request).toHaveBeenCalledOnce()
+
+    const strict = createRestrictedHttpClient({ lookupAddresses, request })
+    await expect(strict.getJson(
+      'https://api.dshfind.com/v1/plugins',
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'blocked-address' })
+  })
+
   it('caches a completed fixed-catalog response and collapses concurrent reads', async () => {
     let now = 1_000
     let release: ((value: { value: object; finalUrl: string }) => void) | undefined
