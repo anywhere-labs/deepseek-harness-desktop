@@ -119,6 +119,39 @@ describe('desktop update installer download', () => {
     await expectNoPartialFiles(directory)
   })
 
+  it('rejects a truncated Windows executable whose delivered size falls short of the declared length', async () => {
+    const userDataPath = await temporaryUserData()
+    const artifact = windowsArtifact()
+    await expectFailure(downloadDesktopUpdate({
+      platform: 'win32',
+      version: '2.2.1',
+      userDataPath,
+      request: async () => chunkedResponse(
+        [artifact],
+        { 'content-length': String(artifact.byteLength + 512) },
+      ),
+    }), 'invalid-artifact')
+    await expectNoPartialFiles(userDataPath, '2.2.1')
+  })
+
+  it('accepts a Windows executable whose delivered size matches the declared length', async () => {
+    const userDataPath = await temporaryUserData()
+    const artifact = windowsArtifact()
+    const result = await downloadDesktopUpdate({
+      platform: 'win32',
+      version: '2.2.2',
+      userDataPath,
+      request: async () => chunkedResponse(
+        [artifact],
+        { 'content-length': String(artifact.byteLength) },
+      ),
+    })
+
+    expect(result).toBe(join(userDataPath, 'updates', '2.2.2', 'DSH-Desktop-2.2.2-windows.exe'))
+    expect(await readFile(result)).toEqual(Buffer.from(artifact))
+    await expectNoPartialFiles(userDataPath, '2.2.2')
+  })
+
   it('accepts canonical stable SemVer build metadata in the private artifact path', async () => {
     const directory = await temporaryDirectory()
     const result = await downloadDesktopUpdate({

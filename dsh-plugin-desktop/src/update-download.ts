@@ -131,11 +131,11 @@ export async function downloadDesktopUpdate(options: DownloadDesktopUpdateOption
   if (response.body === null) {
     throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
   }
-  assertDeclaredSize(response)
+  const declaredSize = assertDeclaredSize(response)
 
   let failure: unknown
   try {
-    await writeResponseBody(paths.temporary, response.body, options.signal)
+    await writeResponseBody(paths.temporary, response.body, options.signal, declaredSize)
     throwIfAborted(options.signal)
     await validateArtifact(paths.temporary, platform)
     throwIfAborted(options.signal)
@@ -359,21 +359,24 @@ async function lstatOptional(filename: string): Promise<Awaited<ReturnType<typeo
   }
 }
 
-function assertDeclaredSize(response: Response): void {
+function assertDeclaredSize(response: Response): bigint | undefined {
   const declared = response.headers.get('content-length')
-  if (declared === null || !DECIMAL_BYTES.test(declared)) return
-  if (BigInt(declared) > BigInt(MAX_UPDATE_DOWNLOAD_BYTES)) {
+  if (declared === null || !DECIMAL_BYTES.test(declared)) return undefined
+  const bytes = BigInt(declared)
+  if (bytes > BigInt(MAX_UPDATE_DOWNLOAD_BYTES)) {
     throw new UpdateDownloadError(
       'response-too-large',
       `The update installer exceeds ${String(MAX_UPDATE_DOWNLOAD_BYTES)} bytes.`,
     )
   }
+  return bytes
 }
 
 async function writeResponseBody(
   filename: string,
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal | undefined,
+  declaredSize: bigint | undefined,
 ): Promise<void> {
   const handle = await open(filename, 'wx', PRIVATE_FILE_MODE)
   const reader = body.getReader()
@@ -395,6 +398,12 @@ async function writeResponseBody(
     }
     if (bytesWritten === 0) {
       throw new UpdateDownloadError('empty-body', 'The update download service returned an empty body.')
+    }
+    if (declaredSize !== undefined && BigInt(bytesWritten) !== declaredSize) {
+      throw new UpdateDownloadError(
+        'invalid-artifact',
+        'The update installer download was truncated before it completed.',
+      )
     }
     await handle.sync()
   } catch (cause) {
