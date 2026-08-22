@@ -311,7 +311,8 @@
       "cordis.patch.yml",
       "lib/**",
       "package.json",
-      "!node_modules/node-pty/build/**"
+      "!node_modules/node-pty/build/**",
+      "!**/*.map"
     ],
     "mac": {
       "target": [
