@@ -3,9 +3,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { assertDesktopProfileName } from './profile-manager.ts'
 import type { DesktopMarketProvider } from './desktop-market.ts'
+import { parseDesktopHostTargetSelection, type DesktopHostTargetSelection } from './host-target.ts'
 import type DesktopSettingsController from './desktop-settings-controller.ts'
 import type { DesktopSettingsPostResponse } from './desktop-settings-controller.ts'
 import type {
+  DesktopHostTargetRequest,
   DesktopMarketSelectRequest,
   DesktopProfileCreateRequest,
   DesktopProfileDeleteRequest,
@@ -146,6 +148,24 @@ function isMarketProvider(value: unknown): value is DesktopMarketProvider {
 function parseMarketRequest(value: unknown): DesktopMarketSelectRequest | undefined {
   if (!isExactRecord(value, 'provider') || !isMarketProvider(value.provider)) return undefined
   return { provider: value.provider }
+}
+
+function parseHostTargetRequest(value: unknown): DesktopHostTargetRequest | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const keys = Object.keys(record)
+  if (record.mode === 'local') {
+    if (keys.length !== 1 || keys[0] !== 'mode') return undefined
+  } else if (record.mode === 'wsl') {
+    if (keys.length !== 2 || !keys.includes('mode') || !keys.includes('distribution')) return undefined
+  } else {
+    return undefined
+  }
+  try {
+    return parseDesktopHostTargetSelection(record)
+  } catch {
+    return undefined
+  }
 }
 
 function isEmptyRequest(value: unknown): boolean {
@@ -317,6 +337,37 @@ export async function handleDesktopMarketSelectRequest(
   } catch (cause) {
     reportError('select Market provider', cause)
     finishJson(res, 500, error('Market selection could not be saved'))
+  }
+}
+
+/** Persist a complete Host target and queue restart after the response is sent. */
+export async function handleDesktopHostTargetSelectRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  expectedOrigin: string,
+  controller: DesktopSettingsController,
+  reportError: (operation: string, cause: unknown) => void = () => {},
+): Promise<void> {
+  if (req.method !== 'POST') return finishJson(res, 405, error('method not allowed'), 'POST')
+  if (!isSameOriginLoopbackRequest(req, expectedOrigin, true)) {
+    return finishJson(res, 403, error('forbidden'))
+  }
+  const value = await parsePostBody(req, res)
+  if (value === INVALID_BODY) return
+  const request = parseHostTargetRequest(value)
+  if (request === undefined) return finishJson(res, 400, error('invalid Host target selection request'))
+  try {
+    const operation = await controller.selectHostTarget(request as DesktopHostTargetSelection)
+    finishPostResponse(
+      res,
+      operation.response.restartRequired ? 202 : 200,
+      operation,
+      'select Host target',
+      reportError,
+    )
+  } catch (cause) {
+    reportError('select Host target', cause)
+    finishJson(res, 409, error('Host target could not be selected'))
   }
 }
 

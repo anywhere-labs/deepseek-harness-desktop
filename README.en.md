@@ -51,6 +51,7 @@ Ordinary users can start with the [user guide](docs/user-guide.en.md); the devel
 | Goal | Entry point |
 | --- | --- |
 | Install and use the application | [User guide](docs/user-guide.en.md) |
+| Run the complete Host in WSL 2 on Windows | [Managed WSL Host](dsh-plugin-desktop/docs/wsl-host.md) |
 | Check platforms, prerequisites, and product boundaries | [FAQ](docs/faq.en.md) |
 | Understand why the project exists | [Why DSH Desktop](docs/why-desktop.en.md) |
 | See the full documentation and README map | [Documentation index](docs/README.en.md) |
@@ -74,7 +75,7 @@ Ordinary users can start with the [user guide](docs/user-guide.en.md); the devel
   <tr>
     <td width="50%" valign="top">
       <h3>Desktop</h3>
-      <p>Bring the upstream DeepSeek Harness local Web UI to a native desktop application. The app starts and manages the local Harness service, integrates the system tray and desktop window, and requires no Node.js installation or command-line setup.</p>
+      <p>Bring the upstream DeepSeek Harness local Web UI to a native desktop application. By default the app manages a Local Host with no extra Node.js installation. Windows users can instead place the complete Host, profiles, plugins, and terminal in one selected WSL 2 distribution while retaining the native window and system integrations.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Mobile Remote Control <img src="https://img.shields.io/badge/COMING_SOON-F59E0B?style=flat-square" alt="Coming Soon"></h3>

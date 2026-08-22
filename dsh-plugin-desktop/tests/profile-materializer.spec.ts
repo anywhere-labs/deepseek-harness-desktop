@@ -100,6 +100,30 @@ describe('profile materializer', () => {
     })
   })
 
+  it('targets the Node ABI for a managed WSL Host without Electron headers', async () => {
+    const child = fakeChild()
+    let spawnOptions: SpawnOptions | undefined
+    const spawn = vi.fn((_command: string, _args: readonly string[], selectedOptions: SpawnOptions) => {
+      spawnOptions = selectedOptions
+      return child as unknown as ChildProcess
+    }) as unknown as ProfileMaterializerSpawn
+    const resultPromise = materializeProfile({
+      ...options(spawn),
+      runtime: 'node',
+      electronVersion: '24.19.0',
+    })
+    child.stdout.end('installed\n')
+    child.stderr.end('')
+    child.emit('close', 0, null)
+    await resultPromise
+
+    expect(spawnOptions?.env).toMatchObject({
+      npm_config_runtime: 'node',
+      npm_config_target: '24.19.0',
+    })
+    expect(spawnOptions?.env).not.toHaveProperty('npm_config_disturl')
+  })
+
   it('terminates and rejects when the caller aborts', async () => {
     const child = fakeChild()
     const spawn = vi.fn(() => child as unknown as ChildProcess) as unknown as ProfileMaterializerSpawn

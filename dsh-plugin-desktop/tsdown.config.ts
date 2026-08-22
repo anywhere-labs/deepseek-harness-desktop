@@ -30,6 +30,7 @@ export default defineConfig([
       'windows-agent-presets': 'src/windows-agent-presets.ts',
       'windows-pwsh-sandbox': 'src/windows-pwsh-sandbox.ts',
       'windows-acl-runner': 'src/windows-acl-runner.ts',
+      'wsl-host': 'src/wsl-host.ts',
       main: 'src/main.ts',
     },
     outDir: 'lib',

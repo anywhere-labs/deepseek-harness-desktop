@@ -1,6 +1,7 @@
 /** Private same-origin Desktop settings API shared with the bundled renderer. */
 
 import type { DesktopMarketProvider } from './desktop-market.ts'
+import type { DesktopHostTargetSelectRequest, DesktopHostTargetView } from './host-target.ts'
 
 /** Read the current Desktop-owned settings state. */
 export const DESKTOP_SETTINGS_PATH = '/api/desktop/settings'
@@ -28,6 +29,9 @@ export const DESKTOP_PROFILE_CREATE_WINDOW_PATH = '/api/desktop/profiles/create-
 
 /** Restore the last successful Profile and its latest healthy configuration. */
 export const DESKTOP_PROFILE_ROLLBACK_PATH = '/api/desktop/profiles/rollback'
+
+/** Select whether the next complete Host generation runs locally or in WSL. */
+export const DESKTOP_HOST_TARGET_SELECT_PATH = '/api/desktop/host-target/select'
 
 /** Renderer-safe projection of one discovered profile. */
 export interface DesktopSettingsProfileView {
@@ -61,6 +65,8 @@ export interface DesktopSettingsResponse {
   readonly profiles: readonly DesktopSettingsProfileView[]
   /** Market choice for the current and next generation. */
   readonly market: DesktopSettingsMarketView
+  /** Native Host-target discovery, when the launcher exposes target switching. */
+  readonly hostTarget?: DesktopHostTargetView
 }
 
 /** Exact body accepted by the profile-creation endpoint. */
@@ -100,6 +106,12 @@ export interface DesktopMarketSelectRequest {
 
 /** Successful Market selection handoff. */
 export type DesktopMarketSelectResponse = DesktopRestartAcceptance
+
+/** Exact body accepted by the Host-target endpoint. */
+export type DesktopHostTargetRequest = DesktopHostTargetSelectRequest
+
+/** Successful Host-target selection handoff. */
+export type DesktopHostTargetSelectResponse = DesktopRestartAcceptance
 
 /** Exact empty body accepted by the terminal endpoint. */
 export type DesktopTerminalOpenRequest = Readonly<Record<string, never>>

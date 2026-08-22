@@ -12,6 +12,8 @@ const TERMINATION_GRACE_MS = 3_000
 
 /** Runtime inputs resolved by the Electron bootstrap. */
 export interface ProfileMaterializerOptions {
+  /** Native ABI targeted by the Host process; Desktop defaults to Electron. */
+  readonly runtime?: 'electron' | 'node'
   readonly appExecutable: string
   readonly clearEnvironmentPath: string
   readonly pnpmBinPath: string
@@ -137,6 +139,7 @@ export async function materializeProfile(
     '--frozen-lockfile',
   ] as const
   const path = inheritedPath()
+  const runtime = options.runtime ?? 'electron'
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: path.length === 0 ? options.nodeBinDir : `${options.nodeBinDir}${delimiter}${path}`,
@@ -144,9 +147,9 @@ export async function materializeProfile(
     ELECTRON_RUN_AS_NODE: '1',
     DSH_HOME: options.homeDir,
     CI: 'true',
-    npm_config_runtime: 'electron',
+    npm_config_runtime: runtime,
     npm_config_target: options.electronVersion,
-    npm_config_disturl: ELECTRON_HEADERS_URL,
+    ...(runtime === 'electron' ? { npm_config_disturl: ELECTRON_HEADERS_URL } : {}),
   }
   const spawn = options.spawn ?? childSpawn
   const child = spawn(options.appExecutable, argv.slice(1), {

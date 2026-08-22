@@ -25,6 +25,11 @@ const VIEW: DesktopSettingsView = {
     { name: 'work', exists: true, webCapable: true, selectable: true, deletable: true },
   ],
   market: { requested: 'disabled', effective: 'disabled', legacyDefaulted: true },
+  hostTarget: {
+    current: { mode: 'local' },
+    distributions: ['Ubuntu-24.04'],
+    wslSupported: true,
+  },
 }
 
 function json(value: unknown, status = 200): Response {
@@ -41,6 +46,13 @@ describe('Desktop settings API', () => {
       .toThrow('duplicate profile')
     expect(() => parseDesktopSettingsView({ ...VIEW, market: { ...VIEW.market, requested: 'unknown' } }))
       .toThrow('invalid Desktop settings response')
+    expect(() => parseDesktopSettingsView({
+      ...VIEW,
+      hostTarget: { ...VIEW.hostTarget, distributions: ['Ubuntu-24.04', 'Ubuntu-24.04'] },
+    })).toThrow('invalid Host target settings response')
+    expect(() => parseDesktopSettingsView({
+      ...VIEW, hostTarget: { current: { mode: 'wsl' }, distributions: [], wslSupported: true },
+    })).toThrow('invalid WSL distribution')
     expect(parseDesktopRestartAcceptance({ accepted: true, restartRequired: true }))
       .toEqual({ accepted: true, restartRequired: true })
     expect(parseDesktopRestartAcceptance({ accepted: true, restartRequired: false }))
@@ -66,6 +78,8 @@ describe('Desktop settings API', () => {
     await expect(api.selectProfile('work')).resolves.toEqual({ accepted: true, restartRequired: true })
     await expect(api.deleteProfile('work')).resolves.toEqual(VIEW)
     await expect(api.selectMarket('community-market')).resolves.toEqual({ accepted: true, restartRequired: true })
+    await expect(api.selectHostTarget({ mode: 'wsl', distribution: 'Ubuntu-24.04' }))
+      .resolves.toEqual({ accepted: true, restartRequired: true })
     await expect(api.openTerminal()).resolves.toBeUndefined()
 
     expect(fetcher.mock.calls.map(call => call[0])).toEqual([
@@ -74,6 +88,7 @@ describe('Desktop settings API', () => {
       desktopSettingsPaths.profileSelect,
       desktopSettingsPaths.profileDelete,
       desktopSettingsPaths.marketSelect,
+      desktopSettingsPaths.hostTargetSelect,
       desktopSettingsPaths.terminalOpen,
     ])
     expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
@@ -89,6 +104,9 @@ describe('Desktop settings API', () => {
       body: JSON.stringify({ provider: 'community-market' }),
     })
     expect(fetcher.mock.calls[5]?.[1]).toMatchObject({
+      body: JSON.stringify({ mode: 'wsl', distribution: 'Ubuntu-24.04' }),
+    })
+    expect(fetcher.mock.calls[6]?.[1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({}),
     })

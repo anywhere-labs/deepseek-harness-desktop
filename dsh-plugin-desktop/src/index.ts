@@ -28,6 +28,7 @@ import {
 } from './directory-picker-route.ts'
 import {
   DESKTOP_DIAGNOSTICS_EXPORT_PATH,
+  DESKTOP_HOST_TARGET_SELECT_PATH,
   DESKTOP_MARKET_SELECT_PATH,
   DESKTOP_PROFILE_CREATE_PATH,
   DESKTOP_PROFILE_CREATE_WINDOW_PATH,
@@ -39,6 +40,7 @@ import {
 } from './desktop-settings-contract.ts'
 import {
   handleDesktopDiagnosticsExportRequest,
+  handleDesktopHostTargetSelectRequest,
   handleDesktopMarketSelectRequest,
   handleDesktopProfileCreateRequest,
   handleDesktopProfileCreateWindowRequest,
@@ -189,6 +191,7 @@ export function apply(ctx: Context, config: Config): void {
       [DESKTOP_PROFILE_ROLLBACK_PATH, handleDesktopProfileRollbackRequest],
       [DESKTOP_PROFILE_SELECT_PATH, handleDesktopProfileSelectRequest],
       [DESKTOP_MARKET_SELECT_PATH, handleDesktopMarketSelectRequest],
+      [DESKTOP_HOST_TARGET_SELECT_PATH, handleDesktopHostTargetSelectRequest],
       [DESKTOP_TERMINAL_OPEN_PATH, handleDesktopTerminalOpenRequest],
       [DESKTOP_DIAGNOSTICS_EXPORT_PATH, handleDesktopDiagnosticsExportRequest],
     ] as const

@@ -2,6 +2,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import type { UpdateCheckResult, UpdateRequest } from './update-checker.ts'
 import type { ProfileCreateWindowOptions } from './profile-create-window.ts'
+import type {
+  DesktopHostTargetSelection,
+  DesktopHostTargetView,
+} from './host-target.ts'
 
 /** Electron platforms supported by the DSH Desktop native adapter. */
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux'
@@ -150,6 +154,12 @@ export interface DesktopRuntime {
 
   /** Native network, update-download, and notification adapter. */
   readonly updates: DesktopUpdateAdapter
+
+  /** Native launcher target applied to this generation, when target switching is available. */
+  readonly hostTarget?: DesktopHostTargetView
+
+  /** Persist a local or WSL Host target for the next generation. */
+  selectHostTarget?(selection: DesktopHostTargetSelection): Promise<void>
 
   /**
    * Register one shell generation while the Cordis profile is activating.

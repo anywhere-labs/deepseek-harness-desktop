@@ -6,7 +6,7 @@ import {
 import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  DesktopMarketProvider, DesktopProfileView, DesktopSettingsApi, DesktopSettingsView,
+  DesktopHostTargetSelection, DesktopMarketProvider, DesktopProfileView, DesktopSettingsApi, DesktopSettingsView,
 } from './desktop-settings-api.ts'
 import type { DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
 import type { DesktopClientPlatform } from './environment.ts'
@@ -43,7 +43,8 @@ export type DesktopSettingsSectionProps =
   & InjectFace<DesktopSettingsSectionInjected>
 
 type Translate = DesktopSettingsSectionProps['t']
-type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-market' | 'mode' | 'notification'
+type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile'
+  | 'select-market' | 'select-host-target' | 'mode' | 'notification'
 type RestartState = 'none' | 'restarting' | 'required'
 
 function useScope<T>(scope: SettingsScope<T>) {
@@ -284,6 +285,17 @@ export function DesktopSettingsSection({
     })
   }
 
+  const selectHostTarget = (selection: DesktopHostTargetSelection): void => {
+    void run('select-host-target', async () => {
+      const response = await api.selectHostTarget(selection)
+      setView(current => current?.hostTarget === undefined ? current : {
+        ...current,
+        hostTarget: { ...current.hostTarget, current: selection },
+      })
+      if (response.restartRequired) requestRestart()
+    })
+  }
+
   const setMode = (next: DesktopShellSettings['mode']): void => {
     void run('mode', async () => {
       await desktopSettings.set('mode', next)
@@ -294,6 +306,12 @@ export function DesktopSettingsSection({
   const setNotification = (field: keyof DesktopNotificationSettings, checked: boolean): void => {
     void run('notification', async () => { await notificationSettings.set(field, checked) })
   }
+
+  const hostTarget = view?.hostTarget
+  const hostDistributions = hostTarget?.current.mode === 'wsl'
+    && !hostTarget.distributions.includes(hostTarget.current.distribution)
+    ? [hostTarget.current.distribution, ...hostTarget.distributions]
+    : hostTarget?.distributions ?? []
 
   return (
     <div className="dshDesktopSettings">
@@ -400,6 +418,47 @@ export function DesktopSettingsSection({
           </>
         )}
       </section>
+
+      {hostTarget !== undefined && (platform === 'win32' || hostTarget.current.mode === 'wsl') && (
+        <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-host-target-title">
+          <div>
+            <h3 id="dsh-desktop-host-target-title">{t('hostTargetTitle')}</h3>
+            <p className="dshDesktopSettingsGroupIntro">{t('hostTargetIntro')}</p>
+          </div>
+          {!hostTarget.wslSupported && (
+            <p className="dshDesktopSettingsNotice">{t('wslUnavailable')}</p>
+          )}
+          {hostTarget.wslSupported && hostTarget.distributions.length === 0 && (
+            <p className="dshDesktopSettingsNotice">{t('wslNoDistribution')}</p>
+          )}
+          <div className="dshDesktopSettingsList" role="radiogroup" aria-labelledby="dsh-desktop-host-target-title">
+            <Choice
+              title={t('localHost')}
+              body={t('localHostBody')}
+              selected={hostTarget.current.mode === 'local'}
+              disabled={busy !== undefined || restart !== 'none'}
+              action={() => { selectHostTarget({ mode: 'local' }) }}
+              status={hostTarget.current.mode === 'local' ? t('selected') : undefined}
+            />
+            {hostDistributions.map((distribution) => {
+              const available = hostTarget.distributions.includes(distribution)
+              const selected = hostTarget.current.mode === 'wsl'
+                && hostTarget.current.distribution === distribution
+              return (
+                <Choice
+                  key={distribution}
+                  title={`WSL · ${distribution}`}
+                  body={available ? t('wslHostBody') : t('wslDistributionUnavailable')}
+                  selected={selected}
+                  disabled={!available || busy !== undefined || restart !== 'none'}
+                  action={() => { selectHostTarget({ mode: 'wsl', distribution }) }}
+                  status={selected ? t('selected') : undefined}
+                />
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-market-title">
         <div>

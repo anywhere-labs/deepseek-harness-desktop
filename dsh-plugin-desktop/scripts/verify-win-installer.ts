@@ -3,6 +3,10 @@
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  verifyWslRuntimeBundle,
+  WSL_RUNTIME_BUNDLE_DIRECTORY,
+} from '../src/wsl-runtime-bundle.ts'
 
 /** Verify a complete in-memory Windows PE image. */
 export function assertPortableExecutableBuffer(data: Buffer, label: string, source: string): void {
@@ -24,6 +28,8 @@ export interface WindowsInstallerArtifacts {
   readonly installerPath: string
   /** Unpacked application executable path. */
   readonly applicationPath: string
+  /** Integrity-checked WSL payload sealed beside the unpacked app. */
+  readonly runtimeBundlePath: string
 }
 
 /** Injectable Windows installer verification boundary. */
@@ -93,10 +99,14 @@ export function verifyWindowsInstaller(
     `DSH-Desktop-${options.version}-x64-Setup.exe`,
   )
   const applicationPath = join(distDir, 'win-unpacked', 'DSH Desktop.exe')
+  const runtimeBundlePath = join(
+    distDir, 'win-unpacked', 'resources', WSL_RUNTIME_BUNDLE_DIRECTORY,
+  )
 
   assertPortableExecutable(installerPath, 'Windows NSIS installer')
   assertPortableExecutable(applicationPath, 'unpacked Windows application')
-  return { installerPath, applicationPath }
+  verifyWslRuntimeBundle(runtimeBundlePath, options.version)
+  return { installerPath, applicationPath, runtimeBundlePath }
 }
 
 const invokedPath = process.argv[1]

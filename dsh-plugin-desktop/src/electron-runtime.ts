@@ -58,6 +58,8 @@ import {
 } from './windows-volume-diagnostics.ts'
 import { ElectronWorkspaceAdmission } from './workspace-admission.ts'
 import { ProfileCreateWindow, type ProfileCreateWindowOptions } from './profile-create-window.ts'
+import type { DesktopHostTargetController } from './host-target-controller.ts'
+import type { DesktopHostTargetSelection, DesktopHostTargetView } from './host-target.ts'
 
 /** Return the presentation mode opposite the active generation. */
 export function nextDesktopShellMode(mode: DesktopShellSpec['mode']): DesktopShellSpec['mode'] {
@@ -109,6 +111,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   private terminalSpec: DesktopTerminalSpec | undefined
   private diagnosticExport: Promise<void> | undefined
   private readonly workspaceAdmission: ElectronWorkspaceAdmission
+  private readonly hostTargetController: Pick<DesktopHostTargetController, 'read' | 'select'>
   private updateCleanupTask: Promise<void> | undefined
   private rendererHealthGate: DesktopRendererHealthGate | undefined
   private profileCreateWindow: ProfileCreateWindow | undefined
@@ -118,9 +121,18 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
     private readonly onRendererBoot: (report: RendererBootReport) => boolean | void = () => {},
     private readonly logger: DesktopLogger | undefined = undefined,
     workspaceVolumeQuery: WindowsVolumeQuery | undefined = undefined,
+    hostTargetController?: Pick<DesktopHostTargetController, 'read' | 'select'>,
   ) {
     this.platformStrategy = electronPlatformStrategy()
     this.platform = this.platformStrategy.platform
+    this.hostTargetController = hostTargetController ?? {
+      read: () => Object.freeze({
+        current: { mode: 'local' as const },
+        distributions: [],
+        wslSupported: false,
+      }),
+      select: selection => selection,
+    }
     const platformStrategy = this.platformStrategy
     this.workspaceAdmission = new ElectronWorkspaceAdmission({
       platform: this.platform,
@@ -424,6 +436,16 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   /** @inheritdoc */
   async requestRestart(): Promise<void> {
     await this.restart()
+  }
+
+  /** @inheritdoc */
+  get hostTarget(): DesktopHostTargetView {
+    return this.hostTargetController.read()
+  }
+
+  /** @inheritdoc */
+  async selectHostTarget(selection: DesktopHostTargetSelection): Promise<void> {
+    this.hostTargetController.select(selection)
   }
 
   /** @inheritdoc */

@@ -7,6 +7,7 @@ import DesktopSettingsController, {
 } from '../src/desktop-settings-controller.ts'
 import {
   handleDesktopDiagnosticsExportRequest,
+  handleDesktopHostTargetSelectRequest,
   handleDesktopMarketSelectRequest,
   handleDesktopProfileCreateRequest,
   handleDesktopProfileCreateWindowRequest,
@@ -239,6 +240,40 @@ describe('desktop settings controller', () => {
     expect(events).toEqual(['persist:dsh-market'])
     operation.afterResponse?.()
     expect(events).toEqual(['persist:dsh-market', 'schedule'])
+  })
+
+  it('projects, persists, and defers restart for a complete Host target', async () => {
+    let current: { mode: 'local' } | { mode: 'wsl', distribution: string } = { mode: 'local' }
+    const selectHostTarget = vi.fn(async (selection: { mode: 'local' } | { mode: 'wsl', distribution: string }) => {
+      current = selection
+    })
+    const scheduleRestart = vi.fn()
+    const controller = new DesktopSettingsController(bootstrap({
+      readHostTarget: () => ({
+        current,
+        distributions: ['Ubuntu-24.04'],
+        wslSupported: true,
+      }),
+      selectHostTarget,
+      scheduleRestart,
+    }))
+
+    expect(controller.read()).toMatchObject({
+      hostTarget: {
+        current: { mode: 'local' },
+        distributions: ['Ubuntu-24.04'],
+        wslSupported: true,
+      },
+    })
+    await expect(controller.selectHostTarget({ mode: 'local' })).resolves.toEqual({
+      response: { accepted: true, restartRequired: false },
+    })
+    const operation = await controller.selectHostTarget({ mode: 'wsl', distribution: 'Ubuntu-24.04' })
+    expect(operation.response).toEqual({ accepted: true, restartRequired: true })
+    expect(selectHostTarget).toHaveBeenCalledWith({ mode: 'wsl', distribution: 'Ubuntu-24.04' })
+    expect(scheduleRestart).not.toHaveBeenCalled()
+    operation.afterResponse?.()
+    expect(scheduleRestart).toHaveBeenCalledOnce()
   })
 
   it('persists an explicit legacy-default choice without restarting the same provider', async () => {
@@ -487,6 +522,46 @@ describe('desktop settings HTTP boundary', () => {
     expect(scheduleRestart).not.toHaveBeenCalled()
     await new Promise<void>(resolve => { setImmediate(resolve) })
     expect(scheduleRestart).toHaveBeenCalledTimes(2)
+  })
+
+  it('accepts only an exact discovered Host target and schedules after response', async () => {
+    const selectHostTarget = vi.fn(async () => {})
+    const scheduleRestart = vi.fn()
+    const controller = new DesktopSettingsController(bootstrap({
+      readHostTarget: () => ({
+        current: { mode: 'local' },
+        distributions: ['Ubuntu-24.04'],
+        wslSupported: true,
+      }),
+      selectHostTarget,
+      scheduleRestart,
+    }))
+    const accepted = response()
+
+    await handleDesktopHostTargetSelectRequest(
+      jsonRequest({ mode: 'wsl', distribution: 'Ubuntu-24.04' }),
+      accepted,
+      ORIGIN,
+      controller,
+    )
+
+    expect(accepted.statusCode).toBe(202)
+    expect(JSON.parse(accepted.body)).toEqual({ accepted: true, restartRequired: true })
+    expect(selectHostTarget).toHaveBeenCalledWith({ mode: 'wsl', distribution: 'Ubuntu-24.04' })
+    expect(scheduleRestart).not.toHaveBeenCalled()
+    await new Promise<void>(resolve => { setImmediate(resolve) })
+    expect(scheduleRestart).toHaveBeenCalledOnce()
+
+    for (const body of [
+      { mode: 'wsl' },
+      { mode: 'local', distribution: 'Ubuntu-24.04' },
+      { mode: 'wsl', distribution: 'Ubuntu-24.04', extra: true },
+    ]) {
+      const rejected = response()
+      await handleDesktopHostTargetSelectRequest(jsonRequest(body), rejected, ORIGIN, controller)
+      expect(rejected.statusCode).toBe(400)
+    }
+    expect(selectHostTarget).toHaveBeenCalledOnce()
   })
 
   it('opens the terminal only for an exact same-origin empty request', async () => {

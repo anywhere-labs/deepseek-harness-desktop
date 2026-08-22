@@ -3,7 +3,8 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join, relative, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { listPackage } from '@electron/asar'
 import AdmZip from 'adm-zip'
@@ -11,6 +12,8 @@ import {
   FORBIDDEN_MACOS_UNIVERSAL_ENTRIES,
   MACOS_UNIVERSAL_NATIVE_ENTRIES,
 } from './mac-universal.ts'
+import { generateWslRuntimeBundle } from './wsl-runtime-bundle.ts'
+import { WSL_RUNTIME_BUNDLE_DIRECTORY } from '../src/wsl-runtime-bundle.ts'
 
 /** AfterPack fields consumed without importing Electron Builder's incomplete declaration graph. */
 export interface PackagedRuntimeContext {
@@ -51,6 +54,7 @@ export const REQUIRED_PACKAGED_RUNTIME_ENTRIES = [
   'lib/updates.js',
   'lib/windows-agent-presets.js',
   'lib/windows-acl-runner.js',
+  'lib/wsl-host.js',
   'node_modules/@deepseek-ai/dsh/lib/bin.js',
   'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html',
   'node_modules/@deepseek-ai/dsh-app-boot/lib/index.js',
@@ -82,6 +86,7 @@ export const REQUIRED_UNPACKED_RUNTIME_ENTRIES = [
   'lib/updates.js',
   'lib/windows-agent-presets.js',
   'lib/windows-pwsh-sandbox.js',
+  'lib/wsl-host.js',
   'node_modules/@deepseek-ai/dsh/package.json',
   'node_modules/@deepseek-ai/dsh/config/agent-presets/cordis/agent.cordis.yml',
   'node_modules/@deepseek-ai/dsh/config/agent-presets/cordis/skills/cordis-plugin-development/SKILL.md',
@@ -152,12 +157,28 @@ export type PackagedDiagnosticWorkerLauncher = (
 /** Injectable smoke seam used to verify afterPack ordering. */
 export type PackagedDiagnosticWorkerSmoke = (unpackedRoot: string) => Promise<void>
 
+/** Build the platform-specific WSL payload before static package verification. */
+export type PackagedWslRuntimePreparer = (context: PackagedRuntimeContext) => Promise<void>
+
 /** Result posted by the bundled diagnostics Worker. */
 type PackagedDiagnosticWorkerResult =
   | { readonly ok: true, readonly path: string }
   | { readonly ok: false, readonly error: string }
 
 const PACKAGED_DIAGNOSTIC_WORKER_TIMEOUT_MS = 30_000
+
+/** Seal the exact patched dependency graph beside a packaged Windows app. */
+export async function preparePackagedWslRuntime(
+  context: PackagedRuntimeContext,
+): Promise<void> {
+  if (context.electronPlatformName !== 'win32') return
+  const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+  generateWslRuntimeBundle({
+    desktopRoot,
+    marketRoot: resolve(desktopRoot, '..', 'dsh-community-market'),
+    outputRoot: join(context.appOutDir, 'resources', WSL_RUNTIME_BUNDLE_DIRECTORY),
+  })
+}
 
 /** Start the physical packaged diagnostics Worker and wait for its terminal result. */
 async function launchPackagedDiagnosticWorker(
@@ -404,7 +425,9 @@ export async function afterPack(
   context: PackagedRuntimeContext,
   verify: typeof verifyPackagedRuntime = verifyPackagedRuntime,
   smoke: PackagedDiagnosticWorkerSmoke = smokePackagedDiagnosticWorker,
+  prepareWsl: PackagedWslRuntimePreparer = preparePackagedWslRuntime,
 ): Promise<void> {
+  await prepareWsl(context)
   verify(context)
   await smoke(resolvePackagedUnpackedRoot(context))
 }

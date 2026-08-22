@@ -13,6 +13,7 @@ Ordinary users can start with the [user guide](user-guide.en.md) and never need 
 | Document | Covers |
 | --- | --- |
 | [User guide](user-guide.en.md) | Installation, profiles, modes, terminal, plugins, and updates |
+| [Managed WSL Host](../dsh-plugin-desktop/docs/wsl-host.md) | Keep the native Windows shell while the complete Host, profiles, plugins, and workspaces run in WSL 2 |
 | [FAQ](faq.en.md) | Direct answers about platforms, bundled runtime, project status, data, plugins, and updates |
 | [Why Desktop](why-desktop.en.md) | The boundary with upstream Harness and the case for plugins |
 

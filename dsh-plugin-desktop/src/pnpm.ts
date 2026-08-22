@@ -34,6 +34,8 @@ export interface DesktopPnpmBootstrap {
   readonly pnpmBinPath: string
   /** Electron version used when pnpm installs native dependencies. */
   readonly electronVersion: string
+  /** Native ABI used by package lifecycle scripts; omitted means Electron. */
+  readonly runtime?: 'electron' | 'node'
   /** Private directory containing the Electron-backed Node command. */
   readonly nodeBinDir: string
   /** Private Electron-backed Node command used by pnpm lifecycle scripts. */
@@ -183,6 +185,9 @@ function validateBootstrap(bootstrap: DesktopPnpmBootstrap): void {
   assertDesktopProfileName(bootstrap.activeProfileName)
   if (typeof bootstrap.externalMarketInstallEnabled !== 'boolean') {
     throw new Error(`${BIN_NAME}: external Market install capability must be a boolean`)
+  }
+  if (bootstrap.runtime !== undefined && bootstrap.runtime !== 'electron' && bootstrap.runtime !== 'node') {
+    throw new Error(`${BIN_NAME}: desktop pnpm runtime target is invalid`)
   }
   for (const [label, value] of [
     ['active profile directory', bootstrap.activeProfileDir],
@@ -456,12 +461,16 @@ class DesktopPnpmService extends Service implements DesktopPnpm {
           ? this.bootstrap.nodeBinDir
           : `${this.bootstrap.nodeBinDir}${delimiter}${path}`,
         NODE: this.bootstrap.nodeShimPath,
-        ELECTRON_RUN_AS_NODE: '1',
         DSH_HOME: this.bootstrap.homeDir,
         CI: 'true',
-        npm_config_runtime: 'electron',
-        npm_config_target: this.bootstrap.electronVersion,
-        npm_config_disturl: ELECTRON_HEADERS_URL,
+        ...(this.bootstrap.runtime === 'node'
+          ? {}
+          : {
+              ELECTRON_RUN_AS_NODE: '1',
+              npm_config_runtime: 'electron',
+              npm_config_target: this.bootstrap.electronVersion,
+              npm_config_disturl: ELECTRON_HEADERS_URL,
+            }),
       },
     }
     const child = this.ctx.subprocess.spawn(spec)

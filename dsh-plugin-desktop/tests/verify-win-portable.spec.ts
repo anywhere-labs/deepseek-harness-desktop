@@ -1,9 +1,13 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import AdmZip from 'adm-zip'
 import { afterEach, describe, expect, it } from 'vitest'
 import { verifyWindowsPortable } from '../scripts/verify-win-portable.ts'
+import {
+  listWslRuntimeBundleFixture,
+  writeWslRuntimeBundleFixture,
+} from './helpers/wsl-runtime-bundle.ts'
 
 const temporaryRoots: string[] = []
 
@@ -24,6 +28,11 @@ function fixture(version = '2.0.0'): { readonly root: string; readonly portable:
   const archive = new AdmZip()
   archive.addFile('DSH Desktop.exe', portableExecutable())
   archive.addFile('resources/app.asar', Buffer.from('asar'))
+  const bundleRoot = join(root, 'wsl-runtime')
+  writeWslRuntimeBundleFixture(bundleRoot, version)
+  for (const name of listWslRuntimeBundleFixture(bundleRoot)) {
+    archive.addFile(`resources/wsl-runtime/${name}`, readFileSync(join(bundleRoot, ...name.split('/'))))
+  }
   archive.writeZip(portable)
   return { root, portable }
 }
@@ -53,9 +62,22 @@ describe('Windows portable artifact verification', () => {
     const archive = new AdmZip()
     archive.addFile('DSH Desktop.exe', invalid)
     archive.addFile('resources/app.asar', Buffer.from('asar'))
+    const bundleRoot = join(value.root, 'wsl-runtime')
+    for (const name of listWslRuntimeBundleFixture(bundleRoot)) {
+      archive.addFile(`resources/wsl-runtime/${name}`, readFileSync(join(bundleRoot, ...name.split('/'))))
+    }
     archive.writeZip(value.portable)
 
     expect(() => verifyWindowsPortable({ desktopRoot: value.root, version: '2.0.0' }))
       .toThrow('does not have a Windows PE header')
+  })
+
+  it('rejects a portable archive without the sealed WSL manifest', () => {
+    const value = fixture()
+    const archive = new AdmZip(value.portable)
+    archive.deleteFile('resources/wsl-runtime/manifest.json')
+    archive.writeZip(value.portable)
+    expect(() => verifyWindowsPortable({ desktopRoot: value.root, version: '2.0.0' }))
+      .toThrow('manifest is unavailable')
   })
 })

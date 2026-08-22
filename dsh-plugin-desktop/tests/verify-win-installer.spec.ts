@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { verifyWindowsInstaller } from '../scripts/verify-win-installer.ts'
+import { writeWslRuntimeBundleFixture } from './helpers/wsl-runtime-bundle.ts'
 
 const temporaryRoots: string[] = []
 
@@ -26,8 +27,10 @@ function fixture(version = '2.0.0'): {
   mkdirSync(unpacked, { recursive: true })
   const installer = join(dist, `DSH-Desktop-${version}-x64-Setup.exe`)
   const application = join(unpacked, 'DSH Desktop.exe')
+  const runtimeBundle = join(unpacked, 'resources', 'wsl-runtime')
   writeFileSync(installer, portableExecutable())
   writeFileSync(application, portableExecutable())
+  writeWslRuntimeBundleFixture(runtimeBundle, version)
   return { root, installer, application }
 }
 
@@ -42,6 +45,7 @@ describe('Windows installer artifact verification', () => {
     expect(verifyWindowsInstaller({ desktopRoot: value.root, version: '2.0.0' })).toEqual({
       installerPath: value.installer,
       applicationPath: value.application,
+      runtimeBundlePath: join(value.root, 'dist', 'win-unpacked', 'resources', 'wsl-runtime'),
     })
   })
 
@@ -70,5 +74,12 @@ describe('Windows installer artifact verification', () => {
 
     expect(() => verifyWindowsInstaller({ desktopRoot: value.root, version: '2.0.0' }))
       .toThrow('does not have a Windows PE signature')
+  })
+
+  it('rejects an unpacked application whose WSL runtime bundle is missing', () => {
+    const value = fixture()
+    rmSync(join(value.root, 'dist', 'win-unpacked', 'resources', 'wsl-runtime', 'manifest.json'))
+    expect(() => verifyWindowsInstaller({ desktopRoot: value.root, version: '2.0.0' }))
+      .toThrow('manifest is unavailable')
   })
 })

@@ -6,21 +6,23 @@
 
 ## 架构
 
-Electron 可执行文件只包含最小启动代码。它获取单实例锁、解析当前选中的 DSH profile、提供原生运行时能力，并在 Electron main 进程中启动 Host Cordis 根。`desktop-shell` Host 插件通过 Cordis effect 拥有 `BrowserWindow`、导航策略、settings namespace，以及关闭与退出生命周期。原生 runtime 拥有实体托盘；`desktop-shell`、`desktop-profiles`、`desktop-terminal` 与 `desktop-updates` 则通过有序 item registry 提供 effect-scoped 命令。
+Electron 可执行文件只包含最小启动代码。它获取单实例锁、解析当前选中的 Host 目标，并提供原生 runtime capability。默认“本机 Host”会在 Electron main 进程中启动 Cordis 根；Windows 上还可以选择托管式 WSL 目标，由桌面进程监管指定 WSL 2 发行版中的完整 Host，并通过受控控制通道提供原生能力。`desktop-shell` Host 插件通过 Cordis effect 拥有逻辑窗口、导航策略、settings namespace，以及关闭与退出生命周期。Windows 或 macOS runtime 拥有真实 Electron 对象和实体托盘；`desktop-shell`、`desktop-profiles`、`desktop-terminal` 与 `desktop-updates` 则通过有序 item registry 提供 effect-scoped 命令。
 
 两种呈现模式都复用现有 loopback Web carrier。profile 挂载普通 `dsh-base` 与 `dsh-web-app` bundle；Host 把 HTTP 与 WebSocket surface 绑定到 `127.0.0.1` 的临时端口；Electron 在沙箱 renderer 中加载该同源页面。Electron 不维护自有插件 roster，不使用 preload bridge，renderer 也不会获得原始 Electron API。
 
 desktop package 拥有普通 Host 与 Web Client 两个 face。它的 Client face 会在两种模式下校验 Host 提供的模式与平台 marker。兼容模式随后直接返回，不注册 service、slot、样式或呈现；高级模式则安装下文所述的 desktop layout service 与 root 呈现。两种模式下，第三方 Web client 都继续使用普通 DSH 模块图。
 
+前置条件、名词解释、数据位置、生命周期、安全边界、开发方式和恢复行为详见[托管式 WSL Host](docs/wsl-host.zh.md)。
+
 托盘中的 profile 选择器会列出现有 profile，以及可延迟创建的 `desktop` 与 `web` 默认项。可选 profile 必须直接按顺序组合 `dsh-base` 与 `dsh-web-app`；headless、损坏或已经内嵌 desktop bundle 的 profile 仍会显示，但不可选择。只有 `desktop` 是 Launcher 管理的 profile：它会修复安装方拥有的前缀，同时保留第三方 bundle 的相对顺序。其他被选 profile 的 manifest、用户 patch 与依赖均保持不变。Launcher 只会为当前 generation 在 `dsh-web-app` 后插入自有 desktop layer，不会把该 layer 持久化到被选 bundle 列表。
 
-Profile 选择保存在 Electron user data 下的 desktop 自有状态中，而不是被选 profile 内的另一个字段。切换会先记为 pending，再通过有序重启生效。只有 Cordis 树与原生窗口成功挂载后，新 profile 才会成为 last-known-good；托盘会在 Web surface 加载后才创建，而且该状态提交会在托盘命令能够运行前同步完成。Pending generation 启动失败时会回滚并自动重启一次。官方 profile 默认共用同一个 DSH home 中的 sessions、settings 与 storage，因此切换不会复制或迁移记录；自定义 profile patch 仍可主动重定向其中某个持久化根。
+Profile 选择保存在当前 Host 目标的 desktop 自有状态根中，而不是被选 profile 内的另一个字段。本机 Host 使用 Electron user data；托管式 WSL Host 使用其私有 Linux state 目录。切换会先记为 pending，再通过有序重启生效。只有 Cordis 树与原生窗口成功挂载后，新 profile 才会成为 last-known-good；托盘会在 Web surface 加载后才创建，而且该状态提交会在托盘命令能够运行前同步完成。Pending generation 启动失败时会回滚并自动重启一次。同一个 Host 目标内的官方 profile 默认共用一个 DSH home 中的 sessions、settings 与 storage，因此 profile 切换不会复制或迁移记录。本机与 WSL Host 有意使用不同 DSH home。自定义 profile patch 仍可主动重定向其中某个持久化根。
 
 Launcher 会在 Loader entry 挂载前注册作用于当前 generation 的 `ctx.desktopProfiles` service。其不可变 `current` 值包含激活 profile 的 `name` 与绝对 `dir`；`list()` 只读执行发现，`select(name)` 会串行化“先持久化、再重启”的切换，而不会就地改变当前 generation。该 service 是 Desktop Host capability，不是 renderer bridge，也不是当前上游 DSH 已提供的 active-profile API。
 
 Cordis 的裸插件导入从持久化 profile 解析。一个范围受限的 Node resolve hook 只处理由 `@deepseek-ai/cordis-plugin-loader` 发起的导入，因此即使打包后的 Electron 不暴露 Node 内部 ESM Loader，profile 本地第三方包与修复后的 launcher fallback 仍使用同一条解析路径。
 
-在 profile 准备与 Cordis boot 之前，打包后的 macOS 或 Linux 启动会以交互式 login 模式运行用户账户配置的 shell，并恢复其导出的 `PATH`。这样可补全 Finder、LaunchServices 等图形启动方式通常传入的精简 `PATH`。除 `PATH` 外，只会从固定 allowlist 补充当前启动环境尚未定义的 locale、工具链、package manager 与虚拟环境变量；只有 `PATH` 始终采用 shell 值。该流程只支持绝对路径的 `zsh`、`bash` 与 `fish`。Bash 遵循标准 login 行为，只有 login profile 主动 source `.bashrc` 时，该文件才会参与。Windows 以及未打包或开发运行会跳过恢复；shell 不存在或不受支持、捕获超时或失败、没有可用 `PATH` 时，会静默保留原有进程环境。
+在 profile 准备与 Cordis boot 之前，打包后的本机 macOS 或 Linux 启动会以交互式 login 模式运行用户账户配置的 shell，并恢复其导出的 `PATH`。这样可补全 Finder、LaunchServices 等图形启动方式通常传入的精简 `PATH`。除 `PATH` 外，只会从固定 allowlist 补充当前启动环境尚未定义的 locale、工具链、package manager 与虚拟环境变量；只有 `PATH` 始终采用 shell 值。该流程只支持绝对路径的 `zsh`、`bash` 与 `fish`。Bash 遵循标准 login 行为，只有 login profile 主动 source `.bashrc` 时，该文件才会参与。Windows、WSL Host 以及未打包或开发运行会跳过恢复；shell 不存在或不受支持、捕获超时或失败、没有可用 `PATH` 时，会静默保留原有进程环境。
 
 捕获过程以 `@deepseek-ai/dsh-subprocess` 的 `scrubbedParentEnv()` 作为输入；捕获到的变量名还必须通过同一套 `SENSITIVE_ENV_PATTERN` 与 `DSH_ENV_PREFIX` 检查，之后才进入固定 allowlist。因此，只在 shell rc 中出现的凭据、`DSH_*` 值、代理与 SSH agent 设置，以及进程启动 hook 都不会被导入 Electron。该恢复流程不会删除 Electron 显式启动环境中已经存在的值。普通 DSH subprocess 会再次应用官方 scrub；显式 child environment 仍可有意补回某项值。
 
@@ -28,7 +30,7 @@ Login-shell 恢复完成后，Launcher 才创建 layered launch-environment snap
 
 `desktop-pnpm` Host row 会提供 `ctx.desktopPnpm`，用于针对不可变激活 profile 执行受管 package operation。`run(args, signal?)` 会在激活 profile 目录中直接执行内置 pnpm；它是低层 operation，不承诺 DSH profile 初始化、调用方相对 source 锚定或 bundle reconcile。`runPlugin(args, invokingDir, signal?)` 会为 remove、update 和 dependency repair 启动内置 `dsh plugin --profile <active>`，但拒绝 `add`。插件安装使用 `installPlugin(request)`：它把精确 `name@version` 目标与 receipt 绑定，spawn 前快照 profile，并在完成前封存或恢复快照。上游 CLI 仍拥有 pnpm profile working directory 和 bundle reconcile 语义。
 
-两个方法都会返回实时 stdout 与 stderr stream、在完整 process tree 退出后才 settle 的 `done` promise，以及 `cancel()`。每个 generation 同时最多运行一个 operation。Service 使用普通 DSH subprocess provider、准确的已打包 JavaScript entry、无 shell argv，以及只属于 child 的 DSH home、Electron-backed Node、CI 与 native-module ABI 值。公开 runtime path 仍不会暴露 `node` 或 `dsh`；其中私有 helper、`ELECTRON_RUN_AS_NODE` 与 npm ABI 变量只存在于 package-manager subprocess tree 内。Launcher 不会修改系统 `PATH`、shell 启动文件、profile 配置或 `.env` 文档。
+两个方法都会返回实时 stdout 与 stderr stream、在完整 process tree 退出后才 settle 的 `done` promise，以及 `cancel()`。每个 generation 同时最多运行一个 operation。Service 使用普通 DSH subprocess provider、准确的已打包 JavaScript entry、无 shell argv，以及只属于 child 的 DSH home、CI 与 native-module ABI 值。本机 Host 使用 Electron-backed Node，WSL Host 使用已经校验的 Linux 原生 Node runtime。公开 runtime path 仍不会暴露 `node` 或 `dsh`；其中私有 helper 与 npm ABI 变量只存在于 package-manager subprocess tree 内。Launcher 不会修改系统 `PATH`、shell 启动文件、profile 配置或 `.env` 文档。
 
 插件作者应遵循 [Desktop 插件 service 架构](docs/plugin-services.zh.md)中记录的受支持 contract import、生命周期规则与适配模式。
 
@@ -59,7 +61,7 @@ Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在
 
 在所有桌面平台与两种呈现模式下，可以把一个本地文件夹拖到左侧工作区区域。隔离的 preload 只使用 Electron `webUtils` 解析这一个由操作者拖入的 `File`，Client 随后复用官方的 `workspaces.create` 与 `startSession` 流程。普通文件、多项拖入和内部工作区/会话排序不会触发目录接纳；Host 仍负责规范化路径、验证目录和复用已登记的工作区。
 
-在两种呈现模式下，Windows PowerShell 都会保留上游 `pwsh-sandbox` 行为与 Windows ACL confinement。Launcher generation 只会把该 Host provider 替换为同一 package 中的 `dsh-plugin-desktop/windows-pwsh-sandbox` 子路径。对于与上游 ACL runner 完全匹配的 argv，adapter 会让打包后的 Electron executable 通过私有 trampoline 以 Node 模式启动，在创建受限 PowerShell 进程前移除 Node-mode 环境变量，然后把全部 policy 与失败处理重新委托给上游 runner。Desktop deploy root 还会固定一个 Yarn patch，在两条原生受限进程路径上把 `STARTF_USESHOWWINDOW`、现有的 `STARTF_USESTDHANDLES` 与 `SW_HIDE` 组合起来。这会保留已捕获的 stdio 而不抑制 console 分配，并在 Windows 为 GUI Host 启动的 PowerShell 进程创建首个 console 窗口时，请求使用隐藏的初始显示状态。它不会使用与上游实现不兼容的 `CREATE_NO_WINDOW` 或 `CREATE_NEW_CONSOLE` flag。直接使用 `danger-full-access` 的 PowerShell、macOS 与 Linux 执行路径保持不变；Windows confinement 失败时不会自动回退到不受限执行。
+在两种呈现模式下，本机 Windows Host 都会保留上游 `pwsh-sandbox` 行为与 Windows ACL confinement。Launcher generation 只会把该 Host provider 替换为同一 package 中的 `dsh-plugin-desktop/windows-pwsh-sandbox` 子路径。对于与上游 ACL runner 完全匹配的 argv，adapter 会让打包后的 Electron executable 通过私有 trampoline 以 Node 模式启动，在创建受限 PowerShell 进程前移除 Node-mode 环境变量，然后把全部 policy 与失败处理重新委托给上游 runner。Desktop deploy root 还会固定一个 Yarn patch，在两条原生受限进程路径上把 `STARTF_USESHOWWINDOW`、现有的 `STARTF_USESTDHANDLES` 与 `SW_HIDE` 组合起来。这会保留已捕获的 stdio 而不抑制 console 分配，并在 Windows 为 GUI Host 启动的 PowerShell 进程创建首个 console 窗口时，请求使用隐藏的初始显示状态。它不会使用与上游实现不兼容的 `CREATE_NO_WINDOW` 或 `CREATE_NEW_CONSOLE` flag。WSL Host 则组合普通 Linux 执行 provider。直接使用 `danger-full-access` 的 PowerShell、macOS 与 Linux 执行路径保持不变；Windows confinement 失败时不会自动回退到不受限执行。
 
 ## 高级模式
 

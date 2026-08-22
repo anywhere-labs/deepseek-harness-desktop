@@ -4,9 +4,11 @@ import type {
   DesktopMarketProvider,
   DesktopMarketSnapshot,
 } from './desktop-market.ts'
+import type { DesktopHostTargetSelection, DesktopHostTargetView } from './host-target.ts'
 import type { DesktopProfileSummary } from './profile-manager.ts'
 import type { DesktopProfiles } from './profile-service.ts'
 import type {
+  DesktopHostTargetSelectResponse,
   DesktopMarketSelectResponse,
   DesktopDiagnosticsExportResponse,
   DesktopProfileCreateResponse,
@@ -41,6 +43,10 @@ export interface DesktopSettingsControllerBootstrap {
   openProfileCreator(): void
   /** Prepare a last-known-good rollback without quiescing the Host yet. */
   prepareProfileRollback(): DesktopSettingsPostResponse<DesktopProfileRollbackResponse>
+  /** Read native Host-target discovery without exposing persistence paths. */
+  readHostTarget?(): DesktopHostTargetView
+  /** Persist the complete Host location selected for the next generation. */
+  selectHostTarget?(selection: DesktopHostTargetSelection): void | Promise<void>
 }
 
 /** A persisted response plus work that must run only after `res.end()`. */
@@ -83,9 +89,11 @@ function projectMarket(
  */
 export class DesktopSettingsController {
   private readonly effectiveMarket: DesktopMarketProvider
+  private readonly effectiveHostTarget: DesktopHostTargetSelection | undefined
 
   constructor(private readonly bootstrap: DesktopSettingsControllerBootstrap) {
     this.effectiveMarket = bootstrap.readMarket().effective
+    this.effectiveHostTarget = bootstrap.readHostTarget?.().current
   }
 
   /** Read a fresh, renderer-safe settings projection. */
@@ -99,6 +107,9 @@ export class DesktopSettingsController {
         )),
       ),
       market: projectMarket(this.bootstrap.readMarket(), this.effectiveMarket),
+      ...(this.bootstrap.readHostTarget === undefined
+        ? {}
+        : { hostTarget: this.bootstrap.readHostTarget() }),
     })
   }
 
@@ -141,6 +152,24 @@ export class DesktopSettingsController {
   ): Promise<DesktopSettingsPostResponse<DesktopMarketSelectResponse>> {
     await this.bootstrap.selectMarket(provider)
     const restartRequired = provider !== this.effectiveMarket
+    return Object.freeze({
+      response: Object.freeze({ accepted: true, restartRequired }),
+      ...(restartRequired ? { afterResponse: () => { this.bootstrap.scheduleRestart() } } : {}),
+    })
+  }
+
+  /** Persist a complete Host target and restart after the response is committed. */
+  async selectHostTarget(
+    selection: DesktopHostTargetSelection,
+  ): Promise<DesktopSettingsPostResponse<DesktopHostTargetSelectResponse>> {
+    if (this.bootstrap.selectHostTarget === undefined || this.effectiveHostTarget === undefined) {
+      throw new Error('dsh-plugin-desktop: Host target switching is unavailable')
+    }
+    const restartRequired = this.effectiveHostTarget.mode !== selection.mode
+      || (this.effectiveHostTarget.mode === 'wsl'
+        && selection.mode === 'wsl'
+        && this.effectiveHostTarget.distribution !== selection.distribution)
+    if (restartRequired) await this.bootstrap.selectHostTarget(selection)
     return Object.freeze({
       response: Object.freeze({ accepted: true, restartRequired }),
       ...(restartRequired ? { afterResponse: () => { this.bootstrap.scheduleRestart() } } : {}),

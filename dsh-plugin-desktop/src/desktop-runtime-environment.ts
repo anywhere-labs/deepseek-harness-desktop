@@ -35,6 +35,8 @@ export interface DesktopPnpmRuntimeOptions {
   pnpmBinPath: string
   /** Electron version used when pnpm installs native dependencies. */
   electronVersion: string
+  /** Native ABI targeted by package lifecycle scripts; defaults to Electron. */
+  runtime?: 'electron' | 'node'
   /** Private application-owned directory receiving generated files. */
   stateDir: string
   /** Parent environment whose PATH is updated; defaults to `process.env`. */
@@ -211,10 +213,12 @@ function clearEnvironmentModule(): string {
 }
 
 /** Build the private POSIX Node command used only by pnpm lifecycle scripts. */
-function posixNodeShim(appExecutable: string, clearEnvironmentUrl: string): string {
+function posixNodeShim(appExecutable: string, clearEnvironmentUrl: string, runtime: 'electron' | 'node'): string {
   return [
     '#!/bin/sh',
-    `${RUN_AS_NODE}=1 exec ${quoteSh(appExecutable)} --import ${quoteSh(clearEnvironmentUrl)} "$@"`,
+    runtime === 'electron'
+      ? `${RUN_AS_NODE}=1 exec ${quoteSh(appExecutable)} --import ${quoteSh(clearEnvironmentUrl)} "$@"`
+      : `exec ${quoteSh(appExecutable)} --import ${quoteSh(clearEnvironmentUrl)} "$@"`,
     '',
   ].join('\n')
 }
@@ -231,10 +235,12 @@ function posixPnpmShim(
     [
       `PATH=${quoteSh(nodeBinDir)}:"\${PATH:-}"`,
       `NODE=${quoteSh(nodeShimPath)}`,
-      `${RUN_AS_NODE}=1`,
-      'npm_config_runtime=electron',
-      `npm_config_target=${quoteSh(options.electronVersion)}`,
-      `npm_config_disturl=${quoteSh(ELECTRON_HEADERS_URL)}`,
+      ...(options.runtime === 'node'
+        ? []
+        : [`${RUN_AS_NODE}=1`,
+            'npm_config_runtime=electron',
+            `npm_config_target=${quoteSh(options.electronVersion)}`,
+            `npm_config_disturl=${quoteSh(ELECTRON_HEADERS_URL)}`]),
       `exec ${quoteSh(options.appExecutable)} --import ${quoteSh(clearEnvironmentUrl)} ${quoteSh(options.pnpmBinPath)} "$@"`,
     ].join(' '),
     '',
@@ -392,6 +398,10 @@ export function installDesktopPnpmRuntime(options: DesktopPnpmRuntimeOptions): D
   if (options.platform !== 'darwin' && options.platform !== 'linux' && options.platform !== 'win32') {
     throw new Error(`dsh-plugin-desktop: pnpm runtime is unsupported on ${options.platform}`)
   }
+  const runtime = options.runtime ?? 'electron'
+  if (runtime === 'node' && options.platform === 'win32') {
+    throw new Error('dsh-plugin-desktop: native Node pnpm runtime is supported only on POSIX')
+  }
   for (const [label, value] of [
     ['application executable', options.appExecutable],
     ['pnpm entry', options.pnpmBinPath],
@@ -424,7 +434,7 @@ export function installDesktopPnpmRuntime(options: DesktopPnpmRuntimeOptions): D
     nodeShimPath,
     windows
       ? windowsNodeShim(options.appExecutable, clearEnvironmentUrl)
-      : posixNodeShim(options.appExecutable, clearEnvironmentUrl),
+      : posixNodeShim(options.appExecutable, clearEnvironmentUrl, runtime),
     windows ? PRIVATE_FILE_MODE : EXECUTABLE_FILE_MODE,
   )
   replacePrivateFile(

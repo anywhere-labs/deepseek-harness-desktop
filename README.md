@@ -51,6 +51,7 @@ DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
 | 目标 | 入口 |
 | --- | --- |
 | 安装和日常使用 | [用户指南](docs/user-guide.md) |
+| 在 Windows 上把完整 Host 运行在 WSL 2 | [托管式 WSL Host](dsh-plugin-desktop/docs/wsl-host.zh.md) |
 | 快速确认平台、环境和使用边界 | [常见问题](docs/faq.md) |
 | 了解项目为什么存在 | [为什么做 DSH Desktop](docs/why-desktop.md) |
 | 查看全部文档与 README 分工 | [文档索引](docs/README.md) |
@@ -74,7 +75,7 @@ DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
   <tr>
     <td width="50%" valign="top">
       <h3>Desktop</h3>
-      <p>把上游 DeepSeek Harness 的本地 Web UI 带到原生桌面。应用自动启动和管理本地 Harness 服务，集成系统托盘与桌面窗口，无需安装 Node.js 或执行命令。</p>
+      <p>把上游 DeepSeek Harness 的本地 Web UI 带到原生桌面。应用默认自动管理无需额外 Node.js 的本机 Host；Windows 用户也可把完整 Host、Profile、插件和终端放进指定 WSL 2 发行版，同时保留原生窗口与系统集成。</p>
     </td>
     <td width="50%" valign="top">
       <h3>手机远程控制 <img src="https://img.shields.io/badge/%E5%8D%B3%E5%B0%86%E6%8E%A8%E5%87%BA-F59E0B?style=flat-square" alt="即将推出"></h3>

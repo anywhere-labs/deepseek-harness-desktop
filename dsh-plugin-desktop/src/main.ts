@@ -69,6 +69,8 @@ import {
   readDesktopMarketStateForUserData,
   selectDesktopMarketProvider,
 } from './desktop-market.ts'
+import { DesktopHostTargetController } from './host-target-controller.ts'
+import { desktopHostTargetStatePath } from './host-target.ts'
 import DesktopSettingsController from './desktop-settings-controller.ts'
 import { DesktopStartupRecoveryController } from './startup-recovery-controller.ts'
 import {
@@ -101,6 +103,10 @@ import {
 } from './windows-volume-diagnostics.ts'
 import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { desktopLocaleFromLanguageTag } from './tray-locale.ts'
+import { discoverWslHostTargets } from './wsl.ts'
+import { startWslHost, type WslHostExit, type WslManagedRuntime } from './wsl-supervisor.ts'
+import { WslWorkspaceAdapter } from './wsl-workspace.ts'
+import { openWslDesktopTerminal } from './wsl-terminal.ts'
 
 const BIN_NAME = 'dsh-plugin-desktop'
 const PRODUCT_NAME = 'DSH Desktop'
@@ -253,6 +259,126 @@ function notifyWindowsVolumeConcerns(
   }
 }
 
+function wslHostExitFailure(distribution: string, result: WslHostExit): Error {
+  const outcome = result.error === undefined
+    ? `exit code ${String(result.exitCode)}${result.signal === null ? '' : `, signal ${result.signal}`}`
+    : result.error
+  return new Error(`${BIN_NAME}: WSL Host ${distribution} terminated before startup health was committed (${outcome})`)
+}
+
+function createWslWorkspaceAdapter(
+  distribution: string,
+  managedRuntime: WslManagedRuntime,
+  logger: DesktopLogger,
+): WslWorkspaceAdapter {
+  return new WslWorkspaceAdapter({
+    distribution,
+    homeDir: managedRuntime.prerequisites.homeDir,
+    showOpenDialog: async options => await dialog.showOpenDialog({
+      title: options.title,
+      defaultPath: options.defaultPath,
+      properties: ['openDirectory', 'createDirectory'],
+    }),
+    reportOutsideDistribution: async () => {
+      const locale = desktopLocaleFromLanguageTag(app.getLocale())
+      const copy = locale === 'zh'
+        ? {
+            title: '请选择 WSL 文件夹',
+            message: `工作区必须位于 WSL 发行版「${distribution}」中。`,
+            detail: String.raw`请从该发行版的 \\wsl.localhost 目录中选择文件夹。Windows 路径不会自动转换为 Linux 工作区。`,
+          }
+        : {
+            title: 'Choose a WSL folder',
+            message: `The workspace must be inside the “${distribution}” WSL distribution.`,
+            detail: String.raw`Choose a folder under this distribution’s \\wsl.localhost share. Windows paths are not translated into Linux workspaces.`,
+          }
+      try {
+        await dialog.showMessageBox({
+          type: 'warning',
+          title: copy.title,
+          message: copy.message,
+          detail: copy.detail,
+          buttons: ['OK'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        })
+      } catch (cause) {
+        logger.error(`${BIN_NAME}: failed to explain rejected WSL workspace: ${cause instanceof Error ? cause.message : String(cause)}`)
+      }
+    },
+  })
+}
+
+async function chooseWslStartupRecovery(
+  distribution: string,
+  cause: unknown,
+): Promise<'local' | 'quit'> {
+  const locale = desktopLocaleFromLanguageTag(app.getLocale())
+  const detail = maskSecrets(cause instanceof Error ? cause.message : String(cause))
+  const copy = locale === 'zh'
+    ? {
+        title: 'WSL Host 无法启动',
+        message: `DSH Desktop 无法在「${distribution}」中启动完整 Host。`,
+        detail: `${detail}\n\n你可以切回本机 Host 并重新启动。WSL 中的 Profile 和数据不会被删除。`,
+        local: '切回本机 Host',
+        quit: '退出',
+      }
+    : {
+        title: 'WSL Host could not start',
+        message: `DSH Desktop could not start the complete Host in “${distribution}”.`,
+        detail: `${detail}\n\nYou can switch back to the Local Host and restart. Profiles and data in WSL will not be deleted.`,
+        local: 'Use Local Host',
+        quit: 'Quit',
+      }
+  const result = await dialog.showMessageBox({
+    type: 'error',
+    title: copy.title,
+    message: copy.message,
+    detail: copy.detail,
+    buttons: [copy.local, copy.quit],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+  return result.response === 0 ? 'local' : 'quit'
+}
+
+/** Keep post-health WSL recovery failures on the native trusted surface. */
+async function chooseWslProfileRecoveryFailure(
+  distribution: string,
+  message: string,
+): Promise<'local' | 'quit'> {
+  const locale = desktopLocaleFromLanguageTag(app.getLocale())
+  const detail = maskSecrets(message)
+  const copy = locale === 'zh'
+    ? {
+        title: 'WSL 配置恢复失败',
+        message: `DSH Desktop 无法在「${distribution}」中完成配置恢复。`,
+        detail: `${detail}\n\n你可以切回本机 Host。WSL 中的 Profile、诊断和数据会保留，便于之后在 WSL 终端中修复。`,
+        local: '切回本机 Host',
+        quit: '退出',
+      }
+    : {
+        title: 'WSL Profile recovery failed',
+        message: `DSH Desktop could not complete Profile recovery in “${distribution}”.`,
+        detail: `${detail}\n\nYou can switch to the Local Host. The WSL Profile, diagnostics, and data are preserved for repair from a WSL terminal.`,
+        local: 'Use Local Host',
+        quit: 'Quit',
+      }
+  const result = await dialog.showMessageBox({
+    type: 'error',
+    title: copy.title,
+    message: copy.message,
+    detail: copy.detail,
+    buttons: [copy.local, copy.quit],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+  return result.response === 0 ? 'local' : 'quit'
+}
+
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
 async function start(): Promise<void> {
   if (!app.requestSingleInstanceLock()) {
@@ -355,6 +481,19 @@ async function start(): Promise<void> {
       }
     },
   )
+  const hostTargetController = new DesktopHostTargetController(
+    desktopHostTargetStatePath(app.getPath('userData')),
+    {
+      distributions: [],
+      wslSupported: process.platform === 'win32',
+      ...(process.platform === 'win32' ? { problem: 'WSL discovery is in progress.' } : {}),
+    },
+    cause => {
+      electronLogger.error(
+        `${BIN_NAME}: invalid Host target state was ignored: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    },
+  )
   let restartRequested = false
   runtime = new ElectronDesktopRuntime(async () => {
     if (shutdown === undefined) {
@@ -374,7 +513,7 @@ async function start(): Promise<void> {
     // Main owns every pre-health failure branch. Returning true prevents the
     // legacy Renderer recovery dialog from racing the native startup window.
     return report.status === 'failed'
-  }, electronLogger)
+  }, electronLogger, undefined, hostTargetController)
   const finalExit = (code: number): void => { nativeExit.finish(code) }
   shutdown = createDesktopShutdown(
     async () => { await generation.release() },
@@ -387,6 +526,14 @@ async function start(): Promise<void> {
     requestQuit,
   )
   removeShutdownRequests = installShutdownRequests(process, app, requestQuit)
+
+  const failLoudProcess: FailLoudProcess = {
+    on: (event, handler) => process.on(event, handler),
+    off: (event, handler) => process.off(event, handler),
+    stderr: electronLogger,
+    exit: finalExit,
+  }
+  installFailLoud(BIN_NAME, failLoudProcess, async () => { await generation.release() })
 
   const openStartupRecoveryWindow = async (
     failureDetail: string,
@@ -431,6 +578,123 @@ async function start(): Promise<void> {
     startupStage = 'shell-environment'
     lifecycleRecorder.transitionStartupStage(startupStage)
     if (process.platform === 'win32') app.setAppUserModelId('ai.deepseek.dsh.desktop')
+    const discoveredHostTargets = await discoverWslHostTargets()
+    hostTargetController.updateDiscovery({
+      distributions: discoveredHostTargets.distributions,
+      wslSupported: discoveredHostTargets.wslSupported,
+      ...(discoveredHostTargets.problem === undefined ? {} : { problem: discoveredHostTargets.problem }),
+    })
+    const selectedHostTarget = hostTargetController.read().current
+    if (selectedHostTarget.mode === 'wsl') {
+      const distribution = selectedHostTarget.distribution
+      try {
+        if (!discoveredHostTargets.distributions.includes(distribution)) {
+          throw new Error(`${BIN_NAME}: selected WSL 2 distribution is not available: ${distribution}`)
+        }
+        const runtimeBundlePath = app.isPackaged
+          ? join(process.resourcesPath, 'wsl-runtime')
+          : process.env.DSH_DESKTOP_WSL_BUNDLE_DIR
+        if (runtimeBundlePath === undefined) {
+          throw new Error(
+            `${BIN_NAME}: source builds require DSH_DESKTOP_WSL_BUNDLE_DIR to select a prepared runtime bundle`,
+          )
+        }
+        startupStage = 'runtime-bootstrap'
+        lifecycleRecorder.transitionStartupStage(startupStage)
+        let workspace: WslWorkspaceAdapter | undefined
+        const workspaceFor = (managedRuntime: WslManagedRuntime): WslWorkspaceAdapter => {
+          workspace ??= createWslWorkspaceAdapter(distribution, managedRuntime, electronLogger)
+          return workspace
+        }
+        startupStage = 'host-boot'
+        lifecycleRecorder.transitionStartupStage(startupStage)
+        const host = await startWslHost({
+          distribution,
+          productVersion: appVersion,
+          runtimeBundlePath,
+          runtime,
+          logger: electronLogger,
+          pickDirectory: async managedRuntime => await workspaceFor(managedRuntime).pickDirectory(),
+          validateDirectory: async (managedRuntime, path) => await workspaceFor(managedRuntime).validateDirectory(path),
+          openTerminal: (managedRuntime, ready) => {
+            openWslDesktopTerminal({
+              distribution,
+              homeDir: ready.homeDir,
+              profileName: ready.profileName,
+              profileDir: ready.profileDir,
+              runtimeRoot: managedRuntime.runtimeRoot,
+              onLaunchError: cause => {
+                electronLogger.error(
+                  `${BIN_NAME}: failed to open WSL terminal: ${cause instanceof Error ? cause.message : String(cause)}`,
+                )
+                try {
+                  runtime.updates.notify({
+                    title: 'Unable to Open WSL Terminal',
+                    body: `Windows Terminal and the console host could not open ${distribution}.`,
+                  })
+                } catch {}
+              },
+            })
+          },
+          exportRecoveryDiagnostics: async () => {
+            const diagnosticsPath = await exportDesktopDiagnostics(app.getPath('userData'), {
+              appVersion,
+              crashDumpsDir: app.getPath('crashDumps'),
+            })
+            electronLogger.error(`${BIN_NAME}: WSL recovery diagnostics saved: ${diagnosticsPath}`)
+          },
+          showProfileRestoreNotice: async profileName => {
+            await showProfileCheckpointRestoreNotice(
+              profileName,
+              desktopLocaleFromLanguageTag(app.getLocale()),
+              electronLogger,
+            )
+          },
+          showRecoveryFailure: async message => await chooseWslProfileRecoveryFailure(distribution, message),
+          requestQuit,
+        })
+        generation.bindHost(host)
+        startupStage = 'renderer-startup'
+        lifecycleRecorder.transitionStartupStage(startupStage)
+        lifecycleRecorder.startRendererBoot()
+        const rendererBoot = runtime.beginRendererBootMonitoring({
+          commitHealthy: async () => {
+            lifecycleRecorder.finishRendererBoot({ status: 'healthy' }, 'renderer-failed')
+            startupStage = 'health-commit'
+            lifecycleRecorder.transitionStartupStage(startupStage)
+            await host.commitHealthy()
+          },
+        })
+        const [, rendererVerdict] = await Promise.race([
+          Promise.all([runtime.mountScheduled(), rendererBoot] as const),
+          host.terminated.then((result) => { throw wslHostExitFailure(distribution, result) }),
+        ])
+        if ('failureReason' in rendererVerdict) {
+          throw new RendererStartupFailure(rendererVerdict.failureReason, rendererVerdict.report)
+        }
+        lifecycleRecorder.completeStartup(startupStage, rendererVerdict.report)
+        return
+      } catch (cause) {
+        runtime.stopRendererBootMonitoring()
+        lifecycleRecorder.failRendererBootIfPending(lifecycleRendererFailureReason(runtime.rendererBootFailureReason))
+        lifecycleRecorder.failStartup(startupStage, lifecycleStartupFailureReason(cause, runtime))
+        electronLogger.errorCause(cause)
+        let recovery: 'local' | 'quit' = 'quit'
+        try {
+          recovery = await chooseWslStartupRecovery(distribution, cause)
+        } catch (recoveryCause) {
+          electronLogger.error(
+            `${BIN_NAME}: WSL recovery dialog failed: ${recoveryCause instanceof Error ? recoveryCause.message : String(recoveryCause)}`,
+          )
+        }
+        if (recovery === 'local') {
+          hostTargetController.select({ mode: 'local' })
+          nativeExit.requestRelaunch()
+        }
+        await shutdown.request(recovery === 'local' ? 0 : 1)
+        return
+      }
+    }
     if (app.isPackaged && process.cwd() === '/') process.chdir(app.getPath('home'))
     const shellEnvironmentResolution = await resolveDesktopShellEnvironment({
       environment: process.env,
@@ -446,14 +710,6 @@ async function start(): Promise<void> {
       { label: 'DSH home', path: homeDir },
     ])
     warnWindowsVolumeConcerns(electronLogger, windowsVolumeConcerns)
-
-    const failLoudProcess: FailLoudProcess = {
-      on: (event, handler) => process.on(event, handler),
-      off: (event, handler) => process.off(event, handler),
-      stderr: electronLogger,
-      exit: finalExit,
-    }
-    installFailLoud(BIN_NAME, failLoudProcess, async () => { await generation.release() })
 
     startupStage = 'runtime-bootstrap'
     lifecycleRecorder.transitionStartupStage(startupStage)
@@ -937,6 +1193,8 @@ async function start(): Promise<void> {
         }
         hostCtx.provide('desktopSettingsController', new DesktopSettingsController({
           profiles: hostCtx.desktopProfiles,
+          readHostTarget: () => runtime.hostTarget,
+          selectHostTarget: async selection => { await runtime.selectHostTarget(selection) },
           persistProfileSelection: name => {
             selectDesktopProfile(selectionStatePath, homeDir, name)
           },
