@@ -266,6 +266,9 @@ describe('desktop profile composition', {
     expect(rows.find(row => row.id === 'desktop-profiles')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/profiles',
     }))
+    expect(rows.find(row => row.id === 'desktop-llm-guardian')).toEqual(expect.objectContaining({
+      name: 'dsh-llm-guardian',
+    }))
   })
 
   it('keeps both Market providers absent until the user explicitly enables one', () => {

@@ -8219,6 +8219,29 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"dsh-llm-guardian@github:ice-kele/dsh-llm-guardian#cbd5fade93178db82ff6b4b07cd6baaf7fbd509e":
+  version: 0.2.0
+  resolution: "dsh-llm-guardian@https://github.com/ice-kele/dsh-llm-guardian.git#commit=cbd5fade93178db82ff6b4b07cd6baaf7fbd509e"
+  dependencies:
+    "@deepseek-ai/schemastery": "npm:^3.18.1"
+  peerDependencies:
+    "@deepseek-ai/dsh-api-remotes": 0.1.1-rc.2
+    "@deepseek-ai/dsh-client-runtime": 0.1.1-rc.2
+    "@deepseek-ai/dsh-client-ui-settings-models": 0.1.1-rc.2
+    "@deepseek-ai/dsh-settings": 0.1.1-rc.2
+  peerDependenciesMeta:
+    "@deepseek-ai/dsh-api-remotes":
+      optional: true
+    "@deepseek-ai/dsh-client-runtime":
+      optional: true
+    "@deepseek-ai/dsh-client-ui-settings-models":
+      optional: true
+    "@deepseek-ai/dsh-settings":
+      optional: true
+  checksum: 10c0/03c83fa294a2daa0187882dde6add9d7c9d2c0549b8e1b7306090dfea81ee63825e19cd8366908fcd66e4d465de37a105fad4d86a8774cedf8bcf148b1d78e5f
+  languageName: node
+  linkType: hard
+
 "dsh-plugin-desktop@workspace:dsh-plugin-desktop":
   version: 0.0.0-use.local
   resolution: "dsh-plugin-desktop@workspace:dsh-plugin-desktop"
@@ -8343,6 +8366,7 @@ __metadata:
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
     dsh-community-market: "npm:0.1.0-dev.0"
+    dsh-llm-guardian: "github:ice-kele/dsh-llm-guardian#cbd5fade93178db82ff6b4b07cd6baaf7fbd509e"
     dshmarket: "npm:1.17.1"
     electron: "npm:43.4.0"
     electron-builder: "npm:26.15.7"

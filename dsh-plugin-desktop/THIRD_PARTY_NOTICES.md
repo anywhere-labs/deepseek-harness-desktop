@@ -342,6 +342,7 @@ the package names, versions, and licenses for transparency.
 | diff | 9.0.0 | BSD-3-Clause |
 | dsh-community-market | 0.1.0-dev.0 | MIT |
 | dshmarket | 1.17.1 | MIT |
+| dsh-llm-guardian | 0.2.0 | MIT |
 | dunder-proto | 1.0.1 | MIT |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 |
 | ee-first | 1.1.1 | MIT |
@@ -548,4 +549,4 @@ the package names, versions, and licenses for transparency.
 | zod-to-json-schema | 3.25.2 | ISC |
 | zustand | 4.4.7 | MIT |
 | zwitch | 2.0.4 | MIT |
-> Notice-required licenses in use: LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
+> Notice-required licenses in use: Apache-2.0 AND LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
