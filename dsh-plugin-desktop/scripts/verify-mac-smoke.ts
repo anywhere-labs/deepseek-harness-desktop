@@ -97,6 +97,7 @@ export function verifyMacSmoke(
       throw new Error(`packaged application is missing ${infoPlistPath}`)
     }
     options.run('plutil', ['-lint', infoPlistPath])
+    options.run('plutil', ['-extract', 'NSMicrophoneUsageDescription', 'raw', infoPlistPath])
 
     const macosDirectory = join(appPath, 'Contents', 'MacOS')
     if (!options.exists(macosDirectory)) {

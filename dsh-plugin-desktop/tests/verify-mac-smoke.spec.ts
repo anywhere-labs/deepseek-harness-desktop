@@ -115,6 +115,10 @@ describe('macOS DMG smoke artifact verification', () => {
       },
       { command: 'plutil', args: ['-lint', value.infoPlist] },
       {
+        command: 'plutil',
+        args: ['-extract', 'NSMicrophoneUsageDescription', 'raw', value.infoPlist],
+      },
+      {
         command: 'lipo',
         args: [value.executable, '-verify_arch', 'x86_64'],
       },

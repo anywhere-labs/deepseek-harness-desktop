@@ -22,7 +22,7 @@ function options(overrides: Partial<MacReleaseVerificationOptions> = {}) {
 }
 
 describe('macOS release artifact verification', () => {
-  it('mounts one DMG and verifies signature, Gatekeeper, and the stapled ticket', () => {
+  it('verifies microphone metadata, entitlements, signature, Gatekeeper, and ticket', () => {
     const harness = options()
     const appPath = join('/private/tmp/dsh-desktop-dmg-test', 'DSH Desktop.app')
 
@@ -37,6 +37,15 @@ describe('macOS release artifact verification', () => {
         args: [
           'attach', '/release/dist/DSH Desktop-2.0.0-universal.dmg',
           '-mountpoint', '/private/tmp/dsh-desktop-dmg-test', '-nobrowse', '-readonly',
+        ],
+      },
+      {
+        command: 'plutil',
+        args: [
+          '-extract',
+          'NSMicrophoneUsageDescription',
+          'raw',
+          join(appPath, 'Contents', 'Info.plist'),
         ],
       },
       {
@@ -57,6 +66,29 @@ describe('macOS release artifact verification', () => {
       {
         command: 'codesign',
         args: ['--verify', '--deep', '--strict', '--verbose=2', appPath],
+      },
+      {
+        command: 'codesign',
+        args: [
+          '--verify',
+          '--test-requirement',
+          '=entitlement["com.apple.security.device.audio-input"]',
+          appPath,
+        ],
+      },
+      {
+        command: 'codesign',
+        args: [
+          '--verify',
+          '--test-requirement',
+          '=entitlement["com.apple.security.device.audio-input"]',
+          join(
+            appPath,
+            'Contents',
+            'Frameworks',
+            'DSH Desktop Helper (Renderer).app',
+          ),
+        ],
       },
       {
         command: 'spctl',

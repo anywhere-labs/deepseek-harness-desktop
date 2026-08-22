@@ -7,6 +7,9 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MACOS_UNIVERSAL_NATIVE_ENTRIES } from './mac-universal.ts'
 
+const MICROPHONE_ENTITLEMENT_REQUIREMENT =
+  '=entitlement["com.apple.security.device.audio-input"]'
+
 /** Injectable filesystem and command boundaries for release verification. */
 export interface MacReleaseVerificationOptions {
   /** Directory containing exactly one release DMG. */
@@ -76,6 +79,12 @@ export function verifyMacRelease(
   try {
     options.run('hdiutil', ['attach', dmgPath, '-mountpoint', mountPoint, '-nobrowse', '-readonly'])
     mounted = true
+    options.run('plutil', [
+      '-extract',
+      'NSMicrophoneUsageDescription',
+      'raw',
+      join(appPath, 'Contents', 'Info.plist'),
+    ])
     const executablePath = join(appPath, 'Contents', 'MacOS', options.productName)
     options.run('lipo', [executablePath, '-verify_arch', 'x86_64'])
     options.run('lipo', [executablePath, '-verify_arch', 'arm64'])
@@ -84,6 +93,18 @@ export function verifyMacRelease(
       options.run('lipo', [join(unpackedRoot, entry.path), '-verify_arch', entry.arch])
     }
     options.run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath])
+    options.run('codesign', [
+      '--verify', '--test-requirement', MICROPHONE_ENTITLEMENT_REQUIREMENT, appPath,
+    ])
+    options.run('codesign', [
+      '--verify', '--test-requirement', MICROPHONE_ENTITLEMENT_REQUIREMENT,
+      join(
+        appPath,
+        'Contents',
+        'Frameworks',
+        `${options.productName} Helper (Renderer).app`,
+      ),
+    ])
     options.run('spctl', ['--assess', '--type', 'execute', '--verbose=4', appPath])
     options.run('xcrun', ['stapler', 'validate', appPath])
   } catch (cause) {
