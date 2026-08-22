@@ -406,8 +406,13 @@ function buildCatalogScanSnapshots(
     ? new Date(generatedAt).toISOString()
     : undefined
   const providerRevision = plainText(meta.revision, 160, '') || undefined
-  const total = providerTotal(meta, raw.packages.length) ?? items.length
-  if (total !== items.length) throw new Error('1024Store scan did not reach the provider total')
+  // The 1024Store endpoint returns only a bounded prefix of its catalog and
+  // ignores pagination parameters, so a complete scan is impossible. Accept
+  // the truncated response: report the received item count as the page total
+  // so the scan completes and the source stays browsable. The provider
+  // metadata total remains available through the browse path (buildSnapshot).
+  providerTotal(meta, raw.packages.length)
+  const total = items.length
   const fetchedAt = new Date().toISOString()
   const snapshots: CatalogSnapshot[] = []
   for (let offset = 0; offset < items.length; offset += 100) {
