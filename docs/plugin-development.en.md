@@ -78,10 +78,10 @@ export function apply(ctx: Context, config: { profile?: string }): void {
     return
   }
 
-  ctx.inject(['desktopPnpm'], (desktopPnpm) => {
+  ctx.inject(['desktopProfiles', 'desktopPnpm'], (desktopProfiles, desktopPnpm) => {
     mountManager(ctx, {
-      profile: profiles.current.name,
-      profileDir: profiles.current.dir,
+      profile: desktopProfiles.current.name,
+      profileDir: desktopProfiles.current.dir,
       runPlugin: (args, cwd, signal) => desktopPnpm.runPlugin(args, cwd, signal),
     })
   })
@@ -89,6 +89,40 @@ export function apply(ctx: Context, config: { profile?: string }): void {
 ```
 
 The ordinary DSH fallback remains the plugin's authoritative implementation. Do not infer the Desktop profile from `process.argv`, `ctx.baseUrl`, settings, or `$DSH_HOME`; in Desktop, use `desktopProfiles.current`.
+
+## Isolated development-sandbox mirrors
+
+An external development-sandbox plugin can use this cross-environment pattern to test a local plugin checkout without changing the active Desktop profile. Its target is an isolated DSH Web mirror, not a second Electron process.
+
+When `desktopProfiles` is available, retain both `desktopProfiles` and `desktopPnpm` in the nested `ctx.inject()` dependency set. Build a `host-web` mirror from the immutable `desktopProfiles.current.dir` for that Host generation; do not assume `profiles/web`, and do not retain the profile or runner after either Desktop service leaves the generation.
+
+A user-requested build may use the low-level `desktopPnpm.run(['--dir', absolutePluginDir, 'run', 'build'], signal)` because it builds a local checkout and does not mutate the active profile. Give it a deadline, read both output streams, retain the returned handle, and on disposal call `cancel()` and await `done`. A nonzero exit, signal termination, or rejected `done` must stop the mirror from launching.
+
+A reference implementation is [`dsh-dev-sandbox`](https://github.com/zp-home/dsh-dev-sandbox).
+
+## Desktop Settings entry for a sandbox
+
+The sandbox client belongs in the official Settings navigation, rather than a custom sidebar node or an overlay. Register a `settings.section` occupant with a stable id. In the current Settings ordering, `order: 25` places `sandbox` immediately after the built-in Agent Presets section (`order: 20`).
+
+```tsx
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import { SandboxSettingsSection } from './SandboxSettingsSection'
+
+export const inject = ['slots', 'locale']
+
+export function apply(ctx: ClientContext): void {
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'sandbox',
+    order: 25,
+    locale: 'dsh-dev-sandbox',
+    label: () => ctx.locale.bind('dsh-dev-sandbox')('entry.label'),
+  }, SandboxSettingsSection))
+}
+```
+
+The section component should render the sandbox workbench in the Settings content pane. It must dispose any mounted DOM or request work when its Client fiber is disposed; do not retain a Settings DOM node, overlay state, or Desktop Host service across generations.
 
 ## `run()`, `runPlugin()`, and `installPlugin()`
 

@@ -78,10 +78,10 @@ export function apply(ctx: Context, config: { profile?: string }): void {
     return
   }
 
-  ctx.inject(['desktopPnpm'], (desktopPnpm) => {
+  ctx.inject(['desktopProfiles', 'desktopPnpm'], (desktopProfiles, desktopPnpm) => {
     mountManager(ctx, {
-      profile: profiles.current.name,
-      profileDir: profiles.current.dir,
+      profile: desktopProfiles.current.name,
+      profileDir: desktopProfiles.current.dir,
       runPlugin: (args, cwd, signal) => desktopPnpm.runPlugin(args, cwd, signal),
     })
   })
@@ -89,6 +89,40 @@ export function apply(ctx: Context, config: { profile?: string }): void {
 ```
 
 普通 DSH 的 fallback 仍然是插件自己的权威实现。不要从 `process.argv`、`ctx.baseUrl`、settings 或 `$DSH_HOME` 推断 Desktop profile；在 Desktop 中以 `desktopProfiles.current` 为准。
+
+## 隔离开发沙盒镜像
+
+外部开发沙盒插件可以使用这种跨环境模式，在不修改活动 Desktop profile 的情况下测试本地插件检出。它的目标是隔离的 DSH Web 镜像，而不是第二个 Electron 进程。
+
+当存在 `desktopProfiles` 时，嵌套的 `ctx.inject()` 依赖集合应同时保留 `desktopProfiles` 和 `desktopPnpm`。`host-web` 镜像应以当前 Host generation 中不可变的 `desktopProfiles.current.dir` 为来源；不要假设为 `profiles/web`，也不要在任一 Desktop service 离开该 generation 后保留 profile 或 runner。
+
+由用户明确请求的构建可以使用低层 `desktopPnpm.run(['--dir', absolutePluginDir, 'run', 'build'], signal)`，因为它构建的是本地检出，不会修改活动 profile。必须提供 deadline，读取两个输出流，保留返回的 handle，并在 dispose 时调用 `cancel()` 后等待 `done`。非零退出码、信号终止或被拒绝的 `done` 都必须阻止镜像继续启动。
+
+参考实现见 [`dsh-dev-sandbox`](https://github.com/zp-home/dsh-dev-sandbox)。
+
+## 沙盒的 Desktop 设置入口
+
+沙盒 Client 应进入官方的设置导航，而不是创建自定义的侧边栏节点或 overlay。为 `settings.section` 注册一个稳定的 id。当前设置导航中，`order: 25` 会把 `sandbox` 放在内置“Agent 预设”（`order: 20`）之后。
+
+```tsx
+import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import { SandboxSettingsSection } from './SandboxSettingsSection'
+
+export const inject = ['slots', 'locale']
+
+export function apply(ctx: ClientContext): void {
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'sandbox',
+    order: 25,
+    locale: 'dsh-dev-sandbox',
+    label: () => ctx.locale.bind('dsh-dev-sandbox')('entry.label'),
+  }, SandboxSettingsSection))
+}
+```
+
+section 组件应在设置内容区渲染沙盒工作台。它必须在 Client fiber dispose 时清理已挂载的 DOM 与请求；不要跨 generation 保留设置 DOM 节点、overlay 状态或 Desktop Host service。
 
 ## `run()`、`runPlugin()` 和 `installPlugin()` 的区别
 
