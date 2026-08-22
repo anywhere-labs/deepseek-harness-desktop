@@ -127,7 +127,7 @@ describe('application shutdown requests', () => {
     signalListeners.get('SIGTERM')?.()
     appListeners.get('before-quit')?.(quitEvent)
 
-    expect(requestQuit.mock.calls).toEqual([[130], [0], [0]])
+    expect(requestQuit.mock.calls).toEqual([[130], [143], [0]])
     expect(quitEvent.preventDefault).toHaveBeenCalledOnce()
 
     remove()
