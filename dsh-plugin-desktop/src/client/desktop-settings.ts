@@ -3,7 +3,12 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import { DesktopSettingsSection, type DesktopNotificationSettings, type DesktopShellSettings } from './DesktopSettingsSection.tsx'
+import {
+  DesktopSettingsSection,
+  type DesktopAgentSettings,
+  type DesktopNotificationSettings,
+  type DesktopShellSettings,
+} from './DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from './DesktopTerminalSettingsAction.tsx'
 import { createDesktopSettingsApi } from './desktop-settings-api.ts'
 import { en, zh, type DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
@@ -15,6 +20,7 @@ export const DESKTOP_SETTINGS_LOCALE_NAMESPACE = 'desktop.settings'
 
 /** Host settings namespaces bound through the standard client settings service. */
 export const DESKTOP_SHELL_SETTINGS_NAMESPACE = 'dsh-desktop'
+export const DESKTOP_AGENT_SETTINGS_NAMESPACE = 'dsh-desktop-agent'
 export const DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE = 'dsh-desktop-notifications'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -31,6 +37,9 @@ export function applyDesktopSettings(ctx: ClientContext, environment: DesktopCli
   })
   const notificationSettings = ctx.settingsScope.bind<DesktopNotificationSettings>({
     namespace: DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
+  })
+  const agentSettings = ctx.settingsScope.bind<DesktopAgentSettings>({
+    namespace: DESKTOP_AGENT_SETTINGS_NAMESPACE,
   })
   const api = createDesktopSettingsApi()
   const t = ctx.locale.bind(DESKTOP_SETTINGS_LOCALE_NAMESPACE)
@@ -55,6 +64,7 @@ export function applyDesktopSettings(ctx: ClientContext, environment: DesktopCli
       initialMode: environment.mode,
       desktopSettings,
       notificationSettings,
+      agentSettings,
     }),
   }, DesktopSettingsSection))
   ctx.slots.inject('settings.action', () => ctx.slots.register({

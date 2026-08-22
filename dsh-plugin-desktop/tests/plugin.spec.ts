@@ -22,6 +22,10 @@ import {
 } from '../src/directory-picker-contract.ts'
 import type { DesktopRuntime, DesktopShellSpec } from '../src/runtime.ts'
 import { RENDERER_BOOT_REPORT_PATH, type RendererBootReport } from '../src/renderer-boot-contract.ts'
+import {
+  RESPONSE_LANGUAGE_SETTINGS_NAMESPACE,
+  ResponseLanguageSettingsSchema,
+} from '../src/response-language.ts'
 
 const config: DesktopConfig = {
   mode: 'compatibility',
@@ -63,6 +67,8 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   const validateDirectory = vi.fn(async () => true)
   const routes = new Map<string, WebRoute>()
   const settingsUpdated = new Set<(namespace: unknown, next: unknown) => void>()
+  const effect = vi.fn((register: () => unknown) => register())
+  const systemPrompt = { section: vi.fn(() => () => {}) }
   let localePreference: LocaleId | undefined
   let themePreference: ThemePreference = 'system'
   const runtime: DesktopRuntime = {
@@ -104,8 +110,10 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
       if (String(namespace) === 'locale') return { preference: localePreference }
       return undefined
     }),
-    register: vi.fn(() => ({
-      get: () => ({ mode: config.mode }),
+    register: vi.fn((namespace: unknown) => ({
+      get: () => String(namespace) === String(RESPONSE_LANGUAGE_SETTINGS_NAMESPACE)
+        ? { responseLanguage: 'auto' as const }
+        : { mode: config.mode },
       watch: (callback: typeof watcher) => {
         watcher = callback
         return () => { watcher = undefined }
@@ -127,7 +135,10 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     settings,
     logger: { warn: vi.fn(), error: vi.fn() },
     get: vi.fn((key: unknown) => String(key) === 'desktopRuntime' ? runtime : () => {}),
-    effect: vi.fn((register: () => unknown) => register()),
+    effect,
+    inject: vi.fn((_services: string[], callback: (injected: Context) => void) => {
+      callback({ effect, systemPrompt } as unknown as Context)
+    }),
     on: vi.fn((event: string, listener: (namespace: unknown, next: unknown) => void) => {
       if (event === 'settings/updated') settingsUpdated.add(listener)
       return () => { settingsUpdated.delete(listener) }
@@ -162,11 +173,13 @@ describe('desktop Host plugin', () => {
     expect(Config({} as DesktopConfig)).toEqual(config)
     expect(Config({ mode: 'advanced' } as DesktopConfig)).toEqual({ ...config, mode: 'advanced' })
     expect(DesktopSettingsSchema({} as DesktopSettings)).toEqual({ mode: 'compatibility', port: 43_120, logLevel: 'info' })
+    expect(ResponseLanguageSettingsSchema({} as never)).toEqual({ responseLanguage: 'auto' })
     expect(() => DesktopSettingsSchema({ port: -1 } as DesktopSettings)).toThrow()
     expect(() => DesktopSettingsSchema({ port: 1.5 } as DesktopSettings)).toThrow()
     expect(() => DesktopSettingsSchema({ port: 65_536 } as DesktopSettings)).toThrow()
     expect(() => Config({ mode: 'custom' } as never)).toThrow()
     expect(String(DESKTOP_SETTINGS_NAMESPACE)).toBe('dsh-desktop')
+    expect(String(RESPONSE_LANGUAGE_SETTINGS_NAMESPACE)).toBe('dsh-desktop-agent')
   })
 
   it('prints a launcher reminder and registers nothing without desktopRuntime', () => {
@@ -213,9 +226,11 @@ describe('desktop Host plugin', () => {
 
     expect(inject).toContain('settings')
     expect(inject).not.toContain('loader')
+    expect(vi.mocked(harness.ctx.inject)).toHaveBeenCalledWith(['systemPrompt'], expect.any(Function))
     const register = vi.mocked(harness.ctx.settings.register)
     expect(register.mock.calls[0]?.[2]).toEqual(expect.objectContaining({ applies: 'restart' }))
     expect(register.mock.calls[0]?.[2]).not.toHaveProperty('base')
+    expect(String(register.mock.calls[1]?.[0])).toBe('dsh-desktop-agent')
     expect(loaderAwait).not.toHaveBeenCalled()
     expect(harness.shell()).toEqual(expect.objectContaining({
       mode: 'compatibility',

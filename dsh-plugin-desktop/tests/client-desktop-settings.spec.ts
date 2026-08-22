@@ -12,6 +12,7 @@ import {
 } from '../src/client/desktop-settings-api.ts'
 import {
   applyDesktopSettings,
+  DESKTOP_AGENT_SETTINGS_NAMESPACE,
   DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE,
   DESKTOP_SETTINGS_LOCALE_NAMESPACE,
   DESKTOP_SHELL_SETTINGS_NAMESPACE,
@@ -135,6 +136,7 @@ describe('Desktop settings Slot registration', () => {
 
     expect(bind).toHaveBeenNthCalledWith(1, { namespace: DESKTOP_SHELL_SETTINGS_NAMESPACE })
     expect(bind).toHaveBeenNthCalledWith(2, { namespace: DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE })
+    expect(bind).toHaveBeenNthCalledWith(3, { namespace: DESKTOP_AGENT_SETTINGS_NAMESPACE })
     expect(inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
     expect(inject).toHaveBeenCalledWith('settings.action', expect.any(Function))
     const [options, component] = register.mock.calls[0] as unknown as [
@@ -148,7 +150,11 @@ describe('Desktop settings Slot registration', () => {
       locale: DESKTOP_SETTINGS_LOCALE_NAMESPACE,
     })
     expect(options.label()).toBe(`${DESKTOP_SETTINGS_LOCALE_NAMESPACE}:nav`)
-    expect(options.inject()).toMatchObject({ platform: 'darwin', initialMode: 'compatibility' })
+    expect(options.inject()).toMatchObject({
+      platform: 'darwin',
+      initialMode: 'compatibility',
+      agentSettings: scope,
+    })
     expect(component).toBe(DesktopSettingsSection)
 
     const [actionOptions, actionComponent] = register.mock.calls[1] as unknown as [
