@@ -1,6 +1,8 @@
 /** Private RunAsNode bootstrap for the packaged DeepSeek Harness CLI. */
 
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
 import {
@@ -112,6 +114,41 @@ class CapturedDesktopCliExit {
   constructor(readonly code: number) {}
 }
 
+/** The value pnpm ≥11 writes for a dependency build script it blocked until allowed. */
+const BLOCKED_BUILD_PLACEHOLDER = 'set this to true or false'
+
+/**
+ * Build the actionable message when a failed plugin install left pnpm's
+ * blocked-build-scripts placeholder in the profile's `pnpm-workspace.yaml`.
+ * pnpm ≥11 blocks dependency build scripts by default (`strictDepBuilds`),
+ * fails the install with `ERR_PNPM_IGNORED_BUILDS`, and records the blocked
+ * packages as `allowBuilds` entries with a placeholder value before exiting;
+ * only a literal boolean allows a script. The packaged CLI only hints for
+ * git-hosted specs, so registry plugins with native dependencies surface no
+ * pointer to the file pnpm itself wrote.
+ * @param profileDir - the profile directory owning `pnpm-workspace.yaml`.
+ * @returns the actionable message, or undefined when no placeholder exists.
+ */
+export async function blockedBuildsHint(profileDir: string): Promise<string | undefined> {
+  let workspaceYaml: string
+  try {
+    workspaceYaml = await readFile(join(profileDir, 'pnpm-workspace.yaml'), 'utf8')
+  } catch {
+    // No pnpm-workspace.yaml means pnpm never recorded an allowance decision.
+    return undefined
+  }
+  const entries = [...workspaceYaml.matchAll(
+    new RegExp(`^\\s*([^:\\s][^:\\n]*?):\\s*(?:["'])?${BLOCKED_BUILD_PLACEHOLDER}(?:["'])?\\s*$`, 'gm'),
+  )]
+    .map(match => match[1])
+    .filter((name): name is string => name !== undefined && name.length > 0)
+  if (entries.length === 0) return undefined
+  const file = join(profileDir, 'pnpm-workspace.yaml')
+  const allowlist = entries.map(name => `    ${name}: true`).join('\n')
+  return `dsh-desktop: pnpm blocked the build scripts of ${entries.join(', ')} until allowed — add them `
+    + `under allowBuilds in ${file}, then re-run:\n  allowBuilds:\n${allowlist}\n`
+}
+
 /** Run one built-in-terminal add inside the same durable recovery boundary as Market installs. */
 async function loadWithInstallRecovery(
   load: (url: string) => Promise<unknown>,
@@ -155,6 +192,8 @@ async function loadWithInstallRecovery(
       throw cause
     }
   } else {
+    const hint = await blockedBuildsHint(store.profileDir)
+    if (hint !== undefined) process.stderr.write(hint)
     const restored = await store.restoreCurrentInstall(transaction.transactionId, 'install-failed')
     if (restored.status !== 'manual-recovery-required') await store.clear(transaction.transactionId)
   }
