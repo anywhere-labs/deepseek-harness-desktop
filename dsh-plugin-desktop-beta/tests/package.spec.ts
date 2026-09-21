@@ -1000,6 +1000,14 @@ describe('published package surface', () => {
       extendInfo: {
         CFBundleAllowMixedLocalizations: true,
         CFBundleDevelopmentRegion: 'en',
+        CFBundleDocumentTypes: [
+          {
+            CFBundleTypeName: 'Folder',
+            CFBundleTypeRole: 'Viewer',
+            LSHandlerRank: 'Alternate',
+            LSItemContentTypes: ['public.folder'],
+          },
+        ],
         NSMicrophoneUsageDescription: 'DSH Desktop Beta uses the microphone for voice input.',
         CFBundleLocalizations: ['en', 'zh_CN'],
       },
