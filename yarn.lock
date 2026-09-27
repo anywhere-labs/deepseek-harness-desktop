@@ -3354,6 +3354,34 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@file%3Avendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.7-rc.2.tgz#./patches/dsh-llm-deepseek@0.1.7-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.7-rc.2
+  resolution: "@deepseek-ai/dsh-llm-deepseek@patch:@deepseek-ai/dsh-llm-deepseek@file%3Avendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.7-rc.2.tgz%23vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-llm-deepseek-0.1.7-rc.2.tgz%3A%3Ahash=990796&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-llm-deepseek@0.1.7-rc.2.patch::version=0.1.7-rc.2&hash=4abbde&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/cosmokit": "npm:~1.8.5"
+    "@deepseek-ai/dsh-brand": "npm:0.1.7-rc.2"
+    "@deepseek-ai/dsh-util-values": "npm:0.1.7-rc.2"
+    "@deepseek-ai/schemastery": "npm:~3.18.4"
+    eventsource-parser: "npm:^3.1.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.4
+    "@deepseek-ai/cordis-plugin-loader": ~1.0.5
+    "@deepseek-ai/dsh-anonymous-user-id": 0.1.7-rc.2
+    "@deepseek-ai/dsh-atomic-write": 0.1.7-rc.2
+    "@deepseek-ai/dsh-attachment": 0.1.7-rc.2
+    "@deepseek-ai/dsh-deepseek-llm-api-extensions": 0.1.7-rc.2
+    "@deepseek-ai/dsh-fs": 0.1.7-rc.2
+    "@deepseek-ai/dsh-home-paths": 0.1.7-rc.2
+    "@deepseek-ai/dsh-launch-environment": 0.1.7-rc.2
+    "@deepseek-ai/dsh-llm": 0.1.7-rc.2
+    "@deepseek-ai/dsh-timeout": 0.1.7-rc.2
+  peerDependenciesMeta:
+    "@deepseek-ai/cordis-plugin-loader":
+      optional: true
+  checksum: 10c0/6d9746777f530f4db1bc859a86eca28f0235a3e1d41eaaba18eede1dc7bcb4ebdb97c9c2f434f8c8b505d4e32242c45c69d815ec52439748b5d7db2ff7de6d8a
+  languageName: node
+  linkType: hard
+
 "@deepseek-ai/dsh-llm-pi-ai@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.7-rc.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.7-rc.2
   resolution: "@deepseek-ai/dsh-llm-pi-ai@file:vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.7-rc.2.tgz#vendor/dsh-runtime/0.1.7-rc.2/deepseek-ai-dsh-llm-pi-ai-0.1.7-rc.2.tgz::hash=75b0d6&locator=deepseek-harness-desktop%40workspace%3A."

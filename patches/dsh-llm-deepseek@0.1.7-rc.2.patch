@@ -1,0 +1,179 @@
+diff --git a/lib/index.js b/lib/index.js
+index 4deb593..a4494f0 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1902,6 +1902,145 @@ function stopReason(raw) {
+ 		default: return malformed(`unsupported stop reason ${String(raw)}`);
+ 	}
+ }
++/** Best-effort repair of malformed provider tool-call JSON.
++* Providers occasionally stream `partial_json` that is not valid JSON once the
++* deltas are concatenated: raw control characters inside strings, trailing
++* commas, markdown fences, or unterminated strings/containers. Repairing here
++* keeps one bad byte from failing the whole turn.
++* @param raw - accumulated `input_json_delta.partial_json` text.
++* @returns the first candidate that parses as a JSON object, or `undefined`.
++*/
++function repairToolJson(raw) {
++	if (typeof raw !== "string" || raw.length === 0) return void 0;
++	const candidates = [];
++	const push = (value) => {
++		if (typeof value === "string" && value.length > 0 && !candidates.includes(value)) candidates.push(value);
++	};
++	const trimmed = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
++	push(raw);
++	push(trimmed);
++	push(firstJsonObject(trimmed));
++	for (const base of [...candidates]) {
++		const clean = stripControlChars(base);
++		push(clean);
++		const noTrailing = dropTrailingCommas(clean);
++		push(noTrailing);
++		push(closeOpenContainers(noTrailing));
++		push(closeOpenContainers(clean));
++	}
++	for (const candidate of candidates) try {
++		const parsed = JSON.parse(candidate);
++		if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) return candidate;
++	} catch {}
++	return void 0;
++}
++/** Escape raw control characters that appear inside JSON strings.
++* @param text - candidate JSON text.
++* @returns the text with in-string control characters escaped.
++*/
++function stripControlChars(text) {
++	let out = "";
++	let inString = false;
++	let escaped = false;
++	for (const ch of text) {
++		const code = ch.codePointAt(0);
++		if (inString) {
++			if (escaped) {
++				out += ch;
++				escaped = false;
++				continue;
++			}
++			if (ch === "\\") {
++				out += ch;
++				escaped = true;
++				continue;
++			}
++			if (ch === "\"") {
++				out += ch;
++				inString = false;
++				continue;
++			}
++			if (code < 32) {
++				out += code === 10 ? "\\n" : code === 13 ? "\\r" : code === 9 ? "\\t" : `\\u${code.toString(16).padStart(4, "0")}`;
++				continue;
++			}
++			out += ch;
++			continue;
++		}
++		if (ch === "\"") {
++			inString = true;
++			out += ch;
++			continue;
++		}
++		if (code < 32 && code !== 10 && code !== 13 && code !== 9) continue;
++		out += ch;
++	}
++	return out;
++}
++/** Remove trailing commas that precede a closing brace or bracket.
++* @param text - candidate JSON text.
++* @returns the text without trailing commas.
++*/
++function dropTrailingCommas(text) {
++	return text.replace(/,\s*([}\]])/g, "$1");
++}
++/** Append the closers needed to balance unterminated strings and containers.
++* @param text - candidate JSON text.
++* @returns the text with missing string/container closers appended.
++*/
++function closeOpenContainers(text) {
++	let out = "";
++	const stack = [];
++	let inString = false;
++	let escaped = false;
++	for (const ch of text) {
++		if (inString) {
++			out += ch;
++			if (escaped) escaped = false;
++			else if (ch === "\\") escaped = true;
++			else if (ch === "\"") inString = false;
++			continue;
++		}
++		if (ch === "\"") {
++			inString = true;
++			out += ch;
++			continue;
++		}
++		if (ch === "{" || ch === "[") stack.push(ch);
++		else if (ch === "}" || ch === "]") stack.pop();
++		out += ch;
++	}
++	if (inString) out += "\"";
++	while (stack.length > 0) out += stack.pop() === "{" ? "}" : "]";
++	return out;
++}
++/** Extract the first balanced JSON object from surrounding prose.
++* @param text - candidate JSON text.
++* @returns the object slice, or `undefined` when no opening brace exists.
++*/
++function firstJsonObject(text) {
++	const start = text.indexOf("{");
++	if (start < 0) return void 0;
++	let depth = 0;
++	let inString = false;
++	let escaped = false;
++	for (let i = start; i < text.length; i++) {
++		const ch = text[i];
++		if (inString) {
++			if (escaped) escaped = false;
++			else if (ch === "\\") escaped = true;
++			else if (ch === "\"") inString = false;
++			continue;
++		}
++		if (ch === "\"") inString = true;
++		else if (ch === "{") depth += 1;
++		else if (ch === "}") {
++			depth -= 1;
++			if (depth === 0) return text.slice(start, i + 1);
++		}
++	}
++	return text.slice(start);
++}
+ /** Translate decoded SSE data into the Harness stream protocol.
+ * @param events - framed, decoded provider events in arrival order.
+ * @param model - requested model id stored in durable replay state.
+@@ -1961,7 +2100,7 @@ async function* translate(events, model) {
+ 				if (chunk !== void 0) yield chunk;
+ 			} else {
+ 				block.closed = true;
+-				if (block.content.type === "tool-call" && block.json.length > 0) block.content.arguments = block.json;
++				if (block.content.type === "tool-call" && block.json.length > 0) block.content.arguments = repairToolJson(block.json) ?? block.json;
+ 				yield {
+ 					type: "block-end",
+ 					index: block.index,
+@@ -1977,13 +2116,15 @@ async function* translate(events, model) {
+ 			if (blocks.size === 0 && reason.kind === "stop") throw new LlmError("DeepSeek Messages returned no content", "EMPTY_RESPONSE");
+ 			if (reason.kind !== "max-tokens") for (const { content } of blocks.values()) {
+ 				if (content.type !== "tool-call") continue;
+-				let parsed;
++				const repaired = repairToolJson(content.arguments);
++				if (repaired !== void 0) content.arguments = repaired;
+ 				try {
+-					parsed = JSON.parse(content.arguments);
++					object(JSON.parse(content.arguments));
+ 				} catch (_invalidProviderToolJson) {
+-					return malformed("tool input is invalid JSON");
++					// Degrade gracefully: the agent loop preserves unparseable arguments as literal
++					// text, so a single malformed tool call must never fail the whole turn.
++					console.warn("[dsh-llm-deepseek] tool call arguments are not valid JSON; passing the raw text through");
+ 				}
+-				object(parsed);
+ 			}
+ 			usage.totalTokens = usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+ 			yield {
