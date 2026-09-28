@@ -6,6 +6,7 @@ import type {
   MessageBoxOptions,
   MessageBoxReturnValue,
 } from 'electron'
+import { existsSync } from 'node:fs'
 import type { DesktopLocale, DesktopPlatform } from './runtime.ts'
 import {
   evaluateWindowsWorkspaceVolume,
@@ -18,6 +19,8 @@ export interface ElectronWorkspaceAdmissionOptions {
   readonly canPickDirectory: boolean
   readonly locale: () => DesktopLocale
   readonly showOpenDialog: (options: OpenDialogOptions) => Promise<OpenDialogReturnValue>
+  readonly pickWindowsUnicodeDirectory?: (title: string) => Promise<string | null>
+  readonly pathExists?: (path: string) => boolean
   readonly showMessageBox: (options: MessageBoxOptions) => Promise<MessageBoxReturnValue>
   readonly logError: (message: string) => void
   readonly volumeQuery?: WindowsVolumeQuery
@@ -45,6 +48,7 @@ function inspectPathOnDisk(path: string): PathInspectionResult | undefined {
 /** Own native workspace selection and every Desktop policy decision before persistence. */
 export class ElectronWorkspaceAdmission {
   private pickTask: Promise<string | null> | undefined
+  private preferUnicodeWindowsPicker = false
 
   constructor(private readonly options: ElectronWorkspaceAdmissionOptions) {}
 
@@ -152,10 +156,26 @@ export class ElectronWorkspaceAdmission {
   }
 
   private async showDirectoryPicker(): Promise<string | null> {
+    const title = this.options.locale() === 'zh' ? '选择工作区目录' : 'Select Workspace Directory'
+    if (this.preferUnicodeWindowsPicker && this.options.pickWindowsUnicodeDirectory !== undefined) {
+      return await this.options.pickWindowsUnicodeDirectory(title)
+    }
     const result = await this.options.showOpenDialog({
-      title: this.options.locale() === 'zh' ? '选择工作区目录' : 'Select Workspace Directory',
+      title,
       properties: ['openDirectory', 'dontAddToRecent'],
     })
-    return result.canceled ? null : result.filePaths[0] ?? null
+    const path = result.canceled ? null : result.filePaths[0] ?? null
+    if (this.options.platform !== 'win32'
+      || path === null
+      || this.options.pickWindowsUnicodeDirectory === undefined
+      || !/[^\u0000-\u007f]/u.test(path)
+      || (this.options.pathExists ?? existsSync)(path)) {
+      return path
+    }
+
+    this.options.logError('dsh-plugin-desktop: native workspace picker returned an inaccessible non-ASCII path; retrying with the UTF-16 Windows picker')
+    const fallback = await this.options.pickWindowsUnicodeDirectory(title)
+    this.preferUnicodeWindowsPicker = true
+    return fallback
   }
 }

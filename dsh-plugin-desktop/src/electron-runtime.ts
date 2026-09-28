@@ -68,6 +68,7 @@ import {
   type WindowsVolumeQuery,
 } from './windows-volume-diagnostics.ts'
 import { ElectronWorkspaceAdmission } from './workspace-admission.ts'
+import { pickWindowsUnicodeDirectory } from './windows-unicode-directory-picker.ts'
 import { ProfileCreateWindow, type ProfileCreateWindowOptions } from './profile-create-window.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
 import {
@@ -218,6 +219,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       showOpenDialog: async options => this.generation === undefined
         ? await dialog.showOpenDialog(options)
         : await this.generation.showOpenDialog(options),
+      pickWindowsUnicodeDirectory: async title => await pickWindowsUnicodeDirectory(title),
       showMessageBox: async options => await this.showDesktopMessageBox(options),
       logError: message => { this.logError(message) },
       ...(workspaceVolumeQuery === undefined ? {} : { volumeQuery: workspaceVolumeQuery }),

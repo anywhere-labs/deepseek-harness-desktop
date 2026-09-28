@@ -49,6 +49,39 @@ describe('Electron workspace admission', () => {
     expect(showOpenDialog).not.toHaveBeenCalled()
   })
 
+  it('retries an inaccessible non-ASCII Windows result through the UTF-16 picker and keeps using it', async () => {
+    const showOpenDialog = vi.fn(async () => ({
+      canceled: false,
+      filePaths: ['D:\\Ѹ������'],
+    }))
+    const pickWindowsUnicodeDirectory = vi.fn(async () => 'D:\\迅雷下载')
+    const { admission: subject, options } = admission({
+      locale: () => 'zh',
+      showOpenDialog,
+      pickWindowsUnicodeDirectory,
+      pathExists: () => false,
+    })
+
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    expect(showOpenDialog).toHaveBeenCalledOnce()
+    expect(pickWindowsUnicodeDirectory).toHaveBeenCalledTimes(2)
+    expect(pickWindowsUnicodeDirectory).toHaveBeenCalledWith('选择工作区目录')
+    expect(options.logError).toHaveBeenCalledWith(expect.stringContaining('inaccessible non-ASCII path'))
+  })
+
+  it('keeps an existing Unicode path returned by Electron without opening the fallback picker', async () => {
+    const pickWindowsUnicodeDirectory = vi.fn(async () => 'D:\\其他目录')
+    const { admission: subject } = admission({
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['D:\\迅雷下载'] })),
+      pickWindowsUnicodeDirectory,
+      pathExists: path => path === 'D:\\迅雷下载',
+    })
+
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    expect(pickWindowsUnicodeDirectory).not.toHaveBeenCalled()
+  })
+
   it('allows a fixed NTFS workspace without prompting or logging', async () => {
     const { admission: subject, options } = admission()
 
