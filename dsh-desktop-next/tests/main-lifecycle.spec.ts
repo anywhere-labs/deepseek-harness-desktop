@@ -751,3 +751,45 @@ it('disables and re-enables a Profile bundle from recovery without running the p
     expect(fixture.plugin).not.toHaveBeenCalled()
   } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
 })
+
+it('recovers login-shell exports into the Host environment before any Host starts', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-shell-environment-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const resolve = vi.fn(async () => ({
+    updates: { PATH: '/login-shell/bin:/usr/bin', PNPM_HOME: '/Users/tester/Library/pnpm' },
+    source: 'login-shell' as const,
+  }))
+  vi.doMock('../src/shell-environment.ts', async importOriginal => ({ ...await importOriginal<typeof import('../src/shell-environment.ts')>(), resolveDesktopShellEnvironment: resolve }))
+  const saved = { PATH: process.env.PATH, PNPM_HOME: process.env.PNPM_HOME }
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    // The Host environment spreads process.env, so the recovered exports must land there
+    // before runtime.start() can spawn a Host (a GUI launch otherwise keeps the launchd PATH).
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ environment: process.env, home, platform: process.platform }))
+    expect(process.env.PATH).toBe('/login-shell/bin:/usr/bin')
+    expect(process.env.PNPM_HOME).toBe('/Users/tester/Library/pnpm')
+    expect(fixture.diagnosticAppend).not.toHaveBeenCalledWith(expect.stringContaining('login-shell environment not recovered'), 'info')
+  } finally {
+    vi.doUnmock('../src/shell-environment.ts')
+    for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value }
+    vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
+  }
+})
+
+it('logs an unexpected login-shell capture fallback while keeping the launch environment', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-shell-environment-fallback-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const resolve = vi.fn(async () => ({ updates: {}, source: 'process' as const, fallbackReason: 'capture-failed' as const }))
+  vi.doMock('../src/shell-environment.ts', async importOriginal => ({ ...await importOriginal<typeof import('../src/shell-environment.ts')>(), resolveDesktopShellEnvironment: resolve }))
+  const savedPath = process.env.PATH
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    expect(process.env.PATH).toBe(savedPath)
+    expect(fixture.diagnosticAppend).toHaveBeenCalledWith('DSH NEXT: login-shell environment not recovered (capture-failed); keeping the launch environment', 'info')
+  } finally {
+    vi.doUnmock('../src/shell-environment.ts')
+    vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
+  }
+})
