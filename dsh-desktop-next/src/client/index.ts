@@ -18,7 +18,8 @@ import '../../../dsh-plugin-desktop-beta/src/client/onboarding.css'
 import { registerPluginControls } from './plugin-controls.tsx'
 import { installPluginControlsStyles } from './plugin-controls-styles.ts'
 import { SettingsRequests } from './settings-requests.tsx'
-import type { DesktopSettingsLocaleKey } from '../../../dsh-plugin-desktop-beta/src/client/desktop-settings-locales.ts'
+import { zhTw, type DesktopSettingsLocaleKey } from '../../../dsh-plugin-desktop-beta/src/client/desktop-settings-locales.ts'
+import { registerTraditionalChinese, TRADITIONAL_CHINESE } from '../../../dsh-plugin-desktop-beta/src/client/traditional-chinese.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -35,6 +36,15 @@ export function apply(ctx: Context): void {
     zh: { settings: '桌面设置', language: 'zh', safeMode: '安全模式', safeModeDetail: '当前使用临时环境。退出安全模式并重启后返回原 Profile，临时数据不会保留。', dismiss: '关闭提示', recovery: '打开恢复助手' },
     en: { settings: 'Desktop settings', language: 'en', safeMode: 'Safe mode', safeModeDetail: 'You are using a temporary environment. Exiting Safe Mode and restarting returns to the original Profile and removes the temporary data.', dismiss: 'Dismiss notice', recovery: 'Open recovery assistant' },
   }), 'Next settings and recovery labels')
+  ctx.effect(() => ctx.locale.register('desktop-next', TRADITIONAL_CHINESE, {
+    settings: '桌面設定', language: TRADITIONAL_CHINESE, safeMode: '安全模式',
+    safeModeDetail: '目前使用臨時環境。結束安全模式並重新啟動後返回原 Profile，臨時資料不會保留。',
+    dismiss: '關閉提示', recovery: '開啟恢復助手',
+  }), 'Next settings and recovery labels (Traditional Chinese)')
+  // Next mounts this dictionary for the shared Desktop settings namespace it also owns copy for.
+  ctx.effect(() => ctx.locale.register('desktop.settings', TRADITIONAL_CHINESE, zhTw),
+    'Next desktop settings dictionary (Traditional Chinese)')
+  ctx.effect(() => registerTraditionalChinese(ctx), 'Next Traditional Chinese language')
   ctx.effect(() => installDesktopSettingsStyles('dsh-desktop-next'), 'Shared Desktop settings styles')
   ctx.effect(installPluginControlsStyles, 'Plugin controls and permission dialog styles')
   registerPluginControls(ctx)

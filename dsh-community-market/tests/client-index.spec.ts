@@ -70,6 +70,7 @@ describe('community market client registration', () => {
 
     expect(test.effects.map(value => value.label)).toEqual([
       'community-market: dictionaries',
+      'community-market: Traditional Chinese dictionary',
       'community-market: styles',
     ])
     expect(test.injections.map(value => value.name)).toEqual([

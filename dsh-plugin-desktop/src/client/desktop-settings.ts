@@ -6,7 +6,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { DesktopSettingsSection, type DesktopNotificationSettings, type DesktopShellSettings } from './DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from './DesktopTerminalSettingsAction.tsx'
 import { createDesktopSettingsApi } from './desktop-settings-api.ts'
-import { en, zh, type DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
+import { en, zh, zhTw, type DesktopSettingsLocaleKey } from './desktop-settings-locales.ts'
+import { registerTraditionalChinese, TRADITIONAL_CHINESE } from './traditional-chinese.ts'
 import { installDesktopSettingsStyles } from './desktop-settings-styles.ts'
 import type { DesktopClientEnvironment } from './environment.ts'
 import {
@@ -85,6 +86,11 @@ export function applyDesktopSettings(
     () => ctx.locale.register(DESKTOP_SETTINGS_LOCALE_NAMESPACE, { zh, en }),
     'dsh-plugin-desktop: settings dictionaries',
   )
+  ctx.effect(
+    () => ctx.locale.register(DESKTOP_SETTINGS_LOCALE_NAMESPACE, TRADITIONAL_CHINESE, zhTw),
+    'dsh-plugin-desktop: Traditional Chinese settings dictionary',
+  )
+  ctx.effect(() => registerTraditionalChinese(ctx), 'dsh-plugin-desktop: Traditional Chinese language')
   ctx.effect(
     () => installDesktopSettingsStyles(),
     'dsh-plugin-desktop: settings styles',
