@@ -27,7 +27,7 @@ const CLIENT_ID = 'dsh-plugin-anywhere-api'
 const SCOPES = ['profile', 'email', 'offline_access', 'account']
 
 /** Credential record key holding this plugin's grant; opaque to every other plugin. */
-const CREDENTIAL_KEY = 'anywhere-gateway'
+const CREDENTIAL_KEY = 'anywhere-gateway/session'
 
 /** Same-origin route prefix the Client half calls. */
 export const API_BASE = '/anywhere-gateway-api'
