@@ -1,0 +1,5 @@
+# The Host half is an empty apply for now: the Anywhere 模型网关 surfaces are rendered
+# by the Web Client half (./client.js). Host-side account access arrives here later.
+- insert:
+    - id: anywhere-gateway
+      name: dsh-plugin-anywhere-api

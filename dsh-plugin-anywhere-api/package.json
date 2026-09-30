@@ -1,0 +1,36 @@
+{
+  "name": "dsh-plugin-anywhere-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Anywhere API relay account panel for the DeepSeek Harness (DSH) Web client.",
+  "license": "MIT",
+  "icon": "./plugin-artwork-default.svg",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "plugin-artwork-default.svg",
+    "locale/*.json",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  }
+}
