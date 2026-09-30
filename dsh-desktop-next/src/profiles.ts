@@ -1,5 +1,5 @@
 /** Next-owned profile state. Recovery works without importing any user plugin. */
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, unlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmdirSync, symlinkSync, unlinkSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { initProfile, loadOverlayPatches, loadProfileDirectory, PROFILE_TEMPLATES, readProfilePatches, type Profile, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
@@ -255,6 +255,42 @@ export class NextProfiles {
   }
 }
 
+/**
+ * Whether `path` is a symlink or junction. Sandboxie masks the reparse-point flag from
+ * handle-based queries, so `lstat` reports a real junction as a plain directory there;
+ * the parent directory listing (FindFirstFile) keeps the flag, so consult it as well.
+ */
+function isLinkEntry(path: string): boolean {
+  if (lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true) return true
+  try {
+    return readdirSync(dirname(path), { withFileTypes: true })
+      .some(entry => entry.name === basename(path) && entry.isSymbolicLink())
+  } catch { return false }
+}
+
+/** Resolve a link's target; where the reparse data is unreadable, ask the OS instead. */
+function linkTarget(link: string): string | undefined {
+  try {
+    return resolve(dirname(link), readlinkSync(link))
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== 'EINVAL' && code !== 'ENOTSUP' && code !== 'UNKNOWN') return undefined
+    // realpathSync is the JS walker and needs the same unreadable readlink; .native goes through the OS.
+    try { return realpathSync.native(link) } catch { return undefined }
+  }
+}
+
+/** Remove a symlink or junction without ever touching its target. */
+function removeLink(link: string): void {
+  try {
+    unlinkSync(link)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== 'EPERM' && code !== 'EACCES' && code !== 'EISDIR') throw error
+    rmdirSync(link)   // a Windows junction is a directory reparse point
+  }
+}
+
 /** Add product capabilities without replacing the upstream Web presentation. */
 export function loadNextProfile(projectDir: string, home: string, installAnchor = NEXT_PACKAGE): Profile {
   const manager = new NextProfiles(home)
@@ -270,8 +306,9 @@ export function loadNextProfile(projectDir: string, home: string, installAnchor 
   const link = join(modules, 'dsh-desktop-next')
   const target = realpathSync(dirname(installAnchor))
   const existingLink = lstatSync(link, { throwIfNoEntry: false })
-  if (existingLink && !existingLink.isSymbolicLink()) throw new Error('Next bundle fallback is occupied by an unmanaged package')
-  if (existingLink && resolve(modules, readlinkSync(link)) !== target) unlinkSync(link)
+  const existingIsLink = existingLink !== undefined && isLinkEntry(link)
+  if (existingLink && !existingIsLink) throw new Error('Next bundle fallback is occupied by an unmanaged package')
+  if (existingIsLink && linkTarget(link) !== target) removeLink(link)
   if (!lstatSync(link, { throwIfNoEntry: false })) symlinkSync(target, link, 'junction')
   const profile = loadProfileDirectory('dsh-desktop-next', projectDir, installAnchor)
   profile.layers.push({ packageName: 'dsh-desktop-next', packageDir: target,
