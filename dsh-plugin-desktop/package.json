@@ -310,7 +310,7 @@
     "@deepseek-ai/schemastery": "^3.18.4",
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
-    "dshmarket": "1.66.5",
+    "dshmarket": "1.66.7",
     "fs-ext": "2.1.1",
     "koffi": "3.1.5",
     "node-addon-require-builtin": "^0.1.6",

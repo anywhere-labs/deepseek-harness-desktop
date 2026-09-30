@@ -196,7 +196,7 @@
     "@deepseek-ai/dsh-workspace": "0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.4",
     "dsh-community-market": "0.1.0-dev.0",
-    "dshmarket": "1.66.5",
+    "dshmarket": "1.66.7",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-string": "^4.0.0",

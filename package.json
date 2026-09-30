@@ -24,7 +24,6 @@
     "koffi@npm:^3.1.0": "3.1.5",
     "@vscode/ripgrep@npm:1.18.0": "patch:@vscode/ripgrep@npm%3A1.18.0#./patches/vscode-ripgrep@1.18.0.patch",
     "@vscode/ripgrep@npm:^1.18.0": "patch:@vscode/ripgrep@npm%3A1.18.0#./patches/vscode-ripgrep@1.18.0.patch",
-    "dshmarket@npm:1.66.5": "patch:dshmarket@npm%3A1.66.5#./.yarn/patches/dshmarket-desktop.patch",
     "@deepseek-ai/dsh-brand@npm:0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-brand-0.2.0-rc.2.tgz",
     "@deepseek-ai/dsh-brand@npm:^0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-brand-0.2.0-rc.2.tgz",
     "@deepseek-ai/dsh-invariants@npm:0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-invariants-0.2.0-rc.2.tgz",
@@ -660,7 +659,8 @@
     "@deepseek-ai/dsh-web-search-exa@npm:0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-web-search-exa-0.2.0-rc.2.tgz",
     "@deepseek-ai/dsh-web-search-exa@npm:^0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-web-search-exa-0.2.0-rc.2.tgz",
     "@deepseek-ai/dsh-web-search-perplexity@npm:0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-web-search-perplexity-0.2.0-rc.2.tgz",
-    "@deepseek-ai/dsh-web-search-perplexity@npm:^0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-web-search-perplexity-0.2.0-rc.2.tgz"
+    "@deepseek-ai/dsh-web-search-perplexity@npm:^0.2.0-rc.2": "file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-web-search-perplexity-0.2.0-rc.2.tgz",
+    "dshmarket@npm:1.66.7": "patch:dshmarket@npm%3A1.66.7#./.yarn/patches/dshmarket-desktop.patch"
   },
   "dependenciesMeta": {
     "@deepseek-ai/dsh-subprocess-local": {

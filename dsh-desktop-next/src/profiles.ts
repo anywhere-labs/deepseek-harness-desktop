@@ -9,6 +9,7 @@ import { NextRecovery } from './recovery.ts'
 import { DEFAULT_PROFILE } from './desktop-contract.ts'
 import { computerUsePatch } from './profile-computer-use.ts'
 import { legacySchedulePatch, SCHEDULE_BUNDLE } from './profile-schedule.ts'
+import { removeLinkProjectionsSafely } from '../../dsh-plugin-desktop-beta/src/link-projections.ts'
 
 export const NEXT_PACKAGE = fileURLToPath(new URL('../package.json', import.meta.url))
 export const WEB_BUNDLES = [...PROFILE_TEMPLATES.web!.bundles]
@@ -255,11 +256,28 @@ export class NextProfiles {
   }
 }
 
+/**
+ * Remove the package links a dsh 0.1.5 launcher (Stable before 2.0.14, the 0.1.5 CLI)
+ * projected into this shared Profile. They point at that launcher's installation, so the
+ * Host would load a second copy of every Harness package through them: a second
+ * `dsh-scope` loses preset scope tags and new sessions fail with `agent-preset/invalid`.
+ * Upstream sweeps them in `loadProfile`, which Next bypasses. A locked link must not keep
+ * the Host from starting; the next launch retries.
+ */
+function retireLinkProjections(projectDir: string): void {
+  try {
+    removeLinkProjectionsSafely(projectDir)
+  } catch (cause) {
+    process.stderr.write(`dsh-desktop-next: could not remove dsh 0.1.5 link projections from ${projectDir}: ${String(cause)}\n`)
+  }
+}
+
 /** Add product capabilities without replacing the upstream Web presentation. */
 export function loadNextProfile(projectDir: string, home: string, installAnchor = NEXT_PACKAGE): Profile {
   const manager = new NextProfiles(home)
   if (manager.directory(basename(projectDir)) !== resolve(projectDir)) throw new Error('Profile must belong to Next home')
   manager.ensure(basename(projectDir))
+  retireLinkProjections(projectDir)
   // Upstream bundle discovery walks physical node_modules before installing its
   // runtime resolver. Project only this application's bundle, not its dependency
   // tree; the alpha.2 runtime resolver owns all other package fallbacks.

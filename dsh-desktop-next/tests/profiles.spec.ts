@@ -1,11 +1,12 @@
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 import { composeEntries, loadOverlayPatches, loadProfileDirectory, OPTIONAL_BUNDLES } from '@deepseek-ai/dsh-app-boot'
 import { AA_PACKAGE, COMMUNITY_MARKET_PACKAGE, DSH_MARKET_PACKAGE, loadNextProfile, NEXT_PACKAGE, NextProfiles, profileName, readNextProfilePatches, WEB_BUNDLES } from '../src/profiles.ts'
 import * as privateFiles from '../src/private-files.ts'
+import * as linkProjections from '../../dsh-plugin-desktop-beta/src/link-projections.ts'
 
 const roots: string[] = []
 function profiles() { const home = mkdtempSync(join(tmpdir(), 'dsh-next-profiles-')); roots.push(home); return new NextProfiles(home) }
@@ -468,4 +469,49 @@ it('leaves a malformed patch for recovery and retries the Scheduled Tasks migrat
   writeFileSync(join(dir, 'cordis.patch.yml'), '- id: schedule\n  disabled: false\n')
   manager.ensure('desktop')
   expect(read().bundles).toContain(SCHEDULE_BUNDLE)
+})
+
+/** Lay out what a dsh 0.1.5 launcher left in the shared Profile: profile link -> owned link -> its installation. */
+function projectLegacyPackages(home: string, dir: string) {
+  const directoryLink = process.platform === 'win32' ? 'junction' : 'dir'
+  const files: string[] = []
+  const links: string[] = []
+  for (const packageName of ['@deepseek-ai/dsh-scope', '@deepseek-ai/dsh-persona']) {
+    const target = join(home, 'old-desktop', 'node_modules', packageName)
+    mkdirSync(target, { recursive: true })
+    writeFileSync(join(target, 'index.js'), 'old installation')
+    files.push(join(target, 'index.js'))
+    const owned = join(dir, '.dsh-module-fallback', 'node_modules', packageName)
+    mkdirSync(dirname(owned), { recursive: true })
+    symlinkSync(target, owned, directoryLink)
+    const link = join(dir, 'node_modules', packageName)
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(owned, link, directoryLink)
+    links.push(link)
+  }
+  return { files, links }
+}
+
+it('retires dsh 0.1.5 link projections before composing the Profile', () => {
+  const manager = profiles()
+  const dir = manager.ensure('desktop')
+  const { files, links } = projectLegacyPackages(manager.home, dir)
+  loadNextProfile(dir, manager.home)
+  for (const link of links) expect(lstatSync(link, { throwIfNoEntry: false })).toBeUndefined()
+  expect(existsSync(join(dir, '.dsh-module-fallback'))).toBe(false)
+  for (const file of files) expect(readFileSync(file, 'utf8')).toBe('old installation')
+})
+
+it('still loads the Profile when the projection sweep fails', () => {
+  const manager = profiles()
+  const dir = manager.ensure('desktop')
+  const sweep = vi.spyOn(linkProjections, 'removeLinkProjectionsSafely').mockImplementation(() => {
+    throw Object.assign(new Error('EBUSY: junction is locked'), { code: 'EBUSY' })
+  })
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  try {
+    expect(loadNextProfile(dir, manager.home).layers.map(layer => layer.packageName)).toContain('dsh-desktop-next')
+    expect(sweep).toHaveBeenCalledWith(dir)
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('could not remove dsh 0.1.5 link projections'))
+  } finally { sweep.mockRestore(); stderr.mockRestore() }
 })
