@@ -11,7 +11,10 @@ describe('native macOS application menu', () => {
   it('uses the first supported macOS preferred language', () => {
     expect(nativeMenuLocale(['zh-Hans-CN', 'en-CN'])).toBe('zh-CN')
     expect(nativeMenuLocale(['zh_CN', 'en-CN'])).toBe('zh-CN')
-    expect(nativeMenuLocale(['zh-Hant-TW', 'en-US'])).toBe('en')
+    expect(nativeMenuLocale(['zh-Hant-TW', 'en-US'])).toBe('zh-TW')
+    expect(nativeMenuLocale(['zh-Hant'])).toBe('zh-TW')
+    expect(nativeMenuLocale(['zh-HK'])).toBe('zh-TW')
+    expect(nativeMenuLocale(['zh_MO'])).toBe('zh-TW')
     expect(nativeMenuLocale(['fr-FR', 'en-US', 'zh-Hans'])).toBe('en')
     expect(nativeMenuLocale(['fr-FR'])).toBe('en')
   })
@@ -40,6 +43,29 @@ describe('native macOS application menu', () => {
     ]))
   })
 
+  it('localizes the complete Traditional Chinese menu while retaining native roles', () => {
+    const template = macApplicationMenuTemplate('DSH Desktop', 'zh-TW')
+
+    expect(template.map(item => item.label)).toEqual([
+      'DSH Desktop', '檔案', '編輯', '顯示方式', '視窗',
+    ])
+    expect(submenu(template[0]!).map(item => item.label).filter(Boolean)).toEqual([
+      '關於 DSH Desktop', '服務', '隱藏 DSH Desktop', '隱藏其他', '顯示全部', '結束 DSH Desktop',
+    ])
+    expect(submenu(template[1]!)).toEqual([
+      expect.objectContaining({ label: '關閉視窗', role: 'close' }),
+    ])
+    expect(submenu(template[2]!)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '拷貝', role: 'copy' }),
+      expect.objectContaining({ label: '貼上', role: 'paste' }),
+      expect.objectContaining({ label: '全選', role: 'selectAll' }),
+    ]))
+    expect(submenu(template[3]!)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '實際大小', role: 'resetZoom' }),
+      expect.objectContaining({ label: '放大', role: 'zoomIn' }),
+      expect.objectContaining({ label: '縮小', role: 'zoomOut' }),
+    ]))
+  })
   it('keeps the English fallback complete', () => {
     const template = macApplicationMenuTemplate('DSH Desktop', 'en')
 

@@ -22,7 +22,8 @@ function App() {
 
 function NativePages({ adapter }: { adapter: NextSettingsAdapter }) {
   const state = useDesktopState(adapter)
-  const locale = new URLSearchParams(location.search).get('locale') === 'zh' ? 'zh' : 'en'
+  // Shell locales share one native copy set: Traditional resolves to Simplified copy until its own lands.
+  const locale = (new URLSearchParams(location.search).get('locale') ?? '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
   const t = (cn: string, en: string) => locale === 'zh' ? cn : en
   const [page, setPage] = useState(location.hash.slice(1) || 'recovery')
   const [failure, setFailure] = useState('')
