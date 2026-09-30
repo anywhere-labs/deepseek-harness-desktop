@@ -117,7 +117,8 @@ window.__ModuleLoader__.load({
 .dsapi-muted{color:var(--dsw-alias-label-tertiary)}
 .dsapi-identity{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .dsapi-identityMain{display:flex;align-items:center;gap:10px;min-width:0}
-.dsapi-avatar{flex:none;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--dsw-alias-bg-skeleton);color:var(--dsw-alias-label-tertiary);font-size:13px;font-weight:500}
+.dsapi-avatar{position:relative;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--dsw-alias-bg-skeleton);color:var(--dsw-alias-label-tertiary);font-size:13px;font-weight:500}
+.dsapi-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .dsapi-name{font-size:14px;font-weight:500}
 .dsapi-status{display:flex;align-items:center;gap:8px;color:var(--dsw-alias-label-tertiary);font-size:12px}
 .dsapi-balance{display:flex;flex-direction:column;gap:12px}
@@ -150,6 +151,12 @@ window.__ModuleLoader__.load({
     /** How often a pending authorization is re-checked. */
     const POLL_MS = 1200
 
+    /** How often the account figures are refreshed while signed in. */
+    const IDLE_MS = 60_000
+
+    /** Repeated triggers (panel mounts, focus) closer than this are coalesced. */
+    const MIN_GAP_MS = 10_000
+
     /**
      * One shared account state for both surfaces. `getSnapshot` keeps the same reference until
      * the Host reports a change, which is what the framework's observable hook requires.
@@ -159,6 +166,7 @@ window.__ModuleLoader__.load({
       let snapshot = { signedIn: false, pending: false, loading: true }
       const listeners = new Set()
       let timer
+      let lastReadAt = 0
       const publish = change => {
         snapshot = { ...snapshot, ...change }
         for (const listener of [...listeners]) listener()
@@ -188,6 +196,7 @@ window.__ModuleLoader__.load({
             })
             return undefined
           }
+          lastReadAt = Date.now()
           publish({ ...body, loading: false })
           return body
         } catch {
@@ -195,13 +204,13 @@ window.__ModuleLoader__.load({
           return undefined
         }
       }
+      // Signed in, the figures keep moving: keep a slow timer instead of stopping after the
+      // authorization settles, and pause it while the window is hidden.
       const poll = async () => {
+        timer = undefined
         const body = await readState()
-        if (body === undefined || !body.pending) {
-          stopPolling()
-          return
-        }
-        timer = window.setTimeout(() => { void poll() }, POLL_MS)
+        if (document.visibilityState === 'hidden') return
+        timer = window.setTimeout(() => { void poll() }, body?.pending === true ? POLL_MS : IDLE_MS)
       }
       return {
         getSnapshot: () => snapshot,
@@ -209,10 +218,14 @@ window.__ModuleLoader__.load({
           listeners.add(listener)
           return () => { listeners.delete(listener) }
         },
-        /** Read the Host's current account state once. */
-        async refresh() {
+        /**
+         * Read the Host's current account state now.
+         * @param force - bypass the coalescing gap, for events that must not show stale data.
+         */
+        async refresh(force = false) {
+          if (!force && lastReadAt !== 0 && Date.now() - lastReadAt < MIN_GAP_MS) return
           stopPolling()
-          await readState()
+          await poll()
         },
         /** Ask the Host to run the OAuth flow, then follow it until it settles. */
         async signIn() {
@@ -443,7 +456,45 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'dsapi-identityMain' },
-            h('span', { className: 'dsapi-avatar' }, (account.profile?.name ?? '?').slice(0, 1)),
+            h(
+              'span',
+              {
+                className: 'dsapi-avatar',
+                // Inline geometry on purpose: an avatar that renders as a bare square means the
+                // styling never reached the element, and inline styles cannot be lost to a stale
+                // injected sheet or a host rule that wins the cascade.
+                style: {
+                  position: 'relative',
+                  overflow: 'hidden',
+                  flex: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                },
+              },
+              (account.profile?.name ?? '?').slice(0, 1),
+              // The picture rides on top of the initial; a broken URL just removes itself.
+              typeof account.profile?.avatar === 'string' && account.profile.avatar !== ''
+                ? h('img', {
+                  src: account.profile.avatar,
+                  alt: '',
+                  style: {
+                    position: 'absolute',
+                    top: '0',
+                    left: '0',
+                    width: '32px',
+                    height: '32px',
+                    objectFit: 'cover',
+                    borderRadius: '50%',
+                    display: 'block',
+                  },
+                  onError: event => { event.currentTarget.remove() },
+                })
+                : null,
+            ),
             h(
               'div',
               null,
@@ -524,6 +575,8 @@ window.__ModuleLoader__.load({
     function SettingsPage(props) {
       const t = props.t
       const account = props.useGateway(snapshot => snapshot)
+      // Opening the settings section is the clearest signal that the user wants current numbers.
+      React.useEffect(() => { props.refresh() }, [])
       return h(
         'section',
         { className: 'dsapi-root', 'aria-label': t('nav') },
@@ -600,6 +653,7 @@ window.__ModuleLoader__.load({
           hooks: { gateway },
           signIn: () => { void gateway.signIn() },
           signOut: () => { void gateway.signOut() },
+          refresh: () => { void gateway.refresh() },
         }
         const footerFace = {
           hooks: { gateway },
@@ -615,10 +669,23 @@ window.__ModuleLoader__.load({
           return () => { sheet.remove() }
         }, 'anywhere-gateway: styles')
         ctx.effect(() => ctx.locale.register('anywhere-gateway', DICTIONARIES), 'anywhere-gateway: dictionaries')
-        // Read the Host's account state once, and stop polling when the plugin unloads.
+        // Refresh triggers: plugin load, returning focus (for example after authorizing in the
+        // browser), and coming back from a hidden window. The state module coalesces them and
+        // keeps a slow timer of its own, so the sidebar figures stay current without polling
+        // the gateway hard. Everything is removed when the plugin unloads.
         ctx.effect(() => {
-          void gateway.refresh()
-          return () => { gateway.dispose() }
+          const onFocus = () => { void gateway.refresh() }
+          const onVisibility = () => {
+            if (document.visibilityState === 'visible') void gateway.refresh()
+          }
+          window.addEventListener('focus', onFocus)
+          document.addEventListener('visibilitychange', onVisibility)
+          void gateway.refresh(true)
+          return () => {
+            window.removeEventListener('focus', onFocus)
+            document.removeEventListener('visibilitychange', onVisibility)
+            gateway.dispose()
+          }
         }, 'anywhere-gateway: account state')
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section',
