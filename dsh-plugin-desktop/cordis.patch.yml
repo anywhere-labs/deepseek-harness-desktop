@@ -12,6 +12,11 @@
       name: dsh-plugin-desktop/diagnostics
     - id: desktop-notifications
       name: dsh-plugin-desktop/notifications
+    - id: desktop-context
+      name: dsh-plugin-desktop/context
+    - id: desktop-loop-guard
+      name: dsh-plugin-desktop/loop-guard
+      disabled: true
     - id: desktop-pnpm
       name: dsh-plugin-desktop/pnpm
     - id: desktop-profiles
