@@ -2,10 +2,9 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { checkForDesktopUpdate, type UpdateCheckResult, type UpdateRequest } from '../../dsh-plugin-desktop-beta/src/update-checker.ts'
-import { desktopUpdateFilename, downloadDesktopUpdate } from '../../dsh-plugin-desktop-beta/src/update-download.ts'
+import { desktopUpdateFilename, downloadDesktopUpdate, type UpdateArtifactRequest } from '../../dsh-plugin-desktop-beta/src/update-download.ts'
 import { getOrCreateDesktopInstallationId } from '../../dsh-plugin-desktop-beta/src/desktop-installation-id.ts'
 import { privateDirectory } from './private-files.ts'
-import { artifactRequest } from './update-transport.ts'
 import type { NextUpdateState } from './update-state.ts'
 
 export interface NextUpdateOptions {
@@ -13,7 +12,10 @@ export interface NextUpdateOptions {
   platform: string
   packaged: boolean
   userData: string
+  /** Fetch adapter for the version check. */
   request: UpdateRequest
+  /** Installer transport; it owns redirect following and its per-hop HTTPS check. */
+  artifactRequest: UpdateArtifactRequest
   changed(): void
   log(error: unknown): void
   prepare(path: string, version: string, directory: string, signal: AbortSignal): Promise<void>
@@ -113,7 +115,7 @@ export class NextUpdates {
         let lastProgress = 0
         const path = await downloadDesktopUpdate({ platform, version: result.latestVersion, channel: 'next',
           destinationPath: join(directory, desktopUpdateFilename(platform, result.latestVersion, 'next')),
-          request: artifactRequest(this.options.request), expectedSha256: result.installerSha256?.[platform],
+          request: this.options.artifactRequest, expectedSha256: result.installerSha256?.[platform],
           signal: AbortSignal.any([signal, AbortSignal.timeout(60 * 60_000)]), onProgress: (received, total) => {
             if (Date.now() - lastProgress < 250 && received !== total) return
             lastProgress = Date.now(); this.set({ received, total })
