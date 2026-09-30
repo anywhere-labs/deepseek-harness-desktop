@@ -156,11 +156,36 @@ function waitForCallback(server, expected) {
       const state = url.searchParams.get('state')
       const issuer = url.searchParams.get('iss')
       const failure = url.searchParams.get('error')
-      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-      response.end(`<!doctype html><meta charset="utf-8"><title>Anywhere 模型网关</title>
-<body style="font:16px/1.6 system-ui;padding:48px">${
-        failure === null ? '已登录，请回到 DSH。' : `授权未完成：${failure}`
-      }</body>`)
+      const callbackValid = failure === null && code !== null && state === expected.state
+        && (issuer === null || issuer.replace(/\/$/, '') === BASE_URL)
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      })
+      response.end(`<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Anywhere 模型网关</title>
+<style>
+  :root { color-scheme: dark; background: #0a0a0a; color: #fafafa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100svh; display: grid; }
+  main { display: grid; place-items: center; padding: 32px 24px; }
+  section { width: 100%; max-width: 440px; text-align: center; }
+  h1 { margin: 0; font-size: 24px; line-height: 1.5; font-weight: 500; letter-spacing: -.02em; }
+  p { margin: 12px 0 0; color: #a3a3a3; font-size: 14px; line-height: 1.8; }
+  .hint { margin-top: 36px; padding-top: 20px; border-top: 1px solid #ffffff1a; color: #737373; font-size: 12px; }
+  @media (max-width: 480px) { h1 { font-size: 22px; } }
+</style></head><body>
+<main><section aria-labelledby="result-title">
+  <h1 id="result-title">${callbackValid ? '已登录，请返回 DSH' : '授权未完成'}</h1>
+  <p>${callbackValid ? '请回到 DSH 客户端继续，连接状态将在应用中更新。' : '请返回 DSH 客户端，重新发起登录。'}</p>
+  <p class="hint">你可以安全关闭此页面</p>
+</section></main></body></html>`)
       if (failure !== null) {
         finish(new Error(`授权未完成：${failure}`))
         return
@@ -367,7 +392,9 @@ async function snapshot(ctx) {
       profile: {
         id: self?.id,
         name: self?.display_name ?? self?.username ?? '',
-        avatar: self?.avatar ?? '',
+        // The site stores either a URL, a data URL, or a site-relative path (AA login writes
+        // whatever the identity provider returned).
+        avatar: absoluteUrl(self?.avatar),
       },
       balance: money(self?.quota),
       totalSpend: money(self?.used_quota),
@@ -421,6 +448,17 @@ async function logout(ctx) {
   const confirmed = typeof grant?.refreshToken === 'string' ? await revokeGrant(grant.refreshToken) : true
   await clearGrant(ctx)
   return { confirmed }
+}
+
+/**
+ * Absolute URL for a value the gateway stores for a resource.
+ * @param raw - the stored value: empty, a data URL, an absolute URL, or a site-relative path.
+ * @returns the URL the page can render, or undefined when there is nothing to show.
+ */
+function absoluteUrl(raw) {
+  if (typeof raw !== 'string' || raw === '') return undefined
+  if (raw.startsWith('data:') || /^https?:\/\//.test(raw)) return raw
+  return new URL(raw, BASE_URL).href
 }
 
 /** @param response - server response. @param status - HTTP status. @param body - JSON body. */
