@@ -14,6 +14,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { request as httpRequest, createServer } from 'node:http'
 import { Agent, request as httpsRequest } from 'node:https'
 import { createAccessTokenResolver } from './oauth-session.js'
+import { createProviderSetup } from './provider-setup.js'
 
 /**
  * Gateway origin. TEMPORARY: the local development server. Production is
@@ -81,6 +82,7 @@ function requestGateway(path, options = {}) {
       })
     })
     request.on('error', reject)
+    request.setTimeout(30_000, () => request.destroy(new Error('网关请求超时')))
     if (body !== undefined) request.write(body)
     request.end()
   })
@@ -338,12 +340,17 @@ async function currentAccessToken(ctx, rejectedToken) {
  * @returns the parsed body's `data` field.
  * @throws when authentication cannot be repaired, or the gateway reports a failure.
  */
-async function callUserApi(ctx, path) {
+async function callUserApi(ctx, path, options = {}) {
   let token = await currentAccessToken(ctx)
   if (token === undefined) throw new Error('未登录')
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (options.expectedUserId !== undefined) {
+      const subject = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).sub
+      if (String(subject) !== String(options.expectedUserId)) throw new Error('登录账号已变更，请重新配置')
+    }
     const { status, body } = await requestGateway(path, {
-      headers: { authorization: `Bearer ${token}`, 'user-agent': USER_AGENT },
+      ...options,
+      headers: { authorization: `Bearer ${token}`, 'user-agent': USER_AGENT, 'content-type': 'application/json' },
     })
     const code = body?.message ?? body?.data?.code
     if (code === 'AUTH_SESSION_REVOKED') {
@@ -356,12 +363,35 @@ async function callUserApi(ctx, path) {
       if (token === undefined) break
       continue
     }
-    if (status < 200 || status >= 300) throw new Error(code ?? `网关返回 HTTP ${status}`)
+    if (status < 200 || status >= 300) {
+      const error = new Error(code ?? `网关返回 HTTP ${status}`)
+      error.requestRejected = status >= 400 && status < 500 && status !== 408
+      throw error
+    }
     // Business refusals can arrive as HTTP 200 with success:false.
-    if (body?.success === false) throw new Error(body?.message ?? '网关拒绝了该请求')
+    if (body?.success === false) {
+      const error = new Error(body?.message ?? '网关拒绝了该请求')
+      error.requestRejected = true
+      throw error
+    }
     return body?.data
   }
   throw new Error('登录已过期，请重新登录')
+}
+
+const providerSetup = createProviderSetup({
+  issuer: BASE_URL,
+  userApi: callUserApi,
+  async models(apiKey) {
+    const { status, body } = await requestGateway('/v1/models', { headers: { authorization: `Bearer ${apiKey}` } })
+    if (status !== 200 || !Array.isArray(body?.data)) throw new Error('无法获取模型列表')
+    return body.data
+  },
+})
+
+async function configureProvider(ctx) {
+  const user = await callUserApi(ctx, '/api/user/self')
+  return providerSetup.run(ctx, user.id)
 }
 
 /**
@@ -386,6 +416,7 @@ async function snapshot(ctx) {
     ).catch(() => undefined)
     return {
       signedIn: true,
+      setup: await providerSetup.status(ctx, self.id).catch(() => ({ status: 'error', error: '模型配置服务暂不可用' })),
       profile: {
         id: self?.id,
         name: self?.display_name ?? self?.username ?? '',
@@ -428,6 +459,7 @@ async function login(ctx) {
     const code = await waitForCallback(server, { state: pkce.state })
     // A code is single-use: never retry a code whose exchange may already have been sent.
     await writeGrant(ctx, await exchangeCode(code, redirectUri, pkce.verifier))
+    await configureProvider(ctx)
     return { ok: true }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -499,6 +531,17 @@ export function apply(ctx) {
           if (route === '/logout' && request.method === 'POST') {
             const outcome = await logout(ctx)
             sendJson(response, 200, { signedIn: false, ...outcome })
+            return
+          }
+          if (route === '/configure' && request.method === 'POST') {
+            let sameOrigin = false
+            try { sameOrigin = new URL(request.headers.origin).host === request.headers.host } catch {}
+            if (!sameOrigin || request.headers['sec-fetch-site'] === 'cross-site') {
+              sendJson(response, 403, { error: '拒绝跨站配置请求' })
+              return
+            }
+            const setup = await configureProvider(ctx)
+            sendJson(response, 200, { setup })
             return
           }
           sendJson(response, 404, { error: 'not found' })

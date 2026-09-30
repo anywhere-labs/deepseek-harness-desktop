@@ -15,6 +15,7 @@
   "files": [
     "index.js",
     "oauth-session.js",
+    "provider-setup.js",
     "client.js",
     "cordis.patch.yml",
     "plugin-artwork-default.svg",

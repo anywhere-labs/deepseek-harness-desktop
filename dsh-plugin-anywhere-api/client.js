@@ -57,6 +57,9 @@ window.__ModuleLoader__.load({
         totalRequests: '请求总数',
         console: '打开管理台',
         signOut: '退出登录',
+        configure: '配置模型供应商',
+        configuring: '正在配置模型…',
+        configured: '模型供应商已配置',
       },
       en: {
         nav: 'Anywhere Model Gateway',
@@ -84,6 +87,9 @@ window.__ModuleLoader__.load({
         totalRequests: 'Total requests',
         console: 'Open console',
         signOut: 'Sign out',
+        configure: 'Configure model provider',
+        configuring: 'Configuring models…',
+        configured: 'Model provider configured',
       },
     }
 
@@ -257,6 +263,20 @@ window.__ModuleLoader__.load({
             publish({ signedIn: false, pending: false, error: '已在本地退出；未能连接网关' })
           }
           await readState()
+        },
+        async configure() {
+          if (snapshot.configuring) return
+          publish({ configuring: true, error: undefined })
+          try {
+            const response = await fetch(`${API_BASE}/configure`, { method: 'POST' })
+            const body = await response.json()
+            if (!response.ok) publish({ error: body.error ?? '模型配置失败 / Model setup failed' })
+          } catch {
+            publish({ error: '无法连接插件主机 / Cannot reach plugin host' })
+          } finally {
+            publish({ configuring: false })
+            await readState()
+          }
         },
         /** Stop polling when the plugin unloads. */
         dispose() {
@@ -439,7 +459,7 @@ window.__ModuleLoader__.load({
     }
 
     /** The signed-in account, balance, and usage cards. */
-    function SignedInPanel({ t, account, onSignOut }) {
+    function SignedInPanel({ t, account, onSignOut, onConfigure }) {
       const stat = (label, value) => h(
         'div',
         { className: 'dsapi-stat', key: label },
@@ -450,6 +470,13 @@ window.__ModuleLoader__.load({
         React.Fragment,
         null,
         account.error === undefined ? null : h('div', { className: 'dsapi-error' }, account.error),
+        account.setup?.status === 'ready'
+          ? h(Tag, { tone: 'success' }, t('configured'))
+          : h(React.Fragment, null,
+            account.setup?.error ? h('div', { className: 'dsapi-error' }, account.setup.error) : null,
+            h(Button, { variant: 'outline', disabled: account.configuring || account.pending || account.setup?.status === 'working',
+              onClick: onConfigure }, account.configuring || account.pending || account.setup?.status === 'working'
+                ? t('configuring') : t('configure'))),
         h(
           'div',
           { className: 'dsapi-card dsapi-identity' },
@@ -581,7 +608,7 @@ window.__ModuleLoader__.load({
         'section',
         { className: 'dsapi-root', 'aria-label': t('nav') },
         account.signedIn
-          ? h(SignedInPanel, { t, account, onSignOut: props.signOut })
+          ? h(SignedInPanel, { t, account, onSignOut: props.signOut, onConfigure: props.configure })
           : h(SignedOutPanel, { t, account, onSignIn: props.signIn }),
       )
     }
@@ -653,6 +680,7 @@ window.__ModuleLoader__.load({
           hooks: { gateway },
           signIn: () => { void gateway.signIn() },
           signOut: () => { void gateway.signOut() },
+          configure: () => { void gateway.configure() },
           refresh: () => { void gateway.refresh() },
         }
         const footerFace = {
