@@ -13,6 +13,7 @@ import { spawn } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { request as httpRequest, createServer } from 'node:http'
 import { Agent, request as httpsRequest } from 'node:https'
+import { createAccessTokenResolver } from './oauth-session.js'
 
 /**
  * Gateway origin. TEMPORARY: the local development server. Production is
@@ -247,7 +248,9 @@ async function postForm(path, form) {
   })
   if (status < 200 || status >= 300) {
     const reason = body?.error ?? body?.message ?? `HTTP ${status}`
-    throw new Error(`网关拒绝请求（${reason}）`)
+    const error = new Error(reason === 'invalid_grant' ? '登录已失效，请重新登录' : `网关拒绝请求（${reason}）`)
+    error.code = reason
+    throw error
   }
   return body
 }
@@ -320,15 +323,12 @@ async function revokeGrant(refreshToken) {
  * @param ctx - Host context.
  * @returns the token, or undefined when signed out.
  */
-async function currentAccessToken(ctx) {
-  const grant = await readGrant(ctx)
-  if (grant === undefined) return undefined
-  const now = Math.floor(Date.now() / 1000)
-  if (typeof grant.accessToken === 'string' && grant.expiresAt - REFRESH_SKEW_S > now) return grant.accessToken
-  if (typeof grant.refreshToken !== 'string') throw new Error('登录凭据不完整，请重新登录')
-  const next = await refreshGrant(grant.refreshToken)
-  await writeGrant(ctx, next)
-  return next.accessToken
+const resolveAccessToken = createAccessTokenResolver({
+  key: CREDENTIAL_KEY, refresh: refreshGrant, skewSeconds: REFRESH_SKEW_S,
+})
+
+async function currentAccessToken(ctx, rejectedToken) {
+  return resolveAccessToken(ctx.get('credentials'), rejectedToken)
 }
 
 /**
@@ -346,18 +346,15 @@ async function callUserApi(ctx, path) {
       headers: { authorization: `Bearer ${token}`, 'user-agent': USER_AGENT },
     })
     const code = body?.message ?? body?.data?.code
-    if (status === 401 || code === 'AUTH_TOKEN_EXPIRED') {
-      if (attempt === 1) break
-      const grant = await readGrant(ctx)
-      if (grant === undefined || typeof grant.refreshToken !== 'string') break
-      const next = await refreshGrant(grant.refreshToken)
-      await writeGrant(ctx, next)
-      token = next.accessToken
-      continue
-    }
     if (code === 'AUTH_SESSION_REVOKED') {
       await clearGrant(ctx)
       throw new Error('登录已在网站被撤销，请重新登录')
+    }
+    if (status === 401 || code === 'AUTH_TOKEN_EXPIRED') {
+      if (attempt === 1) break
+      token = await currentAccessToken(ctx, token)
+      if (token === undefined) break
+      continue
     }
     if (status < 200 || status >= 300) throw new Error(code ?? `网关返回 HTTP ${status}`)
     // Business refusals can arrive as HTTP 200 with success:false.
@@ -402,7 +399,8 @@ async function snapshot(ctx) {
       last24h: money(dayAgo?.quota),
     }
   } catch (error) {
-    return { signedIn: true, error: error instanceof Error ? error.message : String(error) }
+    return { signedIn: error?.code !== 'invalid_grant' && (await readGrant(ctx)) !== undefined,
+      error: error instanceof Error ? error.message : String(error) }
   }
 }
 
