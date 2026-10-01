@@ -17,6 +17,11 @@
     - id: desktop-loop-guard
       name: dsh-plugin-desktop-beta/loop-guard
       disabled: true
+    # Keyless DuckDuckGo search backend (default off). Enable by removing the
+    # `disabled` below and pinning `searchProvider: duckduckgo` on the `web` row.
+    - id: desktop-web-search
+      name: dsh-plugin-desktop-beta/web-search
+      disabled: true
     - id: desktop-pnpm
       name: dsh-plugin-desktop-beta/pnpm
     - id: desktop-profiles
