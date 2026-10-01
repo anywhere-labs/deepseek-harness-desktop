@@ -21,7 +21,8 @@ window.__ModuleLoader__.load({
       Tag,
       Tooltip,
       IconCheckOutlineRegular,
-      IconGaugeOutlineRegular,
+      IconGlobeOutlineRegular,
+      IconSettingsOutlineRegular,
       IconRightUpOutlineRegular,
       PluginArtworkDefault,
     } = require('@deepseek-ai/dsh-client-ui-primitives')
@@ -470,13 +471,8 @@ window.__ModuleLoader__.load({
         React.Fragment,
         null,
         account.error === undefined ? null : h('div', { className: 'dsapi-error' }, account.error),
-        account.setup?.status === 'ready'
-          ? h(Tag, { tone: 'success' }, t('configured'))
-          : h(React.Fragment, null,
-            account.setup?.error ? h('div', { className: 'dsapi-error' }, account.setup.error) : null,
-            h(Button, { variant: 'outline', disabled: account.configuring || account.pending || account.setup?.status === 'working',
-              onClick: onConfigure }, account.configuring || account.pending || account.setup?.status === 'working'
-                ? t('configuring') : t('configure'))),
+        account.setup?.status !== 'ready' && account.setup?.error
+          ? h('div', { className: 'dsapi-error' }, account.setup.error) : null,
         h(
           'div',
           { className: 'dsapi-card dsapi-identity' },
@@ -585,12 +581,23 @@ window.__ModuleLoader__.load({
           { className: 'dsapi-stack' },
           h(Button, {
             variant: 'primary',
+            size: 'md',
             className: 'dsapi-block',
-            icon: h(IconGaugeOutlineRegular, { size: 16 }),
+            icon: h(IconGlobeOutlineRegular, { size: 16 }),
             onClick: () => { openExternal(pageUrl('console')) },
           }, t('console')),
+          account.setup?.status === 'ready' ? null : h(Button, {
+            variant: 'outline',
+            size: 'md',
+            className: 'dsapi-block',
+            icon: h(IconSettingsOutlineRegular, { size: 16 }),
+            disabled: account.configuring || account.pending || account.setup?.status === 'working',
+            onClick: onConfigure,
+          }, account.configuring || account.pending || account.setup?.status === 'working'
+            ? t('configuring') : t('configure')),
           h(Button, {
             variant: 'ghost',
+            size: 'md',
             className: 'dsapi-block',
             onClick: onSignOut,
           }, t('signOut')),
