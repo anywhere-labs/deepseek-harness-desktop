@@ -161,3 +161,76 @@ flowchart LR
 - 会话重启后 L3 记忆可经检索召回。
 - 桌面自有文件产物在轮转/清理时进入系统回收站而非直接删除，可恢复（年龄轮转日志 + 更新安装包）。
 - 上游 `deepseek-harness/` 无改动；`corepack yarn check`（typecheck + test）通过。
+
+## 十、分层编排（Pro 定级 + Router 分发 + Marvis 桥，已实现，默认关）
+
+> 本层在「上下文管理」之上再加一层**任务编排**：用户需求先经 Pro 模型定级为 L0–L4，再由纯代码 Router 分发到对应执行器。真正的新增量只有三个薄层——**Pro 定级 + Router 分发 + 异常闭环**；执行器、信息分级、防死循环都复用 harness 已有能力（`ctx.subagents` 的 fresh 隔离、`ctx.get('llm').stream`、`ctx.get('userQuestions')`）。Marvis（腾讯「马维斯」）无官方 API，仅能经剪贴板人工在环接入。
+
+### 10.1 五级难度与执行器映射
+
+| 级别 | 语义 | 执行器 | 路径 |
+|---|---|---|---|
+| L0 | 确定性、单步、无需 LLM | `local`（本地确定性操作，如 JSON 格式化） | 直达 |
+| L1 | 单目标、1–3 步 | `flash`（fresh `spawn` subagent） | 直达 |
+| L2 | 多步、需分解 | `marvis`（剪贴板人工在环） | 直达（人工搬运） |
+| L3 | 多目标、跨域、路径不清 | `pro_router`（递归长链路） | 长链路 |
+| L4 | 开放、高风险 | `human`（人工决策） | 直达（转交人工） |
+
+### 10.2 架构
+
+```mermaid
+flowchart LR
+  Task[用户需求] --> Plan[ProPlanner 定级 L0-L4]
+  Plan --> Router{Router switch}
+  Router -->|L0| Local[local 执行器]
+  Router -->|L1| Flash[flash 执行器]
+  Router -->|L2| Marvis[marvis 执行器]
+  Router -->|L3| ProRouter[pro_router 递归]
+  Router -->|L4| Human[human 转交]
+  Local --> Result[结果]
+  Flash --> Result
+  Marvis --> Result
+  Human --> Result
+  ProRouter -->|子目标| Plan
+  Result -.失败.-> Plan
+```
+
+### 10.3 执行器与信息分级
+
+- **L0 `local`**：确定性单步、零 token；识别 JSON 格式化等确定性操作，无法识别则失败回 Pro 重新定级。
+- **L1 `flash`**：`ctx.subagents.start('spawn', …)` 派生 fresh 子 agent——`spawn` provider `inheritsParentContext = false`，子 agent **只看到任务卡、看不到父历史**，即「下层看不到全量历史」这条硬规矩的落点。
+- **L2 `marvis`**：生成任务卡写系统剪贴板，返回「请到 Marvis 粘贴执行」提示；结果由 flash 经 `marvis_collect` 工具读回。
+- **L3 `pro_router`**：拿 Pro 分解的 `subGoals`，逐个递归 dispatch（重新定级→路由→执行），汇总子目标输出；递归深度由 `maxDepth` 封顶。
+- **L4 `human`**：停止链路，返回转交提示（目标 + 定级依据），由用户决策后再回报。
+
+### 10.4 Marvis 剪贴板桥（人工在环）
+
+Marvis 无官方 API/CLI，接入方式为剪贴板人工在环，脚本**不自动点发送、不自动点授权**：
+
+1. `marvis_send` 工具把任务卡（`===DSH_TASK===` JSON：`task_id`/`goal`/`context`/`output_format`）写入系统剪贴板。
+2. 用户手动切到 Marvis 粘贴执行，全选复制结果。
+3. 用户回 DSH，flash 调 `marvis_collect` 读剪贴板，解析 `===DSH_RESULT===` 标记（无标记则取全量剪贴板文本）。
+
+- 剪贴板能力经 `desktopClipboard` 服务注入（`main.ts` 用 Electron `clipboard` 模块经 `hostCtx.provide` 提供）；headless 启动不注入 → `ctx.get('desktopClipboard')` 为 `undefined`，Marvis 优雅降级「剪贴板不可用」。
+- 熔断：`maxSendsPerHour`（默认 100）按滚动小时限流，防止免费额度被当无限水龙头。
+
+### 10.5 关键约束
+
+- **Pro 是唯一定级入口**：只有 `ProPlanner` 调定级模型；执行器绝不重新定级、不自动升级、不改全局计划。
+- **Router 是纯 switch**：按 `level` 分发，零智能判断。
+- **异常闭环**：执行失败 → 带 `attempted` 回 Pro 重新定级，最多 `maxReplans` 次；L3 递归深度最多 `maxDepth`。无自动升级、无无限重试。
+- **信息分级是硬规矩**：任务卡只带 `task_id`/`goal`/`context`，下层拿不到上层全量历史。
+
+### 10.6 插件与配置（默认关）
+
+- `desktop-orchestrator`：`orchestrate` 工具 + ProPlanner + Router + 五级执行器。`Config`：`proProvider`（空=继承会话路由）、`proModel`（默认 `deepseek-v4-pro`）、`proMaxTokens`（默认 1024）、`maxReplans`（默认 2）、`maxDepth`（默认 3）。
+- `desktop-marvis`：`marvis_send` / `marvis_collect` 工具 + 熔断。`Config`：`maxSendsPerHour`（默认 100）。
+- 两者均 `disabled: true` 默认关，经 `cordis.patch.yml` 挂载，符合「可选、默认不启用」约定。
+
+### 10.7 验收标准
+
+- L0 本地确定性、L1 fresh subagent、L2 Marvis 剪贴板桥各跑通一个用例。
+- L3 多目标任务递归分解为子目标并汇总；深度封顶不失控。
+- L4 高风险任务转交人工，不自动执行。
+- 执行失败回 Pro 重新定级，re-plan 有界。
+- 下层（flash/marvis/子目标）拿不到父历史全量。
