@@ -64,6 +64,7 @@ import type { UpdateCheckResult } from './update-checker.ts'
 import type { DesktopInstallationId } from './desktop-installation-id.ts'
 import { DESKTOP_RELEASE_CHANNEL } from './product-identity.ts'
 import type { DesktopReleaseChannel } from './update-checker.ts'
+import { desktopRecycleBinEnabled } from './desktop-recycle-bin.ts'
 import {
   type WindowsVolumeQuery,
 } from './windows-volume-diagnostics.ts'
@@ -970,7 +971,10 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
       cancelId: 1,
       noLink: true,
     })
-    await resolveDesktopUpdateArtifact(userDataPath, artifact, result.response === 0)
+    await resolveDesktopUpdateArtifact(userDataPath, artifact, result.response === 0,
+      result.response === 0 && desktopRecycleBinEnabled()
+        ? path => shell.trashItem(path)
+        : undefined)
   }
 
   /** Start the downloaded NSIS installer visibly before releasing the current process. */

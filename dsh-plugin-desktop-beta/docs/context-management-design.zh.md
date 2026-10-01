@@ -37,7 +37,7 @@ KV 缓存、重要文件 markdown、RAG、上下文缓存与 30 天回收箱是�
 | RAG | 无 | 新建：可选向量检索插件（阶段三） |
 | 3kda+1gated mla | 模型/注意力架构规格 | 作为摘要模型路由配置项 + 暖前缀 KV 缓存复用策略 |
 | 对话过长自动压缩 | 已有 `compaction-basic` | 复用，作为分层压缩最底层触发 |
-| 上下文缓存 + 30 天回收箱 | 部分（投影缓存 + spill 硬删除） | 新建：统一回收箱（移入而非删除） |
+| 上下文缓存 + 30 天回收箱 | 部分（投影缓存 + spill 硬删除） | 复用系统回收站，替换桌面自有文件硬删除 |
 | 分层压缩架构 | 无 | 新建：多级摘要金字塔 |
 | 长短期记忆 | 无 | 新建：组合摘要 + KV + spill + RAG |
 
@@ -114,11 +114,15 @@ flowchart LR
 - 检索接口注入 `ctx`，模型通过工具/引用按需召回 L3 记忆。
 - 与上游 `session-reference` 区分：RAG 做语义检索，session-reference 做确定性快照引用，两者并存。
 
-### 5.6 上下文缓存 + 30 天回收箱（新）
+### 5.6 30 天回收箱（复用系统回收站，新）
 
-- 现状：`spill-local` 的 30 天清理是**硬删除**；`session-projection-cache` 是投影缓存。
-- 改造：新增「回收箱」层——超过 30 天未访问的缓存/派生产物（spill 文件、投影缓存、RAG 索引条目、L3 摘要）先**移入**回收箱目录（`.trash/`，带时间戳），而非直接删除；回收箱可手动恢复，再次到期后硬删除。
-- 与上游 `spill-local.cleanupPeriodDays` 的硬删除区分：回收箱是 Desktop 自有层，上游行为不被修改。30 天为可配置 `Config` 字段。
+- 现状：桌面自有文件产物（诊断日志、更新安装包）在轮转/清理时是**硬删除**（`unlinkSync`/`unlink`）；上游 `spill-local` 的 30 天清理也是硬删除，但无拦截钩子、且 spill 文件生命周期由上游决定，不属于桌面可安全改动的范围。
+- 改造：**复用系统回收站**（Electron `shell.trashItem`）替换桌面自有文件产物的硬删除——「移入系统回收站」而非「直接删除」，用户可在系统回收站中手动找回。桌面已现成接线：`desktop-factory-reset` 通过注入的 `trashItem`（绑定 `shell.trashItem`）把数据移入系统回收站，含 fail-closed 安全边界。
+- 落地对象（桌面自有、可恢复、不涉及上游）：
+  - 诊断日志**年龄轮转**：`log-files.ts` 的 `purgeOlderThan(7)`（`LogFileSinkOptions.trashItem` 注入，回收站失败回退 `unlinkSync`）。
+  - 更新安装包清理：`update-download.ts` 的 `resolveDesktopUpdateArtifact(remove)` 新增 `trashItem` 参数，删除时移入回收站。
+- 明确不覆盖：spill 文件（上游硬删、无钩子）、投影缓存（上游持有）、L3 摘要/RAG 索引（KV 记录，非文件，`shell.trashItem` 不适用）；日志的**容量阀** `enforceDirectoryCap()`（`write()` 内联同步路径，保持同步硬删除的安全阀语义）与**全量清空** `clear()`（显式清空意图，保持硬删除）。
+- 开关与限制：`trashItem` 通过注入提供；开关为**机器级**环境变量 `DSH_DESKTOP_RECYCLE_BIN`（默认关，非空且非 `0`/`false` 时开启，见 `desktop-recycle-bin.ts`）——主进程日志清理发生在 Profile 选择前，故不用 per-Profile 偏好。**host 进程**（`host-process-entry.ts`，独立 Node utility 进程、无 Electron main API）的日志 sink 无法使用 `shell.trashItem`，本轮不覆盖，后续可经 RPC 让 supervisor 代为回收。
 
 ### 5.7 3kda+1gated mla（模型/注意力架构规格）
 
@@ -138,7 +142,7 @@ flowchart LR
 ## 七、分阶段实施
 
 - **Phase 1（核心闭环）**：`desktop-context` 插件骨架 + 分层压缩（L0→L1 复用 compaction，L1→L2 再摘要）+ 长期记忆落库（`memory` domain）+ 短期/长期边界。
-- **Phase 2**：30 天回收箱 + 上下文缓存统一（spill/投影/摘要的回收箱迁移）。
+- **Phase 2**：30 天回收箱（桌面自有文件硬删除 → 移入系统回收站）。
 - **Phase 3**：重要文件 markdown 索引 + RAG 向量检索（可选插件）。
 
 ## 八、风险与边界
@@ -146,11 +150,11 @@ flowchart LR
 - 上游只读：所有能力挂在扩展点，`deepseek-harness/` 内代码零改动。
 - 分层压缩的摘要质量依赖摘要模型；L2/L3 的「摘要再摘要」有信息损失，靠 spill locator 保留原文兜底。
 - RAG 依赖 embedding 提供方；作为可选插件，缺失时不阻断核心闭环。
-- 回收箱的「30 天」为可配置项（`Config` 字段），不硬编码（符合上游「无硬编码可调项」约定）。
+- 回收箱的保留期沿用桌面现有日志轮转配置（`purgeOlderThan(7)` / 目录容量上限），回收站本身由操作系统管理；回收箱能力由机器级环境变量 `DSH_DESKTOP_RECYCLE_BIN` 开关、默认关，不硬编码（符合上游「无硬编码可调项」约定）。
 
 ## 九、验收标准
 
 - 长对话越过阈值后自动分层压缩，L0→L1→L2 逐级降级且上下文内 token 保持有界。
 - 会话重启后 L3 记忆可经检索召回。
-- 超 30 天派生产物进入回收箱而非直接删除，可恢复。
+- 桌面自有文件产物在轮转/清理时进入系统回收站而非直接删除，可恢复（年龄轮转日志 + 更新安装包）。
 - 上游 `deepseek-harness/` 无改动；`corepack yarn check`（typecheck + test）通过。

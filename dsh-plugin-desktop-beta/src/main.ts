@@ -116,6 +116,7 @@ import {
 } from './desktop-data-directory.ts'
 import { acquireDesktopDataOperationLock } from './desktop-data-operation-lock.ts'
 import { resetDesktopDataDirectory } from './desktop-factory-reset.ts'
+import { desktopRecycleBinEnabled } from './desktop-recycle-bin.ts'
 import {
   clearDesktopProfilePreferences,
   desktopProfilePreferencesFromSettings,
@@ -516,9 +517,12 @@ async function start(): Promise<void> {
     logSink = new LogFileSink(join(app.getPath('userData'), 'logs'), {
       maxFileBytes: 10 * 1024 * 1024,
       maxDirectoryBytes: 200 * 1024 * 1024,
+      ...(desktopRecycleBinEnabled()
+        ? { trashItem: (path: string) => shell.trashItem(path) }
+        : {}),
     })
     logSink.enforceDirectoryCap()
-    logSink.purgeOlderThan(7)
+    await logSink.purgeOlderThan(7)
     logSink.writeHeader(`--- ${BIN_NAME} ${PRODUCT_NAME} ${appVersion} ${process.platform} node ${process.version} run ${Date.now()} ---`)
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause)
