@@ -185,9 +185,9 @@ function waitForCallback(server, expected, complete) {
         title = '设置未完成，请返回 DSH'
         description = '登录或模型配置未完成，请返回客户端查看错误信息后重试。'
       } else if (callbackValid) {
-        title = '已登录，请返回 DSH'
+        title = result?.alreadyConfigured ? '此账号已完成过模型配置' : '模型配置和APIkey已自动导入DSH'
         description = result?.alreadyConfigured
-          ? '此账号已完成过模型配置。账户充值后，即可返回 DSH 开始对话。'
+          ? '账户充值后，即可返回 DSH 开始对话。'
           : '已自动创建 API Key 并写入 DSH 模型配置。账户充值后，即可返回 DSH 开始对话。'
       }
       response.writeHead(200, {
@@ -207,11 +207,11 @@ function waitForCallback(server, expected, complete) {
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100svh; display: grid; }
   main { display: grid; place-items: center; padding: 32px 24px; }
-  section { width: 100%; max-width: 440px; text-align: center; }
-  h1 { margin: 0; font-size: 24px; line-height: 1.5; font-weight: 500; letter-spacing: -.02em; }
-  p { margin: 12px 0 0; color: #a3a3a3; font-size: 14px; line-height: 1.8; }
+  section { width: 100%; max-width: 560px; text-align: center; }
+  h1 { margin: 0; font-size: 32px; line-height: 1.5; font-weight: 500; letter-spacing: -.02em; }
+  p { margin: 20px 0 0; color: #d4d4d4; font-size: 18px; line-height: 1.8; }
   .hint { margin-top: 36px; padding-top: 20px; border-top: 1px solid #ffffff1a; color: #737373; font-size: 12px; }
-  @media (max-width: 480px) { h1 { font-size: 22px; } }
+  @media (max-width: 480px) { h1 { font-size: 26px; } p { font-size: 16px; } }
 </style></head><body>
 <main><section aria-labelledby="result-title">
   <h1 id="result-title">${title}</h1>

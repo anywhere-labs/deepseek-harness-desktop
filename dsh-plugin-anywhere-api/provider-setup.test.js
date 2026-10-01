@@ -251,6 +251,7 @@ test('callback reports setup success only after completion and rejects duplicate
   finishSetup({ status: 'ready' })
   await first
   await pending
+  assert.match(html, /<h1 id="result-title">模型配置和APIkey已自动导入DSH<\/h1>/)
   assert.match(html, /已自动创建 API Key 并写入 DSH 模型配置/)
 })
 
