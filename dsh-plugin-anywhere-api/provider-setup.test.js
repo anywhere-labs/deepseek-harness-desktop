@@ -48,7 +48,8 @@ function fixture() {
         counts.create++
         const body = JSON.parse(request.body)
         assert.equal(body.expired_time, -1)
-        assert.equal(body.group, '')
+        assert.equal(body.group, 'auto')
+        assert.equal(body.cross_group_retry, true)
         assert.equal(body.unlimited_quota, true)
         return { id: counts.create }
       }

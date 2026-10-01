@@ -57,8 +57,8 @@ export function createProviderSetup({ issuer, userApi, models }) {
         const created = await userApi(ctx, '/api/token/', {
           expectedUserId: userId,
           method: 'POST', body: JSON.stringify({ name: `DSH-${state.flowId}`, expired_time: -1,
-            unlimited_quota: true, remain_quota: 0, group: '', model_limits_enabled: false,
-            model_limits: '', allow_ips: '', cross_group_retry: false }),
+            unlimited_quota: true, remain_quota: 0, group: 'auto', model_limits_enabled: false,
+            model_limits: '', allow_ips: '', cross_group_retry: true }),
         })
         if (!Number.isSafeInteger(created?.id) || created.id <= 0) {
           throw new Error('创建接口未返回 ID，请先更新网关后端；勿重复创建')
