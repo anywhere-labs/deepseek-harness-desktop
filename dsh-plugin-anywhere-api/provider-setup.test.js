@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
 import { createProviderSetup } from './provider-setup.js'
 
 function fixture() {
@@ -157,4 +159,116 @@ test('manual provider edits are preserved', async () => {
   await setup.run(f.ctx, 1)
   assert.deepEqual(provider.models, [{ id: 'custom-user-choice' }])
   assert.equal(f.counts.write, 1)
+})
+
+test('completed setup is not repaired after the user removes its provider and credential', async () => {
+  const f = fixture()
+  await createProviderSetup(f.options).run(f.ctx, 1)
+  for (const key of Object.keys(f.providers())) {
+    if (key.startsWith('anywhere-')) delete f.providers()[key]
+  }
+  f.secrets.clear()
+  f.settings.describe = () => { throw new Error('must not inspect model configuration') }
+  const setup = createProviderSetup(f.options)
+  assert.equal((await setup.status(f.ctx, 1)).status, 'ready')
+  assert.equal((await setup.run(f.ctx, 1)).alreadyConfigured, true)
+  assert.equal(f.counts.create, 1)
+  assert.equal(f.counts.write, 1)
+})
+
+test('a confirmed deleted key during unfinished setup is replaced once, including concurrent retries', async () => {
+  const f = fixture()
+  const models = f.options.models
+  f.options.models = async () => []
+  await assert.rejects(createProviderSetup(f.options).run(f.ctx, 1))
+  f.options.models = models
+  const userApi = f.options.userApi
+  f.options.userApi = async (...args) => {
+    if (args[1] === '/api/token/1/key') {
+      throw Object.assign(new Error('record not found'), { requestRejected: true })
+    }
+    return userApi(...args)
+  }
+  const setup = createProviderSetup(f.options)
+  await Promise.all([setup.run(f.ctx, 1), setup.run(f.ctx, 1)])
+  assert.equal(f.counts.create, 2)
+  assert.equal((await setup.status(f.ctx, 1)).status, 'ready')
+})
+
+test('network, authorization and rate-limit failures never trigger replacement keys', async () => {
+  for (const error of [new Error('record not found'),
+    Object.assign(new Error('unauthorized'), { requestRejected: true }),
+    Object.assign(new Error('rate limited'), { requestRejected: true })]) {
+    const f = fixture()
+    const userApi = f.options.userApi
+    f.options.userApi = async (...args) => {
+      if (args[1].endsWith('/key')) throw error
+      return userApi(...args)
+    }
+    const setup = createProviderSetup(f.options)
+    await assert.rejects(setup.run(f.ctx, 1))
+    await assert.rejects(setup.run(f.ctx, 1))
+    assert.equal(f.counts.create, 1)
+  }
+})
+
+test('repeated key deletion cannot cause an unbounded creation loop', async () => {
+  const f = fixture()
+  const userApi = f.options.userApi
+  f.options.userApi = async (...args) => {
+    if (args[1].endsWith('/key')) {
+      throw Object.assign(new Error('record not found'), { requestRejected: true })
+    }
+    return userApi(...args)
+  }
+  await assert.rejects(createProviderSetup(f.options).run(f.ctx, 1))
+  assert.equal(f.counts.create, 2)
+})
+
+// Exercise the actual loopback handler without a browser, socket or stored credentials.
+const hostSource = readFileSync(new URL('./index.js', import.meta.url), 'utf8')
+const callbackStart = hostSource.indexOf('function waitForCallback(')
+const callbackEnd = hostSource.indexOf('\n/**', callbackStart)
+const waitForCallback = runInNewContext(
+  `${hostSource.slice(callbackStart, callbackEnd)}; waitForCallback`,
+  { URL, setTimeout, clearTimeout, LOOPBACK_HOST: '127.0.0.1',
+    LOGIN_TIMEOUT_MS: 1000, BASE_URL: 'https://example.test' },
+)
+
+test('callback reports setup success only after completion and rejects duplicate callbacks', async () => {
+  let handler
+  let finishSetup
+  const completed = new Promise(resolve => { finishSetup = resolve })
+  const pending = waitForCallback({ on: (_, fn) => { handler = fn } }, { state: 'test' }, () => completed)
+  let html
+  const response = { writeHead() { return this }, end(value) { html = value } }
+  const request = { url: '/callback?code=example&state=test' }
+  const first = handler(request, response)
+  assert.equal(html, undefined)
+  let duplicateStatus
+  await handler(request, { writeHead(status) { duplicateStatus = status; return this }, end() {} })
+  assert.equal(duplicateStatus, 409)
+  finishSetup({ status: 'ready' })
+  await first
+  await pending
+  assert.match(html, /已自动创建 API Key 并写入 DSH 模型配置/)
+})
+
+test('failed setup or invalid OAuth callbacks never claim successful provisioning', async () => {
+  for (const state of ['test', 'wrong']) {
+    let handler
+    let calls = 0
+    const pending = waitForCallback({ on: (_, fn) => { handler = fn } }, { state: 'test' }, async () => {
+      calls++
+      throw new Error('private upstream detail')
+    })
+    const rejection = assert.rejects(pending)
+    let html
+    await handler({ url: `/callback?code=example&state=${state}` }, {
+      writeHead() { return this }, end(value) { html = value },
+    })
+    await rejection
+    assert.equal(calls, state === 'test' ? 1 : 0)
+    assert.doesNotMatch(html, /已自动创建|private upstream detail/)
+  }
 })

@@ -21,14 +21,6 @@ export function createProviderSetup({ issuer, userApi, models }) {
     const state = record?.kind === 'grant' ? record.payload : undefined
     if (!state) return { status: 'idle' }
     if (pending.has(id.key)) return { status: 'working' }
-    if (state.status === 'ready') {
-      const descriptor = id.settings.describe({ redactSecrets: true }).find(row => row.ns === state.namespace)
-      const provider = descriptor?.value?.providers?.[id.providerId]
-      const credential = await id.credentials.describe(id.ref)
-      if (!provider || provider.apiKeyEnv !== id.ref || !credential.configured) {
-        return { status: 'repair', error: '供应商或凭据已变更，请点击配置进行检查' }
-      }
-    }
     return { status: state.status, error: state.error, modelCount: state.modelCount }
   }
 
@@ -40,15 +32,15 @@ export function createProviderSetup({ issuer, userApi, models }) {
     try { return await task } finally { pending.delete(id.key) }
   }
 
-  async function provision(ctx, userId, id) {
+  async function provision(ctx, userId, id, allowReplacement = true) {
     const { credentials, settings, key, ref, providerId } = id
     let state = (await credentials.readRecord(key))?.payload
+    if (state?.status === 'ready') {
+      return { status: 'ready', modelCount: state.modelCount, alreadyConfigured: true }
+    }
     const descriptor = settings.describe({ redactSecrets: true }).find(row => row.ns === 'llm-pi-ai')
     if (!descriptor) throw new Error('当前 DSH 未启用官方 llm-pi-ai 模型配置服务')
     const existing = descriptor.value?.providers?.[providerId]
-    if (state?.status === 'ready' && existing?.apiKeyEnv === ref && (await credentials.describe(ref)).configured) {
-      return { status: 'ready', modelCount: state.modelCount }
-    }
     if (existing && (existing.apiKeyEnv !== ref || existing.baseURL !== `${issuer}/v1`)) {
       throw new Error('现有供应商已被修改，请保留或手动移除后再配置')
     }
@@ -83,8 +75,10 @@ export function createProviderSetup({ issuer, userApi, models }) {
       }
     }
     if (!state.tokenId) throw new Error(state.error ?? '创建结果尚未确认，请在网关检查本次 DSH key')
+    let keyReadCompleted = false
     try {
       const value = await userApi(ctx, `/api/token/${state.tokenId}/key`, { method: 'POST', expectedUserId: userId })
+      keyReadCompleted = true
       if (typeof value?.key !== 'string' || !value.key) throw new Error('未获取到模型 API key')
       const apiKey = value.key.startsWith('sk-') ? value.key : `sk-${value.key}`
       const available = await models(apiKey)
@@ -115,7 +109,18 @@ export function createProviderSetup({ issuer, userApi, models }) {
         modelCount: saved.models?.length ?? catalog.length, error: null }
       await credentials.modifyRecord(key, () => ({ kind: 'grant', payload: state }))
       return { status: 'ready', modelCount: state.modelCount }
-    } catch {
+    } catch (error) {
+      // The existing owned-key endpoint reports GORM's exact not-found message.
+      // Only a confirmed missing key can restart creation, once per attempt.
+      if (!keyReadCompleted && allowReplacement && error.requestRejected === true && error.message === 'record not found') {
+        const missingTokenId = state.tokenId
+        await credentials.modifyRecord(key, current => {
+          if (current?.payload?.tokenId !== missingTokenId) return undefined
+          return { kind: 'grant', payload: { ...current.payload, tokenId: undefined,
+            status: 'error', canRetryCreate: true, error: null } }
+        })
+        return provision(ctx, userId, id, false)
+      }
       // Avoid propagating upstream responses or provider errors containing secrets.
       state = { ...state, status: 'error', error: '配置未完成，请确认 key 有效、聊天模型可用且 DSH 配置可写后重试' }
       await credentials.modifyRecord(key, () => ({ kind: 'grant', payload: state }))

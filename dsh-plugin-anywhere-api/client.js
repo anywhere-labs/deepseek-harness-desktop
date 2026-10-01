@@ -58,9 +58,6 @@ window.__ModuleLoader__.load({
         totalRequests: '请求总数',
         console: '打开管理台',
         signOut: '退出登录',
-        configure: '配置模型供应商',
-        configuring: '正在配置模型…',
-        configured: '模型供应商已配置',
         dismiss: '关闭提示',
       },
       en: {
@@ -89,9 +86,6 @@ window.__ModuleLoader__.load({
         totalRequests: 'Total requests',
         console: 'Open console',
         signOut: 'Sign out',
-        configure: 'Configure model provider',
-        configuring: 'Configuring models…',
-        configured: 'Model provider configured',
         dismiss: 'Dismiss notification',
       },
     }
@@ -473,7 +467,7 @@ window.__ModuleLoader__.load({
     }
 
     /** The signed-in account, balance, and usage cards. */
-    function SignedInPanel({ t, account, onSignOut, onConfigure }) {
+    function SignedInPanel({ t, account, onSignOut }) {
       const stat = (label, value) => h(
         'div',
         { className: 'dsapi-stat', key: label },
@@ -596,14 +590,6 @@ window.__ModuleLoader__.load({
             icon: h(IconGlobeOutlineRegular, { size: 16 }),
             onClick: () => { openExternal(pageUrl('console')) },
           }, t('console')),
-          account.setup?.status === 'ready' ? null : h(Button, {
-            variant: 'outline',
-            size: 'md',
-            className: 'dsapi-block',
-            disabled: account.configuring || account.pending || account.setup?.status === 'working',
-            onClick: onConfigure,
-          }, account.configuring || account.pending || account.setup?.status === 'working'
-            ? t('configuring') : t('configure')),
           h(Button, {
             variant: 'ghost',
             size: 'md',
@@ -637,7 +623,7 @@ window.__ModuleLoader__.load({
           }),
         )),
         account.signedIn
-          ? h(SignedInPanel, { t, account, onSignOut: props.signOut, onConfigure: props.configure })
+          ? h(SignedInPanel, { t, account, onSignOut: props.signOut })
           : h(SignedOutPanel, { t, account, onSignIn: props.signIn }),
       )
     }

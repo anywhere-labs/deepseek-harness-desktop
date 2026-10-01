@@ -134,14 +134,17 @@ function listenLoopback() {
 }
 
 /**
- * Wait for the gateway to redirect back with a code, answering the browser meanwhile.
+ * Validate one callback and finish login/setup before reporting its result to the browser.
  * @param server - the loopback server from `listenLoopback`.
  * @param expected - the state and issuer this attempt expects.
- * @returns the authorization code.
+ * @param complete - exchanges the single-use code and completes initial setup.
+ * @returns after the browser has received the result.
  */
-function waitForCallback(server, expected) {
+function waitForCallback(server, expected, complete) {
   return new Promise((resolve, reject) => {
+    let claimed = false
     const timer = setTimeout(() => {
+      claimed = true
       reject(new Error('授权超时：请在浏览器中完成登录后重试'))
     }, LOGIN_TIMEOUT_MS)
     const finish = (error, code) => {
@@ -149,18 +152,44 @@ function waitForCallback(server, expected) {
       if (error === undefined) resolve(code)
       else reject(error)
     }
-    server.on('request', (request, response) => {
+    server.on('request', async (request, response) => {
       const url = new URL(request.url ?? '/', `http://${LOOPBACK_HOST}`)
       if (url.pathname !== '/callback') {
         response.writeHead(404).end()
         return
       }
+      if (claimed) {
+        response.writeHead(409).end()
+        return
+      }
+      claimed = true
+      clearTimeout(timer)
       const code = url.searchParams.get('code')
       const state = url.searchParams.get('state')
       const issuer = url.searchParams.get('iss')
       const failure = url.searchParams.get('error')
       const callbackValid = failure === null && code !== null && state === expected.state
         && (issuer === null || issuer.replace(/\/$/, '') === BASE_URL)
+      let completionError
+      let result
+      if (callbackValid) {
+        try {
+          result = await complete(code)
+        } catch (error) {
+          completionError = error
+        }
+      }
+      let title = '授权未完成'
+      let description = '请返回 DSH 客户端，重新发起登录。'
+      if (callbackValid && completionError) {
+        title = '设置未完成，请返回 DSH'
+        description = '登录或模型配置未完成，请返回客户端查看错误信息后重试。'
+      } else if (callbackValid) {
+        title = '已登录，请返回 DSH'
+        description = result?.alreadyConfigured
+          ? '此账号已完成过模型配置。账户充值后，即可返回 DSH 开始对话。'
+          : '已自动创建 API Key 并写入 DSH 模型配置。账户充值后，即可返回 DSH 开始对话。'
+      }
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
@@ -185,8 +214,8 @@ function waitForCallback(server, expected) {
   @media (max-width: 480px) { h1 { font-size: 22px; } }
 </style></head><body>
 <main><section aria-labelledby="result-title">
-  <h1 id="result-title">${callbackValid ? '已登录，请返回 DSH' : '授权未完成'}</h1>
-  <p>${callbackValid ? '请回到 DSH 客户端继续，连接状态将在应用中更新。' : '请返回 DSH 客户端，重新发起登录。'}</p>
+  <h1 id="result-title">${title}</h1>
+  <p>${description}</p>
   <p class="hint">你可以安全关闭此页面</p>
 </section></main></body></html>`)
       if (failure !== null) {
@@ -201,7 +230,7 @@ function waitForCallback(server, expected) {
         finish(new Error('授权回调校验失败：iss 与本网关不一致'))
         return
       }
-      finish(undefined, code)
+      finish(completionError)
     })
   })
 }
@@ -456,10 +485,11 @@ async function login(ctx) {
     authorize.searchParams.set('code_challenge_method', 'S256')
     authorize.searchParams.set('code_challenge', pkce.challenge)
     openBrowser(authorize.href)
-    const code = await waitForCallback(server, { state: pkce.state })
-    // A code is single-use: never retry a code whose exchange may already have been sent.
-    await writeGrant(ctx, await exchangeCode(code, redirectUri, pkce.verifier))
-    await configureProvider(ctx)
+    await waitForCallback(server, { state: pkce.state }, async code => {
+      // A code is single-use: never retry a code whose exchange may already have been sent.
+      await writeGrant(ctx, await exchangeCode(code, redirectUri, pkce.verifier))
+      return configureProvider(ctx)
+    })
     return { ok: true }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
