@@ -21,8 +21,8 @@ window.__ModuleLoader__.load({
       Tag,
       Tooltip,
       IconCheckOutlineRegular,
+      IconCloseOutlineRegular,
       IconGlobeOutlineRegular,
-      IconSettingsOutlineRegular,
       IconRightUpOutlineRegular,
       PluginArtworkDefault,
     } = require('@deepseek-ai/dsh-client-ui-primitives')
@@ -61,6 +61,7 @@ window.__ModuleLoader__.load({
         configure: '配置模型供应商',
         configuring: '正在配置模型…',
         configured: '模型供应商已配置',
+        dismiss: '关闭提示',
       },
       en: {
         nav: 'Anywhere Model Gateway',
@@ -91,6 +92,7 @@ window.__ModuleLoader__.load({
         configure: 'Configure model provider',
         configuring: 'Configuring models…',
         configured: 'Model provider configured',
+        dismiss: 'Dismiss notification',
       },
     }
 
@@ -116,7 +118,9 @@ window.__ModuleLoader__.load({
 .dsapi-pointIcon{flex:none;display:inline-flex;color:var(--dsw-alias-label-tertiary)}
 .dsapi-card{padding:16px 18px;border:0.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-xl);background:var(--dsw-alias-settings-card-fill)}
 .dsapi-divider{border-top:0.5px solid var(--dsw-alias-border-l2)}
-.dsapi-error{color:var(--dsw-alias-state-error-primary);font-size:13px;line-height:20px}
+.dsapi-error{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 20%,transparent);border-radius:var(--dsw-radius-md);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);font-size:13px;line-height:20px}
+.dsapi-errorText{flex:1;min-width:0;overflow-wrap:anywhere}
+.dsapi-errorClose{flex:none;color:inherit}
 .dsapi-hero{display:flex;flex-direction:column;gap:14px}
 .dsapi-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .dsapi-stack{display:flex;flex-direction:column;gap:12px;margin-top:8px}
@@ -170,12 +174,19 @@ window.__ModuleLoader__.load({
      * @returns the observable plus the sign-in, sign-out, and refresh actions.
      */
     function createGatewayState() {
-      let snapshot = { signedIn: false, pending: false, loading: true }
+      let snapshot = { signedIn: false, pending: false, loading: true, errors: [], dismissedErrors: [] }
       const listeners = new Set()
       let timer
       let lastReadAt = 0
       const publish = change => {
         snapshot = { ...snapshot, ...change }
+        const errors = [...new Set([
+          snapshot.error,
+          snapshot.signedIn && snapshot.setup?.status !== 'ready' ? snapshot.setup?.error : undefined,
+        ].filter(Boolean))]
+        // Retain dismissal across polling and panel mounts, only while the error persists.
+        snapshot.dismissedErrors = snapshot.dismissedErrors.filter(error => errors.includes(error))
+        snapshot.errors = errors.filter(error => !snapshot.dismissedErrors.includes(error))
         for (const listener of [...listeners]) listener()
       }
       const stopPolling = () => {
@@ -221,6 +232,9 @@ window.__ModuleLoader__.load({
       }
       return {
         getSnapshot: () => snapshot,
+        dismissError(error) {
+          publish({ dismissedErrors: [...snapshot.dismissedErrors, error] })
+        },
         subscribe(listener) {
           listeners.add(listener)
           return () => { listeners.delete(listener) }
@@ -236,7 +250,7 @@ window.__ModuleLoader__.load({
         },
         /** Ask the Host to run the OAuth flow, then follow it until it settles. */
         async signIn() {
-          publish({ error: undefined, pending: true })
+          publish({ error: undefined, pending: true, dismissedErrors: [] })
           try {
             const response = await fetch(`${API_BASE}/login`, { method: 'POST' })
             if (!response.ok) {
@@ -267,7 +281,7 @@ window.__ModuleLoader__.load({
         },
         async configure() {
           if (snapshot.configuring) return
-          publish({ configuring: true, error: undefined })
+          publish({ configuring: true, error: undefined, dismissedErrors: [] })
           try {
             const response = await fetch(`${API_BASE}/configure`, { method: 'POST' })
             const body = await response.json()
@@ -443,7 +457,6 @@ window.__ModuleLoader__.load({
           ),
           siteButton,
         ),
-        account?.error === undefined ? null : h('div', { className: 'dsapi-error', key: 'error' }, account.error),
         h('div', { className: 'dsapi-divider', key: 'divider' }),
         h(
           'div',
@@ -470,9 +483,6 @@ window.__ModuleLoader__.load({
       return h(
         React.Fragment,
         null,
-        account.error === undefined ? null : h('div', { className: 'dsapi-error' }, account.error),
-        account.setup?.status !== 'ready' && account.setup?.error
-          ? h('div', { className: 'dsapi-error' }, account.setup.error) : null,
         h(
           'div',
           { className: 'dsapi-card dsapi-identity' },
@@ -590,7 +600,6 @@ window.__ModuleLoader__.load({
             variant: 'outline',
             size: 'md',
             className: 'dsapi-block',
-            icon: h(IconSettingsOutlineRegular, { size: 16 }),
             disabled: account.configuring || account.pending || account.setup?.status === 'working',
             onClick: onConfigure,
           }, account.configuring || account.pending || account.setup?.status === 'working'
@@ -614,6 +623,19 @@ window.__ModuleLoader__.load({
       return h(
         'section',
         { className: 'dsapi-root', 'aria-label': t('nav') },
+        account.errors.map(error => h(
+          'div',
+          { className: 'dsapi-error', role: 'alert', key: error },
+          h('span', { className: 'dsapi-errorText' }, error),
+          h(Button, {
+            variant: 'ghost',
+            size: 'sm',
+            className: 'dsapi-errorClose',
+            icon: h(IconCloseOutlineRegular, { size: 16 }),
+            'aria-label': t('dismiss'),
+            onClick: () => { props.dismissError(error) },
+          }),
+        )),
         account.signedIn
           ? h(SignedInPanel, { t, account, onSignOut: props.signOut, onConfigure: props.configure })
           : h(SignedOutPanel, { t, account, onSignIn: props.signIn }),
@@ -688,6 +710,7 @@ window.__ModuleLoader__.load({
           signIn: () => { void gateway.signIn() },
           signOut: () => { void gateway.signOut() },
           configure: () => { void gateway.configure() },
+          dismissError: error => { gateway.dismissError(error) },
           refresh: () => { void gateway.refresh() },
         }
         const footerFace = {
