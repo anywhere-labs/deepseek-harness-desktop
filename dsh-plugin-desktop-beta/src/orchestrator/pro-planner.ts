@@ -12,7 +12,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Budget, Level, Plan, TaskCard } from './types.ts'
 
 /** The model-facing instruction that fixes the planner's JSON contract. */
@@ -59,10 +60,10 @@ function makeTaskId(now: Date): string {
 }
 
 /** Concatenate the text blocks of a model output. */
-function textOf(blocks: readonly { type: string }[]): string {
+function textOf(blocks: readonly ContentBlock[]): string {
   let text = ''
   for (const block of blocks) {
-    if (block.type === 'text') text += (block as { text: string }).text
+    if (block.type === 'text') text += block.text
   }
   return text
 }
@@ -146,7 +147,7 @@ export async function planTask(
   ctx: Context,
   task: string,
   route: PlanRoute,
-  sessionId: string,
+  sessionId: SessionId,
 ): Promise<Plan> {
   const taskId = makeTaskId(new Date())
   const llm = ctx.get('llm')

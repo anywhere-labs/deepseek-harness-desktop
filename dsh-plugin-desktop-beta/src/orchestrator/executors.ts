@@ -11,7 +11,6 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { buildMarvisTaskCard } from '../marvis-protocol.ts'
 import type { ExecuteContext, Executor, ExecutorError, ExecutorResult, Plan } from './types.ts'

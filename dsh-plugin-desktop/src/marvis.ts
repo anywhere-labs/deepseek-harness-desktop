@@ -19,6 +19,9 @@ import type { Plan } from './orchestrator/types.ts'
 /** Stable Cordis plugin name. */
 export const name = 'desktop-marvis'
 
+/** The `tools` registry must be present before the Marvis tools register. */
+export const inject = ['tools']
+
 /** Bridge limits. */
 export interface Config {
   /** Maximum `marvis_send` calls accepted within a rolling hour. */

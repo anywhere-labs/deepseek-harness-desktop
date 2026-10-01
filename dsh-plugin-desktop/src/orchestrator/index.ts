@@ -17,12 +17,16 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { planTask, type PlanRoute } from './pro-planner.ts'
 import { createExecutors, type Dispatch } from './executors.ts'
 import type { ExecuteContext, Executor, ExecutorResult, Plan } from './types.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-orchestrator'
+
+/** The `tools` registry must be present before the `orchestrate` tool registers. */
+export const inject = ['tools']
 
 /** Pro-planner call and re-plan policy. */
 export interface Config {
@@ -142,7 +146,7 @@ async function orchestrate(
 ): Promise<OrchestrateOutcome> {
   const agent = exec.agent
   const signal = exec.signal
-  const sessionId = agent === undefined ? 'orchestrator' : String(agent.session.id)
+  const sessionId: SessionId = agent === undefined ? SessionId('orchestrator') : agent.session.id
   const provider = config.proProvider.length > 0
     ? config.proProvider
     : agent?.options.provider ?? ''
@@ -173,7 +177,7 @@ async function runTask(
   agent: import('@deepseek-ai/dsh-agent').Agent | undefined,
   depth: number,
   planRoute: PlanRoute,
-  sessionId: string,
+  sessionId: SessionId,
 ): Promise<ExecutorResult> {
   if (depth > config.maxDepth) {
     return {
