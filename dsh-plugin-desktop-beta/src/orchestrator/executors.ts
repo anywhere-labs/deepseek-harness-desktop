@@ -1,9 +1,11 @@
 /**
- * Executor implementations for the orchestrator: local (L0), flash (L1), and
- * marvis (L2). Executors are deliberately dumb — they run one task card and
- * report, never re-level or escalate. The flash executor delegates to a fresh
- * `spawn` subagent so the child sees only its task card, never the caller's
- * history (the information-isolation rule).
+ * Executor implementations for the orchestrator: local (L0), flash (L1),
+ * marvis (L2), the pro router (L3 long path), and human (L4). Executors are
+ * deliberately dumb — they run one task card and report, never re-level or
+ * escalate. The flash executor delegates to a fresh `spawn` subagent so the
+ * child sees only its task card, never the caller's history (the
+ * information-isolation rule). The L3 router recurses over the Pro planner's
+ * sub-goals; the L4 executor hands off to a human instead of acting.
  *
  * @module dsh-plugin-desktop-beta/orchestrator/executors
  */
@@ -12,7 +14,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { buildMarvisTaskCard } from '../marvis-protocol.ts'
-import type { Executor, ExecutorError, ExecutorResult, Plan } from './types.ts'
+import type { ExecuteContext, Executor, ExecutorError, ExecutorResult, Plan } from './types.ts'
+
+/** Recursive dispatch used by the L3 router to run sub-goals. */
+export type Dispatch = (task: string, depth: number) => Promise<ExecutorResult>
 
 /** Concatenate the text blocks of a model output. */
 function textOf(blocks: readonly ContentBlock[]): string {
@@ -32,6 +37,8 @@ function failure(
 ): ExecutorResult {
   return {
     ok: false,
+    taskId: plan.taskId,
+    level: plan.level,
     error: { ...error, taskId: plan.taskId, level: plan.level },
     attempts,
     tokensUsed: 0,
@@ -43,6 +50,8 @@ function failure(
 function success(plan: Plan, startedAt: number, data: string, attempts: number): ExecutorResult {
   return {
     ok: true,
+    taskId: plan.taskId,
+    level: plan.level,
     data,
     attempts,
     tokensUsed: 0,
@@ -58,11 +67,11 @@ function success(plan: Plan, startedAt: number, data: string, attempts: number):
 export class LocalScriptExecutor implements Executor {
   readonly name = 'local' as const
 
-  canHandle(level: Executor['name'] extends never ? never : Plan['level']): boolean {
+  canHandle(level: Plan['level']): boolean {
     return level === 'L0'
   }
 
-  async execute(plan: Plan, _signal: AbortSignal, _parent: Agent | undefined): Promise<ExecutorResult> {
+  async execute(plan: Plan, _context: ExecuteContext): Promise<ExecutorResult> {
     const startedAt = Date.now()
     const text = plan.taskCard.context.trim()
 
@@ -99,8 +108,9 @@ export class FlashExecutor implements Executor {
     return level === 'L1'
   }
 
-  async execute(plan: Plan, signal: AbortSignal, parent: Agent | undefined): Promise<ExecutorResult> {
+  async execute(plan: Plan, context: ExecuteContext): Promise<ExecutorResult> {
     const startedAt = Date.now()
+    const parent = context.parent
     if (parent === undefined) {
       return failure(
         plan,
@@ -127,7 +137,7 @@ export class FlashExecutor implements Executor {
     }]
 
     try {
-      const run = await subagents.start('spawn', { label: card.taskId, prompt, parent, signal })
+      const run = await subagents.start('spawn', { label: card.taskId, prompt, parent, signal: context.signal })
       try {
         const result = await run.result
         const text = textOf(result.output).trim()
@@ -174,7 +184,7 @@ export class MarvisExecutor implements Executor {
     return level === 'L2'
   }
 
-  async execute(plan: Plan, _signal: AbortSignal, _parent: Agent | undefined): Promise<ExecutorResult> {
+  async execute(plan: Plan, _context: ExecuteContext): Promise<ExecutorResult> {
     const startedAt = Date.now()
     const clipboard = this.ctx.get('desktopClipboard')
     if (clipboard === undefined) {
@@ -191,11 +201,108 @@ export class MarvisExecutor implements Executor {
   }
 }
 
+/**
+ * L3 executor: the Pro -> Router long path. It recurses over the Pro planner's
+ * sub-goals, dispatching each one back through the classifier/executor chain,
+ * then joins the sub-goal outputs. Depth growth is the caller's responsibility
+ * (the router caps it); this executor only fans out and collects.
+ */
+export class ProRouterExecutor implements Executor {
+  readonly name = 'pro_router' as const
+
+  constructor(private readonly dispatch: Dispatch) {}
+
+  canHandle(level: Plan['level']): boolean {
+    return level === 'L3'
+  }
+
+  async execute(plan: Plan, context: ExecuteContext): Promise<ExecutorResult> {
+    const startedAt = Date.now()
+    const subGoals = plan.subGoals
+    if (subGoals.length === 0) {
+      return failure(
+        plan,
+        startedAt,
+        { code: 'NO_SUBGOALS', message: 'The task was leveled L3 but produced no sub-goals.', attempted: [] },
+        1,
+      )
+    }
+
+    const results: ExecutorResult[] = []
+    let tokensUsed = 0
+    for (const subGoal of subGoals) {
+      const result = await this.dispatch(subGoal, context.depth + 1)
+      results.push(result)
+      tokensUsed += result.tokensUsed
+    }
+
+    const firstFailure = results.find(result => !result.ok)
+    if (firstFailure === undefined) {
+      const joined = results
+        .map((result, index) => `[${index + 1}] ${String(result.data ?? '')}`)
+        .join('\n\n')
+      return {
+        ok: true,
+        taskId: plan.taskId,
+        level: plan.level,
+        data: joined,
+        attempts: results.length,
+        tokensUsed,
+        durationMs: Date.now() - startedAt,
+      }
+    }
+
+    return {
+      ok: false,
+      taskId: plan.taskId,
+      level: plan.level,
+      error: {
+        code: firstFailure.error?.code ?? 'SUBGOAL_FAILED',
+        message: firstFailure.error?.message ?? 'A sub-goal failed.',
+        attempted: firstFailure.error?.attempted ?? ['sub-goals'],
+        taskId: plan.taskId,
+        level: plan.level,
+      },
+      attempts: results.length,
+      tokensUsed,
+      durationMs: Date.now() - startedAt,
+    }
+  }
+}
+
+/**
+ * L4 executor: open-ended, high-risk work that must not run unattended. It
+ * stops the chain and returns a hand-off prompt; the driving agent relays it to
+ * the user, who performs the task and reports the outcome back.
+ */
+export class HumanExecutor implements Executor {
+  readonly name = 'human' as const
+
+  canHandle(level: Plan['level']): boolean {
+    return level === 'L4'
+  }
+
+  async execute(plan: Plan, _context: ExecuteContext): Promise<ExecutorResult> {
+    const startedAt = Date.now()
+    const prompt = [
+      `This task was leveled L4 (open-ended / high-risk) and must not run unattended.`,
+      ``,
+      `Goal: ${plan.goal}`,
+      `Why: ${plan.reason}`,
+      ``,
+      `Please hand it to the user, then report back their decision or result.`,
+    ].join('\n')
+    return success(plan, startedAt, prompt, 1)
+  }
+}
+
 /** Build the executor set for one orchestrator instance, in level order. */
-export function createExecutors(ctx: Context): Executor[] {
+export function createExecutors(ctx: Context, dispatch: Dispatch): Executor[] {
   return [
     new LocalScriptExecutor(),
     new FlashExecutor(ctx),
     new MarvisExecutor(ctx),
+    new ProRouterExecutor(dispatch),
+    new HumanExecutor(),
   ]
 }

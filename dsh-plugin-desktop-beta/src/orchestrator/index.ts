@@ -6,7 +6,9 @@
  * router picks an executor by level (a pure switch, no complexity judgement),
  * and the executor runs the bounded task card. A failed execution feeds back to
  * the Pro planner for at most `maxReplans` re-levels before the task reports
- * failure upward. Executors never re-level, auto-escalate, or change the plan.
+ * failure upward. L3 recurses over the Pro planner's sub-goals, bounded by
+ * `maxDepth`; L4 hands off to a human. Executors never re-level, auto-escalate,
+ * or change the plan.
  *
  * @module dsh-plugin-desktop-beta/orchestrator
  */
@@ -15,9 +17,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolCallView, ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { planTask } from './pro-planner.ts'
-import { createExecutors } from './executors.ts'
-import type { Executor, Plan } from './types.ts'
+import { planTask, type PlanRoute } from './pro-planner.ts'
+import { createExecutors, type Dispatch } from './executors.ts'
+import type { ExecuteContext, Executor, ExecutorResult, Plan } from './types.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'desktop-orchestrator'
@@ -32,6 +34,8 @@ export interface Config {
   proMaxTokens: number
   /** Maximum re-plans after a failed execution before reporting failure. */
   maxReplans: number
+  /** Maximum L3 recursion depth before the long path reports a runaway. */
+  maxDepth: number
 }
 
 /** Validated orchestrator configuration. */
@@ -40,6 +44,7 @@ export const Config: z<Config> = z.object({
   proModel: z.string().default('deepseek-v4-pro'),
   proMaxTokens: z.number().step(1).min(128).max(16_384).default(1024),
   maxReplans: z.number().step(1).min(0).max(5).default(2),
+  maxDepth: z.number().step(1).min(1).max(8).default(3),
 })
 
 /** Model-facing description of the `orchestrate` tool. */
@@ -81,10 +86,7 @@ function executorNameFor(level: Plan['level']): Executor['name'] {
   }
 }
 
-/**
- * Resolve the executor for a plan. L3/L4 map to executors that are not wired in
- * Phase 1, so they resolve to `undefined` and the task reports "not wired".
- */
+/** Resolve the executor for a plan, or `undefined` when none is wired. */
 function route(plan: Plan, executors: Executor[]): Executor | undefined {
   return executors.find(executor => executor.name === executorNameFor(plan.level))
 }
@@ -92,7 +94,7 @@ function route(plan: Plan, executors: Executor[]): Executor | undefined {
 /**
  * Install the `orchestrate` tool.
  * @param ctx - host context carrying the optional `tools` and `llm` services.
- * @param config - Pro call route and re-plan policy.
+ * @param config - Pro call route, re-plan, and depth policy.
  */
 export function apply(ctx: Context, config: Config): void {
   const tools = ctx.get('tools')
@@ -100,7 +102,6 @@ export function apply(ctx: Context, config: Config): void {
     ctx.logger.warn('desktop-orchestrator: no tools service mounted; orchestrate tool unavailable')
     return
   }
-  const executors = createExecutors(ctx)
 
   ctx.effect(
     () => tools.register(defineTool({
@@ -117,7 +118,7 @@ export function apply(ctx: Context, config: Config): void {
         schema: ORCHESTRATE_OUTPUT_SCHEMA,
         render: (_args: unknown, value: unknown) => [{ type: 'text', text: JSON.stringify(value) }],
       },
-      execute: (args, exec) => orchestrate(ctx, config, executors, args.task, exec),
+      execute: (args, exec) => orchestrate(ctx, config, args.task, exec),
       presentCall: (args): ToolCallView => ({
         card: 'generic',
         title: 'Orchestrate',
@@ -130,21 +131,17 @@ export function apply(ctx: Context, config: Config): void {
 }
 
 /**
- * Run the plan -> dispatch -> execute loop with bounded re-plans.
- * @param ctx - host context.
- * @param config - Pro call route and re-plan policy.
- * @param executors - the executor set.
- * @param task - the original task text.
- * @param exec - the tool run context (caller agent and cancellation).
+ * Entry point for one tool call: assemble the executor set and the recursive
+ * dispatch closure, then run the top-level task at depth 0.
  */
 async function orchestrate(
   ctx: Context,
   config: Config,
-  executors: Executor[],
   task: string,
   exec: ToolRunContext,
 ): Promise<OrchestrateOutcome> {
   const agent = exec.agent
+  const signal = exec.signal
   const sessionId = agent === undefined ? 'orchestrator' : String(agent.session.id)
   const provider = config.proProvider.length > 0
     ? config.proProvider
@@ -152,35 +149,98 @@ async function orchestrate(
   const model = config.proModel.length > 0
     ? config.proModel
     : agent?.options.model ?? ''
+  const planRoute: PlanRoute = { provider, model, maxTokens: config.proMaxTokens }
+
+  const executors: Executor[] = []
+  const dispatch: Dispatch = (subTask, depth) =>
+    runTask(ctx, config, executors, subTask, signal, agent, depth, planRoute, sessionId)
+  executors.push(...createExecutors(ctx, dispatch))
+
+  const result = await runTask(ctx, config, executors, task, signal, agent, 0, planRoute, sessionId)
+  return toOutcome(result)
+}
+
+/**
+ * Classify, route, execute, and re-plan one task (bounded re-plans, bounded
+ * recursion depth). Returns the terminal `ExecutorResult`.
+ */
+async function runTask(
+  ctx: Context,
+  config: Config,
+  executors: Executor[],
+  task: string,
+  signal: AbortSignal,
+  agent: import('@deepseek-ai/dsh-agent').Agent | undefined,
+  depth: number,
+  planRoute: PlanRoute,
+  sessionId: string,
+): Promise<ExecutorResult> {
+  if (depth > config.maxDepth) {
+    return {
+      ok: false,
+      taskId: '',
+      level: 'L3',
+      error: {
+        code: 'MAX_DEPTH',
+        message: `The L3 long path exceeded maxDepth (${config.maxDepth}).`,
+        attempted: [],
+        taskId: '',
+        level: 'L3',
+      },
+      attempts: 1,
+      tokensUsed: 0,
+      durationMs: 0,
+    }
+  }
 
   let currentTask = task
-  let plan = await planTask(ctx, currentTask, { provider, model, maxTokens: config.proMaxTokens }, sessionId)
+  let plan = await planTask(ctx, currentTask, planRoute, sessionId)
   let replans = 0
 
   for (;;) {
     const executor = route(plan, executors)
     if (executor === undefined) {
-      return { ok: false, taskId: plan.taskId, level: plan.level, error: `No executor is wired for level ${plan.level}.` }
-    }
-    const result = await executor.execute(plan, exec.signal, agent)
-    if (result.ok) {
-      return {
-        ok: true,
-        taskId: plan.taskId,
-        level: plan.level,
-        output: typeof result.data === 'string' ? result.data : JSON.stringify(result.data),
-      }
-    }
-    if (replans >= config.maxReplans) {
       return {
         ok: false,
         taskId: plan.taskId,
         level: plan.level,
-        error: result.error?.message ?? 'Executor failed without a message.',
+        error: {
+          code: 'NO_EXECUTOR',
+          message: `No executor is wired for level ${plan.level}.`,
+          attempted: [],
+          taskId: plan.taskId,
+          level: plan.level,
+        },
+        attempts: 1,
+        tokensUsed: 0,
+        durationMs: 0,
       }
     }
+
+    const context: ExecuteContext = { signal, parent: agent, depth }
+    const result = await executor.execute(plan, context)
+    if (result.ok) return result
+    if (replans >= config.maxReplans) return result
     replans += 1
     currentTask = `${task}\n\nPrevious attempt failed at level ${plan.level}: ${result.error?.message ?? 'unknown'}. Re-classify.`
-    plan = await planTask(ctx, currentTask, { provider, model, maxTokens: config.proMaxTokens }, sessionId)
+    plan = await planTask(ctx, currentTask, planRoute, sessionId)
+  }
+}
+
+/** Convert an `ExecutorResult` to the tool's outward-facing outcome. */
+function toOutcome(result: ExecutorResult): OrchestrateOutcome {
+  if (result.ok) {
+    return {
+      ok: true,
+      taskId: result.taskId,
+      level: result.level,
+      output: typeof result.data === 'string' ? result.data : JSON.stringify(result.data),
+    }
+  }
+  return {
+    ok: false,
+    taskId: result.taskId,
+    level: result.level,
+    error: result.error?.message ?? 'Executor failed without a message.',
   }
 }

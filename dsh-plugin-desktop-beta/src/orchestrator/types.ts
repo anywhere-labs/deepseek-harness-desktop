@@ -81,6 +81,10 @@ export interface TaskCard {
 export interface ExecutorResult {
   /** True when the executor satisfied the task. */
   ok: boolean
+  /** The task identity this result belongs to. */
+  taskId: string
+  /** The level this result came from. */
+  level: Level
   /** The executor's output data, when successful. */
   data?: unknown
   /** The failure detail, when not `ok`. */
@@ -108,6 +112,20 @@ export interface ExecutorError {
 }
 
 /**
+ * Runtime context handed to an executor for one run: the caller's cancellation
+ * and parent, plus the recursion depth (guards the L3 long path against
+ * runaway decomposition).
+ */
+export interface ExecuteContext {
+  /** Caller cancellation, forwarded to sub-work. */
+  signal: AbortSignal
+  /** The delegating agent, when one exists; subagent executors need it. */
+  parent: import('@deepseek-ai/dsh-agent').Agent | undefined
+  /** Current recursion depth; the Pro router increments it per sub-goal. */
+  depth: number
+}
+
+/**
  * One executor: a named handler that claims one or more levels and runs a task
  * card to a result. Executors are deliberately dumb — they do not re-plan,
  * auto-escalate, or modify the plan; they only run and report.
@@ -120,9 +138,7 @@ export interface Executor {
   /**
    * Run one task card to completion.
    * @param plan - the plan carrying the task card and budget.
-   * @param signal - caller cancellation, forwarded to sub-work.
-   * @param parent - the delegating agent, when one exists; subagent executors
-   *   need it to establish the child's lineage and workspace.
+   * @param context - cancellation, parent, and recursion depth.
    */
-  execute(plan: Plan, signal: AbortSignal, parent: import('@deepseek-ai/dsh-agent').Agent | undefined): Promise<ExecutorResult>
+  execute(plan: Plan, context: ExecuteContext): Promise<ExecutorResult>
 }
