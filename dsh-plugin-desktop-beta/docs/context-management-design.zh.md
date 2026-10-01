@@ -103,10 +103,13 @@ flowchart LR
 - 直接复用 `storage-domain`。Desktop 已依赖 `@deepseek-ai/dsh-storage-domain`，无需新造 KV。
 - 后端选 `storage-json`（人类可读）或 `storage-sqlite`（频繁点更新），由 `storage-domain` 的 `backend`/`routes` 配置决定。
 
-### 5.4 重要文件 markdown（新）
+### 5.4 重要文件 markdown（已实现，开关默认关）
 
-- 新增「重要文件」索引：当模型/用户把某文件标记为重要，将其路径 + 摘要 + 关键内容转为一条 markdown 记录，写入 `memory` domain 的 `files` 表；内容大时正文走 spill，markdown 只存元数据 + locator。
-- 作为 RAG 与长期记忆的种子语料。
+- `desktop-context` 插件新增 `index_file` 工具：模型调用它把某文件标记为重要。工具读取文件（安全边界：>1MB 拒绝、含 NUL 字节的二进制拒绝、文本内容截断至 16000 字符），把 `path`（解析后的绝对路径）+ `note`（为什么重要）+ 截断后的 `content` 写入 `desktop_memory` domain 的 `files` 表；record key = `sha256(绝对路径)`，同路径重复索引幂等覆盖。
+- 召回：`fileRecall` 开启时，在 `agent/pre-step` 把已索引文件清单（path + note，不含正文）作为一条 `user/message`（source kind `desktop-files`）注入上下文；按 files 表签名（`key:createdAt` 排序）去重，仅清单变化时重新注入。
+- 正文不落 spill：本轮用「拒绝超大文件 + 截断缓存内容」实现有界；`content` 作为 RAG 与长期记忆的种子语料（阶段三的 RAG 消费）。
+- 开关：`fileIndex`（注册工具 + 落库，默认 `false`）、`fileRecall`（注入清单，默认 `false`），均为 `desktop-context` 的 `Config` 字段，按需在 cordis 配置开启，符合「可选、默认不启用」约定。
+- 位置：复用 `desktop-context` 已打开的 `desktop_memory` 域——该域为 single-open（重复开域抛 `already-open`），故工具与 `files` 表都落在 `desktop-context` 内，不新增插件。
 
 ### 5.5 RAG（新，阶段三）
 
@@ -143,7 +146,7 @@ flowchart LR
 
 - **Phase 1（核心闭环）**：`desktop-context` 插件骨架 + 分层压缩（L0→L1 复用 compaction，L1→L2 再摘要）+ 长期记忆落库（`memory` domain）+ 短期/长期边界。
 - **Phase 2**：30 天回收箱（桌面自有文件硬删除 → 移入系统回收站）。
-- **Phase 3**：重要文件 markdown 索引 + RAG 向量检索（可选插件）。
+- **Phase 3**：重要文件 markdown 索引（已完成：`index_file` 工具 + `files` 表 + 清单召回，开关默认关）+ RAG 向量检索（可选插件，待定）。
 
 ## 八、风险与边界
 
