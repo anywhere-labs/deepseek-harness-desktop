@@ -8,7 +8,7 @@
 // runner child alone.
 
 import { formatUnexpectedHostExit, startIsolatedDesktopHost } from './host-process.ts'
-import { app, crashReporter, safeStorage, session, shell } from 'electron'
+import { app, clipboard, crashReporter, safeStorage, session, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -1708,6 +1708,10 @@ async function start(): Promise<void> {
           hostCtx.provide('desktopLanHttps', lanHttps)
           hostCtx.provide('desktopRuntime', runtime)
           hostCtx.provide('desktopPnpmBootstrap', desktopPnpmBootstrap)
+          hostCtx.provide('desktopClipboard', {
+            writeText: (text: string) => clipboard.writeText(text),
+            readText: () => clipboard.readText(),
+          })
           await hostCtx.plugin(DesktopActionsService, {
             openTerminal: () => { runtime.openTerminal() },
             requestRestart: () => runtime.requestRestart(),

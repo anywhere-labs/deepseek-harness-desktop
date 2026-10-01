@@ -80,6 +80,14 @@
       "types": "./lib/types/web-search.d.ts",
       "default": "./lib/web-search.js"
     },
+    "./orchestrator": {
+      "types": "./lib/types/orchestrator/index.d.ts",
+      "default": "./lib/orchestrator/index.js"
+    },
+    "./marvis": {
+      "types": "./lib/types/marvis.d.ts",
+      "default": "./lib/marvis.js"
+    },
     "./updates": {
       "types": "./lib/types/updates.d.ts",
       "default": "./lib/updates.js"

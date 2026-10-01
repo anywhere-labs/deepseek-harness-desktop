@@ -22,6 +22,14 @@
     - id: desktop-web-search
       name: dsh-plugin-desktop/web-search
       disabled: true
+    # Layered plan-and-dispatch (Pro levels L0-L4, router, executors). Default off.
+    - id: desktop-orchestrator
+      name: dsh-plugin-desktop/orchestrator
+      disabled: true
+    # Marvis human-in-the-loop clipboard bridge (send/collect). Default off.
+    - id: desktop-marvis
+      name: dsh-plugin-desktop/marvis
+      disabled: true
     - id: desktop-pnpm
       name: dsh-plugin-desktop/pnpm
     - id: desktop-profiles
