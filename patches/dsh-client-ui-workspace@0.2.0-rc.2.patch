@@ -1,0 +1,201 @@
+diff --git a/lib/client.js b/lib/client.js
+index b7a87d9..9aa3bfa 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -662,6 +662,7 @@ window.__ModuleLoader__.load({
+ 					orderBy: "updated",
+ 					groupExpansion: {},
+ 					sessionOrderByAccount: {},
++					pinnedWorkspaceIds: [],
+ 					archivedFilter: "default"
+ 				}),
+ 				persist: "dsh.workspace.view.v5",
+@@ -681,8 +682,13 @@ window.__ModuleLoader__.load({
+ 						const retained = new Set(workspaceKeys);
+ 						d.groupExpansion = Object.fromEntries(Object.entries(d.groupExpansion).filter(([key]) => retained.has(key)));
+ 						d.sessionOrderByAccount = Object.fromEntries(Object.entries(d.sessionOrderByAccount).filter(([key]) => retained.has(key)));
++						d.pinnedWorkspaceIds = (d.pinnedWorkspaceIds ?? []).filter((workspaceId) => retained.has(workspaceId));
+ 						delete d.sessionUpdatedAtByAccount;
+ 					},
++					toggleWorkspacePin: (d, workspaceId) => {
++						const pinned = d.pinnedWorkspaceIds ?? [];
++						d.pinnedWorkspaceIds = pinned.includes(workspaceId) ? pinned.filter((id) => id !== workspaceId) : [...pinned, workspaceId];
++					},
+ 					syncSessionOrders: (d, orders) => {
+ 						if (d.orderBy !== "manual") return;
+ 						Object.assign(d.sessionOrderByAccount, copySessionOrders(orders));
+@@ -1273,6 +1279,10 @@ window.__ModuleLoader__.load({
+ 			const active = containsCurrentDescendant || group.expanded && group.containsCurrent;
+ 			const [menuOpen, setMenuOpen] = (0, react.useState)(false);
+ 			const workspaceMenuItems = [{
++				id: "pin",
++				label: t(actions?.pinned === true ? "menu.unpinWorkspace" : "menu.pinWorkspace"),
++				icon: (0, react_jsx_runtime.jsx)(actions?.pinned === true ? _deepseek_ai_dsh_client_ui_primitives.IconPinFillRegular : _deepseek_ai_dsh_client_ui_primitives.IconPinOutlineRegular, {})
++			}, {
+ 				id: "rename",
+ 				label: t("rename"),
+ 				icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconEditOutlineRegular, {})
+@@ -1321,9 +1331,10 @@ window.__ModuleLoader__.load({
+ 							items: workspaceMenuItems,
+ 							onSelect: (id) => {
+ 								setMenuOpen(false);
+-								/* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
+-								if (id !== "rename" && id !== "delete") return;
+-								if (id === "rename") actions.rename();
++								/* v8 ignore next -- Menu can emit only the pin, rename, and delete rows supplied above. */
++								if (id !== "pin" && id !== "rename" && id !== "delete") return;
++								if (id === "pin") actions.togglePin();
++								else if (id === "rename") actions.rename();
+ 								else actions.delete();
+ 							},
+ 							portal: true,
+@@ -2294,6 +2305,29 @@ window.__ModuleLoader__.load({
+ 			const rect = e.currentTarget.getBoundingClientRect();
+ 			return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+ 		}
++		/** Keep pinned Workspaces ahead of ordinary ones without changing either order. */
++		function partitionWorkspaces(workspaces, pinnedWorkspaceIds) {
++			const pinned = new Set(pinnedWorkspaceIds);
++			return [
++				...workspaces.filter((workspace) => pinned.has(workspace.workspaceId)),
++				...workspaces.filter((workspace) => !pinned.has(workspace.workspaceId))
++			];
++		}
++		/** Resolve a displayed Workspace drop to a Host insertion anchor. */
++		function workspaceDragMove(siblings, pinnedWorkspaceIds, sourceId, targetId, half) {
++			const pinned = new Set(pinnedWorkspaceIds);
++			const sourcePinned = pinned.has(sourceId);
++			if (sourcePinned !== pinned.has(targetId) || sourceId === targetId) return null;
++			const partition = siblings.filter((workspace) => pinned.has(workspace.workspaceId) === sourcePinned);
++			const sourceIndex = partition.findIndex((workspace) => workspace.workspaceId === sourceId);
++			const targetIndex = partition.findIndex((workspace) => workspace.workspaceId === targetId);
++			if (sourceIndex === -1 || targetIndex === -1) return null;
++			const next = partition.filter((workspace) => workspace.workspaceId !== sourceId);
++			next.splice(next.findIndex((workspace) => workspace.workspaceId === targetId) + (half === "after" ? 1 : 0), 0, partition[sourceIndex]);
++			if (next.every((workspace, index) => workspace.workspaceId === partition[index].workspaceId)) return null;
++			const nextIndex = next.findIndex((workspace) => workspace.workspaceId === sourceId);
++			return next[nextIndex + 1]?.workspaceId;
++		}
+ 		/** The list-empty placeholder — a glyph over the text; the archived-only view names its filter and offers the way back. */
+ 		function EmptySessions({ rowState, onLeaveArchivedOnly, t }) {
+ 			const archivedOnly = rowState.archivedFilter === "only";
+@@ -2313,7 +2347,7 @@ window.__ModuleLoader__.load({
+ 			});
+ 		}
+ 		/** The scrolling session tree; unmounting drops the sessions subscription and local row limits. */
+-		function SessionTree({ list, useSessionStatus, startSession, open, workspaces, ungroupedSessionIds, rowState, onLeaveArchivedOnly, workspaceReady, animationResetKey, usePanelInfo, onRenameRequest, onDeleteRequest, onSessionRenameRequest, renderSlot, insertWorkspaceBefore, nestWorkspaces, groupExpansion, setGroupExpanded, setSessionOrder, home, t, revealSessionId, onSessionRevealed, shortcuts }) {
++		function SessionTree({ list, useSessionStatus, startSession, open, workspaces, pinnedWorkspaceIds, toggleWorkspacePin, ungroupedSessionIds, rowState, onLeaveArchivedOnly, workspaceReady, animationResetKey, usePanelInfo, onRenameRequest, onDeleteRequest, onSessionRenameRequest, renderSlot, insertWorkspaceBefore, nestWorkspaces, groupExpansion, setGroupExpanded, setSessionOrder, home, t, revealSessionId, onSessionRevealed, shortcuts }) {
+ 			const panelActive = usePanelInfo((info) => info.activePanelId !== null);
+ 			const statuses = useSessionStatus((s) => s);
+ 			const current = panelActive ? void 0 : Object.values(list.byId).find((session) => (session.retainedBy.mainView ?? 0) > 0)?.id;
+@@ -2410,13 +2444,8 @@ window.__ModuleLoader__.load({
+ 				setWorkspaceDrag(null);
+ 				const owner = parents.get(activeDrag.workspaceId);
+ 				const siblings = workspaces.filter((workspace) => parents.get(workspace.workspaceId) === owner);
+-				const rowIndex = siblings.findIndex((workspace) => workspace.workspaceId === over.id);
+-				if (rowIndex === -1) return;
+-				const anchor = over.half === "before" ? over.id : siblings[rowIndex + 1]?.workspaceId;
+-				if (anchor === activeDrag.workspaceId) return;
+-				const sourceIndex = siblings.findIndex((workspace) => workspace.workspaceId === activeDrag.workspaceId);
+-				const anchorIndex = anchor === void 0 ? siblings.length : siblings.findIndex((workspace) => workspace.workspaceId === anchor);
+-				if (sourceIndex !== -1 && (anchorIndex === sourceIndex || anchorIndex === sourceIndex + 1)) return;
++				const anchor = workspaceDragMove(siblings, pinnedWorkspaceIds, activeDrag.workspaceId, over.id, over.half);
++				if (anchor === null) return;
+ 				insertWorkspaceBefore(activeDrag.workspaceId, anchor).catch((reason) => {
+ 					console.warn("workspace reorder rejected:", reason);
+ 				});
+@@ -2439,7 +2468,9 @@ window.__ModuleLoader__.load({
+ 			const renderGroup = (group, depth) => {
+ 				const workspaceId = group.workspaceId;
+ 				const children = childrenByParent.get(group.key) ?? [];
+-				const compatibleDrag = workspaceDrag !== null && parents.get(workspaceDrag.workspaceId) === parents.get(group.key);
++				const compatibleDrag = workspaceDrag !== null
++					&& parents.get(workspaceDrag.workspaceId) === parents.get(group.key)
++					&& pinnedWorkspaceIds.includes(workspaceDrag.workspaceId) === pinnedWorkspaceIds.includes(workspaceId);
+ 				const collapsed = collapsedSessionRows(group.sessions);
+ 				const visible = collapsedSessionRows(group.sessions, sessionLimits[group.key]);
+ 				const sessionsExpanded = visible.hiddenCount === 0;
+@@ -2448,7 +2479,7 @@ window.__ModuleLoader__.load({
+ 				const sessions = visible.rows;
+ 				for (const node of sessions) rowKeys.push(`session:${node.id}`);
+ 				if (collapsed.hiddenCount > 0) rowKeys.push(`overflow:${group.key}`);
+-				const workspaceMarker = workspaceId !== void 0 && workspaceDrag?.over?.id === workspaceId ? workspaceDrag.over.half : null;
++				const workspaceMarker = workspaceId !== void 0 && workspaceDrag?.over?.id === workspaceId && compatibleDrag ? workspaceDrag.over.half : null;
+ 				const workspaceDragProps = workspaceId === void 0 ? void 0 : {
+ 					start: () => {
+ 						workspaceDropCommitted.current = false;
+@@ -2534,6 +2565,10 @@ window.__ModuleLoader__.load({
+ 								delete: () => {
+ 									/* v8 ignore next -- narrowing guard: the actions object exists only for real-workspace groups. */
+ 									if (group.workspaceId !== void 0) onDeleteRequest(group.workspaceId, group.label);
++								},
++								pinned: pinnedWorkspaceIds.includes(group.workspaceId),
++								togglePin: () => {
++									if (group.workspaceId !== void 0) toggleWorkspacePin(group.workspaceId);
+ 								}
+ 							}
+ 						}),
+@@ -2812,6 +2847,7 @@ window.__ModuleLoader__.load({
+ 			const orderBy = useStore((s) => s.orderBy);
+ 			const archivedFilter = useStore((s) => s.archivedFilter ?? "default");
+ 			const groupExpansion = useStore((s) => s.groupExpansion);
++			const pinnedWorkspaceIds = useStore((s) => s.pinnedWorkspaceIds ?? []);
+ 			const sessionOrderByAccount = useStore((s) => s.sessionOrderByAccount);
+ 			const guardedOpen = (sessionId) => {
+ 				if (archivedSessionIds.includes(sessionId)) {
+@@ -2839,18 +2875,19 @@ window.__ModuleLoader__.load({
+ 				archivedFilter
+ 			}), [orderState, archivedFilter]);
+ 			const flatMemberIds = (0, react.useMemo)(() => sessionMemberIds(list), [list]);
+-			const orderedWorkspaces = (0, react.useMemo)(() => workspaces.map((workspace) => {
++			const orderedWorkspaces = (0, react.useMemo)(() => partitionWorkspaces(workspaces.map((workspace) => {
+ 				const memberIds = workspace.sessionIds;
+ 				const baseOrder = orderBy === "updated" ? orderByRecency(memberIds, list.byId) : reconcileManualOrder(memberIds, sessionOrderByAccount[workspace.workspaceId], list.byId, orderState);
+ 				return {
+ 					...workspace,
+ 					sessionIds: pinCurrentBlank(baseOrder, currentBlank !== void 0 && memberIds.includes(currentBlank) ? currentBlank : void 0)
+ 				};
+-			}), [
++			}), pinnedWorkspaceIds), [
+ 				currentBlank,
+ 				list.byId,
+ 				orderBy,
+ 				orderState,
++				pinnedWorkspaceIds,
+ 				sessionOrderByAccount,
+ 				workspaces
+ 			]);
+@@ -3283,6 +3320,8 @@ window.__ModuleLoader__.load({
+ 							onSessionRenameRequest: requestSessionRename,
+ 							renderSlot,
+ 							workspaces: orderedWorkspaces,
++							pinnedWorkspaceIds,
++							toggleWorkspacePin: actions.toggleWorkspacePin,
+ 							ungroupedSessionIds: orderedUngroupedSessionIds,
+ 							workspaceReady,
+ 							nestWorkspaces: groupBy === "workspace-tree",
+@@ -3915,6 +3954,8 @@ window.__ModuleLoader__.load({
+ 			"delete.workspace": "删除工作区",
+ 			"delete.desc": "将把“{name}”从工作区列表中移除。文件夹与会话记录会保留，其会话将显示在“未分组”下。",
+ 			"delete.pending": "正在删除工作区…",
++			"menu.pinWorkspace": "置顶工作区",
++			"menu.unpinWorkspace": "取消置顶工作区",
+ 			"menu.fork": "分叉会话",
+ 			"menu.archiveSession": "归档会话",
+ 			"menu.unarchiveSession": "取消归档",
+@@ -4030,6 +4071,8 @@ window.__ModuleLoader__.load({
+ 			"delete.workspace": "Delete workspace",
+ 			"delete.desc": "This removes “{name}” from the workspace list. The folder and session logs will be kept. Its sessions will appear under Ungrouped.",
+ 			"delete.pending": "Deleting workspace…",
++			"menu.pinWorkspace": "Pin workspace",
++			"menu.unpinWorkspace": "Unpin workspace",
+ 			"menu.fork": "Fork session",
+ 			"menu.archiveSession": "Archive session",
+ 			"menu.unarchiveSession": "Unarchive session",
+@@ -4422,4 +4465,4 @@ window.__ModuleLoader__.load({
+ 	}
+ });
+ 
+-//# sourceMappingURL=client.js.map
+\ No newline at end of file
++//# sourceMappingURL=client.js.map
