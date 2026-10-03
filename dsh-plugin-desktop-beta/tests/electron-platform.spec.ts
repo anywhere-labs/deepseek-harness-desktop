@@ -96,8 +96,8 @@ describe('electronPlatformStrategy', () => {
     expect(strategy.updateDownloadPlatform).toBeUndefined()
     expect(strategy.canPickDirectory).toBe(false)
     expect(strategy.canToggleShellMode).toBe(false)
-    // No Linux desktop guarantees a status area, so a hidden window would have
-    // no way back. Linux generations minimize on close instead.
+    // No Linux desktop guarantees a status area, so Linux close quits rather
+    // than leaving the app hidden behind an unreachable tray icon.
     expect(strategy.hidesWindowOnClose).toBe(false)
 
     strategy.configureApplication({} as never, 'DSH Desktop')

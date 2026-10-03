@@ -26,6 +26,7 @@ import {
   resolveDesktopLanConfirmation,
 } from '../src/client/DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from '../src/client/DesktopTerminalSettingsAction.tsx'
+import { CopilotProviderCard } from '../src/client/CopilotProviderCard.tsx'
 import {
   createDesktopSettingsApi,
   desktopRendererActionsBridge,
@@ -697,9 +698,15 @@ describe('Desktop settings Slot registration', () => {
 
     expect(get).toHaveBeenNthCalledWith(1, DESKTOP_SHELL_SETTINGS_NAMESPACE)
     expect(get).toHaveBeenNthCalledWith(2, DESKTOP_NOTIFICATIONS_SETTINGS_NAMESPACE)
+    expect(inject).toHaveBeenCalledWith('settings.models.provider-card', expect.any(Function))
     expect(inject).toHaveBeenCalledWith('settings.section', expect.any(Function))
     expect(inject).toHaveBeenCalledWith('settings.action', expect.any(Function))
-    const [options, component] = register.mock.calls[0] as unknown as [
+    expect(register).toHaveBeenNthCalledWith(1, {
+      name: 'settings.models.provider-card',
+      key: 'llm-pi-ai',
+      locale: DESKTOP_SETTINGS_LOCALE_NAMESPACE,
+    }, CopilotProviderCard)
+    const [options, component] = register.mock.calls[1] as unknown as [
       { id: string; order: number; locale: string; label: () => string; inject: () => Record<string, unknown> },
       unknown,
     ]
@@ -717,7 +724,7 @@ describe('Desktop settings Slot registration', () => {
     })
     expect(component).toBe(DesktopSettingsSection)
 
-    const [actionOptions, actionComponent] = register.mock.calls[1] as unknown as [
+    const [actionOptions, actionComponent] = register.mock.calls[2] as unknown as [
       { id: string; order: number; locale: string; inject: () => Record<string, unknown> },
       unknown,
     ]
@@ -730,7 +737,7 @@ describe('Desktop settings Slot registration', () => {
     expect(actionOptions.inject()).toHaveProperty('api')
     expect(actionComponent).toBe(DesktopTerminalSettingsAction)
     expect(inject).toHaveBeenCalledWith('plugins.bundle.hidden', expect.any(Function))
-    expect(register).toHaveBeenNthCalledWith(3, {
+    expect(register).toHaveBeenNthCalledWith(4, {
       name: 'plugins.bundle.hidden',
       key: 'dshmarket',
     }, expect.any(Function))

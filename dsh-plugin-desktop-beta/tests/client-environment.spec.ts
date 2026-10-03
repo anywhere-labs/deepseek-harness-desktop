@@ -47,7 +47,7 @@ describe('desktop client environment', () => {
     try {
       apply(ctx)
       expect(inject.mock.calls.map(([name]) => name)).toEqual([
-        'settings.section', 'settings.action', 'plugins.bundle.hidden',
+        'settings.models.provider-card', 'settings.section', 'settings.action', 'plugins.bundle.hidden',
       ])
       expect(effect.mock.calls.map(([, label]) => label)).not.toContain('desktop: independent compatibility frame styles')
     } finally {

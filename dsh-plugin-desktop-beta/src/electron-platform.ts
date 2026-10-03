@@ -14,9 +14,8 @@ export interface ElectronPlatformStrategy {
    * Whether closing the window may hide it entirely, leaving the tray as the
    * only way back. Windows and macOS both guarantee a reachable tray or dock
    * icon. Linux does not: `new Tray()` succeeds even where the desktop shows
-   * no status area, so a hidden window becomes unreachable. Those generations
-   * minimize instead, which keeps the Host and its sessions running while
-   * leaving the window in every window list, alt-tab ring, and overview.
+   * no status area. Linux therefore keeps this false and handles window close
+   * as a graceful application quit instead of hiding the only reachable window.
    */
   readonly hidesWindowOnClose: boolean
   configureApplication(
