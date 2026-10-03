@@ -41,15 +41,19 @@ if (process.platform === 'darwin') {
 contextBridge.exposeInMainWorld('dshDesktop', Object.freeze({ protocolVersion: 1 }))
 
 const sessionTarget = new URLSearchParams(window.location.search).get('dsh-desktop-session')
-contextBridge.exposeInMainWorld(SESSION_WINDOW_TARGET, validSessionWindowId(sessionTarget) ? sessionTarget : null)
+const sessionWindow = validSessionWindowId(sessionTarget)
+contextBridge.exposeInMainWorld(SESSION_WINDOW_TARGET, sessionWindow ? sessionTarget : null)
 const sessionWindows: SessionWindowBridge = {
   open: request => ipcRenderer.invoke(SESSION_WINDOW_CHANNEL, request),
   ready: title => { ipcRenderer.send(`${SESSION_WINDOW_CHANNEL}:ready`, title) },
 }
 contextBridge.exposeInMainWorld(SESSION_WINDOW_BRIDGE, sessionWindows)
-contextBridge.exposeInMainWorld('dshDesktopSetup', {
-  read: () => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'read' }),
-  dismissAccount: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'dismiss-account', profile }),
-  applyPending: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'apply-pending', profile }),
-  finish: (profile: string, selection?: unknown) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'finish', profile, selection }),
-})
+// Setup belongs to the main window; session windows have no setup IPC handler.
+if (!sessionWindow) {
+  contextBridge.exposeInMainWorld('dshDesktopSetup', {
+    read: () => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'read' }),
+    dismissAccount: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'dismiss-account', profile }),
+    applyPending: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'apply-pending', profile }),
+    finish: (profile: string, selection?: unknown) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'finish', profile, selection }),
+  })
+}
