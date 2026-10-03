@@ -1,0 +1,11 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -109,6 +109,7 @@
+ * (quota, private mode) only disable persistence, never break the store.
+ */
+ function attachPersistence(api, name) {
++	if (globalThis.__DSH_SESSION_WINDOW_TARGET__ && name === "dsh.sessions.current") name = "dsh.session-window.selection." + globalThis.__DSH_SESSION_WINDOW_TARGET__;
+ 	if (typeof localStorage === "undefined") return;
+ 	try {
+ 		const raw = localStorage.getItem(name);

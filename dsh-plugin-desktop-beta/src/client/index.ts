@@ -1,3 +1,6 @@
+import { applySessionWindows } from './session-window.ts'
+import { installSessionWindowPresentation } from './session-window-presentation.tsx'
+import { SESSION_WINDOW_TARGET } from '../session-window-contract.ts'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -127,6 +130,9 @@ export const inject = [
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
   if (!environment) return
+  const sessionWindow = Boolean(window[SESSION_WINDOW_TARGET])
+  if (sessionWindow) ctx.effect(() => installSessionWindowPresentation(), 'desktop: compact session presentation')
+  applySessionWindows(ctx)
   ctx.effect(
     () => provideDesktopWindow(ctx, desktopWindowService(environment)),
     'dsh-plugin-desktop: native window geometry service',
@@ -141,7 +147,7 @@ export function apply(ctx: ClientContext): void {
     () => installSidebarFooterStyles(),
     'dsh-plugin-desktop: sidebar footer stacking styles',
   )
-  ctx.effect(
+  if (!sessionWindow) ctx.effect(
     () => startRendererBootReporter(ctx.loader),
     'dsh-plugin-desktop: renderer boot health report',
   )
@@ -157,7 +163,7 @@ export function apply(ctx: ClientContext): void {
   // `layout`, and upstream's `uiWorkspace` injects it. Naming `uiWorkspace` in
   // the module-level inject list would deadlock the two against each other.
   // Not gated on win32 either — the launcher's folder argument works on Linux.
-  ctx.inject(['workspaces', 'uiWorkspace'], (scope: ClientContext) => {
+  if (!sessionWindow) ctx.inject(['workspaces', 'uiWorkspace'], (scope: ClientContext) => {
     scope.effect(
       () => installDesktopLaunchWorkspaceBridge({
         ready: async () => { await whenWorkspaceListsReady(scope) },

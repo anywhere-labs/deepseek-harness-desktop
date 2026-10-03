@@ -34,7 +34,8 @@ import type { RendererBootReport } from './renderer-boot-contract.ts'
 import { DesktopRendererRecovery } from './renderer-recovery.ts'
 import { PlatformLoginWindow } from './platform-login-window.ts'
 import { RENDERER_SURFACE_PROBE, RendererSurfaceWatchdog } from './renderer-surface-watchdog.ts'
-import type { DesktopRendererAccessHeader } from './desktop-browser-access.ts'
+import { authenticateRendererSession, installRendererAccessHeader } from './renderer-authentication.ts'
+import { SessionWindows } from './session-windows.ts'
 import {
   fitMainWindowBounds,
   sameMainWindowBounds,
@@ -53,122 +54,6 @@ const WINDOW_STATE_WRITE_DELAY_MS = 250
  * controller's 30s health budget room to observe the reload that follows.
  */
 const REPLACEMENT_EXIT_TIMEOUT_MS = 10_000
-
-function pairedWebSocketOrigin(origin: string): string {
-  const url = new URL(origin)
-  if (url.protocol === 'http:') url.protocol = 'ws:'
-  else if (url.protocol === 'https:') url.protocol = 'wss:'
-  else throw new Error(`dsh-plugin-desktop: unsupported renderer origin protocol ${url.protocol}`)
-  return url.origin
-}
-
-/**
- * Exchange the upstream process token inside the BrowserWindow's own
- * persistent session before its marker-bearing renderer URL is loaded.
- * Keeping the exchange separate preserves the Desktop query markers across
- * the upstream redirect and keeps the launch token out of renderer history.
- */
-async function authenticateRendererSession(
-  renderer: WebContents,
-  spec: DesktopShellSpec,
-): Promise<void> {
-  const session = renderer.session
-  const headers = {
-    [spec.rendererAccessHeader.name]: spec.rendererAccessHeader.value,
-  }
-  const authenticated = await session.fetch(spec.authenticationUrl, {
-    method: 'GET',
-    credentials: 'include',
-    redirect: 'follow',
-    cache: 'no-store',
-    headers,
-  })
-  if (authenticated.status !== 200) {
-    throw new Error(
-      `dsh-plugin-desktop: browser authentication failed with HTTP ${String(authenticated.status)}`,
-    )
-  }
-  await authenticated.body?.cancel()
-}
-
-function sameRendererCarrierOrigin(requestUrl: string, httpOrigin: string, webSocketOrigin: string): boolean {
-  try {
-    const origin = new URL(requestUrl).origin
-    return origin === httpOrigin || origin === webSocketOrigin
-  } catch {
-    return false
-  }
-}
-
-function withoutRendererAccessHeader(
-  requestHeaders: Record<string, string>,
-  headerName: string,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(requestHeaders)
-      .filter(([name]) => name.toLowerCase() !== headerName),
-  )
-}
-
-function requestBelongsToRenderer(
-  details: Electron.OnBeforeSendHeadersListenerDetails,
-  webContentsId: number,
-): boolean {
-  const providedIds = [details.webContentsId, details.webContents?.id]
-    .filter((value): value is number => value !== undefined)
-  return providedIds.length > 0 && providedIds.every(value => value === webContentsId)
-}
-
-function requestComesFromRendererOrigin(
-  details: Electron.OnBeforeSendHeadersListenerDetails,
-  origin: string,
-): boolean {
-  if (details.resourceType === 'mainFrame') return true
-  const frame = details.frame
-  if (frame === undefined || frame === null || frame.detached || frame.origin !== origin) return false
-  const top = frame.top ?? (frame.parent === null ? frame : undefined)
-  return top !== undefined && !top.detached && top.origin === origin
-}
-
-/**
- * Attach one generation-only capability to the renderer's HTTP and WebSocket
- * traffic. Query markers are intentionally insufficient because subresources,
- * API requests, and upgrades do not retain the main-frame query string.
- */
-function installRendererAccessHeader(
-  renderer: WebContents,
-  origin: string,
-  header: DesktopRendererAccessHeader,
-): () => void {
-  const webSocketOrigin = pairedWebSocketOrigin(origin)
-  const webRequest = renderer.session.webRequest
-  const webContentsId = renderer.id
-  const listener = (
-    details: Electron.OnBeforeSendHeadersListenerDetails,
-    callback: (response: Electron.BeforeSendResponse) => void,
-  ): void => {
-    // This listener owns a dedicated renderer session and sees every target so
-    // a redirect can never carry the capability away from the local carrier.
-    const requestHeaders = withoutRendererAccessHeader(details.requestHeaders, header.name)
-    if (!requestBelongsToRenderer(details, webContentsId)
-      || !sameRendererCarrierOrigin(details.url, origin, webSocketOrigin)
-      || !requestComesFromRendererOrigin(details, origin)) {
-      callback({ requestHeaders })
-      return
-    }
-    requestHeaders[header.name] = header.value
-    callback({ requestHeaders })
-  }
-  webRequest.onBeforeSendHeaders({
-    urls: ['<all_urls>'],
-  }, listener)
-  let active = true
-  return () => {
-    if (!active) return
-    active = false
-    webRequest.onBeforeSendHeaders(null)
-  }
-}
 
 function sameOriginFrame(frameUrl: string | undefined, origin: string): boolean {
   if (frameUrl === undefined) return false
@@ -214,6 +99,7 @@ export interface ElectronShellGenerationOptions {
 
 /** Own one BrowserWindow and Tray generation, including every native listener. */
 export class ElectronShellGeneration {
+  private sessionWindows: SessionWindows | undefined
   private window: BrowserWindow | undefined
   private renderer: WebContents | undefined
   private compatibilityShell: CompatibilityShell | undefined
@@ -341,6 +227,7 @@ export class ElectronShellGeneration {
     const renderer = this.compatibilityShell?.webContents ?? window.webContents
     const chrome = this.compatibilityShell?.chromeWebContents ?? window.webContents
     this.renderer = renderer
+    this.sessionWindows = new SessionWindows({ spec, platform, preloadPath: this.options.preloadPath, main: window, renderer, log: this.options.logError })
 
     // Desktop-owned actions stay on the Electron lifetime. The page reaches the
     // main process directly, so a Host generation that exited, hung, or never
@@ -895,6 +782,8 @@ export class ElectronShellGeneration {
     this.rendererRecovery.stop()
     this.options.stopRendererBootMonitoring()
     this.platformLogin.close()
+    this.sessionWindows?.dispose()
+    this.sessionWindows = undefined
 
     const window = this.window
     const tray = this.tray

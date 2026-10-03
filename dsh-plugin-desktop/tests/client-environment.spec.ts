@@ -28,6 +28,9 @@ import {
   WINDOWS_CAPTION_CONTROLS_WIDTH,
 } from '../src/window-chrome.ts'
 
+// Native-window UI is exercised separately; this suite verifies environment/layout contracts.
+vi.mock('../src/client/session-window-menu.tsx', () => ({ installSessionWindowMenu: vi.fn() }))
+vi.mock('../src/client/session-window-presentation.tsx', () => ({ installSessionWindowPresentation: vi.fn() }))
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({ Switch: () => null }))
 
 describe('desktop client environment', () => {

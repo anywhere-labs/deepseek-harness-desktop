@@ -459,6 +459,10 @@ async function mirrorDesktopProfilePreferences(
 
 /** Start one Electron process and leave lifetime to the mounted desktop plugin. */
 async function start(): Promise<void> {
+  // Plugin SSE subscriptions from multiple session windows share Chromium's
+  // six-connection HTTP/1 pool. Keep local Host RPCs from queueing behind them.
+  // Restrict the exception to our loopback carrier; preserve shared auth/storage.
+  app.commandLine.appendSwitch('ignore-connections-limit', '127.0.0.1,localhost,[::1]')
   if (!app.requestSingleInstanceLock()) {
     app.quit()
     return

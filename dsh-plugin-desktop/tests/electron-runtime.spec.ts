@@ -407,6 +407,18 @@ describe('Electron desktop runtime', () => {
     vi.restoreAllMocks()
   })
 
+  it('keeps session windows registered after sign-in and releases them with the Host generation', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+    runtime.platformLogin({ action: 'close', focus: false })
+    expect(electron.webContents.ipc.removeHandler).not.toHaveBeenCalledWith('dsh-desktop:session-window')
+    await release()
+    expect(electron.webContents.ipc.removeHandler).toHaveBeenCalledWith('dsh-desktop:session-window')
+  })
+
   it('uses the independent macOS compatibility frame, Dock icon, and template tray image', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     electron.app.getPreferredSystemLanguages.mockReturnValue(['zh-Hans-CN', 'en-US'])

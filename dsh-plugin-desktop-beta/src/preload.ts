@@ -1,6 +1,7 @@
 /** Minimal context-isolated bridges for drag payloads, Desktop-owned actions, and the upstream Desktop marker. */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { SESSION_WINDOW_BRIDGE, SESSION_WINDOW_CHANNEL, SESSION_WINDOW_TARGET, validSessionWindowId, type SessionWindowBridge } from './session-window-contract.ts'
 import { SETUP_ONBOARDING_CHANNEL } from './setup-onboarding-bridge.ts'
 import { DESKTOP_FILE_PATH_BRIDGE } from './file-path-bridge-contract.ts'
 import { DESKTOP_NATIVE_DIRECTORY_PICKER_CHANNEL } from './directory-picker-contract.ts'
@@ -39,9 +40,20 @@ if (process.platform === 'darwin') {
 // Platform sign-in the Host hands to the native shell (src/platform-login.ts).
 contextBridge.exposeInMainWorld('dshDesktop', Object.freeze({ protocolVersion: 1 }))
 
-contextBridge.exposeInMainWorld('dshDesktopSetup', {
-  read: () => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'read' }),
-  dismissAccount: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'dismiss-account', profile }),
-  applyPending: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'apply-pending', profile }),
-  finish: (profile: string, selection?: unknown) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'finish', profile, selection }),
-})
+const sessionTarget = new URLSearchParams(window.location.search).get('dsh-desktop-session')
+const sessionWindow = validSessionWindowId(sessionTarget)
+contextBridge.exposeInMainWorld(SESSION_WINDOW_TARGET, sessionWindow ? sessionTarget : null)
+const sessionWindows: SessionWindowBridge = {
+  open: request => ipcRenderer.invoke(SESSION_WINDOW_CHANNEL, request),
+  ready: title => { ipcRenderer.send(`${SESSION_WINDOW_CHANNEL}:ready`, title) },
+}
+contextBridge.exposeInMainWorld(SESSION_WINDOW_BRIDGE, sessionWindows)
+// Setup belongs to the main window; session windows have no setup IPC handler.
+if (!sessionWindow) {
+  contextBridge.exposeInMainWorld('dshDesktopSetup', {
+    read: () => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'read' }),
+    dismissAccount: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'dismiss-account', profile }),
+    applyPending: (profile: string) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'apply-pending', profile }),
+    finish: (profile: string, selection?: unknown) => ipcRenderer.invoke(SETUP_ONBOARDING_CHANNEL, { action: 'finish', profile, selection }),
+  })
+}
