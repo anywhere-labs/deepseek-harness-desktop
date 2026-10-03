@@ -1,0 +1,2948 @@
+diff --git a/apps/web/tests/plan-review.e2e.ts b/apps/web/tests/plan-review.e2e.ts
+index ea2a30d938..3e9e12f780 100644
+--- a/apps/web/tests/plan-review.e2e.ts
++++ b/apps/web/tests/plan-review.e2e.ts
+@@ -7,14 +7,17 @@
+ // Replay is deterministic: the plan content arrives from replayed chunks, the
+ // review wait is real, and the approve click is the test's own gesture (the
+ // turn cannot complete without it, in record and replay alike).
+-import { readFile } from 'node:fs/promises'
++import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+ import { fileURLToPath } from 'node:url'
+ import { join } from 'node:path'
+-import type { Browser, ConsoleMessage, Page } from 'playwright'
++import { tmpdir } from 'node:os'
++import type { Browser, ConsoleMessage, Locator, Page } from 'playwright'
+ import { chromium } from 'playwright'
+ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+ import type { SessionEvent } from '@deepseek-ai/dsh-session'
+ import type { SessionId } from '@deepseek-ai/dsh-session/types'
++import { deriveReplayScript, parseSessionLog, type ReplayOverrideDoc } from '@deepseek-ai/dsh-llm-replay'
++import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
+ import {
+   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureExpandedTurnProcessAria, captureStableAria,
+   compareOrRefreshGolden, fixtureUserPrompts,
+@@ -43,6 +46,19 @@ const TASK = 'Plan a small change: add a --greeting flag to a CLI. Do not read o
+   + 'Once the plan is approved, reply with the single word DONE and stop.'
+ const LINE = `/plan ${TASK}`
+ 
++/** Select the complete rendered item, including inline Markdown nodes. */
++async function selectPlanItem(item: Locator): Promise<void> {
++  await item.scrollIntoViewIfNeeded()
++  await item.evaluate((element) => {
++    const range = document.createRange()
++    range.selectNodeContents(element)
++    const selection = window.getSelection()
++    selection?.removeAllRanges()
++    selection?.addRange(range)
++  })
++  await item.dispatchEvent('mouseup', { button: 0 })
++}
++
+ describe('web e2e: plan review takeover round trip', () => {
+   let scaffold: WebScaffold
+   let browser: Browser
+@@ -122,6 +138,67 @@ describe('web e2e: plan review takeover round trip', () => {
+     await card.getByRole('button', { name: 'Open plan in sidebar' }).click()
+     await preview.waitFor({ state: 'visible' })
+ 
++    // An annotation changes the existing composer card in place. The source
++    // selection spans the list item's emphasis and code nodes.
++    const comments = card.locator('[data-plan-comment-item]')
++    const firstNote = 'Keep the existing parser behavior.'
++    await selectPlanItem(preview.locator('li').nth(0))
++    const commentEditor = preview.getByRole('dialog', { name: 'Plan comment', exact: true })
++    await commentEditor.waitFor({ state: 'visible' })
++    await commentEditor.getByRole('textbox').fill(firstNote)
++    await commentEditor.getByRole('button', { name: 'Save', exact: true }).click()
++    await expect.poll(() => card.getAttribute('data-plan-review-variant')).toBe('revision')
++    expect(await page.locator('[data-plan-review-surface]').count()).toBe(1)
++    expect(await page.locator('[data-plan-review-variant="review"]').count()).toBe(0)
++    expect(await card.getByText('Plan revision', { exact: true }).isVisible()).toBe(true)
++    expect(await card.getByRole('button', { name: 'Revise plan', exact: true }).isVisible()).toBe(true)
++    expect(await card.getByRole('button', { name: 'Cancel plan', exact: true }).isVisible()).toBe(true)
++    expect(await comments.count()).toBe(1)
++    const firstMark = preview.locator('[data-plan-comment-mark]').first()
++    await firstMark.hover()
++    expect(await preview.getByRole('tooltip').textContent()).toBe(firstNote)
++    await firstMark.click()
++    expect(await commentEditor.getByRole('textbox').inputValue()).toBe(firstNote)
++    const revisedNote = 'Keep the existing parser behavior and preserve current flags.'
++    await commentEditor.getByRole('textbox').fill(revisedNote)
++    await commentEditor.getByRole('button', { name: 'Save', exact: true }).click()
++    expect(await comments.count()).toBe(1)
++    expect(await comments.first().getByText(revisedNote, { exact: true }).isVisible()).toBe(true)
++    const savedComments = await page.evaluate(() => Object.keys(localStorage)
++      .filter(key => key.startsWith('dsh.plan-comments.v1.')).map(key => localStorage.getItem(key)).join('\n'))
++    expect(savedComments).toContain(revisedNote)
++    await page.locator('[data-sidebar-right-toggle]').click()
++    await preview.waitFor({ state: 'hidden' })
++    await card.getByRole('button', { name: 'Open plan in sidebar' }).click()
++    await preview.waitFor({ state: 'visible' })
++    await expect.poll(() => preview.locator('[data-plan-comment-mark]').count()).toBeGreaterThan(0)
++    expect(await page.locator('[data-plan-review-surface]').count()).toBe(1)
++
++    const secondNote = 'Keep the default value compatible.'
++    await selectPlanItem(preview.locator('li').nth(1))
++    await commentEditor.getByRole('textbox').fill(secondNote)
++    await commentEditor.getByRole('button', { name: 'Save', exact: true }).click()
++    expect(await comments.count()).toBe(2)
++    await comments.filter({ hasText: secondNote }).getByRole('button', { name: 'Delete comment', exact: true }).click()
++    expect(await comments.count()).toBe(1)
++    await selectPlanItem(preview.locator('li').nth(1))
++    await commentEditor.getByRole('textbox').fill(secondNote)
++    await commentEditor.getByRole('button', { name: 'Save', exact: true }).click()
++    expect(await comments.count()).toBe(2)
++    await firstMark.click()
++    await mkdir(fileURLToPath(new URL('../../../../artifacts/', import.meta.url)), { recursive: true })
++    await page.screenshot({ path: fileURLToPath(new URL('../../../../artifacts/plan-comments.png', import.meta.url)), fullPage: true })
++    await commentEditor.getByRole('button', { name: 'Close comment', exact: true }).click()
++    await comments.nth(0).getByRole('checkbox').check()
++    await comments.nth(1).getByRole('checkbox').check()
++    await card.getByRole('button', { name: 'Delete selected', exact: true }).click()
++    await expect.poll(() => card.getAttribute('data-plan-review-variant')).toBe('review')
++    expect(await comments.count()).toBe(0)
++    expect(await preview.locator('[data-plan-comment-mark]').count()).toBe(0)
++    expect(await page.locator('[data-plan-review-surface]').count()).toBe(1)
++    expect(await page.locator('[data-plan-review-variant="revision"]').count()).toBe(0)
++    expect(JSON.stringify(sessionEvents)).not.toContain(revisedNote)
++
+     await card.getByRole('button', { name: 'Approve' }).click()
+     // Park the pointer: the card unmounts and the ContextMeter ring lands
+     // under the click position, whose 200ms hover delay would arm a tooltip
+@@ -152,6 +229,8 @@ describe('web e2e: plan review takeover round trip', () => {
+     await page.locator('[data-plan-card]').waitFor({ state: 'visible' })
+     await page.locator('[data-plan-preview]').waitFor({ state: 'visible' })
+     expect(await page.locator('[data-plan-preview]').getByRole('heading', { level: 1 }).textContent()).toContain('--greeting')
++    await selectPlanItem(page.locator('[data-plan-preview]').locator('li').first())
++    expect(await page.getByRole('dialog', { name: 'Plan comment', exact: true }).count()).toBe(0)
+     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
+     await compareOrRefreshGolden(APPROVED_EXPECTED, snapshot, MODE)
+     const expanded = await captureExpandedTurnProcessAria(
+@@ -389,6 +468,165 @@ describe.skipIf(MODE === 'record')('web e2e: pending plan review across Sidebar
+ })
+ 
+ describe('web e2e: dismissed plan history', () => {
++  it.skipIf(MODE === 'record')('sends revision comments directly from an idle review and clears them after delivery', async () => {
++    const replayRoot = await mkdtemp(join(tmpdir(), 'dsh-plan-revision-replay-'))
++    let scaffold: WebScaffold | undefined
++    let browser: Browser | undefined
++    let withdraw: (() => Promise<void>) | undefined
++    try {
++      const note = 'Retain existing argument parsing and add only the new flag.'
++      const response = 'PLAN_REVISION_RECEIVED {{fromRequest:Requested change: ([^\\n]+)}}'
++      const replay: ReplayOverrideDoc = [{ kind: 'chunks', chunks: [
++        { type: 'block-start', index: 0, blockType: 'text' },
++        { type: 'text-delta', index: 0, text: response },
++        { type: 'block-end', index: 0, block: { type: 'text', text: response } },
++        { type: 'usage', usage: { inputTokens: 256, outputTokens: 20 } },
++        { type: 'finish', reason: { kind: 'stop' } },
++      ] }]
++      const replayOverride = join(replayRoot, 'replay.override.json')
++      await writeFile(replayOverride, JSON.stringify(replay))
++      scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride, compareReplaySession: false, paceMs: 15 })
++      const fixture = await readFile(FIXTURE, 'utf8')
++      const sessionId = await seedSession(scaffold, fixture, 'plan-revision-direct-idle')
++      const planCall = parseSessionLog(fixture).find((event): event is SessionEvent<'tool/call'> => event.type === 'tool/call' && event.data.name === 'exit_plan_mode')
++      if (planCall === undefined) throw new Error('The seed fixture has no submitted plan')
++      const { plan } = JSON.parse(planCall.data.arguments) as { plan: string }
++      const events: SessionEvent[] = []
++      scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { events.push(event) })
++      browser = await chromium.launch()
++      const page = await newEnglishPage(browser)
++      onTestFailed(() => saveFailureShot(page, 'web-e2e-plan-revision-comments'))
++      const tripwire = watchConsole(page)
++      await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
++      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
++      const workspace = page.locator('[data-row-key^="workspace:"]').first()
++      await workspace.waitFor({ timeout: 15_000 })
++      if (await workspace.getAttribute('aria-expanded') !== 'true') await workspace.click()
++      await page.locator(`[data-row-key="session:${sessionId}"]`).click()
++      await page.locator(`[data-conversation-session="${sessionId}"]`).waitFor({ timeout: 15_000 })
++      await expect.poll(() => scaffold?.ctx.agents.get(sessionId) !== undefined).toBe(true)
++      const agent = scaffold.ctx.agents.get(sessionId)
++      if (agent === undefined) throw new Error('The seed Session has no live Agent')
++      const controller = new AbortController()
++      const asked = scaffold.ctx.userQuestions.ask({ agent, signal: controller.signal,
++        questions: [{ id: 'direct-revision', question: 'Approve this plan?', detail: plan,
++          options: [{ label: 'Approve' }, { label: 'Keep planning' }],
++          intent: { kind: 'plan-review', approve: 'Approve', callId: planCall.data.callId },
++        }],
++      })
++      const outcome = asked.then(value => value, (error: unknown) => ({ error }))
++      withdraw = async () => { controller.abort(); await outcome }
++      const input = page.locator('[data-composer-input]').first()
++      const review = page.locator('[data-plan-review-surface]')
++      await review.waitFor({ state: 'visible' })
++      const preview = page.locator('[data-plan-preview]')
++      await preview.waitFor({ state: 'visible' })
++      await selectPlanItem(preview.locator('li').first())
++      const editor = preview.getByRole('dialog', { name: 'Plan comment', exact: true })
++      await editor.getByRole('textbox').fill(note)
++      await editor.getByRole('button', { name: 'Save', exact: true }).click()
++      const settled = scaffold.whenTurnSettled(30_000)
++      await review.getByRole('button', { name: 'Revise plan', exact: true }).click()
++      await settled
++      await page.getByText(`PLAN_REVISION_RECEIVED ${note}`, { exact: true }).waitFor()
++      await review.waitFor({ state: 'detached' })
++      await input.waitFor({ state: 'visible' })
++      expect(await input.evaluate(element => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.textContent ?? '')).toBe('')
++      const delivered = events.filter((event): event is SessionEvent<'user/message'> => event.type === 'user/message' && JSON.stringify(event.data.content).includes(note))
++      expect(delivered).toHaveLength(1)
++      expect(JSON.stringify(delivered[0]!.data.content)).toContain('Please revise the plan using these comments:')
++      await expect.poll(() => preview.locator('[data-plan-comment-mark]').count()).toBe(0)
++      expect(events.filter(event => event.type === 'assistant/message')).toHaveLength(1)
++      expect(tripwire.pageErrors).toEqual([])
++      expect(tripwire.warnings).toEqual([])
++    } finally {
++      await withdraw?.()
++      await browser?.close()
++      await scaffold?.close()
++      await rm(replayRoot, { recursive: true, force: true })
++    }
++  })
++
++  it.skipIf(MODE === 'record')('sends comments into the next model step while the original plan review is waiting', async () => {
++    const replayRoot = await mkdtemp(join(tmpdir(), 'dsh-plan-revision-wait-'))
++    let scaffold: WebScaffold | undefined
++    let browser: Browser | undefined
++    let failure: unknown
++    let failureShot: (() => Promise<void>) | undefined
++    try {
++      const note = 'Retain existing argument parsing and add only the new flag.'
++      const original = deriveReplayScript(parseSessionLog(await readFile(FIXTURE, 'utf8')))
++      expect(original).toHaveLength(2)
++      const revisedCallId = ToolCallId('plan-revision-direct-second')
++      const revisedArguments = JSON.stringify({ plan: '# Revised --greeting plan\n\n- {{fromRequest:(Retain existing argument parsing and add only the new flag.)}}\n- Keep backwards compatibility.' })
++      const replay: ReplayOverrideDoc = [original[0]!, { kind: 'chunks', chunks: [
++        { type: 'block-start', index: 0, blockType: 'tool-call' },
++        { type: 'tool-call-delta', index: 0, id: revisedCallId, name: 'exit_plan_mode', argumentsDelta: revisedArguments },
++        { type: 'block-end', index: 0, block: { type: 'tool-call', id: revisedCallId, name: 'exit_plan_mode', arguments: revisedArguments } },
++        { type: 'usage', usage: { inputTokens: 256, outputTokens: 40 } },
++        { type: 'finish', reason: { kind: 'tool-calls' } },
++      ] }, original[1]!]
++      const replayOverride = join(replayRoot, 'replay.override.json')
++      await writeFile(replayOverride, JSON.stringify(replay))
++      scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride, compareReplaySession: false, paceMs: 15 })
++      const events: SessionEvent[] = []
++      scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { events.push(event) })
++      browser = await chromium.launch()
++      const page = await newEnglishPage(browser)
++      failureShot = () => saveFailureShot(page, 'web-e2e-plan-revision-wait')
++      onTestFailed(failureShot)
++      const tripwire = watchConsole(page)
++      await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
++      await connectFreshWorkspace(page, scaffold.workspaceCwd)
++      const input = page.locator('[data-composer-input]').first()
++      const settled = scaffold.whenTurnSettled(30_000)
++      await input.fill(LINE)
++      await input.press('Enter')
++      const review = page.locator('[data-plan-review-surface]')
++      await review.waitFor({ state: 'visible' })
++      const initialReviewKey = await review.getAttribute('data-plan-review-key')
++      const preview = page.locator('[data-plan-preview]')
++      await preview.waitFor({ state: 'visible' })
++      await selectPlanItem(preview.locator('li').first())
++      const editor = preview.getByRole('dialog', { name: 'Plan comment', exact: true })
++      await editor.getByRole('textbox').fill(note)
++      await editor.getByRole('button', { name: 'Save', exact: true }).click()
++      await review.getByRole('button', { name: 'Revise plan', exact: true }).click()
++      // No Enter gesture follows the revision click. The replay placeholder
++      // refuses the second model request unless it contains the comment.
++      await expect.poll(() => review.getAttribute('data-plan-review-key'), { timeout: 15_000 }).not.toBe(initialReviewKey)
++      await expect.poll(() => review.getByRole('heading').textContent()).toBe('Revised --greeting plan')
++      expect(await page.locator('[data-plan-review-surface]').count()).toBe(1)
++      expect(await review.getAttribute('data-plan-review-variant')).toBe('review')
++      const delivered = events.filter((event): event is SessionEvent<'user/message'> => event.type === 'user/message' && JSON.stringify(event.data.content).includes(note))
++      expect(delivered).toHaveLength(1)
++      const revisionCall = events.find((event): event is SessionEvent<'tool/call'> => event.type === 'tool/call' && event.data.callId === revisedCallId)
++      expect(revisionCall?.data.arguments).toContain(note)
++      expect(events.filter(event => event.type === 'plan/mode' && !event.data.active)).toHaveLength(0)
++      await review.getByRole('button', { name: 'Approve', exact: true }).click()
++      await settled
++      await page.getByText('DONE', { exact: true }).waitFor()
++      expect(await page.locator('[data-plan-review-surface]').count()).toBe(0)
++      expect(events.filter(event => event.type === 'assistant/message')).toHaveLength(3)
++      expect(events.filter(event => event.type === 'plan/mode' && !event.data.active)).toHaveLength(1)
++      expect(tripwire.pageErrors).toEqual([])
++      expect(tripwire.warnings).toEqual([])
++    } catch (error) {
++      failure = error
++      await failureShot?.()
++      throw error
++    } finally {
++      await browser?.close()
++      try {
++        await scaffold?.close()
++      } catch (error) {
++        throw failure === undefined ? error : new AggregateError([failure, error], 'Plan revision assertion and replay teardown failed')
++      } finally {
++        await rm(replayRoot, { recursive: true, force: true })
++      }
++    }
++  })
++
+   it.skipIf(MODE === 'record')('reopens the permanent plan card after dismissing its review', async () => {
+     // Replay supplies a finite continuation; the real question rejection and retained document are the assertions.
+     const scaffold = await launchWebScaffold({ replayFixture: FIXTURE, compareReplaySession: false, paceMs: 15 })
+diff --git a/packages/client/ui-plan/README.md b/packages/client/ui-plan/README.md
+index e02091c34b..32d90357c0 100644
+--- a/packages/client/ui-plan/README.md
++++ b/packages/client/ui-plan/README.md
+@@ -37,6 +37,19 @@ When a Turn ends, each submitted plan appears in its final artifact area, using
+ 
+ A review without a logged invocation also opens automatically. Its complete text lives only in the tab’s navigation memory, and the pending review card can reopen it. Reloading the page loses that text; an expired preview directs the user back to a pending review. Plans opened from an embedded child conversation use the visible sidebar while retaining the child’s address for document reads.
+ 
++### Commenting on a pending plan
++
++Select text in the full plan to add a comment. Saved selections stay highlighted;
++hover to read the note, or click to edit or delete it. The same composer card
++switches from Plan review to Plan revision when comments exist. Individual or
++selected comments can be deleted; deleting the last one restores Plan review.
++Revise plan sends the comments immediately, preserving any existing composer draft
++and attachments.
++Cancel plan dismisses the review and clears its comments. Completed reviews are
++read-only. Comments are stored in this browser per Session and request, without
++a server-side history. If the original text changes, an unresolved note remains
++in the card with Original text changed instead of highlighting unrelated text.
++
+ ### Failures
+ 
+ Admission failures (`matched: false`, business errors, transport faults) surface as an inline error and the chip stays until the projection confirms the exit.
+@@ -55,6 +68,18 @@ Plan cards derive from native `tool/call` or PTC dispatch arguments through a Co
+ 
+ The framework-bound `usePlans(turn)` exposes only submitted-plan data for that Turn. Chat indexes membership on Node updates and orders this collection when read; card rendering neither scans the transcript nor subscribes to other Turns or Node kinds.
+ 
++`ui-user-questions` owns the single `conversation.plan-review.surface` seat and
++the pending lifecycle. This plugin provides that seat and shares a Session store
++with the preview and a UI-free input overlay. The overlay clears a staged set
++of comments only when its exact revision text appears as a durable user message;
++failed sends and queued input retain the notes. Submission uses the existing
++Session prompt path without changing the composer draft. For a live review,
++feedback enters the next-step inbox before the existing non-approval answer
++releases its wait; continued reviews keep their existing dismissal behavior.
++Editing a submitted comment keeps the newer note. Preview highlights are Range geometry
++overlays, so Markdown nodes are not rewritten. An open editor holds the existing
++pending focus timer and releases it on close, unmount, or read-only transition.
++
+ </details>
+ 
+ -----
+diff --git a/packages/client/ui-plan/README.zh.md b/packages/client/ui-plan/README.zh.md
+index 5bb898b582..2abba637b9 100644
+--- a/packages/client/ui-plan/README.zh.md
++++ b/packages/client/ui-plan/README.zh.md
+@@ -37,6 +37,14 @@ kind: "package-reference"
+ 
+ 没有已记录调用标识的审批也会自动打开。完整正文只保存在标签页的导航内存中，待处理审批卡片可以重新打开它。刷新页面会丢失该正文；失效的预览会提示用户返回待处理审批。在嵌入式子对话中打开计划时，预览使用当前可见的侧栏，读取文档仍保留子会话地址。
+ 
++### 评论待审计划
++
++在全文中选择文字后可添加评论。保存后选区保持浅黄色高亮，悬停查看评论，点击可编辑或删除。
++存在评论时，同一张编辑器卡片切换为「计划修正」；支持单项和勾选多项删除，删除最后一条后
++恢复「计划待审」。点击「修正计划」直接发送批注，保留输入框已有草稿和附件；「取消计划」
++关闭审阅并清空评论。已完成审阅只读。评论按会话和请求保存在当前浏览器，不新增服务端历史。
++原文变化导致无法定位时，评论仍保留并显示「原文已变化」，不会高亮无关文本。
++
+ ### 失败
+ 
+ 准入失败（`matched: false`、业务错误、传输故障）以内联错误呈现，徽章保持显示直至投影确认退出。
+diff --git a/packages/client/ui-plan/src/client/PlanPreview.module.css b/packages/client/ui-plan/src/client/PlanPreview.module.css
+index 6344ddeb79..44b3e2bacb 100644
+--- a/packages/client/ui-plan/src/client/PlanPreview.module.css
++++ b/packages/client/ui-plan/src/client/PlanPreview.module.css
+@@ -33,6 +33,72 @@
+ .reviewLink:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 3px; }
+ .preview { position: relative; height: 100%; overflow: auto; padding: 20px 24px 40px; box-sizing: border-box; }
+ .document { color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
++.documentFrame { position: relative; }
++.commentMark {
++  position: absolute;
++  z-index: 1;
++  margin: 0;
++  padding: 0;
++  border: 0;
++  border-radius: 3px;
++  background: color-mix(in srgb, var(--dsw-alias-state-warn-secondary) 20%, transparent);
++  cursor: pointer;
++}
++.commentMark[aria-disabled="true"] { cursor: default; }
++.commentMark:hover,
++.commentMark:focus-visible {
++  background: color-mix(in srgb, var(--dsw-alias-state-warn-secondary) 30%, transparent);
++  outline: 1px solid var(--dsw-alias-state-warn-label);
++  outline-offset: 1px;
++}
++.commentTooltip {
++  position: absolute;
++  z-index: 3;
++  max-width: min(340px, 100%);
++  padding: 8px 10px;
++  border: 0.5px solid var(--dsw-alias-border-l1);
++  border-radius: var(--dsw-radius-md);
++  background: var(--dsw-alias-button-floating-fill);
++  color: var(--dsw-alias-label-primary);
++  box-shadow: var(--dsw-elevation-panel);
++  font-size: 13px;
++  line-height: 1.5;
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
++  pointer-events: none;
++}
++.commentEditor {
++  box-sizing: border-box;
++  position: absolute;
++  z-index: 4;
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  width: min(360px, 100%);
++  padding: 12px;
++  border: 0.5px solid var(--dsw-alias-border-l1);
++  border-radius: var(--dsw-radius-md);
++  background: var(--dsw-alias-button-floating-fill);
++  color: var(--dsw-alias-label-primary);
++  box-shadow: var(--dsw-elevation-panel);
++}
++.commentEditor textarea {
++  box-sizing: border-box;
++  width: 100%;
++  min-height: 72px;
++  padding: 8px 24px 8px 8px;
++  border: 0.5px solid var(--dsw-alias-border-l2);
++  border-radius: var(--dsw-radius-sm);
++  background: var(--dsw-specific-input-major);
++  color: inherit;
++  font: inherit;
++  font-size: 13px;
++  line-height: 1.5;
++  resize: vertical;
++}
++.commentEditor textarea:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); }
++.commentEditorActions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
++.commentEditorClose { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; justify-content: center; padding: 4px; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+ .message { padding: 24px; color: var(--dsw-alias-label-secondary); font-size: 14px; }
+ .titleIcon { flex: none; }
+ @media (max-width: 767px) { .preview { padding: 16px 18px 32px; } }
+diff --git a/packages/client/ui-plan/src/client/PlanPreview.tsx b/packages/client/ui-plan/src/client/PlanPreview.tsx
+index fdee35e7b9..3cc9728333 100644
+--- a/packages/client/ui-plan/src/client/PlanPreview.tsx
++++ b/packages/client/ui-plan/src/client/PlanPreview.tsx
+@@ -1,26 +1,172 @@
+-/** Read-only Markdown viewer for logged plans and temporary review documents. */
+-import { useMemo } from 'react'
+-import { FileTypeIcon, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
+-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
++/** Markdown plan viewer with client-owned selection comments. */
++import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
++import { Button, FileTypeIcon, IconCloseOutlineRegular, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
++import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+ import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+ import type {} from './plan-resource.ts'
+ import { isReviewPreviewAddress } from './review-preview.ts'
+ import { planFailureLine } from './failure-line.ts'
++import { parsePlanAddress } from './plan.ts'
++import { EMPTY_PLAN_COMMENTS, locatePlanComment, planCommentKey, type createPlanCommentsStore } from './plan-comments.ts'
++import { planHighlightRanges, renderedPlanText, selectionPlanAnchor, type PlanTextAnchor } from './comment-dom.ts'
+ import css from './PlanPreview.module.css'
+ 
+ type PlanPreviewProps = PropsRuntime<'sidebar.right.pane.tab'> & PropsLocale<'plan'>
++  & PropsStore<ReturnType<typeof createPlanCommentsStore>>
++  & InjectFace<PlanPreviewInjected>
++
++/** Callbacks to the live review that owns the preview's comments. */
++export interface PlanPreviewInjected {
++  /** Hold its existing countdown while a comment editor is open. */
++  holdReviewFocus: (planKey: string) => void
++  /** Release that hold after the editor closes or unmounts. */
++  releaseReviewFocus: (planKey: string) => void
++}
++
++interface EditorState extends PlanTextAnchor {
++  readonly id?: string
++  readonly left: number
++  readonly top: number
++}
++
++interface HighlightRect {
++  readonly id: string
++  readonly left: number
++  readonly top: number
++  readonly width: number
++  readonly height: number
++}
++
++function randomCommentId(): string {
++  return crypto.randomUUID()
++}
+ 
+ /**
+- * Render the submitted plan with its complete Markdown.
+- * @param props - Framework-bound tab identity, resource, and copy.
++ * Render complete Markdown and floating comments for the current live review.
++ * @param props - Framework-bound tab identity, resource, comment store, and copy.
+  * @returns the plan document or a localized loading/failure state.
+  */
+-export function PlanPreview({ useTabInfo, useResource, t }: PlanPreviewProps) {
++export function PlanPreview({ useTabInfo, useResource, t, sessionId, useStore, actions, holdReviewFocus, releaseReviewFocus }: PlanPreviewProps) {
+   const tab = useTabInfo()
+   const resource = useResource<'plan'>(tab.tab.navigation.address)
+   const temporary = isReviewPreviewAddress(tab.tab.navigation.address)
+   const params = tab.tab.navigation.params
++  const target = temporary ? undefined : parsePlanAddress(tab.tab.navigation.address)
+   const plan = temporary ? (params !== undefined && 'planReview' in params ? params.planReview : undefined) : resource.value
++  const requestKey = temporary
++    ? (params !== undefined && 'planCommentRequestKey' in params && typeof params.planCommentRequestKey === 'string' ? params.planCommentRequestKey : undefined)
++    : (plan !== undefined && 'callId' in plan && typeof plan.callId === 'string' ? plan.callId : undefined)
++  const commentSessionId = target?.session.kind === 'subagent' ? target.session.childSessionId : target?.session.sessionId ?? sessionId
++  const planKey = plan === undefined || commentSessionId === undefined || requestKey === undefined ? undefined : planCommentKey(commentSessionId, requestKey, plan.markdown)
++  const comments = useStore(state => planKey === undefined ? EMPTY_PLAN_COMMENTS : state.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS)
++  const editable = useStore(state => planKey !== undefined && state.editableByPlan[planKey] === true
++    && (temporary || target?.session.kind === 'session' && target.session.sessionId === sessionId))
++  const documentRef = useRef<HTMLDivElement>(null)
++  const editorRef = useRef<HTMLDivElement>(null)
++  const composing = useRef(false)
++  const [editor, setEditor] = useState<EditorState | undefined>()
++  const [note, setNote] = useState('')
++  const [rects, setRects] = useState<readonly HighlightRect[]>([])
++  const [hovered, setHovered] = useState<string | undefined>()
++  const closeEditor = useCallback(() => { composing.current = false; setEditor(undefined); setNote('') }, [])
++  const editing = editor !== undefined && editable
++
++  useEffect(() => {
++    if (planKey !== undefined) actions.adopt(planKey)
++    closeEditor()
++    setHovered(undefined)
++  }, [actions, closeEditor, planKey, editable])
++  useEffect(() => {
++    if (!editing || planKey === undefined) return
++    holdReviewFocus(planKey)
++    return () => { releaseReviewFocus(planKey) }
++  }, [editing, planKey, holdReviewFocus, releaseReviewFocus])
++  useEffect(() => {
++    if (!editing) return
++    const dismissOutside = (event: PointerEvent): void => {
++      if (event.target instanceof Node && !editorRef.current?.contains(event.target)) closeEditor()
++    }
++    const dismissEscape = (event: KeyboardEvent): void => {
++      if (event.key === 'Escape' && !event.isComposing && !composing.current) { event.preventDefault(); closeEditor() }
++    }
++    document.addEventListener('pointerdown', dismissOutside)
++    document.addEventListener('keydown', dismissEscape)
++    return () => {
++      document.removeEventListener('pointerdown', dismissOutside)
++      document.removeEventListener('keydown', dismissEscape)
++    }
++  }, [editing, closeEditor])
++  useLayoutEffect(() => {
++    const root = documentRef.current
++    if (root === null) return
++    const measure = (): void => {
++      const origin = root.getBoundingClientRect()
++      const text = renderedPlanText(root)
++      const next: HighlightRect[] = []
++      const missing: string[] = []
++      for (const comment of comments) {
++        const anchor = locatePlanComment(text, comment)
++        const ranges = anchor === undefined ? [] : planHighlightRanges(root, anchor.start, anchor.end)
++        if (ranges.length === 0) { missing.push(comment.id); continue }
++        for (const range of ranges) {
++          for (const rect of range.getClientRects()) {
++            if (rect.width > 0 && rect.height > 0) next.push({ id: comment.id, left: rect.left - origin.left, top: rect.top - origin.top, width: rect.width, height: rect.height })
++          }
++        }
++      }
++      setRects(next)
++      if (planKey !== undefined) actions.setMissing(planKey, missing)
++    }
++    measure()
++    const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure)
++    resize?.observe(root)
++    window.addEventListener('resize', measure)
++    return () => { resize?.disconnect(); window.removeEventListener('resize', measure) }
++  }, [actions, comments, planKey, plan?.markdown, t])
++  useLayoutEffect(() => {
++    if (!editing || editor === undefined) return
++    const root = documentRef.current
++    const dialog = editorRef.current
++    const viewport = root?.parentElement?.parentElement
++    if (root === null || dialog === null || viewport === undefined || viewport === null) return
++    const origin = root.getBoundingClientRect()
++    const bounds = viewport.getBoundingClientRect()
++    const height = dialog.getBoundingClientRect().height
++    const top = Math.max(0, Math.min(editor.top, bounds.bottom - origin.top - height - 8))
++    if (height > 0 && top !== editor.top) setEditor({ ...editor, top })
++  }, [editing, editor])
++
++  const openEditor = useCallback((next: PlanTextAnchor & { id?: string }, rect: { left: number; bottom: number }): void => {
++    if (!editable || planKey === undefined) return
++    const root = documentRef.current
++    if (root === null) return
++    const origin = root.getBoundingClientRect()
++    const width = Math.min(360, root.clientWidth || 360)
++    const left = Math.max(0, Math.min(rect.left - origin.left, (root.clientWidth || width) - width))
++    setEditor({ ...next, left, top: Math.max(0, rect.bottom - origin.top + 8) })
++    setHovered(undefined)
++    setNote(next.id === undefined ? '' : comments.find(item => item.id === next.id)?.note ?? '')
++  }, [comments, editable, planKey])
++  const onSelection = useCallback(() => {
++    if (!editable) return
++    const root = documentRef.current
++    const selection = window.getSelection()
++    if (root === null || selection === null || selection.rangeCount === 0) return
++    const range = selection.getRangeAt(0)
++    const anchor = selectionPlanAnchor(root, range)
++    if (anchor !== undefined) openEditor(anchor, range.getBoundingClientRect())
++  }, [editable, openEditor])
++  const submitComment = useCallback(() => {
++    if (!editable || planKey === undefined || editor === undefined || note.trim() === '') return
++    actions.save({ id: editor.id ?? randomCommentId(), planKey, quote: editor.quote, note: note.trim(), start: editor.start, end: editor.end, ...(editor.prefix === undefined ? {} : { prefix: editor.prefix }), ...(editor.suffix === undefined ? {} : { suffix: editor.suffix }) })
++    window.getSelection()?.removeAllRanges()
++    closeEditor()
++  }, [actions, closeEditor, editable, editor, note, planKey])
++  const deleteComment = useCallback(() => {
++    if (!editable || planKey === undefined || editor?.id === undefined) return
++    actions.remove(planKey, [editor.id])
++    closeEditor()
++  }, [actions, closeEditor, editable, editor?.id, planKey])
+   const labels = useMemo(() => ({
+     code: { copyLabel: t('copy'), copiedLabel: t('copied'), toolbarLabels: { codeLabel: t('codeBlock.title'), wrapLabel: t('codeBlock.wrap'), unwrapLabel: t('codeBlock.unwrap') } },
+     footnotes: t('markdown.footnotes'),
+@@ -32,9 +178,42 @@ export function PlanPreview({ useTabInfo, useResource, t }: PlanPreviewProps) {
+       {!temporary && resource.failure !== undefined && <p>{planFailureLine(t, resource.failure)}</p>}
+     </div>
+   )
++  const hoverRect = rects.find(rect => rect.id === hovered)
++  const hoverComment = comments.find(comment => comment.id === hovered)
+   return (
+     <section className={css.preview} data-plan-preview={'callId' in plan ? plan.callId : tab.tab.navigation.address} aria-label={plan.title}>
+-      <div className={css.document}><MarkdownText text={plan.markdown} labels={labels} /></div>
++      <div className={css.documentFrame}>
++        <div ref={documentRef} className={css.document} onMouseUp={onSelection} onKeyUp={onSelection}>
++          <MarkdownText text={plan.markdown} labels={labels} />
++        </div>
++        {rects.map((rect, index) => (
++          <button key={`${rect.id}:${index}`} type="button" className={css.commentMark} data-plan-comment-mark={rect.id}
++            tabIndex={rects.findIndex(item => item.id === rect.id) === index ? 0 : -1}
++            style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} aria-label={comments.find(comment => comment.id === rect.id)?.note}
++            aria-disabled={!editable} onMouseEnter={() => { setHovered(rect.id) }} onMouseLeave={() => { setHovered(undefined) }}
++            onFocus={() => { setHovered(rect.id) }} onBlur={() => { setHovered(undefined) }}
++            onClick={event => {
++              const comment = comments.find(item => item.id === rect.id)
++              if (comment !== undefined) openEditor(comment, event.currentTarget.getBoundingClientRect())
++            }} />
++        ))}
++        {!editing && hoverRect !== undefined && hoverComment !== undefined && <div role="tooltip" className={css.commentTooltip} style={{ left: Math.max(0, Math.min(hoverRect.left, (documentRef.current?.clientWidth || 340) - 340)), top: hoverRect.top + hoverRect.height + 6 }}>{hoverComment.note}</div>}
++        {editing && editor !== undefined && (
++          <div ref={editorRef} className={css.commentEditor} style={{ left: editor.left, top: editor.top }} role="dialog" aria-label={t('comment.editor')}>
++            <textarea autoFocus rows={3} value={note} aria-label={t('comment.editor')} placeholder={t('comment.placeholder')}
++              onChange={event => { setNote(event.target.value) }} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }}
++              onKeyDown={event => {
++                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing && !composing.current) { event.preventDefault(); submitComment() }
++              }} />
++            <div className={css.commentEditorActions}>
++              {editor.id !== undefined && <Button size="sm" variant="ghost" onClick={deleteComment}>{t('comment.delete')}</Button>}
++              <Button size="sm" variant="ghost" onClick={closeEditor}>{t('comment.cancel')}</Button>
++              <Button size="sm" variant="primary" disabled={note.trim() === ''} onClick={submitComment}>{t('comment.save')}</Button>
++            </div>
++            <button type="button" className={css.commentEditorClose} aria-label={t('comment.close')} onClick={closeEditor}><IconCloseOutlineRegular size={14} /></button>
++          </div>
++        )}
++      </div>
+     </section>
+   )
+ }
+diff --git a/packages/client/ui-plan/src/client/index.ts b/packages/client/ui-plan/src/client/index.ts
+index 6dc0b66a2f..d635080eb6 100644
+--- a/packages/client/ui-plan/src/client/index.ts
++++ b/packages/client/ui-plan/src/client/index.ts
+@@ -18,7 +18,12 @@ import type {} from '@deepseek-ai/dsh-client-resources/client'
+ import { extractMarkdownPlainText } from '@deepseek-ai/dsh-client-ui-primitives'
+ import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+ import { PlanCards, PlanReviewOpen, type PlanCardsInjected, type PlanOpenInjected, type PlanReviewOpenInjected } from './PlanCard.tsx'
+-import { PlanPreview, PlanTitle } from './PlanPreview.tsx'
++import { PlanPreview, PlanTitle, type PlanPreviewInjected } from './PlanPreview.tsx'
++import { PlanReviewSurface, type PlanReviewSurfaceInjected } from './PlanReviewSurface.tsx'
++import { PlanRevisionReceipt, type PlanRevisionReceiptInjected } from './PlanRevisionReceipt.tsx'
++import { createPlanCommentsStore } from './plan-comments.ts'
++import { watchRevisionSubmissions } from './revision-submissions.ts'
++import type { PendingQuestion } from '@deepseek-ai/dsh-client-ui-user-questions/client'
+ import { planDefinition } from './plan-definition.ts'
+ import { planResourceProvider } from './plan-resource.ts'
+ import { planAddress, parsePlanAddress } from './plan.ts'
+@@ -76,6 +81,28 @@ export function apply(ctx: ClientContext): void {
+   })
+   const reviewWindow = randomUUID()
+   const reviewStore = createPlanReviewStore()
++  const commentsStore = createPlanCommentsStore()
++  // The owning plugin keeps only live focus bindings; annotations live in the
++  // framework's Session store shared by the card, preview, and receipt seat.
++  const focus = new Map<string, { pending: PendingQuestion; held: boolean }>()
++  const previewFocus: PlanPreviewInjected = {
++    holdReviewFocus: planKey => {
++      const binding = focus.get(planKey)
++      if (binding === undefined || binding.held) return
++      binding.held = true
++      binding.pending.holdFocus()
++    },
++    releaseReviewFocus: planKey => {
++      const binding = focus.get(planKey)
++      if (binding === undefined || !binding.held) return
++      binding.held = false
++      binding.pending.releaseFocus()
++    },
++  }
++  ctx.effect(() => () => {
++    for (const binding of focus.values()) if (binding.held) binding.pending.releaseFocus()
++    focus.clear()
++  }, 'ui-plan: review focus')
+   ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+     name: 'conversation.chat.turnTail', id: previewId, locale: NS,
+     inject: (sessionId: SessionId): PlanCardsInjected => {
+@@ -100,14 +127,51 @@ export function apply(ctx: ClientContext): void {
+       openReview: (review, requestKey) => {
+         if (review.callId !== undefined) { open(sessionId).openPlan(review.callId); return }
+         ctx.sidebarRight.openResource(reviewPreviewAddress(sessionId, `${reviewWindow}:${requestKey}`), {
+-          params: { planReview: { markdown: review.plan, title: extractMarkdownPlainText(review.plan, { mode: 'first-line' }) } },
++          params: { planReview: { markdown: review.plan, title: extractMarkdownPlainText(review.plan, { mode: 'first-line' }) }, planCommentRequestKey: requestKey },
+         })
+       },
+       hooks: { sidebarMounted: ctx.sidebarRight.mounted },
+     }),
+   }, PlanReviewOpen))
++  ctx.slots.inject('conversation.plan-review.surface', () => ctx.slots.register({
++    name: 'conversation.plan-review.surface', locale: NS, store: commentsStore,
++    inject: (sessionId: SessionId): PlanReviewSurfaceInjected => ({
++      submissionCursor: () => ctx.sessions.binding(sessionId)?.eventSource.getSnapshot().entries.at(-1)?.event.seq ?? -1,
++      sendRevision: async (text) => {
++        const binding = ctx.sessions.binding(sessionId)
++        if (binding === undefined) throw new Error(`ui-plan: unknown session "${sessionId}"`)
++        const result = await binding.session.prompt([{ type: 'text', text }], 'steer')
++        if (!result.ok) throw new Error(`ui-plan revision failed: ${result.error.code}: ${result.error.message}`)
++      },
++      focusComposer: () => {
++        requestAnimationFrame(() => {
++          if (ctx.sidebarRight.mounted.getSnapshot() !== sessionId) return
++          const binding = ctx.sessions.binding(sessionId)
++          if (binding !== undefined) binding.ctx.get('conversation')?.input.for(binding.ctx).focus()
++        })
++      },
++      bindReview: (planKey, pending) => {
++        const binding = { pending, held: false }
++        focus.set(planKey, binding)
++        return () => {
++          if (focus.get(planKey) !== binding) return
++          if (binding.held) pending.releaseFocus()
++          focus.delete(planKey)
++        }
++      },
++    }),
++  }, PlanReviewSurface))
++  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
++    name: 'conversation.input.overlay', id: previewId, store: commentsStore,
++    inject: (sessionId: SessionId): PlanRevisionReceiptInjected => {
++      const binding = ctx.sessions.binding(sessionId)
++      if (binding === undefined) throw new Error(`ui-plan: unknown session "${sessionId}"`)
++      return { watchSubmitted: onSubmitted => watchRevisionSubmissions(binding.eventSource, onSubmitted) }
++    },
++  }, PlanRevisionReceipt))
+   ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+-    name: 'sidebar.right.pane.tab', key: previewId, locale: NS,
++    name: 'sidebar.right.pane.tab', key: previewId, locale: NS, store: commentsStore,
++    inject: (): PlanPreviewInjected => previewFocus,
+   }, PlanPreview))
+   ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+     name: 'sidebar.right.pane.tab.title', key: previewId,
+diff --git a/packages/client/ui-plan/src/client/locales.ts b/packages/client/ui-plan/src/client/locales.ts
+index 56e7ca9978..b13ace5ed4 100644
+--- a/packages/client/ui-plan/src/client/locales.ts
++++ b/packages/client/ui-plan/src/client/locales.ts
+@@ -19,6 +19,24 @@ export const zh = {
+   'chip.on.aria': '计划模式已开启，按下关闭',
+   'chip.on.title': '计划模式已开启 — 点击关闭（/plan off）',
+   'chip.exitFailed': '退出计划模式失败',
++  'review.waiting': '计划待审',
++  'review.header': '计划修正',
++  'review.approve': '同意执行',
++  'review.discuss': '要求修改',
++  'review.cancel': '取消计划',
++  'review.close': '关闭',
++  'review.fix': '修正计划',
++  'review.prompt': '请根据以下计划批注修正：',
++  'review.note': '修改意见：{note}',
++  'review.changed': '原文已变化',
++  'comment.editor': '计划评论',
++  'comment.placeholder': '输入评论…',
++  'comment.delete': '删除评论',
++  'comment.deleteSelected': '删除所选',
++  'comment.select': '选择评论：{quote}',
++  'comment.cancel': '取消',
++  'comment.close': '关闭评论',
++  'comment.save': '保存',
+ } satisfies Record<string, string>
+ 
+ /** The plan namespace key union. */
+@@ -43,4 +61,22 @@ export const en = {
+   'chip.on.aria': 'Plan mode on, press to turn off',
+   'chip.on.title': 'Plan mode on — click to turn off (/plan off)',
+   'chip.exitFailed': 'Failed to exit plan mode',
++  'review.waiting': 'Plan review',
++  'review.header': 'Plan revision',
++  'review.approve': 'Approve',
++  'review.discuss': 'Request changes',
++  'review.cancel': 'Cancel plan',
++  'review.close': 'Close',
++  'review.fix': 'Revise plan',
++  'review.prompt': 'Please revise the plan using these comments:',
++  'review.note': 'Requested change: {note}',
++  'review.changed': 'Original text changed',
++  'comment.editor': 'Plan comment',
++  'comment.placeholder': 'Add a comment…',
++  'comment.delete': 'Delete comment',
++  'comment.deleteSelected': 'Delete selected',
++  'comment.select': 'Select comment: {quote}',
++  'comment.cancel': 'Cancel',
++  'comment.close': 'Close comment',
++  'comment.save': 'Save',
+ } satisfies Record<PlanKey, string>
+diff --git a/packages/client/ui-plan/src/client/review-preview.ts b/packages/client/ui-plan/src/client/review-preview.ts
+index 19307c8c7b..db07fdbb04 100644
+--- a/packages/client/ui-plan/src/client/review-preview.ts
++++ b/packages/client/ui-plan/src/client/review-preview.ts
+@@ -5,7 +5,7 @@ import type { PlanDocument } from './plan.ts'
+ declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
+   interface SidebarRightResourceParamsMap {
+     /** Review text without a logged invocation; never persisted in sidebar layout. */
+-    'plan-review': { planReview: PlanDocument }
++    'plan-review': { planReview: PlanDocument; planCommentRequestKey?: string }
+   }
+ }
+ 
+diff --git a/packages/client/ui-plan/tests/browser-plugin.client.spec.ts b/packages/client/ui-plan/tests/browser-plugin.client.spec.ts
+index 266ddeda6a..450846d8da 100644
+--- a/packages/client/ui-plan/tests/browser-plugin.client.spec.ts
++++ b/packages/client/ui-plan/tests/browser-plugin.client.spec.ts
+@@ -20,6 +20,7 @@ import { PlanCards, PlanReviewOpen, type PlanCardsInjected, type PlanOpenInjecte
+ import { PlanPreview, PlanTitle } from '../src/client/PlanPreview.tsx'
+ import { submittedPlan } from '../src/client/plan.ts'
+ import type { PlanChipInjected } from '../src/client/index.ts'
++import type { PlanReviewSurfaceInjected } from '../src/client/PlanReviewSurface.tsx'
+ import { apply, inject } from '../src/client/index.ts'
+ import { apply as nodeApply } from '../src/index.ts'
+ import { createSidebarRightController } from '@deepseek-ai/dsh-client-ui-sidebar-right/src/client/service.ts'
+@@ -59,6 +60,8 @@ async function bench() {
+       'conversation.input.plan': { kind: 'single', scope: 'session' },
+       'conversation.chat.turnTail': { kind: 'list', scope: 'session' },
+       'conversation.plan-review.actions': { kind: 'list', scope: 'session' },
++      'conversation.plan-review.surface': { kind: 'single', scope: 'session' },
++      'conversation.input.overlay': { kind: 'list', scope: 'session' },
+       'sidebar.right.pane.tab': { kind: 'keyed', scope: 'session' },
+       'sidebar.right.pane.tab.title': { kind: 'keyed', scope: 'session' },
+     },
+@@ -73,6 +76,29 @@ async function bench() {
+ }
+ 
+ describe('ui-plan browser apply', () => {
++  it('submits only revision text through the addressed Session without touching the composer', async () => {
++    const b = await bench()
++    const prompt = vi.fn(async () => ({ ok: true as const, value: { accepted: true as const } }))
++    b.binding.mockReturnValue({ session: { prompt } })
++    const fiber = b.ctx.plugin({ inject: [...inject], apply })
++    try {
++      await fiber.await()
++      const entry = b.slots.entries('conversation.plan-review.surface')[0]!
++      const injected = (entry.inject as unknown as (sessionId: SessionId) => PlanReviewSurfaceInjected)(SID)
++      const text = 'Please revise the plan using these comments:\n\n1. “Read the store”\n   Requested change: Keep the current flags.'
++      await injected.sendRevision(text)
++      expect(b.binding).toHaveBeenLastCalledWith(SID)
++      expect(prompt).toHaveBeenCalledExactlyOnceWith([{ type: 'text', text }], 'steer')
++      prompt.mockResolvedValueOnce({ ok: false, error: new RemoteError('session/not-found', 'gone', { sessionId: SID }) } as never)
++      await expect(injected.sendRevision(text)).rejects.toThrow('session/not-found')
++      b.binding.mockReturnValueOnce(undefined)
++      await expect(injected.sendRevision(text)).rejects.toThrow('unknown session')
++      expect(prompt).toHaveBeenCalledTimes(2)
++    } finally {
++      await fiber.dispose()
++    }
++  })
++
+   it('binds plan cards to one Turn collection and reports unavailable bindings', async () => {
+     const b = await bench()
+     const turnDataSource = vi.fn<(turn: number, kind: string) => void>()
+@@ -235,7 +261,7 @@ describe('ui-plan browser apply', () => {
+       const first = b.openResource.mock.calls.at(-1)!
+       expect(type.canOpen!(first[0])).toBe(true)
+       expect(first).toEqual([expect.stringMatching(/^dsh-resource:\/\/plan-review\/s-plan\//), {
+-        params: { planReview: { title: 'Temporary', markdown: temporary.plan } },
++        params: { planReview: { title: 'Temporary', markdown: temporary.plan }, planCommentRequestKey: 'question:2' },
+       }])
+       reviewInjected.openReview(temporary, 'question:2')
+       expect(b.openResource).toHaveBeenLastCalledWith(...first)
+@@ -243,9 +269,18 @@ describe('ui-plan browser apply', () => {
+       expect(b.openResource.mock.calls.at(-1)![0]).not.toBe(first[0])
+       expect(b.slots.entries('sidebar.right.pane.tab')[0]!.component).toBe(PlanPreview)
+       expect(b.slots.entries('sidebar.right.pane.tab.title')[0]!.component).toBe(PlanTitle)
++      const surfaces = b.slots.entries('conversation.plan-review.surface')
++      const cleanup = b.slots.entries('conversation.input.overlay')
++      expect(surfaces).toHaveLength(1)
++      expect(cleanup).toHaveLength(1)
++      const preview = b.slots.entries('sidebar.right.pane.tab')[0]!
++      expect(surfaces[0]!.store).toBe(preview.store)
++      expect(cleanup[0]!.store).toBe(preview.store)
+       await fiber.dispose()
+       expect(b.slots.entries('conversation.chat.turnTail')).toEqual([])
+       expect(b.slots.entries('conversation.plan-review.actions')).toEqual([])
++      expect(b.slots.entries('conversation.plan-review.surface')).toEqual([])
++      expect(b.slots.entries('conversation.input.overlay')).toEqual([])
+       expect(b.slots.entries('sidebar.right.pane.tab')).toEqual([])
+       expect(b.slots.entries('sidebar.right.pane.tab.title')).toEqual([])
+     } finally { await fiber.dispose() }
+diff --git a/packages/client/ui-plan/tests/plan-preview.client.spec.tsx b/packages/client/ui-plan/tests/plan-preview.client.spec.tsx
+index 1a4fa9aac9..21b230e88f 100644
+--- a/packages/client/ui-plan/tests/plan-preview.client.spec.tsx
++++ b/packages/client/ui-plan/tests/plan-preview.client.spec.tsx
+@@ -12,7 +12,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
+ import { en, zh } from '../src/client/locales.ts'
+ import { PlanCards, PlanReviewOpen } from '../src/client/PlanCard.tsx'
+-import { PlanPreview, PlanTitle } from '../src/client/PlanPreview.tsx'
++import { PlanPreview as PlanPreviewComponent, PlanTitle } from '../src/client/PlanPreview.tsx'
++import { createPlanCommentsStore, type PlanCommentsState } from '../src/client/plan-comments.ts'
+ import { planAddress, parsePlanAddress, submittedPlan } from '../src/client/plan.ts'
+ import { reviewPreviewAddress, isReviewPreviewAddress } from '../src/client/review-preview.ts'
+ import { planDefinition } from '../src/client/plan-definition.ts'
+@@ -24,6 +25,16 @@ const call = { type: 'tool/call', seq: 12, data: { turn: 1, name: 'exit_plan_mod
+ const plan = submittedPlan(call)!
+ const target = { session: { kind: 'session' as const, sessionId: 'session / 中文' as SessionId }, callId: plan.callId }
+ const t = makeTranslate(en, commonEn)
++const comments = createPlanCommentsStore().create()
++const commentProps = {
++  useStore: <S,>(select: (state: PlanCommentsState) => S): S => select(comments.getSnapshot()),
++  actions: comments.actions,
++  holdReviewFocus: (_planKey: string): void => {},
++  releaseReviewFocus: (_planKey: string): void => {},
++}
++function PlanPreview(props: Parameters<typeof PlanPreviewComponent>[0]) {
++  return <PlanPreviewComponent {...props} {...commentProps} />
++}
+ 
+ function planHook(plans: readonly typeof plan[]): Parameters<typeof PlanCards>[0]['usePlans'] {
+   const source = createSnapshotStore(plans)
+diff --git a/packages/client/ui-user-questions/README.md b/packages/client/ui-user-questions/README.md
+index c8c182444f..761416afc4 100644
+--- a/packages/client/ui-user-questions/README.md
++++ b/packages/client/ui-user-questions/README.md
+@@ -77,6 +77,11 @@ This package fills `userQuestionPanels`, the optional capability `dsh-client-ui-
+ 
+ The card accepts one question declaring the intent, carrying the plan as `detail`, and offering the named approve label, with at most one alternative and no multi-select. Its secondary action returns to the composer for change requests. Larger choices and multi-select questions remain in the generic flow. A plan review exposes `conversation.plan-review.actions` with its request key, full text, and optional invocation identity; the plan plugin opens logged plans from history and unlogged reviews as temporary sidebar previews, and opening a document does not answer or dismiss the review.
+ 
++The single `conversation.plan-review.surface` seat receives the pending carrier,
++current snapshot, busy/error state, and settlement callbacks. Without a provider
++the default panel is retained. `ui-plan` supplies comments and the revision
++variant in this same seat without creating a second pending or composer card.
++
+ ### Copy and locale
+ 
+ Composer chrome copy (pager, buttons, placeholders, validation feedback) is bilingual: the plugin registers zh/en dictionaries under the `question` namespace of `dsh-client-locale` and hands the entry its bound translator plus the locale snapshot source through the inject face, so a locale switch re-renders a mounted composer. Question and option text arrives from the model and renders verbatim; carrier failure messages also display untranslated.
+diff --git a/packages/client/ui-user-questions/README.zh.md b/packages/client/ui-user-questions/README.zh.md
+index 03ed5fc906..4d0bca3568 100644
+--- a/packages/client/ui-user-questions/README.zh.md
++++ b/packages/client/ui-user-questions/README.zh.md
+@@ -43,6 +43,10 @@ Web 客户端在聊天输入框旁显示 agent（智能体）的提问。用户
+ 
+ ### 失败与恢复
+ 
++计划审阅仅占用一个 `conversation.plan-review.surface` 单槽位，负责操作结算和错误恢复。
++没有扩展提供者时仍使用本包的默认审批卡片；`ui-plan` 可替换这个 Surface，加入全文评论及
++同位置的计划修正变体。扩展接收当前快照和 `dismiss()`，不创建第二个 pending 或编辑底层注册表。
++
+ 回答输入框只有在回答通道就绪且没有倒计时时才自动聚焦。接手握手期间的手动聚焦与失焦会被保留：剩余时长到达时，只有回答区域仍持有焦点，倒计时才以暂停状态开始。
+ 
+ 本地返回回答不会释放前台接手记录：Host 接受 waterfall 结果后才关闭该 stream。插件在这段传输期间继续拥有接手记录。显式委托会在调用下一个回答方前释放它，插件卸载则取消剩余接手记录。
+diff --git a/packages/client/ui-user-questions/src/client/PlanReviewPanel.tsx b/packages/client/ui-user-questions/src/client/PlanReviewPanel.tsx
+index b63a64c0e0..5607123dca 100644
+--- a/packages/client/ui-user-questions/src/client/PlanReviewPanel.tsx
++++ b/packages/client/ui-user-questions/src/client/PlanReviewPanel.tsx
+@@ -1,4 +1,4 @@
+-import { useMemo, useState } from 'react'
++import { useEffect, useMemo, useRef, useState } from 'react'
+ import {
+   Button, extractMarkdownPlainText, IconEditOutlineRegular, StateDot,
+ } from '@deepseek-ai/dsh-client-ui-primitives'
+@@ -7,7 +7,7 @@ import css from './PlanReviewPanel.module.css'
+ 
+ /** The panel's own props: the question domain face, the narrowed review, and the locale seat. */
+ export type PlanReviewPanelProps =
+-  { pending: PendingQuestion; review: PlanReview } & Pick<QuestionComposerProps, 't' | 'renderSlot'>
++  { pending: PendingQuestion; review: PlanReview } & Pick<QuestionComposerProps, 't' | 'renderSlot' | 'useQuestionCard'>
+ 
+ /**
+  * Optional-prop spread for a decision button's tooltip: `title` is optional on
+@@ -26,27 +26,46 @@ function tooltip(description: string | undefined): { title?: string } {
+  * @param props - the question domain face, the narrowed plan review, and `t`.
+  * @returns The plan-review takeover for this request.
+  */
+-export function PlanReviewPanel({ pending, review, t, renderSlot }: PlanReviewPanelProps) {
++export function PlanReviewPanel({ pending, review, t, renderSlot, useQuestionCard }: PlanReviewPanelProps) {
+   // Foreground decisions wait for the resolved frame; accepted Remote decisions
+   // hide the panel. A failed send re-enables the buttons and shows the error.
+   const [busy, setBusy] = useState(false)
++  const busyRef = useRef(false)
+   const [error, setError] = useState<string | null>(null)
+-  const settle = (send: () => Promise<void>, remote = false): void => {
++  const card = useQuestionCard(pending.key, snapshot => snapshot ?? pending.snapshot())
++  const sentVia = useRef<'waterfall' | null>(null)
++  useEffect(() => {
++    if (sentVia.current !== 'waterfall' || card.state !== 'continued') return
++    sentVia.current = null
++    busyRef.current = false
++    setBusy(false)
++    setError(t('error.resubmit'))
++  }, [card.state, t])
++  const settle = async (send: () => Promise<void>, remote = false): Promise<boolean> => {
++    if (busyRef.current) return false
++    busyRef.current = true
+     setBusy(true)
+     setError(null)
+-    void send()
+-      .then(() => {
+-        if (!remote) return
++    try {
++      await send()
++      if (remote) {
++        busyRef.current = false
+         setBusy(false)
+-        void pending.dismiss().catch(() => { setError(t('status.sent')) })
+-      })
+-      .catch((cause: unknown) => {
+-        setBusy(false)
+-        setError(cause instanceof Error ? cause.message : String(cause))
+-      })
++        try { await pending.dismiss() }
++        catch (_error) { setError(t('status.sent')) }
++      }
++      return true
++    } catch (cause) {
++      sentVia.current = null
++      busyRef.current = false
++      setBusy(false)
++      setError(cause instanceof Error ? cause.message : String(cause))
++      return false
++    }
+   }
+   const decide = (label: string): void => {
+-    settle(() => pending.answer({ answers: [{ id: review.id, selected: [label] }] }), pending.snapshot().channel === 'rpc')
++    sentVia.current = card.channel === 'waterfall' ? 'waterfall' : null
++    void settle(() => pending.answer({ answers: [{ id: review.id, selected: [label] }] }), card.channel === 'rpc')
+   }
+   const summary = useMemo(() => {
+     const title = extractMarkdownPlainText(review.plan, { mode: 'first-line' })
+@@ -54,14 +73,15 @@ export function PlanReviewPanel({ pending, review, t, renderSlot }: PlanReviewPa
+     return { title, description: description === title ? '' : description }
+   }, [review.plan])
+ 
+-  return (
+-    <div className={css.frame} data-plan-review-key={pending.key}>
++  const preview = renderSlot('conversation.plan-review.actions', { review, requestKey: pending.key })
++  const fallback = (
++    <div className={css.frame} data-plan-review-key={pending.key} data-plan-review-surface data-plan-review-variant="review">
+       <section className={css.card} aria-label={review.question} aria-busy={busy}>
+         <div className={css.strip}>
+           <StateDot state={busy ? 'ongoing' : 'warning'} />
+           {t('plan.header')}
+           <div className={css.previewActions}>
+-            {renderSlot('conversation.plan-review.actions', { review, requestKey: pending.key })}
++            {preview}
+           </div>
+         </div>
+         <div className={css.summary}>
+@@ -71,21 +91,28 @@ export function PlanReviewPanel({ pending, review, t, renderSlot }: PlanReviewPa
+         <div className={css.footer}>
+           <div className={css.feedback} role="status">{error}</div>
+           <div className={css.actions}>
+-            <Button
++            {pending.review !== undefined ? <Button variant="outline" disabled={busy} onClick={() => { void settle(() => pending.dismiss()) }}>{t('close')}</Button> : <>
++              <Button
+               variant="outline" className={css.discuss} icon={<IconEditOutlineRegular size={14} />}
+-              disabled={busy} onClick={() => { settle(() => pending.dismiss()) }}
++              disabled={busy || card.closed} onClick={() => { void settle(() => pending.dismiss()) }}
+             >
+               {t('plan.discuss')}
+             </Button>
+             <Button
+               variant="primary" {...tooltip(review.approve.description)}
+-              disabled={busy} onClick={() => { decide(review.approve.label) }}
++              disabled={busy || card.closed || card.channel === 'none'} onClick={() => { decide(review.approve.label) }}
+             >
+               {t('plan.approve')}
+             </Button>
++            </>}
+           </div>
+         </div>
+       </section>
+     </div>
+   )
++  return renderSlot('conversation.plan-review.surface', {
++    pending, review, requestKey: pending.key, preview, card, busy, error,
++    approve: () => { decide(review.approve.label) },
++    dismiss: () => settle(() => pending.dismiss()),
++  }, { fallback })
+ }
+diff --git a/packages/client/ui-user-questions/src/client/QuestionComposer.tsx b/packages/client/ui-user-questions/src/client/QuestionComposer.tsx
+index 33bbcbec0a..5d612c4498 100644
+--- a/packages/client/ui-user-questions/src/client/QuestionComposer.tsx
++++ b/packages/client/ui-user-questions/src/client/QuestionComposer.tsx
+@@ -150,7 +150,7 @@ export function QuestionComposer(props: QuestionComposerProps) {
+         actions={props.actions}
+       />
+     )
+-    : <PlanReviewPanel key={question.key} pending={question} review={review} t={props.t} renderSlot={props.renderSlot} />
++    : <PlanReviewPanel key={question.key} pending={question} review={review} t={props.t} renderSlot={props.renderSlot} useQuestionCard={props.useQuestionCard} />
+ }
+ 
+ type QuestionFlowProps =
+diff --git a/packages/client/ui-user-questions/src/client/contract/slots.ts b/packages/client/ui-user-questions/src/client/contract/slots.ts
+index 4d1e9fd0e9..06f4536412 100644
+--- a/packages/client/ui-user-questions/src/client/contract/slots.ts
++++ b/packages/client/ui-user-questions/src/client/contract/slots.ts
+@@ -1,4 +1,5 @@
+ /** Question composer props and one pending Remote waterfall response. */
++import type { ReactNode } from 'react'
+ import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+ // The client module declares the conversation.composer SlotMap entry required by PropsRuntime.
+ import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
+@@ -19,6 +20,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+   interface SlotMap {
+     /** Actions for the exact plan under review; approval remains with the question composer. */
+     'conversation.plan-review.actions': { kind: 'list'; scope: 'session'; owner: { review: PlanReview; requestKey: PendingQuestion['key'] } }
++    /** One replacement for the plan-review card; the provider owns the visual variant. */
++    'conversation.plan-review.surface': {
++      kind: 'single'
++      scope: 'session'
++      owner: {
++        pending: PendingQuestion
++        review: PlanReview
++        requestKey: PendingQuestion['key']
++        preview: ReactNode
++        card: QuestionCardSnapshot
++        busy: boolean
++        error: string | null
++        approve: () => void
++        dismiss: () => Promise<boolean>
++      }
++    }
+   }
+ }
+ 
+@@ -568,7 +585,7 @@ export type QuestionWait = PendingQuestion
+ export type QuestionComposerProps =
+   PropsRuntime<'conversation.composer'>
+   & PropsStore<ReturnType<typeof createQuestionDraftStore>>
+-  & PropsRenderSlots<'conversation.plan-review.actions'>
++  & PropsRenderSlots<'conversation.plan-review.actions' | 'conversation.plan-review.surface'>
+   & InjectFace<{ keyedHooks: { questionCard: (key: string) => PendingQuestion | undefined } }>
+   & { matched: QuestionWait }
+   & PropsLocale<'question'>
+diff --git a/packages/client/ui-user-questions/src/client/index.ts b/packages/client/ui-user-questions/src/client/index.ts
+index 8ee3962c39..89a239f2e6 100644
+--- a/packages/client/ui-user-questions/src/client/index.ts
++++ b/packages/client/ui-user-questions/src/client/index.ts
+@@ -387,7 +387,10 @@ export function apply(ctx: ClientContext): void {
+       locale: NS,
+       store: questionDraftStore,
+       inject: () => ({ keyedHooks: { questionCard: (key: string) => cards.source(key) } }),
+-      children: { 'conversation.plan-review.actions': { kind: 'list', scope: 'session' } },
++      children: {
++        'conversation.plan-review.actions': { kind: 'list', scope: 'session' },
++        'conversation.plan-review.surface': { kind: 'single', scope: 'session' },
++      },
+     },
+     QuestionComposer,
+   ))
+diff --git a/packages/client/ui-user-questions/tests/plan-review-panel.client.spec.tsx b/packages/client/ui-user-questions/tests/plan-review-panel.client.spec.tsx
+index 7d9ff6da60..af707fe0b3 100644
+--- a/packages/client/ui-user-questions/tests/plan-review-panel.client.spec.tsx
++++ b/packages/client/ui-user-questions/tests/plan-review-panel.client.spec.tsx
+@@ -1,17 +1,22 @@
+ // @vitest-environment jsdom
+-import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
++import type { GlobalStandardProps, OwnerOf, StandardSourceBinding } from '@deepseek-ai/dsh-client-ui-slots'
++import { Context } from '@deepseek-ai/cordis'
++import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
++import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+ import { afterEach, describe, expect, it, vi } from 'vitest'
+-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
++import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+ import type { SessionId } from '@deepseek-ai/dsh-session/types'
+ import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
+ import {
+-  createWaterfallRequest, PendingQuestion, planReviewOf, type QuestionComposerProps, type QuestionWait,
++  createWaterfallRequest, PendingQuestion, planReviewOf, type QuestionCardSnapshot, type QuestionComposerProps, type QuestionWait,
+ } from '../src/client/contract/slots.ts'
+ import { createQuestionDraftStore } from '../src/client/draft-store.ts'
+ import { QuestionComposer } from '../src/client/QuestionComposer.tsx'
+ import { en, zh } from '../src/client/locales.ts'
+ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
+ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
++import { keyedObservableHook } from '../../ui-renderer/src/client/bindings.tsx'
++import { createSlotRenderer } from '../../ui-renderer/src/client/scoped-slots.tsx'
+ 
+ // Every session-scope fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
+ const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
+@@ -108,10 +113,16 @@ const inputState: InputState = {
+ 
+ const questionDraftStore = createQuestionDraftStore().create(SID)
+ 
++function noQuestionCard(key: string): QuestionCardSnapshot | undefined
++function noQuestionCard<Selected>(key: string, select: (card: QuestionCardSnapshot | undefined) => Selected): Selected
++function noQuestionCard<Selected>(_key: string, select?: (card: QuestionCardSnapshot | undefined) => Selected): Selected | undefined {
++  return select?.(undefined)
++}
++
+ /** Framework standard-kit stubs: the panel consumes only the locale seat. */
+ const kit: Omit<QuestionComposerProps, 'matched'> = {
+-  useQuestionCard: () => { throw new Error('plan review does not read question card state') },
+-  renderSlot: () => null,
++  useQuestionCard: noQuestionCard,
++  renderSlot: (_key, _owner, options) => options?.fallback ?? null,
+   SessionProvider: ({ children }) => children,
+   sessionId: SID,
+   session: undefined,
+@@ -164,7 +175,7 @@ function wait(items: QuestionWait['questions'] = questions()) {
+   const answer = vi.spyOn(carrier, 'answer')
+   const cancel = vi.spyOn(carrier, 'dismiss')
+   void request.result.catch(() => {})
+-  return { carrier, answer, cancel }
++  return { carrier, answer, cancel, channel: request.channel }
+ }
+ 
+ const decision = (label: string) => ({ answers: [{ id: 'plan-review', selected: [label] }] })
+@@ -222,28 +233,110 @@ describe('planReviewOf', () => {
+ })
+ 
+ describe('PlanReviewPanel', () => {
++  it('renders its fallback through the real slot outlet when no surface provider is installed', async () => {
++    const ctx = new Context()
++    const fiber = ctx.plugin(SlotRegistry)
++    await fiber.await()
++    const slots = ctx.get('slots') as SlotRegistry
++    const binding = createSnapshotStore<StandardSourceBinding>({ key: SID, hooks: {}, keyedHooks: {}, props: {} })
++    slots.installScope('session', { current: binding, bindingSource: () => binding,
++      renderArea: (_current, { children }) => typeof children === 'function' ? null : children,
++    })
++    slots.install(createSlotRenderer())
++    const { carrier } = wait()
++    slots.register({
++      name: 'root',
++      children: {
++        'conversation.plan-review.actions': { kind: 'list', scope: 'session' },
++        'conversation.plan-review.surface': { kind: 'single', scope: 'session' },
++      },
++    }, ({ renderSlot, SessionProvider }: Pick<QuestionComposerProps, 'renderSlot' | 'SessionProvider'>) => (
++      <SessionProvider><QuestionComposer matched={carrier} {...kit} renderSlot={renderSlot} /></SessionProvider>
++    ))
++    const view = render(<>{slots.renderSlot('root', {})}</>)
++    try {
++      expect(slots.entries('conversation.plan-review.surface')).toHaveLength(0)
++      expect(document.querySelectorAll('[data-plan-review-surface]')).toHaveLength(1)
++      expect(screen.getByRole('heading', { name: 'Ship the picker' })).toBeTruthy()
++      expect(screen.getByRole('button', { name: zh['plan.approve'] })).toBeTruthy()
++    } finally {
++      view.unmount()
++      await fiber.dispose()
++    }
++  })
++
+   it('passes distinct pending request identities to the preview action for unlogged reviews', () => {
+     const rendered = vi.fn<(key: string, owner: unknown) => void>()
+     const renderSlot: QuestionComposerProps['renderSlot'] = (key, owner) => { rendered(key, owner); return null }
+     const first = wait()
+     const second = wait()
+     const view = render(<QuestionComposer matched={first.carrier} {...kit} renderSlot={renderSlot} />)
+-    expect(rendered).toHaveBeenLastCalledWith('conversation.plan-review.actions', {
++    expect(rendered).toHaveBeenCalledWith('conversation.plan-review.actions', {
+       review: planReviewOf(first.carrier.questions), requestKey: first.carrier.key,
+     })
+     view.rerender(<QuestionComposer matched={second.carrier} {...kit} renderSlot={renderSlot} />)
+-    expect(rendered).toHaveBeenLastCalledWith('conversation.plan-review.actions', {
++    expect(rendered).toHaveBeenCalledWith('conversation.plan-review.actions', {
+       review: planReviewOf(second.carrier.questions), requestKey: second.carrier.key,
+     })
+     expect(first.carrier.key).not.toBe(second.carrier.key)
+     expect(first.answer).not.toHaveBeenCalled()
+     expect(second.answer).not.toHaveBeenCalled()
+   })
++
++  it('renders only the supplied surface and forwards the existing preview and decision lifecycle', async () => {
++    const { carrier, answer } = wait()
++    answer.mockRejectedValue(new Error('Decision rejected'))
++    const owners: OwnerOf<'conversation.plan-review.surface'>[] = []
++    const renderSlot = vi.fn((key: string, owner: OwnerOf<'conversation.plan-review.actions'> | OwnerOf<'conversation.plan-review.surface'>) => {
++      if (key === 'conversation.plan-review.actions') return <button type="button">View full plan</button>
++      if (!('pending' in owner)) throw new Error('surface owner missing lifecycle')
++      const surface = owner
++      owners.push(surface)
++      return (
++        <section data-plan-review-surface data-plan-review-variant="revision" aria-busy={surface.busy}>
++          {surface.preview}
++          <button type="button" disabled={surface.busy} onClick={surface.approve}>Approve supplied surface</button>
++          {surface.error !== null && <p role="status">{surface.error}</p>}
++        </section>
++      )
++    }) as QuestionComposerProps['renderSlot']
++    render(<QuestionComposer matched={carrier} {...kit} renderSlot={renderSlot} />)
++    expect(document.querySelectorAll('[data-plan-review-surface]')).toHaveLength(1)
++    expect(screen.queryByRole('heading', { name: 'Ship the picker' })).toBeNull()
++    expect(screen.getByRole('button', { name: 'View full plan' })).toBeTruthy()
++    expect(owners[0]).toMatchObject({
++      pending: carrier, requestKey: carrier.key, card: carrier.snapshot(), busy: false, error: null,
++    })
++    fireEvent.click(screen.getByRole('button', { name: 'Approve supplied surface' }))
++    expect(answer).toHaveBeenCalledExactlyOnceWith(decision('Approve'))
++    expect(document.querySelector('[data-plan-review-surface]')?.getAttribute('aria-busy')).toBe('true')
++    expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Decision rejected')
++    expect(screen.getByRole('button', { name: 'Approve supplied surface' }).hasAttribute('disabled')).toBe(false)
++  })
++
++  it('exposes dismissal success to the supplied surface without creating a second pending card', async () => {
++    const { carrier, cancel } = wait()
++    const done = vi.fn()
++    const renderSlot = vi.fn((key: string, owner: OwnerOf<'conversation.plan-review.actions'> | OwnerOf<'conversation.plan-review.surface'>) => {
++      if (key === 'conversation.plan-review.actions') return null
++      if (!('pending' in owner)) throw new Error('surface owner missing lifecycle')
++      const surface = owner
++      return <button type="button" data-plan-review-surface onClick={() => { void surface.dismiss().then(done) }}>Dismiss supplied surface</button>
++    }) as QuestionComposerProps['renderSlot']
++    render(<QuestionComposer matched={carrier} {...kit} renderSlot={renderSlot} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Dismiss supplied surface' }))
++    await vi.waitFor(() => { expect(done).toHaveBeenCalledWith(true) })
++    expect(cancel).toHaveBeenCalledOnce()
++    expect(document.querySelectorAll('[data-plan-review-surface]')).toHaveLength(1)
++  })
++
+   it('shows the plan title and summary above two review actions', () => {
+     const { carrier } = wait()
+     render(<QuestionComposer matched={carrier} {...kit} />)
+ 
+     expect(document.querySelector('[data-plan-review-key]')?.getAttribute('data-plan-review-key')).toBe(carrier.key)
++    expect(document.querySelectorAll('[data-plan-review-surface]')).toHaveLength(1)
++    expect(document.querySelector('[data-plan-review-surface]')?.getAttribute('data-plan-review-variant')).toBe('review')
+     expect(screen.getByText(zh['plan.header'])).toBeTruthy()
+     expect(document.querySelector('[data-plan-review-key] [data-state="warning"]')).not.toBeNull()
+     expect(screen.getByRole('heading', { name: 'Ship the picker' })).toBeTruthy()
+@@ -310,6 +403,20 @@ describe('PlanReviewPanel', () => {
+     expect(answer).toHaveBeenCalledOnce()
+   })
+ 
++  it('re-arms a sent waterfall decision when the live card continues for a late reply', async () => {
++    const { carrier, answer, channel } = wait()
++    carrier.attachRpc({ answer: async () => true })
++    render(<QuestionComposer matched={carrier} {...kit} useQuestionCard={keyedObservableHook(() => carrier) as QuestionComposerProps['useQuestionCard']} />)
++    fireEvent.click(screen.getByRole('button', { name: zh['plan.approve'] }))
++    expect(answer).toHaveBeenCalledOnce()
++    await act(async () => {
++      carrier.detachWaterfall(channel)
++      carrier.setState('continued')
++    })
++    expect(await screen.findByText(zh['error.resubmit'])).toBeTruthy()
++    expect(screen.getByRole('button', { name: zh['plan.approve'] }).hasAttribute('disabled')).toBe(false)
++  })
++
+   it('reports a sent plan reply when hiding its panel fails', async () => {
+     const carrier = new PendingQuestion(SID, questions(), 'continued-plan-hide-error' as ToolCallId)
+     const answer = vi.fn(async () => true)
+@@ -387,4 +494,17 @@ describe('PlanReviewPanel', () => {
+     expect(screen.queryByRole('button', { name: 'Refuse' })).toBeNull()
+     expect(screen.getByRole('button', { name: 'Request changes' })).toBeTruthy()
+   })
++
++  it('keeps settled plan reviews closable while omitting decision actions', async () => {
++    const carrier = new PendingQuestion(SID, questions(), 'settled-plan' as ToolCallId, undefined, decision('Approve').answers)
++    const dismiss = vi.spyOn(carrier, 'dismiss')
++    render(<QuestionComposer matched={carrier} {...kit} />)
++    expect(document.querySelectorAll('[data-plan-review-surface]')).toHaveLength(1)
++    expect(screen.queryByRole('button', { name: zh['plan.approve'] })).toBeNull()
++    expect(screen.queryByRole('button', { name: zh['plan.discuss'] })).toBeNull()
++    const close = screen.getByRole('button', { name: commonZh.close })
++    expect(close.hasAttribute('disabled')).toBe(false)
++    fireEvent.click(close)
++    await vi.waitFor(() => { expect(dismiss).toHaveBeenCalledOnce() })
++  })
+ })
+diff --git a/packages/client/ui-plan/src/client/PlanReviewSurface.module.css b/packages/client/ui-plan/src/client/PlanReviewSurface.module.css
+new file mode 100644
+index 0000000000..6c73dd5689
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/PlanReviewSurface.module.css
+@@ -0,0 +1,23 @@
++.frame { display: flex; justify-content: center; padding: 6px calc(var(--dsh-composer-side-clearance) + 16px) 10px; }
++.card { display: flex; overflow: hidden; flex-direction: column; width: 100%; max-width: var(--dsh-chat-content-width); border-radius: var(--dsw-radius-xl); background: var(--dsw-specific-input-major); box-shadow: var(--dsw-elevation-panel); color: var(--dsw-alias-label-primary); }
++.strip { display: flex; align-items: center; flex-shrink: 0; gap: 8px; padding: 12px 16px; background: var(--dsw-alias-state-warn-tertiary); color: var(--dsw-alias-state-warn-primary); font-size: 14px; line-height: 20px; }
++.previewActions { display: flex; align-items: center; margin-left: auto; }
++.summary { min-width: 0; padding: 14px 16px 12px; }
++.title { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; line-height: 22px; }
++.description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 8px 0 0; color: var(--dsw-alias-label-secondary); font-size: 14px; line-height: 24px; }
++.commentList { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding: 12px 16px 4px; }
++.commentRow { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-radius: var(--dsw-radius-sm); background: var(--dsw-static-neutral-50); }
++:global(body[data-ds-dark-theme]) .commentRow { background: var(--dsw-static-neutral-850); }
++.commentRow input { margin-top: 4px; accent-color: var(--dsw-alias-state-business-primary); }
++.commentBody { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; font-size: 13px; line-height: 20px; }
++.commentBody strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
++.commentBody span { color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
++.delete { display: inline-flex; align-items: center; justify-content: center; padding: 4px; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
++.delete:hover { color: var(--dsw-alias-state-error-primary); }
++.delete:disabled { cursor: default; opacity: .5; }
++.delete:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }
++.changed { color: var(--dsw-alias-state-warn-primary); }
++.feedback { min-width: 0; color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; font-size: 13px; }
++.footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px 12px; }
++.actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
++@media (max-width: 720px) { .footer { flex-wrap: wrap; align-items: flex-end; padding: 8px 12px 10px; } .frame { padding-inline: 12px; } }
+diff --git a/packages/client/ui-plan/src/client/PlanReviewSurface.tsx b/packages/client/ui-plan/src/client/PlanReviewSurface.tsx
+new file mode 100644
+index 0000000000..6da3de28de
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/PlanReviewSurface.tsx
+@@ -0,0 +1,149 @@
++/** One composer review surface, switching to revision when comments exist. */
++import { useEffect, useMemo, useRef, useState } from 'react'
++import { Button, extractMarkdownPlainText, IconEditOutlineRegular, IconTrashOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
++import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
++import type {} from '@deepseek-ai/dsh-client-ui-user-questions/client'
++import { EMPTY_PLAN_COMMENTS, planCommentKey, type createPlanCommentsStore } from './plan-comments.ts'
++import css from './PlanReviewSurface.module.css'
++
++/** Session-owned link between the review carrier and its preview editor. */
++export interface PlanReviewSurfaceInjected {
++  /** Bind focus holding for this live review; the disposer removes only this binding. */
++  bindReview: (planKey: string, pending: PropsRuntime<'conversation.plan-review.surface'>['pending']) => () => void
++  /** Last recorded event before the revision prompt is submitted. */
++  submissionCursor: () => number
++  /** Send only the revision prompt, preserving the user's draft and attachments. */
++  sendRevision: (text: string) => Promise<void>
++  /** Restore the Session input's focus after the review seat closes. */
++  focusComposer: () => void
++}
++
++type SurfaceProps = PropsRuntime<'conversation.plan-review.surface'> & PropsLocale<'plan'>
++  & PropsStore<ReturnType<typeof createPlanCommentsStore>> & InjectFace<PlanReviewSurfaceInjected>
++
++/**
++ * Render one card, retaining annotations until a revision is durably submitted.
++ * @param props - Owner lifecycle, Session comment store, preview opener, and copy.
++ * @returns the sole plan-review composer surface.
++ */
++export function PlanReviewSurface({ pending, review, requestKey, preview, card, busy, error, approve, dismiss, sessionId, t, useStore, actions, bindReview, submissionCursor, sendRevision, focusComposer }: SurfaceProps) {
++  const planKey = planCommentKey(sessionId, review.callId === undefined ? requestKey : String(review.callId), review.plan)
++  const comments = useStore(state => state.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS)
++  const missing = useStore(state => state.missingByPlan[planKey])
++  const staged = useStore(state => state.stagedByPlan[planKey])
++  const sending = useStore(state => state.sendingByPlan[planKey] === true)
++  const [sendError, setSendError] = useState<string | null>(null)
++  const sendingRef = useRef(false)
++  const mountedRef = useRef(true)
++  useEffect(() => {
++    mountedRef.current = true
++    return () => { mountedRef.current = false }
++  }, [])
++  const readOnly = pending.review !== undefined || card.closed || card.channel === 'none'
++  const actionBusy = busy || sending
++  const locked = readOnly || actionBusy
++  const [selected, setSelected] = useState<readonly string[]>([])
++  const selectedIds = selected.filter(id => comments.some(comment => comment.id === id))
++  const selectedSet = new Set(selectedIds)
++  useEffect(() => bindReview(planKey, pending), [bindReview, pending, planKey])
++  useEffect(() => { actions.adopt(planKey) }, [actions, planKey])
++  useEffect(() => {
++    actions.setEditable(planKey, !locked)
++    return () => { actions.setEditable(planKey, false) }
++  }, [actions, locked, planKey])
++  const summary = useMemo(() => {
++    const title = extractMarkdownPlainText(review.plan, { mode: 'first-line' })
++    const description = extractMarkdownPlainText(review.plan, { mode: 'first-paragraph' })
++    return { title, description: description === title ? '' : description }
++  }, [review.plan])
++  const revision = comments.length > 0
++  const revisionText = [t('review.prompt'), '', ...comments.flatMap((comment, index) => [
++    `${index + 1}. “${comment.quote}”`,
++    `   ${t('review.note', { note: comment.note })}`,
++  ])].join('\n')
++  const awaitingReceipt = staged?.draft === revisionText && comments.every(comment => staged.ids.includes(comment.id))
++  const remove = (ids: readonly string[]): void => {
++    if (locked) return
++    actions.remove(planKey, ids)
++    setSelected([])
++  }
++  const revise = async (): Promise<void> => {
++    if (comments.length === 0 || locked || sendingRef.current) return
++    sendingRef.current = true
++    actions.setSending(planKey, true)
++    setSendError(null)
++    try {
++      if (!awaitingReceipt) {
++        actions.stage(planKey, revisionText, comments.map(comment => comment.id), submissionCursor())
++        try { await sendRevision(revisionText) }
++        catch (cause) {
++          actions.unstage(planKey, revisionText)
++          throw cause
++        }
++      }
++      if (pending.snapshot().channel === 'waterfall') {
++        await pending.answer({ answers: [{ id: review.id, selected: review.decline === undefined ? [] : [review.decline.label] }] })
++      }
++      await dismiss()
++    } catch (cause) {
++      if (mountedRef.current) setSendError(cause instanceof Error ? cause.message : String(cause))
++    } finally {
++      sendingRef.current = false
++      actions.setSending(planKey, false)
++    }
++  }
++  const cancel = async (): Promise<void> => {
++    if (locked || !await dismiss()) return
++    actions.clear(planKey)
++    focusComposer()
++  }
++  return (
++    <div className={css.frame} data-plan-review-key={pending.key} data-plan-review-surface data-plan-review-variant={revision ? 'revision' : 'review'}>
++      <section className={css.card} aria-label={review.question} aria-busy={actionBusy}>
++        <div className={css.strip}>
++          <StateDot state={actionBusy ? 'ongoing' : 'warning'} />
++          <span>{revision ? t('review.header') : t('review.waiting')}</span>
++          <div className={css.previewActions}>{preview}</div>
++        </div>
++        {!revision ? (
++          <div className={css.summary}>
++            <h3 className={css.title}>{summary.title}</h3>
++            {summary.description !== '' && <p className={css.description}>{summary.description}</p>}
++          </div>
++        ) : (
++          <div className={css.commentList}>
++            {comments.map(comment => (
++              <div key={comment.id} className={css.commentRow} data-plan-comment-item={comment.id}>
++                {!readOnly && <input type="checkbox" aria-label={t('comment.select', { quote: comment.quote })} checked={selectedSet.has(comment.id)} disabled={actionBusy} onChange={event => {
++                  setSelected(ids => event.target.checked ? [...ids, comment.id] : ids.filter(id => id !== comment.id))
++                }} />}
++                <span className={css.commentBody}><strong>“{comment.quote}”</strong><span>{comment.note}</span>{missing?.includes(comment.id) && <small className={css.changed}>{t('review.changed')}</small>}</span>
++                {!readOnly && <button type="button" className={css.delete} aria-label={t('comment.delete')} disabled={actionBusy} onClick={() => { remove([comment.id]) }}>
++                  <IconTrashOutlineRegular size={14} />
++                </button>}
++              </div>
++            ))}
++          </div>
++        )}
++        <div className={css.footer}>
++          <div className={css.feedback} role="status">{sendError ?? error}</div>
++          {revision && selectedIds.length > 0 && !readOnly && <Button size="sm" variant="ghost" disabled={actionBusy} onClick={() => { remove(selectedIds) }}>{t('comment.deleteSelected')}</Button>}
++          {readOnly && <Button variant="outline" disabled={actionBusy} onClick={() => { void dismiss() }}>{t('review.close')}</Button>}
++          {!readOnly && <div className={css.actions}>
++            {!revision ? (
++              <>
++                <Button variant="outline" icon={<IconEditOutlineRegular size={14} />} disabled={actionBusy} onClick={() => { void cancel() }}>{t('review.discuss')}</Button>
++                <Button variant="primary" disabled={actionBusy} onClick={approve}>{t('review.approve')}</Button>
++              </>
++            ) : (
++              <>
++                <Button variant="outline" disabled={actionBusy} onClick={() => { void cancel() }}>{t('review.cancel')}</Button>
++                <Button variant="primary" disabled={actionBusy} onClick={() => { void revise() }}>{t('review.fix')}</Button>
++              </>
++            )}
++          </div>}
++        </div>
++      </section>
++    </div>
++  )
++}
+diff --git a/packages/client/ui-plan/src/client/PlanRevisionReceipt.tsx b/packages/client/ui-plan/src/client/PlanRevisionReceipt.tsx
+new file mode 100644
+index 0000000000..725da33a79
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/PlanRevisionReceipt.tsx
+@@ -0,0 +1,21 @@
++/** Cleanup annotations only when an ordinary user message is recorded. */
++import { useEffect } from 'react'
++import type { InjectFace, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
++import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
++import type { createPlanCommentsStore } from './plan-comments.ts'
++
++/** Session-bound observation of recorded user submissions. */
++export interface PlanRevisionReceiptInjected {
++  /** Observe recorded user text, including a restored successful submission. */
++  watchSubmitted: (onSubmitted: (text: string, seq: number) => void) => () => void
++}
++
++/**
++ * Retain comments through failed sends and queue admission.
++ * @param props - Framework-bound comment store and durable submission observer.
++ * @returns no additional input or review UI.
++ */
++export function PlanRevisionReceipt({ actions, watchSubmitted }: PropsStore<ReturnType<typeof createPlanCommentsStore>> & InjectFace<PlanRevisionReceiptInjected>) {
++  useEffect(() => watchSubmitted(actions.confirmSubmitted), [actions, watchSubmitted])
++  return null
++}
+diff --git a/packages/client/ui-plan/src/client/comment-dom.ts b/packages/client/ui-plan/src/client/comment-dom.ts
+new file mode 100644
+index 0000000000..4d9124de89
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/comment-dom.ts
+@@ -0,0 +1,111 @@
++/** Read plan text and create browser Ranges without changing Markdown's DOM. */
++import type { PlanComment } from './plan-comments.ts'
++
++/** Text offsets and surrounding context captured from a plan selection. */
++export type PlanTextAnchor = Pick<PlanComment, 'quote' | 'start' | 'end' | 'prefix' | 'suffix'>
++
++function textNodes(root: HTMLElement): Text[] {
++  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT)
++  const nodes: Text[] = []
++  let node = walker.nextNode()
++  while (node !== null) {
++    // Markdown controls and decorative icons are not part of the plan text.
++    if (node.parentElement?.closest('button, input, textarea, select, script, style, svg, [aria-hidden="true"], [data-code-block-banner]') === null) nodes.push(node as Text)
++    node = walker.nextNode()
++  }
++  return nodes
++}
++
++/**
++ * Read selectable Markdown content, excluding its generated controls.
++ * @param root - Markdown-only document element.
++ * @returns the text whose offsets identify comments.
++ */
++export function renderedPlanText(root: HTMLElement): string {
++  return textNodes(root).map(node => node.data).join('')
++}
++
++function offsetAt(root: HTMLElement, container: Node, offset: number, nodes: readonly Text[]): number {
++  const prefix = root.ownerDocument.createRange()
++  prefix.selectNodeContents(root)
++  prefix.setEnd(container, offset)
++  let cursor = 0
++  for (const node of nodes) {
++    if (prefix.comparePoint(node, node.length) <= 0) cursor += node.length
++    else if (prefix.comparePoint(node, 0) <= 0) return cursor + (node === container ? offset : 0)
++    else return cursor
++  }
++  return cursor
++}
++
++/**
++ * Capture a selection with trimmed text and matching offsets across inline nodes.
++ * @param root - Markdown-only document element.
++ * @param range - User selection, in either selection direction.
++ * @returns a nonempty anchor when both endpoints belong to the document.
++ */
++export function selectionPlanAnchor(root: HTMLElement, range: Range): PlanTextAnchor | undefined {
++  if (range.collapsed || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return undefined
++  const nodes = textNodes(root)
++  const text = nodes.map(node => node.data).join('')
++  let start = offsetAt(root, range.startContainer, range.startOffset, nodes)
++  let end = offsetAt(root, range.endContainer, range.endOffset, nodes)
++  const raw = text.slice(start, end)
++  start += raw.length - raw.trimStart().length
++  end -= raw.length - raw.trimEnd().length
++  if (end <= start) return undefined
++  return { quote: text.slice(start, end), start, end, prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32) }
++}
++
++/**
++ * Resolve rendered-text offsets into a Range, retaining inline Markdown nodes.
++ * @param root - Markdown-only document element.
++ * @param start - Inclusive text offset.
++ * @param end - Exclusive text offset.
++ * @returns the anchored Range or undefined when offsets exceed the document.
++ */
++export function planTextRange(root: HTMLElement, start: number, end: number): Range | undefined {
++  if (start < 0 || end <= start) return undefined
++  const range = root.ownerDocument.createRange()
++  let cursor = 0
++  let started = false
++  for (const node of textNodes(root)) {
++    const next = cursor + node.length
++    if (!started && start < next) {
++      range.setStart(node, start - cursor)
++      started = true
++    }
++    if (started && end <= next) {
++      range.setEnd(node, end - cursor)
++      return range
++    }
++    cursor = next
++  }
++  return undefined
++}
++
++/**
++ * Split a comment into text-only Ranges so highlights exclude banners and block boxes.
++ * @param root - Markdown-only document element.
++ * @param start - Inclusive text offset.
++ * @param end - Exclusive text offset.
++ * @returns each inline text segment, or an empty array for invalid offsets.
++ */
++export function planHighlightRanges(root: HTMLElement, start: number, end: number): readonly Range[] {
++  if (planTextRange(root, start, end) === undefined) return []
++  const ranges: Range[] = []
++  let cursor = 0
++  for (const node of textNodes(root)) {
++    const first = Math.max(0, start - cursor)
++    const last = Math.min(node.length, end - cursor)
++    if (last > first) {
++      const range = root.ownerDocument.createRange()
++      range.setStart(node, first)
++      range.setEnd(node, last)
++      ranges.push(range)
++    }
++    cursor += node.length
++    if (cursor >= end) break
++  }
++  return ranges
++}
+diff --git a/packages/client/ui-plan/src/client/plan-comments.ts b/packages/client/ui-plan/src/client/plan-comments.ts
+new file mode 100644
+index 0000000000..37bf962151
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/plan-comments.ts
+@@ -0,0 +1,294 @@
++/** Browser-owned annotations and revision submissions for plan review. */
++import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
++import type { SessionId } from '@deepseek-ai/dsh-session/types'
++
++/** One note anchored to a plan's rendered text. */
++export interface PlanComment {
++  readonly id: string
++  readonly planKey: string
++  readonly quote: string
++  readonly note: string
++  readonly start: number
++  readonly end: number
++  readonly prefix?: string
++  readonly suffix?: string
++}
++
++/** Comments included in submitted revision text awaiting durable delivery. */
++export interface PlanCommentRevision {
++  readonly draft: string
++  readonly ids: readonly string[]
++  readonly afterSeq: number
++}
++
++/** Shared interaction state for the plan card and full-text preview. */
++export interface PlanCommentsState {
++  commentsByPlan: Record<string, readonly PlanComment[]>
++  editableByPlan: Record<string, boolean>
++  sendingByPlan: Record<string, boolean>
++  missingByPlan: Record<string, readonly string[]>
++  stagedByPlan: Record<string, PlanCommentRevision>
++}
++
++/** Declared mutations for the shared plan review state. */
++export type PlanCommentsActions = {
++  adopt: (state: PlanCommentsState, planKey: string) => void
++  save: (state: PlanCommentsState, comment: PlanComment) => void
++  remove: (state: PlanCommentsState, planKey: string, ids: readonly string[]) => void
++  clear: (state: PlanCommentsState, planKey: string) => void
++  setEditable: (state: PlanCommentsState, planKey: string, editable: boolean) => void
++  setSending: (state: PlanCommentsState, planKey: string, sending: boolean) => void
++  setMissing: (state: PlanCommentsState, planKey: string, ids: readonly string[]) => void
++  stage: (state: PlanCommentsState, planKey: string, draft: string, ids: readonly string[], afterSeq: number) => void
++  unstage: (state: PlanCommentsState, planKey: string, draft: string) => void
++  confirm: (state: PlanCommentsState, planKey: string, draft: string, seq: number) => void
++  confirmSubmitted: (state: PlanCommentsState, text: string, seq: number) => void
++}
++
++/** Stable empty selection for framework store selectors. */
++export const EMPTY_PLAN_COMMENTS: readonly PlanComment[] = Object.freeze([])
++
++const STORAGE_KEY = 'dsh.plan-comments.v1'
++
++function dictionary<T>(): Record<string, T> {
++  return Object.create(null) as Record<string, T>
++}
++
++function isObject(value: unknown): value is Record<string, unknown> {
++  return typeof value === 'object' && value !== null && !Array.isArray(value)
++}
++
++function isPlanComment(value: unknown): value is PlanComment {
++  if (!isObject(value)) return false
++  const { id, planKey, quote, note, start, end, prefix, suffix } = value
++  return typeof id === 'string' && id.length > 0
++    && typeof planKey === 'string' && planKey.length > 0
++    && typeof quote === 'string' && quote.trim().length > 0
++    && typeof note === 'string' && note.trim().length > 0
++    && typeof start === 'number' && Number.isSafeInteger(start) && start >= 0
++    && typeof end === 'number' && Number.isSafeInteger(end) && end > start
++    && end - start === quote.length
++    && (prefix === undefined || typeof prefix === 'string')
++    && (suffix === undefined || typeof suffix === 'string')
++}
++
++function restore(raw: string | null): Pick<PlanCommentsState, 'commentsByPlan' | 'stagedByPlan'> {
++  const commentsByPlan = dictionary<readonly PlanComment[]>()
++  const stagedByPlan = dictionary<PlanCommentRevision>()
++  if (raw === null) return { commentsByPlan, stagedByPlan }
++  let parsed: unknown
++  try {
++    parsed = JSON.parse(raw)
++  } catch (_error) {
++    // Malformed browser data starts a fresh usable interaction store.
++    return { commentsByPlan, stagedByPlan }
++  }
++  if (!isObject(parsed)) return { commentsByPlan, stagedByPlan }
++  if (isObject(parsed.commentsByPlan)) {
++    for (const [planKey, items] of Object.entries(parsed.commentsByPlan)) {
++      if (!Array.isArray(items)) continue
++      const ids = new Set<string>()
++      const valid = items.filter((item): item is PlanComment => {
++        if (!isPlanComment(item) || item.planKey !== planKey || ids.has(item.id)) return false
++        ids.add(item.id)
++        return true
++      })
++      if (valid.length > 0) commentsByPlan[planKey] = valid
++    }
++  }
++  if (isObject(parsed.stagedByPlan)) {
++    for (const [planKey, item] of Object.entries(parsed.stagedByPlan)) {
++      if (!isObject(item) || typeof item.draft !== 'string' || item.draft.length === 0 || !Array.isArray(item.ids)
++        || typeof item.afterSeq !== 'number' || !Number.isSafeInteger(item.afterSeq) || item.afterSeq < -1) continue
++      const ids = item.ids.filter((id): id is string => typeof id === 'string' && commentsByPlan[planKey]?.some(comment => comment.id === id) === true)
++      if (ids.length > 0) stagedByPlan[planKey] = { draft: item.draft, ids: [...new Set(ids)], afterSeq: item.afterSeq }
++    }
++  }
++  return { commentsByPlan, stagedByPlan }
++}
++
++function readStored(key: string): Pick<PlanCommentsState, 'commentsByPlan' | 'stagedByPlan'> {
++  let raw: string | null = null
++  try {
++    raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(key)
++  } catch (_error) {
++    // An unavailable browser store leaves the in-memory interaction usable.
++  }
++  return restore(raw)
++}
++
++function persist(key: string, state: PlanCommentsState): void {
++  if (typeof localStorage === 'undefined') return
++  const serialized = JSON.stringify({ commentsByPlan: state.commentsByPlan, stagedByPlan: state.stagedByPlan })
++  try {
++    localStorage.setItem(key, serialized)
++  } catch (_error) {
++    // Storage quota and private mode do not block comment gestures.
++  }
++}
++
++function remove(state: PlanCommentsState, planKey: string, ids: readonly string[]): void {
++  const current = state.commentsByPlan[planKey]
++  if (current === undefined) return
++  const selected = new Set(ids)
++  const next = current.filter(item => !selected.has(item.id))
++  if (next.length === current.length) return
++  if (next.length === 0) delete state.commentsByPlan[planKey]
++  else state.commentsByPlan[planKey] = next
++}
++
++function confirm(state: PlanCommentsState, planKey: string, text: string, seq: number): void {
++  const revision = state.stagedByPlan[planKey]
++  if (revision === undefined || revision.draft !== text || seq <= revision.afterSeq) return
++  remove(state, planKey, revision.ids)
++  delete state.stagedByPlan[planKey]
++}
++
++/**
++ * Declare one session-scoped store shared by card, preview, and delivery confirmation.
++ * @returns a registration handle with validated, non-fatal browser persistence.
++ */
++export function createPlanCommentsStore(): EngineStoreHandle<PlanCommentsState, PlanCommentsActions> {
++  const handle = defineStore<PlanCommentsState, PlanCommentsActions>({
++    init: () => ({ commentsByPlan: dictionary(), editableByPlan: dictionary(), sendingByPlan: dictionary(), missingByPlan: dictionary(), stagedByPlan: dictionary() }),
++    actions: {
++      adopt: (state, planKey) => {
++        const identity = planKey.slice(0, planKey.lastIndexOf(':') + 1)
++        const previous = Object.keys(state.commentsByPlan).filter(key => key !== planKey && key.startsWith(identity))
++        if (previous.length === 0) return
++        const current = [...(state.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS)]
++        const ids = new Set(current.map(comment => comment.id))
++        for (const key of previous) {
++          for (const comment of state.commentsByPlan[key] ?? EMPTY_PLAN_COMMENTS) {
++            if (ids.has(comment.id)) continue
++            current.push({ ...comment, planKey })
++            ids.add(comment.id)
++          }
++          delete state.commentsByPlan[key]
++          delete state.editableByPlan[key]
++          delete state.missingByPlan[key]
++          delete state.stagedByPlan[key]
++        }
++        state.commentsByPlan[planKey] = current
++      },
++      save: (state, comment) => {
++        const current = [...(state.commentsByPlan[comment.planKey] ?? EMPTY_PLAN_COMMENTS)]
++        const index = current.findIndex(item => item.id === comment.id)
++        const previous = current[index]
++        if (index === -1) current.push(comment)
++        else current[index] = comment
++        state.commentsByPlan[comment.planKey] = current
++        const staged = state.stagedByPlan[comment.planKey]
++        if (staged !== undefined && previous !== undefined && (previous.note !== comment.note || previous.quote !== comment.quote)) {
++          const ids = staged.ids.filter(id => id !== comment.id)
++          if (ids.length === 0) delete state.stagedByPlan[comment.planKey]
++          else state.stagedByPlan[comment.planKey] = { ...staged, ids }
++        }
++      },
++      remove,
++      clear: (state, planKey) => {
++        delete state.commentsByPlan[planKey]
++        delete state.missingByPlan[planKey]
++        delete state.stagedByPlan[planKey]
++      },
++      setEditable: (state, planKey, editable) => {
++        if (editable) state.editableByPlan[planKey] = true
++        else delete state.editableByPlan[planKey]
++      },
++      setSending: (state, planKey, sending) => {
++        if (sending) state.sendingByPlan[planKey] = true
++        else delete state.sendingByPlan[planKey]
++      },
++      setMissing: (state, planKey, ids) => {
++        const current = state.missingByPlan[planKey]
++        if (ids.length === 0) {
++          if (current !== undefined) delete state.missingByPlan[planKey]
++        } else if (current === undefined || current.length !== ids.length || current.some((id, index) => id !== ids[index])) {
++          state.missingByPlan[planKey] = [...ids]
++        }
++      },
++      stage: (state, planKey, draft, ids, afterSeq) => {
++        state.stagedByPlan[planKey] = { draft, ids: [...ids], afterSeq }
++      },
++      unstage: (state, planKey, draft) => {
++        if (state.stagedByPlan[planKey]?.draft === draft) delete state.stagedByPlan[planKey]
++      },
++      confirm,
++      confirmSubmitted: (state, text, seq) => {
++        for (const planKey of Object.keys(state.stagedByPlan)) confirm(state, planKey, text, seq)
++      },
++    },
++  })
++  return {
++    spec: handle.spec,
++    create: (scopeKey) => {
++      const instance = handle.create(scopeKey)
++      const key = scopeKey === undefined ? STORAGE_KEY : `${STORAGE_KEY}.${scopeKey}`
++      instance.store.set({ ...readStored(key), editableByPlan: dictionary(), sendingByPlan: dictionary(), missingByPlan: dictionary() })
++      instance.subscribe(() => { persist(key, instance.getSnapshot()) })
++      return {
++        ...instance,
++        clearPersisted: () => {
++          if (typeof localStorage === 'undefined') return
++          try {
++            localStorage.removeItem(key)
++          } catch (_error) {
++            // Browser storage can be unavailable during scope teardown.
++          }
++        },
++      }
++    },
++  }
++}
++
++function hash(text: string): string {
++  let value = 2166136261
++  for (let index = 0; index < text.length; index += 1) {
++    value ^= text.charCodeAt(index)
++    value = Math.imul(value, 16777619)
++  }
++  return (value >>> 0).toString(36)
++}
++
++/**
++ * Identify a plan by its session, invocation (or unnamed request), and Markdown.
++ * @param sessionId - the owning Session.
++ * @param requestKey - tool call id, or the pending unnamed request key.
++ * @param markdown - exact plan text.
++ * @returns the browser-owned plan key.
++ */
++export function planCommentKey(sessionId: SessionId, requestKey: string, markdown: string): string {
++  return `${encodeURIComponent(sessionId)}:${encodeURIComponent(requestKey)}:${hash(markdown)}`
++}
++
++function contextMatches(text: string, start: number, comment: PlanComment): boolean {
++  const end = start + comment.quote.length
++  return (comment.prefix === undefined || text.slice(Math.max(0, start - comment.prefix.length), start) === comment.prefix)
++    && (comment.suffix === undefined || text.slice(end, end + comment.suffix.length) === comment.suffix)
++}
++
++/**
++ * Resolve an annotation only when its original offset or text context identifies it.
++ * @param text - current rendered plan text.
++ * @param comment - persisted quote and text offsets.
++ * @returns exact text offsets, or undefined for a missing or ambiguous quote.
++ */
++export function locatePlanComment(text: string, comment: PlanComment): { start: number; end: number } | undefined {
++  if (text.slice(comment.start, comment.end) === comment.quote && contextMatches(text, comment.start, comment)) {
++    return { start: comment.start, end: comment.end }
++  }
++  const candidates: number[] = []
++  let offset = text.indexOf(comment.quote)
++  while (offset !== -1) {
++    candidates.push(offset)
++    offset = text.indexOf(comment.quote, offset + 1)
++  }
++  if (candidates.length === 1) {
++    const start = candidates[0] as number
++    return { start, end: start + comment.quote.length }
++  }
++  const contextual = candidates.filter(start => contextMatches(text, start, comment))
++  if (contextual.length !== 1) return undefined
++  const start = contextual[0] as number
++  return { start, end: start + comment.quote.length }
++}
+diff --git a/packages/client/ui-plan/src/client/revision-submissions.ts b/packages/client/ui-plan/src/client/revision-submissions.ts
+new file mode 100644
+index 0000000000..15bfe3809c
+--- /dev/null
++++ b/packages/client/ui-plan/src/client/revision-submissions.ts
+@@ -0,0 +1,31 @@
++/** Durable user-message acknowledgements for staged plan revisions. */
++import type { SessionEventSource, SessionEventLikeEntry } from '@deepseek-ai/dsh-api-session-controller/client'
++
++function submittedText(entry: SessionEventLikeEntry): string | undefined {
++  if (entry.type !== 'event' || entry.event.type !== 'user/message' || entry.event.data.source.kind !== 'user') return undefined
++  return entry.event.data.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
++}
++
++/**
++ * Read history once on mount, then consume only the feed's exact deltas.
++ * @param source - The Session's contiguous event window.
++ * @param onSubmitted - Called only for durably recorded user text.
++ * @returns subscription disposer.
++ */
++export function watchRevisionSubmissions(source: SessionEventSource, onSubmitted: (text: string, seq: number) => void): () => void {
++  const inspect = (entries: readonly SessionEventLikeEntry[]): void => {
++    for (const entry of entries) {
++      const text = submittedText(entry)
++      if (text !== undefined) onSubmitted(text, entry.event.seq)
++    }
++  }
++  let revision = source.getSnapshot().revision
++  const dispose = source.subscribe(() => {
++    const snapshot = source.getSnapshot()
++    if (snapshot.revision === revision) return
++    revision = snapshot.revision
++    if (snapshot.change.kind !== 'settle-assistant') inspect(snapshot.change.entries)
++  })
++  inspect(source.getSnapshot().entries)
++  return dispose
++}
+diff --git a/packages/client/ui-plan/tests/comment-dom.client.spec.ts b/packages/client/ui-plan/tests/comment-dom.client.spec.ts
+new file mode 100644
+index 0000000000..dd0504eae3
+--- /dev/null
++++ b/packages/client/ui-plan/tests/comment-dom.client.spec.ts
+@@ -0,0 +1,60 @@
++// @vitest-environment jsdom
++import { describe, expect, it } from 'vitest'
++import { planHighlightRanges, planTextRange, renderedPlanText, selectionPlanAnchor } from '../src/client/comment-dom.ts'
++
++function documentOf(html: string): HTMLDivElement {
++  const root = document.createElement('div')
++  root.innerHTML = html
++  return root
++}
++
++describe('rendered plan comment anchors', () => {
++  it('anchors across inline code and emphasis without changing their nodes', () => {
++    const root = documentOf('<p>  Review <code>serial</code> and <strong>parallel</strong> now  </p>')
++    const paragraph = root.firstElementChild!
++    const range = document.createRange()
++    range.setStart(paragraph.firstChild!, 0)
++    range.setEnd(paragraph.lastChild!, paragraph.lastChild!.textContent!.length)
++    const anchor = selectionPlanAnchor(root, range)!
++    expect(anchor).toEqual({ quote: 'Review serial and parallel now', start: 2, end: 32, prefix: '  ', suffix: '  ' })
++    expect(planTextRange(root, anchor.start, anchor.end)?.toString()).toBe(anchor.quote)
++    expect(planHighlightRanges(root, anchor.start, anchor.end).map(segment => segment.toString()).join('')).toBe(anchor.quote)
++    expect(root.innerHTML).toBe('<p>  Review <code>serial</code> and <strong>parallel</strong> now  </p>')
++  })
++  it('keeps duplicate text at its selected occurrence and captures surrounding context', () => {
++    const root = documentOf('<p>Same <em>item</em>, then same <em>item</em>.</p>')
++    const second = root.querySelectorAll('em')[1]!.firstChild!
++    const range = document.createRange()
++    range.setStart(second, 0)
++    range.setEnd(second, 4)
++    const anchor = selectionPlanAnchor(root, range)!
++    expect(anchor.quote).toBe('item')
++    expect(anchor.start).toBe(21)
++    expect(anchor.prefix).toBe('Same item, then same ')
++    expect(planTextRange(root, anchor.start, anchor.end)?.startContainer).toBe(second)
++  })
++  it('excludes generated controls and handles element-boundary selections', () => {
++    const root = documentOf('<div><div data-code-block-banner>Code<button>Copy</button></div><p>first <code>second</code> third</p></div>')
++    const paragraph = root.querySelector('p')!
++    const range = document.createRange()
++    range.selectNodeContents(paragraph)
++    expect(renderedPlanText(root)).toBe('first second third')
++    expect(selectionPlanAnchor(root, range)).toMatchObject({ start: 0, end: 18, quote: 'first second third' })
++    expect(planTextRange(root, 6, 12)?.toString()).toBe('second')
++  })
++  it('ignores collapsed, whitespace-only, outside and out-of-document selections', () => {
++    const root = documentOf('<p>  plan  </p>')
++    const range = document.createRange()
++    range.setStart(root.firstElementChild!.firstChild!, 0)
++    range.setEnd(root.firstElementChild!.firstChild!, 2)
++    expect(selectionPlanAnchor(root, range)).toBeUndefined()
++    range.collapse()
++    expect(selectionPlanAnchor(root, range)).toBeUndefined()
++    range.selectNodeContents(documentOf('elsewhere'))
++    expect(selectionPlanAnchor(root, range)).toBeUndefined()
++    expect(planTextRange(root, -1, 2)).toBeUndefined()
++    expect(planTextRange(root, 2, 2)).toBeUndefined()
++    expect(planTextRange(root, 2, 99)).toBeUndefined()
++    expect(planHighlightRanges(root, 2, 99)).toEqual([])
++  })
++})
+diff --git a/packages/client/ui-plan/tests/plan-comments-preview.client.spec.tsx b/packages/client/ui-plan/tests/plan-comments-preview.client.spec.tsx
+new file mode 100644
+index 0000000000..b7e6d3e5c7
+--- /dev/null
++++ b/packages/client/ui-plan/tests/plan-comments-preview.client.spec.tsx
+@@ -0,0 +1,128 @@
++// @vitest-environment jsdom
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import { cleanup, fireEvent, render, screen } from '@testing-library/react'
++import type { SessionId } from '@deepseek-ai/dsh-session/types'
++import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
++import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
++import { en } from '../src/client/locales.ts'
++import { PlanPreview } from '../src/client/PlanPreview.tsx'
++import { createPlanCommentsStore, planCommentKey, type PlanCommentsState } from '../src/client/plan-comments.ts'
++
++beforeEach(() => {
++  localStorage.clear()
++  Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect(30, 20, 160, 18) })
++  Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [new DOMRect(30, 20, 80, 18), new DOMRect(30, 38, 160, 18)] })
++})
++afterEach(() => {
++  cleanup()
++  window.getSelection()?.removeAllRanges()
++  Reflect.deleteProperty(Range.prototype, 'getBoundingClientRect')
++  Reflect.deleteProperty(Range.prototype, 'getClientRects')
++})
++
++function preview(markdown = '# Plan\n\nReview **parallel** and `serial` now.') {
++  const sessionId = 'plan-selection-session' as SessionId
++  const planKey = planCommentKey(sessionId, 'call-selection', markdown)
++  const store = createPlanCommentsStore().create(sessionId)
++  store.actions.setEditable(planKey, true)
++  const holdReviewFocus = vi.fn()
++  const releaseReviewFocus = vi.fn()
++  const props = {
++    sessionId, t: makeTranslate(en, commonEn), actions: store.actions, holdReviewFocus, releaseReviewFocus,
++    useStore: <S,>(select: (state: PlanCommentsState) => S): S => select(store.getSnapshot()),
++    useResource: () => ({ status: 'live', value: { callId: 'call-selection', title: 'Plan', markdown } }),
++    useTabInfo: () => ({ tab: { title: 'Plan', navigation: { address: 'dsh-resource://plan/plan-selection-session/call-selection' } } }),
++  } as Parameters<typeof PlanPreview>[0]
++  const view = render(<PlanPreview {...props} />)
++  return { ...view, props, planKey, store, holdReviewFocus, releaseReviewFocus }
++}
++
++function selectParagraph(container: HTMLElement): void {
++  const paragraph = container.querySelector('p')!
++  const range = document.createRange()
++  range.selectNodeContents(paragraph)
++  const selection = window.getSelection()!
++  selection.removeAllRanges()
++  selection.addRange(range)
++  fireEvent.mouseUp(paragraph)
++}
++
++describe('plan comment preview', () => {
++  it('saves cross-node selections, shows hover comments, and edits or removes a highlight', () => {
++    const view = preview()
++    selectParagraph(view.container)
++    expect(view.holdReviewFocus).toHaveBeenCalledWith(view.planKey)
++    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep existing behavior.' } })
++    fireEvent.click(screen.getByRole('button', { name: en['comment.save'] }))
++    expect(view.store.getSnapshot().commentsByPlan[view.planKey]?.[0]).toMatchObject({ quote: 'Review parallel and serial now.', note: 'Keep existing behavior.' })
++    expect(view.releaseReviewFocus).toHaveBeenCalledWith(view.planKey)
++    expect(screen.queryByRole('dialog')).toBeNull()
++    const mark = view.container.querySelector<HTMLElement>('[data-plan-comment-mark]')!
++    fireEvent.mouseEnter(mark)
++    expect(screen.getByRole('tooltip').textContent).toBe('Keep existing behavior.')
++    fireEvent.click(mark)
++    expect(screen.getByRole('textbox').getAttribute('placeholder')).toBe(en['comment.placeholder'])
++    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('Keep existing behavior.')
++    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep parity.' } })
++    fireEvent.click(screen.getByRole('button', { name: en['comment.save'] }))
++    expect(view.store.getSnapshot().commentsByPlan[view.planKey]).toHaveLength(1)
++    expect(view.store.getSnapshot().commentsByPlan[view.planKey]?.[0]?.note).toBe('Keep parity.')
++    fireEvent.click(view.container.querySelector('[data-plan-comment-mark]')!)
++    fireEvent.click(screen.getByRole('button', { name: en['comment.delete'] }))
++    expect(view.store.getSnapshot().commentsByPlan[view.planKey]).toBeUndefined()
++    expect(view.container.querySelector('[data-plan-comment-mark]')).toBeNull()
++    expect(view.container.querySelector('strong')?.textContent).toBe('parallel')
++    expect(view.container.querySelector('code')?.textContent).toBe('serial')
++  })
++  it('keeps textarea newlines and composition input from submitting and closes on Escape or outside click', () => {
++    const view = preview()
++    selectParagraph(view.container)
++    const textarea = screen.getByRole('textbox')
++    fireEvent.change(textarea, { target: { value: '修改边界\n保持原行为' } })
++    fireEvent.keyDown(textarea, { key: 'Enter' })
++    expect(screen.getByRole('dialog')).toBeTruthy()
++    fireEvent.compositionStart(textarea)
++    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true, isComposing: true })
++    expect(view.store.getSnapshot().commentsByPlan[view.planKey]).toBeUndefined()
++    fireEvent.compositionEnd(textarea)
++    fireEvent.keyDown(textarea, { key: 'Escape' })
++    expect(screen.queryByRole('dialog')).toBeNull()
++    selectParagraph(view.container)
++    fireEvent.pointerDown(document.body)
++    expect(screen.queryByRole('dialog')).toBeNull()
++    expect(view.releaseReviewFocus).toHaveBeenCalledTimes(2)
++    selectParagraph(view.container)
++    view.unmount()
++    expect(view.releaseReviewFocus).toHaveBeenCalledTimes(3)
++  })
++  it('closes an active editor when the request becomes read-only while preserving hover notes', () => {
++    const view = preview()
++    selectParagraph(view.container)
++    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Review this.' } })
++    fireEvent.click(screen.getByRole('button', { name: en['comment.save'] }))
++    fireEvent.click(view.container.querySelector('[data-plan-comment-mark]')!)
++    view.store.actions.setEditable(view.planKey, false)
++    view.rerender(<PlanPreview {...view.props} />)
++    expect(screen.queryByRole('dialog')).toBeNull()
++    const mark = view.container.querySelector('[data-plan-comment-mark]')!
++    fireEvent.mouseEnter(mark)
++    expect(screen.getByRole('tooltip').textContent).toBe('Review this.')
++    fireEvent.click(mark)
++    selectParagraph(view.container)
++    expect(screen.queryByRole('dialog')).toBeNull()
++    expect(view.releaseReviewFocus).toHaveBeenCalledTimes(2)
++  })
++  it('restores highlights after remount and reports unresolved originals without drawing them', () => {
++    const view = preview()
++    selectParagraph(view.container)
++    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Remember this.' } })
++    fireEvent.click(screen.getByRole('button', { name: en['comment.save'] }))
++    view.unmount()
++    const restored = preview()
++    expect(restored.container.querySelector('[data-plan-comment-mark]')).not.toBeNull()
++    restored.store.actions.save({ id: 'missing', planKey: restored.planKey, quote: 'Unknown source', note: 'Update it.', start: 100, end: 114 })
++    restored.rerender(<PlanPreview {...restored.props} />)
++    expect(restored.store.getSnapshot().missingByPlan[restored.planKey]).toEqual(['missing'])
++    expect(restored.container.querySelector('[data-plan-comment-mark="missing"]')).toBeNull()
++  })
++})
+diff --git a/packages/client/ui-plan/tests/plan-comments.client.spec.ts b/packages/client/ui-plan/tests/plan-comments.client.spec.ts
+new file mode 100644
+index 0000000000..37f337563d
+--- /dev/null
++++ b/packages/client/ui-plan/tests/plan-comments.client.spec.ts
+@@ -0,0 +1,242 @@
++// @vitest-environment jsdom
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import type { SessionId } from '@deepseek-ai/dsh-session/types'
++import {
++  createPlanCommentsStore, EMPTY_PLAN_COMMENTS, locatePlanComment, planCommentKey, type PlanComment,
++} from '../src/client/plan-comments.ts'
++
++const sessionA = 'session-a' as SessionId
++const sessionB = 'session-b' as SessionId
++const planKey = planCommentKey(sessionA, 'call-a', '# Plan\nReview this text')
++const comment: PlanComment = {
++  id: 'comment-a', planKey, quote: 'Review', note: 'Add a test', start: 0, end: 6,
++  prefix: '', suffix: ' this text',
++}
++
++beforeEach(() => { localStorage.clear() })
++afterEach(() => { vi.restoreAllMocks() })
++
++describe('plan comment persistence', () => {
++  it('restores comments and pending revision after reload, leaving editability transient', () => {
++    const first = createPlanCommentsStore().create(sessionA)
++    first.actions.save(comment)
++    first.actions.setEditable(planKey, true)
++    first.actions.setSending(planKey, true)
++    first.actions.stage(planKey, 'Revision draft', [comment.id], 100)
++    const restored = createPlanCommentsStore().create(sessionA)
++    expect(restored.getSnapshot().commentsByPlan[planKey]).toEqual([comment])
++    expect(restored.getSnapshot().stagedByPlan[planKey]).toEqual({ draft: 'Revision draft', ids: [comment.id], afterSeq: 100 })
++    expect(restored.getSnapshot().editableByPlan[planKey]).toBeUndefined()
++    expect(first.getSnapshot().sendingByPlan[planKey]).toBe(true)
++    expect(restored.getSnapshot().sendingByPlan[planKey]).toBeUndefined()
++    expect(JSON.parse(localStorage.getItem(`dsh.plan-comments.v1.${sessionA}`)!).sendingByPlan).toBeUndefined()
++  })
++
++  it('keeps independent session instances and keys', () => {
++    const handle = createPlanCommentsStore()
++    const first = handle.create(sessionA)
++    const second = handle.create(sessionB)
++    first.actions.save(comment)
++    expect(second.getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++    expect(handle.create(sessionB).getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++    expect(planCommentKey(sessionB, 'call-a', '# Plan\nReview this text')).not.toBe(planKey)
++    expect(planCommentKey(sessionA, 'call-b', '# Plan\nReview this text')).not.toBe(planKey)
++    expect(planCommentKey(sessionA, 'call-a', '# New plan')).not.toBe(planKey)
++  })
++
++  it('keeps the empty snapshot reference stable and notifies consumers for edits', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    const first = store.getSnapshot()
++    const notify = vi.fn()
++    const unsubscribe = store.subscribe(notify)
++    expect(store.getSnapshot()).toBe(first)
++    expect(first.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS).toBe(EMPTY_PLAN_COMMENTS)
++    store.actions.save(comment)
++    expect(notify).toHaveBeenCalledTimes(1)
++    store.actions.save({ ...comment, note: 'Revised comment' })
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([{ ...comment, note: 'Revised comment' }])
++    unsubscribe()
++    store.actions.clear(planKey)
++    expect(notify).toHaveBeenCalledTimes(2)
++  })
++
++  it('filters invalid durable anchors, key mismatches, and duplicate ids', () => {
++    localStorage.setItem(`dsh.plan-comments.v1.${sessionA}`, JSON.stringify({
++      commentsByPlan: {
++        [planKey]: [comment, comment, { ...comment, id: 'negative', start: -1 }, { ...comment, id: 'fraction', start: 0.5 },
++          { ...comment, id: 'range', end: 5 }, { ...comment, id: 'empty', note: '  ' }, { ...comment, id: 'wrong-key', planKey: 'other' },
++          { ...comment, id: 'bad-context', prefix: 1 }],
++        other: 'not an array',
++      },
++      stagedByPlan: { [planKey]: { draft: 'Draft', ids: [comment.id, 'missing', 1, comment.id], afterSeq: 100 } },
++    }))
++    const restored = createPlanCommentsStore().create(sessionA)
++    expect(restored.getSnapshot().commentsByPlan[planKey]).toEqual([comment])
++    expect(restored.getSnapshot().stagedByPlan[planKey]).toEqual({ draft: 'Draft', ids: [comment.id], afterSeq: 100 })
++  })
++
++  it('starts clean for malformed storage and continues through browser read/write failures', () => {
++    localStorage.setItem(`dsh.plan-comments.v1.${sessionA}`, '{invalid')
++    const malformed = createPlanCommentsStore().create(sessionA)
++    expect(malformed.getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Unavailable') })
++    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Quota exceeded') })
++    const unavailable = createPlanCommentsStore().create(sessionA)
++    expect(() => { unavailable.actions.save(comment) }).not.toThrow()
++    expect(unavailable.getSnapshot().commentsByPlan[planKey]).toEqual([comment])
++    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new DOMException('Unavailable') })
++    expect(() => { unavailable.clearPersisted() }).not.toThrow()
++  })
++
++  it('removes only staged ids after the exact draft is delivered', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.stage(planKey, 'Draft', [comment.id], 100)
++    const later = { ...comment, id: 'comment-b', note: 'Later note' }
++    store.actions.save(later)
++    store.actions.confirm(planKey, 'Edited draft', 101)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([comment, later])
++    expect(store.getSnapshot().stagedByPlan[planKey]).toBeDefined()
++    store.actions.confirm(planKey, 'Draft', 101)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([later])
++    expect(store.getSnapshot().stagedByPlan[planKey]).toBeUndefined()
++  })
++
++  it('unstages a failed matching request without deleting comments or a newer request', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.stage(planKey, 'Newer request', [comment.id], 100)
++    store.actions.unstage(planKey, 'Older request')
++    expect(store.getSnapshot().stagedByPlan[planKey]?.draft).toBe('Newer request')
++    store.actions.unstage(planKey, 'Newer request')
++    expect(store.getSnapshot().stagedByPlan[planKey]).toBeUndefined()
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([comment])
++  })
++
++  it('confirms the current stage synchronously without consuming unrelated revisions or later notes', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    const otherKey = planCommentKey(sessionA, 'call-b', '# Other plan')
++    store.actions.save(comment)
++    store.actions.save({ ...comment, id: 'other', planKey: otherKey })
++    store.actions.stage(planKey, 'Revision request', [comment.id], 100)
++    store.actions.stage(otherKey, 'Other request', ['other'], 100)
++    const later = { ...comment, id: 'later', note: 'Keep this later note' }
++    store.actions.save(later)
++    store.actions.confirmSubmitted('Revision request', 100)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([comment, later])
++    store.actions.confirmSubmitted('Revision request', 101)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([later])
++    expect(store.getSnapshot().stagedByPlan[planKey]).toBeUndefined()
++    expect(store.getSnapshot().commentsByPlan[otherKey]).toHaveLength(1)
++    expect(store.getSnapshot().stagedByPlan[otherKey]).toBeDefined()
++  })
++
++  it('retains a new revision when identical earlier successful user text is replayed', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.stage(planKey, 'Same revision draft', [comment.id], 100)
++    store.actions.confirm(planKey, 'Same revision draft', 50)
++    store.actions.confirm(planKey, 'Same revision draft', 100)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([comment])
++    const restored = createPlanCommentsStore().create(sessionA)
++    restored.actions.confirm(planKey, 'Same revision draft', 50)
++    expect(restored.getSnapshot().commentsByPlan[planKey]).toEqual([comment])
++    restored.actions.confirm(planKey, 'Same revision draft', 101)
++    expect(restored.getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++  })
++
++  it('restores a revision staged before the first durable event', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.stage(planKey, 'First revision draft', [comment.id], -1)
++    const restored = createPlanCommentsStore().create(sessionA)
++    expect(restored.getSnapshot().stagedByPlan[planKey]?.afterSeq).toBe(-1)
++    restored.actions.confirm(planKey, 'First revision draft', 0)
++    expect(restored.getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++  })
++
++  it('clears all comments and the staged revision on explicit cancellation', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.save({ ...comment, id: 'comment-b' })
++    store.actions.stage(planKey, 'Draft', [comment.id], 100)
++    store.actions.remove(planKey, [comment.id])
++    expect(store.getSnapshot().commentsByPlan[planKey]?.map(item => item.id)).toEqual(['comment-b'])
++    store.actions.clear(planKey)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++    expect(store.getSnapshot().stagedByPlan[planKey]).toBeUndefined()
++    store.clearPersisted()
++    expect(localStorage.getItem(`dsh.plan-comments.v1.${sessionA}`)).toBeNull()
++  })
++
++  it('keeps a comment edited after staging when the older draft is delivered', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.stage(planKey, 'Older draft', [comment.id], 100)
++    store.actions.save({ ...comment, note: 'Updated after staging' })
++    store.actions.confirm(planKey, 'Older draft', 101)
++    expect(store.getSnapshot().commentsByPlan[planKey]).toEqual([{ ...comment, note: 'Updated after staging' }])
++  })
++
++  it('publishes missing text anchors once per change without persisting preview status', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    const notify = vi.fn()
++    store.subscribe(notify)
++    store.actions.setMissing(planKey, [comment.id])
++    store.actions.setMissing(planKey, [comment.id])
++    expect(notify).toHaveBeenCalledTimes(1)
++    expect(createPlanCommentsStore().create(sessionA).getSnapshot().missingByPlan[planKey]).toBeUndefined()
++    store.actions.setMissing(planKey, [])
++    store.actions.setMissing(planKey, [])
++    expect(notify).toHaveBeenCalledTimes(2)
++    expect(store.getSnapshot().missingByPlan[planKey]).toBeUndefined()
++  })
++
++  it('retains comments when the same invocation changes plan text and isolates other invocations', () => {
++    const store = createPlanCommentsStore().create(sessionA)
++    store.actions.save(comment)
++    store.actions.stage(planKey, 'Old revision', [comment.id], 100)
++    store.actions.setEditable(planKey, true)
++    store.actions.setMissing(planKey, [comment.id])
++    const another = planCommentKey(sessionA, 'call-b', '# Plan\nReview this text')
++    store.actions.save({ ...comment, id: 'other-comment', planKey: another })
++    const changed = planCommentKey(sessionA, 'call-a', '# Changed plan\nDifferent text')
++    store.actions.adopt(changed)
++    expect(store.getSnapshot().commentsByPlan[changed]).toEqual([{ ...comment, planKey: changed }])
++    expect(locatePlanComment('Changed planDifferent text', store.getSnapshot().commentsByPlan[changed]![0]!)).toBeUndefined()
++    expect(store.getSnapshot().commentsByPlan[another]).toEqual([{ ...comment, id: 'other-comment', planKey: another }])
++    expect(store.getSnapshot().commentsByPlan[planKey]).toBeUndefined()
++    expect(store.getSnapshot().stagedByPlan[planKey]).toBeUndefined()
++    expect(store.getSnapshot().editableByPlan[planKey]).toBeUndefined()
++    expect(store.getSnapshot().missingByPlan[planKey]).toBeUndefined()
++    const snapshot = store.getSnapshot()
++    store.actions.adopt(changed)
++    expect(store.getSnapshot()).toBe(snapshot)
++  })
++})
++
++describe('plan annotation text anchors', () => {
++  it('keeps an exact quote at its original verified text position', () => {
++    expect(locatePlanComment('Review this text', comment)).toEqual({ start: 0, end: 6 })
++  })
++
++  it('reanchors a unique unchanged quote after preceding text moves', () => {
++    expect(locatePlanComment('New: Review this text', comment)).toEqual({ start: 5, end: 11 })
++  })
++
++  it('uses surrounding context to distinguish repeated quotes', () => {
++    expect(locatePlanComment('Review other text; Review this text', comment)).toEqual({ start: 19, end: 25 })
++  })
++
++  it('leaves missing or ambiguous quotes unmarked instead of choosing the first', () => {
++    const { prefix: _prefix, suffix: _suffix, ...withoutContext } = comment
++    const { prefix: _prefixOnly, ...withoutPrefix } = comment
++    expect(locatePlanComment('Changed this text', comment)).toBeUndefined()
++    expect(locatePlanComment('prefix Review this text; Review this text', withoutContext)).toBeUndefined()
++    expect(locatePlanComment('prefix Review this text; Review this text', withoutPrefix)).toBeUndefined()
++  })
++
++  it('keeps request and session delimiters unambiguous in plan keys', () => {
++    expect(planCommentKey('session:a' as SessionId, 'call', 'text')).not.toBe(planCommentKey('session' as SessionId, 'a:call', 'text'))
++  })
++})
+diff --git a/packages/client/ui-plan/tests/plan-review-surface.client.spec.tsx b/packages/client/ui-plan/tests/plan-review-surface.client.spec.tsx
+new file mode 100644
+index 0000000000..e1bb7c17a7
+--- /dev/null
++++ b/packages/client/ui-plan/tests/plan-review-surface.client.spec.tsx
+@@ -0,0 +1,312 @@
++// @vitest-environment jsdom
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
++import type { SessionId } from '@deepseek-ai/dsh-session/types'
++import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
++import type { InputState } from '@deepseek-ai/dsh-client-ui-conversation/client'
++import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
++import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
++import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
++import { PendingQuestion, planReviewOf } from '../../ui-user-questions/src/client/contract/slots.ts'
++import { observableHook } from '../../ui-renderer/src/client/bindings.tsx'
++import { PlanReviewSurface } from '../src/client/PlanReviewSurface.tsx'
++import { createPlanCommentsStore, planCommentKey, type PlanComment } from '../src/client/plan-comments.ts'
++import { en } from '../src/client/locales.ts'
++
++const SID = 'surface-session' as SessionId
++const CALL = 'review-call' as ToolCallId
++const PLAN = '# Ship the picker\n\nRead the store before implementation.'
++const t = makeTranslate(en, commonEn)
++
++beforeEach(() => { localStorage.clear() })
++afterEach(() => { cleanup(); vi.restoreAllMocks() })
++
++function fixture(options: { readOnly?: boolean; draft?: string; attachments?: InputState['attachmentIds']; busy?: boolean; decline?: boolean; rpc?: boolean } = {}) {
++  const questions = [{ id: 'plan-review', question: 'Approve this plan?', detail: PLAN, options: [{ label: 'Approve' }, ...options.decline === true ? [{ label: 'Request changes' }] : []], intent: { kind: 'plan-review' as const, approve: 'Approve', callId: CALL } }]
++  const pending = new PendingQuestion(SID, questions, CALL, undefined, options.readOnly === true ? [{ id: 'plan-review', selected: ['Approve'] }] : undefined)
++  if (options.readOnly !== true) {
++    if (options.rpc === true) {
++      pending.setState('continued')
++      pending.attachRpc({ answer: vi.fn(async () => true) })
++    } else pending.attachWaterfall({ deadline: undefined, resolve: vi.fn(), reject: vi.fn(), delegate: vi.fn() })
++  }
++  const review = planReviewOf(questions)!
++  const key = planCommentKey(SID, CALL, PLAN)
++  const comments = createPlanCommentsStore().create(SID)
++  const input = createSnapshotStore<InputState>({ draft: options.draft ?? '', attachmentIds: options.attachments ?? [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] })
++  const setDraft = vi.fn((draft: string) => { input.set({ ...input.getSnapshot(), draft }) })
++  const dismiss = vi.fn(async () => true)
++  const answer = vi.spyOn(pending, 'answer')
++  const approve = vi.fn()
++  const unbind = vi.fn()
++  const bindReview = vi.fn(() => unbind)
++  const focusComposer = vi.fn()
++  const sendRevision = vi.fn(async (_text: string) => {})
++  const props = {
++    pending, review, requestKey: pending.key, preview: <button type="button">View full plan</button>, card: pending.snapshot(), busy: options.busy ?? false,
++    error: null, approve, dismiss, sessionId: SID, inputActions: { setDraft }, useInput: observableHook(input),
++    submissionCursor: () => 100, t, useStore: observableHook(comments), actions: comments.actions, bindReview, focusComposer, sendRevision,
++  } as Parameters<typeof PlanReviewSurface>[0]
++  const note = (id: string, quote = 'Read the store'): PlanComment => ({ id, planKey: key, quote, note: `Requested change ${id}`, start: 0, end: quote.length })
++  return { props, comments, key, note, setDraft, input, dismiss, answer, approve, bindReview, unbind, focusComposer, sendRevision }
++}
++
++function variant(): string | null {
++  expect(document.querySelectorAll('[data-plan-review-surface]')).toHaveLength(1)
++  return document.querySelector('[data-plan-review-surface]')!.getAttribute('data-plan-review-variant')
++}
++
++describe('one plan review surface', () => {
++  it('switches the existing root to revision for the first comment and back after deleting the last', () => {
++    const f = fixture()
++    render(<PlanReviewSurface {...f.props} />)
++    const original = document.querySelector('[data-plan-review-surface]')
++    expect(variant()).toBe('review')
++    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy()
++    act(() => { f.comments.actions.save(f.note('a')) })
++    expect(variant()).toBe('revision')
++    expect(document.querySelector('[data-plan-review-surface]')).toBe(original)
++    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
++    expect(screen.getByRole('button', { name: 'Revise plan' })).toBeTruthy()
++    fireEvent.click(screen.getByRole('button', { name: 'Delete comment' }))
++    expect(variant()).toBe('review')
++    expect(document.querySelector('[data-plan-review-surface]')).toBe(original)
++    expect(screen.queryByRole('button', { name: 'Revise plan' })).toBeNull()
++  })
++
++  it('deletes selected comments together and keeps the one card and preview opener', () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    f.comments.actions.save(f.note('b', 'before implementation'))
++    render(<PlanReviewSurface {...f.props} />)
++    for (const checkbox of screen.getAllByRole('checkbox')) fireEvent.click(checkbox)
++    fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
++    expect(variant()).toBe('review')
++    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
++    expect(screen.getByRole('button', { name: 'View full plan' })).toBeTruthy()
++  })
++
++  it('keeps saved comments readable while hiding mutation controls on a settled review', async () => {
++    const f = fixture({ readOnly: true })
++    f.comments.actions.save(f.note('a'))
++    render(<PlanReviewSurface {...f.props} />)
++    expect(variant()).toBe('revision')
++    expect(screen.getByText('Requested change a')).toBeTruthy()
++    expect(screen.queryByRole('checkbox')).toBeNull()
++    expect(screen.queryByRole('button', { name: 'Delete comment' })).toBeNull()
++    expect(screen.queryByRole('button', { name: 'Revise plan' })).toBeNull()
++    expect(screen.queryByRole('button', { name: 'Cancel plan' })).toBeNull()
++    expect(screen.getAllByRole('button')).toHaveLength(2)
++    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledOnce() })
++    expect(f.comments.getSnapshot().commentsByPlan[f.key]).toHaveLength(1)
++    expect(f.comments.getSnapshot().editableByPlan[f.key]).toBeUndefined()
++  })
++
++  it('sends only the revision prompt and retains comments until recorded delivery, preserving draft and attachments', async () => {
++    const f = fixture({ draft: 'Existing user draft', attachments: ['user-file' as InputState['attachmentIds'][number]] })
++    const before = f.input.getSnapshot()
++    f.comments.actions.save(f.note('a'))
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledOnce() })
++    const text = f.sendRevision.mock.calls[0]![0]
++    expect(text).toBe('Please revise the plan using these comments:\n\n1. “Read the store”\n   Requested change: Requested change a')
++    expect(f.dismiss).toHaveBeenCalledOnce()
++    expect(f.sendRevision.mock.invocationCallOrder[0]).toBeLessThan(f.answer.mock.invocationCallOrder[0]!)
++    expect(f.answer.mock.invocationCallOrder[0]).toBeLessThan(f.dismiss.mock.invocationCallOrder[0]!)
++    expect(f.answer).toHaveBeenCalledExactlyOnceWith({ answers: [{ id: 'plan-review', selected: [] }] })
++    expect(f.setDraft).not.toHaveBeenCalled()
++    expect(f.focusComposer).not.toHaveBeenCalled()
++    expect(f.input.getSnapshot()).toBe(before)
++    expect(f.comments.getSnapshot().commentsByPlan[f.key]).toHaveLength(1)
++    expect(f.comments.getSnapshot().stagedByPlan[f.key]).toEqual({ draft: text, ids: ['a'], afterSeq: 100 })
++    act(() => { f.comments.actions.confirmSubmitted('Unrelated message', 101) })
++    expect(variant()).toBe('revision')
++    act(() => { f.comments.actions.confirmSubmitted(text, 101) })
++    expect(variant()).toBe('review')
++  })
++
++  it('retains an accepted revision when dismissal fails and retries closing without another prompt', async () => {
++    const f = fixture({ draft: 'Keep this draft' })
++    f.comments.actions.save(f.note('a'))
++    f.dismiss.mockResolvedValue(false)
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledOnce() })
++    expect(f.setDraft).not.toHaveBeenCalled()
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    expect(f.comments.getSnapshot().stagedByPlan[f.key]).toBeDefined()
++    expect(f.comments.getSnapshot().commentsByPlan[f.key]).toHaveLength(1)
++    expect(f.input.getSnapshot().draft).toBe('Keep this draft')
++    expect(f.focusComposer).not.toHaveBeenCalled()
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledTimes(2) })
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    expect(f.comments.getSnapshot().commentsByPlan[f.key]).toHaveLength(1)
++    expect(f.focusComposer).not.toHaveBeenCalled()
++  })
++
++  it('retains comments after a send failure and permits retry without changing the user draft', async () => {
++    const f = fixture({ draft: 'Keep this draft' })
++    f.comments.actions.save(f.note('a'))
++    f.sendRevision.mockRejectedValueOnce(new Error('Offline'))
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(screen.getByRole('status').textContent).toBe('Offline') })
++    expect(f.comments.getSnapshot().commentsByPlan[f.key]).toHaveLength(1)
++    expect(f.comments.getSnapshot().stagedByPlan[f.key]).toBeUndefined()
++    expect(f.answer).not.toHaveBeenCalled()
++    expect(f.dismiss).not.toHaveBeenCalled()
++    expect(screen.getByRole('button', { name: 'Revise plan' }).hasAttribute('disabled')).toBe(false)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.sendRevision).toHaveBeenCalledTimes(2) })
++    expect(f.comments.getSnapshot().stagedByPlan[f.key]).toBeDefined()
++    expect(screen.getByRole('status').textContent).toBe('')
++    expect(f.input.getSnapshot().draft).toBe('Keep this draft')
++    expect(f.setDraft).not.toHaveBeenCalled()
++  })
++
++  it('uses the non-approval option to release the current wait after prompt admission', async () => {
++    const f = fixture({ decline: true })
++    f.comments.actions.save(f.note('a'))
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledOnce() })
++    expect(f.answer).toHaveBeenCalledExactlyOnceWith({ answers: [{ id: 'plan-review', selected: ['Request changes'] }] })
++    expect(f.sendRevision.mock.invocationCallOrder[0]).toBeLessThan(f.answer.mock.invocationCallOrder[0]!)
++  })
++
++  it('does not send a second structured answer for an already continued RPC review', async () => {
++    const f = fixture({ rpc: true })
++    f.comments.actions.save(f.note('a'))
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledOnce() })
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    expect(f.answer).not.toHaveBeenCalled()
++  })
++
++  it('retries only wait release after an accepted prompt fails to settle the old question', async () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    f.answer.mockRejectedValueOnce(new Error('Wait settlement failed'))
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(screen.getByRole('status').textContent).toBe('Wait settlement failed') })
++    expect(f.comments.getSnapshot().stagedByPlan[f.key]).toBeDefined()
++    expect(f.dismiss).not.toHaveBeenCalled()
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledOnce() })
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    expect(f.answer).toHaveBeenCalledTimes(2)
++    expect(f.comments.getSnapshot().commentsByPlan[f.key]).toHaveLength(1)
++  })
++
++  it('guards repeated clicks throughout dismissal and direct-send admission', async () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    let finish: (() => void) | undefined
++    f.sendRevision.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
++    render(<PlanReviewSurface {...f.props} />)
++    const revise = screen.getByRole('button', { name: 'Revise plan' })
++    fireEvent.click(revise)
++    fireEvent.click(revise)
++    await vi.waitFor(() => { expect(f.sendRevision).toHaveBeenCalledOnce() })
++    expect(f.answer).not.toHaveBeenCalled()
++    expect(f.dismiss).not.toHaveBeenCalled()
++    expect(revise.hasAttribute('disabled')).toBe(true)
++    expect(screen.getByRole('button', { name: 'Cancel plan' }).hasAttribute('disabled')).toBe(true)
++    expect(screen.getByRole('button', { name: 'Delete comment' }).hasAttribute('disabled')).toBe(true)
++    await act(async () => { finish!(); await Promise.resolve() })
++    expect(screen.getByRole('button', { name: 'Revise plan' }).hasAttribute('disabled')).toBe(false)
++    expect(f.dismiss).toHaveBeenCalledOnce()
++    expect(screen.getByRole('button', { name: 'Delete comment' }).hasAttribute('disabled')).toBe(false)
++  })
++
++  it('does not resend the same queued revision after reopening, while an edited comment can be submitted', async () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    const view = render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => {
++      expect(f.dismiss).toHaveBeenCalledOnce()
++      expect(f.comments.getSnapshot().sendingByPlan[f.key]).toBeUndefined()
++    })
++    view.unmount()
++    render(<PlanReviewSurface {...f.props} />)
++    const revise = screen.getByRole('button', { name: 'Revise plan' })
++    expect(revise.hasAttribute('disabled')).toBe(false)
++    fireEvent.click(revise)
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledTimes(2) })
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    expect(screen.getByRole('button', { name: 'Delete comment' }).hasAttribute('disabled')).toBe(false)
++    act(() => { f.comments.actions.save({ ...f.note('a'), note: 'Updated requested change' }) })
++    expect(screen.getByRole('button', { name: 'Revise plan' }).hasAttribute('disabled')).toBe(false)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.sendRevision).toHaveBeenCalledTimes(2) })
++    expect(f.sendRevision.mock.calls[1]![0]).toContain('Updated requested change')
++  })
++
++  it('keeps the remounted seat locked until the original prompt admission finishes', async () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    let finish: (() => void) | undefined
++    f.sendRevision.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
++    const first = render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.sendRevision).toHaveBeenCalledOnce() })
++    first.unmount()
++    render(<PlanReviewSurface {...f.props} />)
++    const revise = screen.getByRole('button', { name: 'Revise plan' })
++    expect(f.comments.getSnapshot().sendingByPlan[f.key]).toBe(true)
++    expect(revise.hasAttribute('disabled')).toBe(true)
++    fireEvent.click(revise)
++    expect(f.answer).not.toHaveBeenCalled()
++    expect(f.dismiss).not.toHaveBeenCalled()
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    await act(async () => { finish!(); await Promise.resolve() })
++    expect(f.answer).toHaveBeenCalledOnce()
++    expect(f.dismiss).toHaveBeenCalledOnce()
++    expect(f.comments.getSnapshot().sendingByPlan[f.key]).toBeUndefined()
++    expect(screen.getByRole('button', { name: 'Revise plan' }).hasAttribute('disabled')).toBe(false)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(f.dismiss).toHaveBeenCalledTimes(2) })
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++  })
++
++  it('stages comments before a synchronous delivery acknowledgement', async () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    f.sendRevision.mockImplementation(async text => { f.comments.actions.confirmSubmitted(text, 101) })
++    render(<PlanReviewSurface {...f.props} />)
++    fireEvent.click(screen.getByRole('button', { name: 'Revise plan' }))
++    await vi.waitFor(() => { expect(variant()).toBe('review') })
++    expect(f.sendRevision).toHaveBeenCalledOnce()
++    expect(f.comments.getSnapshot().stagedByPlan[f.key]).toBeUndefined()
++  })
++
++  it('clears comments after successful cancellation and disposes the focus binding', async () => {
++    const f = fixture()
++    f.comments.actions.save(f.note('a'))
++    const view = render(<PlanReviewSurface {...f.props} />)
++    expect(f.bindReview).toHaveBeenCalledExactlyOnceWith(f.key, f.props.pending)
++    fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }))
++    await vi.waitFor(() => { expect(variant()).toBe('review') })
++    expect(f.focusComposer).toHaveBeenCalledOnce()
++    view.unmount()
++    expect(f.unbind).toHaveBeenCalledOnce()
++    expect(f.comments.getSnapshot().editableByPlan[f.key]).toBeUndefined()
++  })
++
++  it('shows changed-original status and disables editing during an in-flight action', () => {
++    const f = fixture({ busy: true })
++    f.comments.actions.save(f.note('a'))
++    f.comments.actions.setMissing(f.key, ['a'])
++    render(<PlanReviewSurface {...f.props} />)
++    expect(screen.getByText('Original text changed')).toBeTruthy()
++    for (const control of screen.getAllByRole('checkbox')) expect(control.hasAttribute('disabled')).toBe(true)
++    expect(screen.getByRole('button', { name: 'Revise plan' }).hasAttribute('disabled')).toBe(true)
++    expect(f.comments.getSnapshot().editableByPlan[f.key]).toBeUndefined()
++  })
++})
+diff --git a/packages/client/ui-plan/tests/plan-revision-receipt.client.spec.tsx b/packages/client/ui-plan/tests/plan-revision-receipt.client.spec.tsx
+new file mode 100644
+index 0000000000..8c6b3c1224
+--- /dev/null
++++ b/packages/client/ui-plan/tests/plan-revision-receipt.client.spec.tsx
+@@ -0,0 +1,94 @@
++// @vitest-environment jsdom
++import { afterEach, beforeEach, describe, expect, it } from 'vitest'
++import { act, cleanup, render } from '@testing-library/react'
++import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
++import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
++import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
++import { MutableSessionEventSource } from '@deepseek-ai/dsh-api-session-controller/src/client/contract/events.ts'
++import { observableHook } from '../../ui-renderer/src/client/bindings.tsx'
++import { createPlanCommentsStore, planCommentKey } from '../src/client/plan-comments.ts'
++import { PlanRevisionReceipt } from '../src/client/PlanRevisionReceipt.tsx'
++import { watchRevisionSubmissions } from '../src/client/revision-submissions.ts'
++
++beforeEach(() => { localStorage.clear() })
++afterEach(cleanup)
++
++describe('plan revision delivery cleanup', () => {
++  it('keeps the submitted revision independent of other draft edits and clears only on its new recorded message', () => {
++    const sessionId = 'revision-receipt' as SessionId
++    const key = planCommentKey(sessionId, 'request', '# Plan')
++    const comments = createPlanCommentsStore().create(sessionId)
++    comments.actions.save({ id: 'note', planKey: key, quote: 'Plan', note: 'Change it', start: 0, end: 4 })
++    comments.actions.stage(key, 'revision draft', ['note'], 20)
++    const input = createSnapshotStore({ draft: 'revision draft' })
++    const source = new MutableSessionEventSource()
++    const append = (text: string, seq: number): void => {
++      source.append({ type: 'event', event: { type: 'user/message', surfaceOp: 'append', seq: seq as SessionSeq, time: seq, data: {
++        id: `receipt-${seq}` as MessageId, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text }],
++      } } })
++    }
++    append('revision draft', 10)
++    const props = { sessionId, actions: comments.actions, useStore: observableHook(comments), useInput: observableHook(input),
++      watchSubmitted: (receipt: (text: string, seq: number) => void) => watchRevisionSubmissions(source, receipt),
++    } as Parameters<typeof PlanRevisionReceipt>[0]
++    render(<PlanRevisionReceipt {...props} />)
++    expect(comments.getSnapshot().commentsByPlan[key]).toHaveLength(1)
++    act(() => { input.set({ draft: 'edited revision draft' }) })
++    expect(comments.getSnapshot().stagedByPlan[key]?.draft).toBe('revision draft')
++    // No recorded message means failed or queued input cannot consume notes.
++    act(() => { input.set({ draft: '' }) })
++    expect(comments.getSnapshot().commentsByPlan[key]).toHaveLength(1)
++    act(() => { input.set({ draft: 'an unrelated later draft' }); append('an unrelated later draft', 21) })
++    expect(comments.getSnapshot().commentsByPlan[key]).toHaveLength(1)
++    act(() => { append('edited revision draft', 22) })
++    expect(comments.getSnapshot().commentsByPlan[key]).toHaveLength(1)
++    act(() => { append('revision draft', 23) })
++    expect(comments.getSnapshot().commentsByPlan[key]).toBeUndefined()
++    expect(comments.getSnapshot().stagedByPlan[key]).toBeUndefined()
++  })
++
++  it('confirms a revision staged immediately before a synchronous recorded event', () => {
++    const sessionId = 'synchronous-receipt' as SessionId
++    const key = planCommentKey(sessionId, 'request', '# Plan')
++    const comments = createPlanCommentsStore().create(sessionId)
++    const source = new MutableSessionEventSource()
++    const props = { actions: comments.actions, useStore: observableHook(comments),
++      watchSubmitted: (receipt: (text: string, seq: number) => void) => watchRevisionSubmissions(source, receipt),
++    }
++    render(<PlanRevisionReceipt {...props} />)
++    act(() => {
++      comments.actions.save({ id: 'note', planKey: key, quote: 'Plan', note: 'Change it', start: 0, end: 4 })
++      comments.actions.stage(key, 'revision request', ['note'], 20)
++      source.append({ type: 'event', event: { type: 'user/message', surfaceOp: 'append', seq: 21 as SessionSeq, time: 21, data: {
++        id: 'sync-receipt' as MessageId, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'revision request' }],
++      } } })
++    })
++    expect(comments.getSnapshot().commentsByPlan[key]).toBeUndefined()
++    expect(comments.getSnapshot().stagedByPlan[key]).toBeUndefined()
++  })
++
++  it('confirms a restored revision from successful history without consuming comments for an older message', () => {
++    const sessionId = 'restored-receipt' as SessionId
++    const key = planCommentKey(sessionId, 'request', '# Plan')
++    const original = createPlanCommentsStore().create(sessionId)
++    original.actions.save({ id: 'note', planKey: key, quote: 'Plan', note: 'Change it', start: 0, end: 4 })
++    original.actions.stage(key, 'revision request', ['note'], 20)
++    const comments = createPlanCommentsStore().create(sessionId)
++    const source = new MutableSessionEventSource()
++    const append = (seq: number): void => {
++      source.append({ type: 'event', event: { type: 'user/message', surfaceOp: 'append', seq: seq as SessionSeq, time: seq, data: {
++        id: `restored-${seq}` as MessageId, role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'revision request' }],
++      } } })
++    }
++    append(10)
++    const props = { actions: comments.actions, useStore: observableHook(comments),
++      watchSubmitted: (receipt: (text: string, seq: number) => void) => watchRevisionSubmissions(source, receipt),
++    }
++    const view = render(<PlanRevisionReceipt {...props} />)
++    expect(comments.getSnapshot().commentsByPlan[key]).toHaveLength(1)
++    view.unmount()
++    append(21)
++    render(<PlanRevisionReceipt {...props} />)
++    expect(comments.getSnapshot().commentsByPlan[key]).toBeUndefined()
++  })
++})
+diff --git a/packages/client/ui-plan/tests/revision-submissions.client.spec.ts b/packages/client/ui-plan/tests/revision-submissions.client.spec.ts
+new file mode 100644
+index 0000000000..8b2d894e4c
+--- /dev/null
++++ b/packages/client/ui-plan/tests/revision-submissions.client.spec.ts
+@@ -0,0 +1,40 @@
++import { describe, expect, it, vi } from 'vitest'
++import { MutableSessionEventSource } from '@deepseek-ai/dsh-api-session-controller/src/client/contract/events.ts'
++import type { SessionEventLikeEntry } from '@deepseek-ai/dsh-api-session-controller/client'
++import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
++import type { MessageId, ToolCallId } from '@deepseek-ai/dsh-llm/brand'
++import { watchRevisionSubmissions } from '../src/client/revision-submissions.ts'
++
++function user(text: string, seq: number, source: 'user' | 'tool' = 'user'): SessionEventLikeEntry {
++  return { type: 'event', event: { type: 'user/message', seq: seq as SessionSeq, time: seq, surfaceOp: 'append', data: {
++    id: `message-${seq}` as MessageId, role: 'user', source: source === 'user' ? { kind: 'user' } : { kind: 'tool', callId: 'receipt-tool' as ToolCallId }, content: [{ type: 'text', text }],
++  } } }
++}
++
++describe('revision submission receipts', () => {
++  it('observes restored successful user text and then only exact live deltas', () => {
++    const source = new MutableSessionEventSource()
++    source.replace([user('saved draft', 1)], false)
++    const receipt = vi.fn()
++    const dispose = watchRevisionSubmissions(source, receipt)
++    expect(receipt.mock.calls).toEqual([['saved draft', 1]])
++    source.append(user('revision draft', 2))
++    expect(receipt.mock.calls).toEqual([['saved draft', 1], ['revision draft', 2]])
++    source.append(user('tool notification', 3, 'tool'))
++    expect(receipt).toHaveBeenCalledTimes(2)
++    dispose()
++    source.append(user('after disposal', 4))
++    expect(receipt).toHaveBeenCalledTimes(2)
++  })
++  it('does not manufacture receipts from assistant or transient output', () => {
++    const source = new MutableSessionEventSource()
++    const receipt = vi.fn()
++    const dispose = watchRevisionSubmissions(source, receipt)
++    source.append({ type: 'transient', event: { type: 'assistant/live-chunk', seq: 1, time: 1, data: {} } } as SessionEventLikeEntry)
++    source.append({ type: 'event', event: { type: 'assistant/message', seq: 2, time: 2, data: {} } } as SessionEventLikeEntry)
++    expect(receipt).not.toHaveBeenCalled()
++    source.append(user('sent manually', 3))
++    expect(receipt).toHaveBeenCalledWith('sent manually', 3)
++    dispose()
++  })
++})

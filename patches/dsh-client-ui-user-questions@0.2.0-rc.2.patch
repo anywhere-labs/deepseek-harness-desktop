@@ -1,0 +1,437 @@
+diff --git a/lib/client.js b/lib/client.js
+index 4ee7833..5b0f87d 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -452,7 +452,7 @@ window.__ModuleLoader__.load({
+ 			});
+ 		}
+ 		//#endregion
+-		//#region ../../../node_modules/.pnpm/clsx@2.1.1/node_modules/clsx/dist/clsx.mjs
++		//#region ../../../../../../Users/qiuya/code/zh-code/dsh-desktop/deepseek-harness/node_modules/.pnpm/clsx@2.1.1/node_modules/clsx/dist/clsx.mjs
+ 		function r(e) {
+ 			var t, f, n = "";
+ 			if ("string" == typeof e || "number" == typeof e) n += e;
+@@ -467,8 +467,8 @@ window.__ModuleLoader__.load({
+ 			return n;
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:D:\qwq\desktop\wt-dsh-master\deepseek-harness\packages\client\ui-user-questions\src\client\PlanReviewPanel.module.css.mjs
+-		const css$2 = ".Ec4s0a_frame{padding:6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;justify-content:center;display:flex}.Ec4s0a_card{width:100%;max-width:var(--dsh-chat-content-width);--dsw-elevation-stroke-color:var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-input-major);box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);border:0;flex-direction:column;display:flex;overflow:hidden}.Ec4s0a_card,.Ec4s0a_card *{box-sizing:border-box}.Ec4s0a_strip{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-primary);flex-shrink:0;align-items:center;gap:8px;padding:12px 16px;font-size:14px;line-height:20px;display:flex}.Ec4s0a_footer{flex-shrink:0;justify-content:space-between;align-items:center;gap:12px;padding:8px 16px 12px;display:flex}.Ec4s0a_feedback{min-height:16px;color:var(--dsw-alias-state-error-primary);font-size:11px;line-height:16px}.Ec4s0a_actions{flex-shrink:0;align-items:center;gap:8px;display:flex}.Ec4s0a_summary{min-width:0;padding:14px 16px 12px}.Ec4s0a_title{text-overflow:ellipsis;white-space:nowrap;margin:0;font-size:15px;font-weight:500;line-height:22px;overflow:hidden}.Ec4s0a_description{-webkit-line-clamp:2;color:var(--dsw-alias-label-secondary);-webkit-box-orient:vertical;margin:8px 0 0;font-size:14px;line-height:24px;display:-webkit-box;overflow:hidden}.Ec4s0a_discuss{gap:6px}@media (width<=720px){.Ec4s0a_card{border-radius:var(--dsw-radius-xl)}.Ec4s0a_footer{align-items:flex-end;padding:8px 12px 10px}}.Ec4s0a_previewActions{align-items:center;margin-left:auto;display:flex}";
++		//#region \0dsh-css:/private/tmp/dsh-plan-comments-send-UDpWmJ/packages/client/ui-user-questions/src/client/PlanReviewPanel.module.css.mjs
++		const css$2 = ".rK16Ra_frame{padding:6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;justify-content:center;display:flex}.rK16Ra_card{width:100%;max-width:var(--dsh-chat-content-width);--dsw-elevation-stroke-color:var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-input-major);box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);border:0;flex-direction:column;display:flex;overflow:hidden}.rK16Ra_card,.rK16Ra_card *{box-sizing:border-box}.rK16Ra_strip{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-primary);flex-shrink:0;align-items:center;gap:8px;padding:12px 16px;font-size:14px;line-height:20px;display:flex}.rK16Ra_footer{flex-shrink:0;justify-content:space-between;align-items:center;gap:12px;padding:8px 16px 12px;display:flex}.rK16Ra_feedback{min-height:16px;color:var(--dsw-alias-state-error-primary);font-size:11px;line-height:16px}.rK16Ra_actions{flex-shrink:0;align-items:center;gap:8px;display:flex}.rK16Ra_summary{min-width:0;padding:14px 16px 12px}.rK16Ra_title{text-overflow:ellipsis;white-space:nowrap;margin:0;font-size:15px;font-weight:500;line-height:22px;overflow:hidden}.rK16Ra_description{-webkit-line-clamp:2;color:var(--dsw-alias-label-secondary);-webkit-box-orient:vertical;margin:8px 0 0;font-size:14px;line-height:24px;display:-webkit-box;overflow:hidden}.rK16Ra_discuss{gap:6px}@media (width<=720px){.rK16Ra_card{border-radius:var(--dsw-radius-xl)}.rK16Ra_footer{align-items:flex-end;padding:8px 12px 10px}}.rK16Ra_previewActions{align-items:center;margin-left:auto;display:flex}";
+ 		const tagId$2 = "@deepseek-ai/dsh-client-ui-user-questions/PlanReviewPanel.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$2) + "]") === null) {
+ 			const tag = document.createElement("style");
+@@ -478,17 +478,17 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+ 		var PlanReviewPanel_module_css_default = {
+-			"actions": "Ec4s0a_actions",
+-			"card": "Ec4s0a_card",
+-			"description": "Ec4s0a_description",
+-			"discuss": "Ec4s0a_discuss",
+-			"feedback": "Ec4s0a_feedback",
+-			"footer": "Ec4s0a_footer",
+-			"frame": "Ec4s0a_frame",
+-			"previewActions": "Ec4s0a_previewActions",
+-			"strip": "Ec4s0a_strip",
+-			"summary": "Ec4s0a_summary",
+-			"title": "Ec4s0a_title"
++			"actions": "rK16Ra_actions",
++			"card": "rK16Ra_card",
++			"description": "rK16Ra_description",
++			"discuss": "rK16Ra_discuss",
++			"feedback": "rK16Ra_feedback",
++			"footer": "rK16Ra_footer",
++			"frame": "rK16Ra_frame",
++			"previewActions": "rK16Ra_previewActions",
++			"strip": "rK16Ra_strip",
++			"summary": "rK16Ra_summary",
++			"title": "rK16Ra_title"
+ 		};
+ 		//#endregion
+ 		//#region lib/types/client/PlanReviewPanel.js
+@@ -508,28 +508,50 @@ window.__ModuleLoader__.load({
+ 		* @param props - the question domain face, the narrowed plan review, and `t`.
+ 		* @returns The plan-review takeover for this request.
+ 		*/
+-		function PlanReviewPanel({ pending, review, t, renderSlot }) {
++		function PlanReviewPanel({ pending, review, t, renderSlot, useQuestionCard }) {
+ 			const [busy, setBusy] = (0, react.useState)(false);
++			const busyRef = (0, react.useRef)(false);
+ 			const [error, setError] = (0, react.useState)(null);
+-			const settle = (send, remote = false) => {
++			const card = useQuestionCard(pending.key, (snapshot) => snapshot ?? pending.snapshot());
++			const sentVia = (0, react.useRef)(null);
++			(0, react.useEffect)(() => {
++				if (sentVia.current !== "waterfall" || card.state !== "continued") return;
++				sentVia.current = null;
++				busyRef.current = false;
++				setBusy(false);
++				setError(t("error.resubmit"));
++			}, [card.state, t]);
++			const settle = async (send, remote = false) => {
++				if (busyRef.current) return false;
++				busyRef.current = true;
+ 				setBusy(true);
+ 				setError(null);
+-				send().then(() => {
+-					if (!remote) return;
+-					setBusy(false);
+-					pending.dismiss().catch(() => {
+-						setError(t("status.sent"));
+-					});
+-				}).catch((cause) => {
++				try {
++					await send();
++					if (remote) {
++						busyRef.current = false;
++						setBusy(false);
++						try {
++							await pending.dismiss();
++						} catch (_error) {
++							setError(t("status.sent"));
++						}
++					}
++					return true;
++				} catch (cause) {
++					sentVia.current = null;
++					busyRef.current = false;
+ 					setBusy(false);
+ 					setError(cause instanceof Error ? cause.message : String(cause));
+-				});
++					return false;
++				}
+ 			};
+ 			const decide = (label) => {
++				sentVia.current = card.channel === "waterfall" ? "waterfall" : null;
+ 				settle(() => pending.answer({ answers: [{
+ 					id: review.id,
+ 					selected: [label]
+-				}] }), pending.snapshot().channel === "rpc");
++				}] }), card.channel === "rpc");
+ 			};
+ 			const summary = (0, react.useMemo)(() => {
+ 				const title = (0, _deepseek_ai_dsh_client_ui_primitives.extractMarkdownPlainText)(review.plan, { mode: "first-line" });
+@@ -539,9 +561,15 @@ window.__ModuleLoader__.load({
+ 					description: description === title ? "" : description
+ 				};
+ 			}, [review.plan]);
+-			return (0, react_jsx_runtime.jsx)("div", {
++			const preview = renderSlot("conversation.plan-review.actions", {
++				review,
++				requestKey: pending.key
++			});
++			const fallback = (0, react_jsx_runtime.jsx)("div", {
+ 				className: PlanReviewPanel_module_css_default.frame,
+ 				"data-plan-review-key": pending.key,
++				"data-plan-review-surface": true,
++				"data-plan-review-variant": "review",
+ 				children: (0, react_jsx_runtime.jsxs)("section", {
+ 					className: PlanReviewPanel_module_css_default.card,
+ 					"aria-label": review.question,
+@@ -554,10 +582,7 @@ window.__ModuleLoader__.load({
+ 								t("plan.header"),
+ 								(0, react_jsx_runtime.jsx)("div", {
+ 									className: PlanReviewPanel_module_css_default.previewActions,
+-									children: renderSlot("conversation.plan-review.actions", {
+-										review,
+-										requestKey: pending.key
+-									})
++									children: preview
+ 								})
+ 							]
+ 						}),
+@@ -577,13 +602,20 @@ window.__ModuleLoader__.load({
+ 								className: PlanReviewPanel_module_css_default.feedback,
+ 								role: "status",
+ 								children: error
+-							}), (0, react_jsx_runtime.jsxs)("div", {
++							}), (0, react_jsx_runtime.jsx)("div", {
+ 								className: PlanReviewPanel_module_css_default.actions,
+-								children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++								children: pending.review !== void 0 ? (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++									variant: "outline",
++									disabled: busy,
++									onClick: () => {
++										settle(() => pending.dismiss());
++									},
++									children: t("close")
++								}) : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+ 									variant: "outline",
+ 									className: PlanReviewPanel_module_css_default.discuss,
+ 									icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconEditOutlineRegular, { size: 14 }),
+-									disabled: busy,
++									disabled: busy || card.closed,
+ 									onClick: () => {
+ 										settle(() => pending.dismiss());
+ 									},
+@@ -591,21 +623,34 @@ window.__ModuleLoader__.load({
+ 								}), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
+ 									variant: "primary",
+ 									...tooltip(review.approve.description),
+-									disabled: busy,
++									disabled: busy || card.closed || card.channel === "none",
+ 									onClick: () => {
+ 										decide(review.approve.label);
+ 									},
+ 									children: t("plan.approve")
+-								})]
++								})] })
+ 							})]
+ 						})
+ 					]
+ 				})
+ 			});
++			return renderSlot("conversation.plan-review.surface", {
++				pending,
++				review,
++				requestKey: pending.key,
++				preview,
++				card,
++				busy,
++				error,
++				approve: () => {
++					decide(review.approve.label);
++				},
++				dismiss: () => settle(() => pending.dismiss())
++			}, { fallback });
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:D:\qwq\desktop\wt-dsh-master\deepseek-harness\packages\client\ui-user-questions\src\client\QuestionComposer.module.css.mjs
+-		const css$1 = ".NwyCaq_frame{padding:6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;justify-content:center;display:flex}.NwyCaq_card{width:100%;max-width:var(--dsh-chat-content-width);--dsw-elevation-stroke-color:var(--dsw-alias-border-l2-darkmode-thin);border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-input-major);max-height:min(60vh,520px);box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border:0;flex-direction:column;padding:0 0 10px;display:flex;overflow:hidden}.NwyCaq_card,.NwyCaq_card *{box-sizing:border-box}.NwyCaq_cardMinimized{max-height:none}.NwyCaq_cardMinimized .NwyCaq_header{padding-bottom:14px}.NwyCaq_headerActions{flex-shrink:0;align-items:center;gap:4px;display:flex}.NwyCaq_waitButton{white-space:nowrap}.NwyCaq_waitStatus{color:var(--dsw-alias-label-secondary);white-space:nowrap;font-size:12px;line-height:24px}.NwyCaq_header{flex-shrink:0;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 16px 0 24px;display:flex}.NwyCaq_headingBlock{min-width:0}.NwyCaq_eyebrow{color:var(--dsw-alias-label-tertiary);margin-bottom:5px;font-size:11px;line-height:16px}.NwyCaq_title{margin:0;font-size:16px;font-weight:500;line-height:22px}.NwyCaq_detail{margin:0 2px 8px}.NwyCaq_footerActions{flex-shrink:0;align-items:center;gap:12px;display:flex}.NwyCaq_pager{flex-shrink:0;align-items:center;gap:6px;display:flex}.NwyCaq_progress{color:var(--dsw-alias-label-secondary);white-space:nowrap;word-spacing:-2px;padding:0 4px;font-size:14px;font-weight:500;line-height:24px}.NwyCaq_iconButton{corner-shape:round;width:24px;height:24px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;place-items:center;padding:0;display:grid}.NwyCaq_iconButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.NwyCaq_iconButton:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.NwyCaq_body{overscroll-behavior:contain;flex-direction:column;flex:auto;min-height:0;display:flex;overflow-y:auto}.NwyCaq_options{flex-direction:column;gap:1px;margin:8px 0 0;padding:4px 12px;display:flex}.NwyCaq_option{border-radius:var(--dsw-radius-md);width:100%;min-height:40px;color:inherit;text-align:left;cursor:pointer;background:0 0;border:1px solid #0000;flex-shrink:0;align-items:flex-start;gap:8px;padding:8px 12px 8px 8px;transition:background-color .12s,border-color .12s;display:flex}.NwyCaq_option:hover:not(:disabled),.NwyCaq_optionSelected{background:var(--dsw-alias-interactive-bg-hover)}.NwyCaq_optionSelected{border-color:var(--dsw-alias-border-l2)}.NwyCaq_option:disabled{cursor:default}.NwyCaq_number{border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-overlay);width:20px;height:20px;color:var(--dsw-alias-label-secondary);flex:0 0 20px;place-items:center;margin-top:2px;font-size:12px;font-weight:500;line-height:18px;display:grid}.NwyCaq_checkbox{flex:0 0 20px;place-items:center;width:20px;height:20px;margin-top:2px;display:grid}.NwyCaq_checkbox:before{content:\"\";border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-xs);grid-area:1/1;width:14px;height:14px;transition:background-color .12s,border-color .12s}.NwyCaq_checkbox>svg{grid-area:1/1}.NwyCaq_checkboxChecked{color:var(--dsw-alias-label-primary-foreground)}.NwyCaq_checkboxChecked:before{border-color:var(--dsw-alias-label-primary);background:var(--dsw-alias-label-primary)}.NwyCaq_optionCopy{flex:1;min-width:0}.NwyCaq_optionLine{flex-wrap:wrap;align-items:baseline;gap:2px 6px;display:flex}.NwyCaq_optionLabel{font-size:14px;font-weight:500;line-height:24px}.NwyCaq_badge{border-radius:var(--dsw-radius-xs);background:var(--dsw-specific-sidebar-nav-item-active-accent);color:var(--dsw-alias-button-info-fill);padding:0 4px;font-size:11px;font-weight:600;line-height:18px}.NwyCaq_description{color:var(--dsw-alias-label-tertiary);font-size:14px;font-weight:400;line-height:24px}.NwyCaq_reviewNote{color:var(--dsw-alias-label-tertiary);margin:0;padding:8px 12px;font-size:14px;line-height:24px}.NwyCaq_customRow{border-radius:var(--dsw-radius-md);border:1px solid #0000;flex-shrink:0;align-items:flex-start;gap:8px;width:100%;min-height:40px;padding:8px 12px 8px 8px;transition:background-color .12s,border-color .12s;display:flex}.NwyCaq_customRow:hover,.NwyCaq_customRow:focus-within,.NwyCaq_customRowActive{background:var(--dsw-alias-interactive-bg-hover)}.NwyCaq_customRow:focus-within,.NwyCaq_customRowActive{border-color:var(--dsw-alias-border-l2)}.NwyCaq_field{--dsh-answer-field-padding:0;min-width:0;display:grid}.NwyCaq_field>*{min-width:0;padding:var(--dsh-answer-field-padding);font:inherit;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;grid-area:1/1;font-size:14px;line-height:24px}.NwyCaq_fieldMirror{box-sizing:content-box;visibility:hidden;max-height:144px;overflow:hidden}.NwyCaq_fieldInput{resize:none;color:var(--dsw-alias-label-primary);caret-color:var(--dsw-alias-state-business-primary);background:0 0;border:none;outline:none;overflow-y:auto}.NwyCaq_fieldInput::placeholder{color:var(--dsw-alias-label-caption)}.NwyCaq_customInline{flex:1}.NwyCaq_customBlock{border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-module-platform);--dsh-answer-field-padding:8px 12px;flex-shrink:0;min-height:64px;margin:0 12px}.NwyCaq_customBlock:focus-within{border-color:var(--dsw-alias-state-business-primary)}.NwyCaq_footer{flex-shrink:0;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;padding:0 10px 0 18px;display:flex}.NwyCaq_feedback{min-height:16px;color:var(--dsw-alias-state-error-primary);text-align:right;flex:1;font-size:11px;line-height:16px}@media (width<=720px){.NwyCaq_card{border-radius:var(--dsw-radius-xl)}.NwyCaq_header{padding:10px 12px 0 18px}.NwyCaq_options{padding:4px 8px}.NwyCaq_title{font-size:15px;line-height:21px}.NwyCaq_option,.NwyCaq_customRow{padding:8px 6px}.NwyCaq_footer{align-items:flex-end;padding:0 10px}.NwyCaq_footerActions{flex-shrink:0}}@media (prefers-reduced-motion:reduce){.NwyCaq_option,.NwyCaq_customRow{transition:none}}";
++		//#region \0dsh-css:/private/tmp/dsh-plan-comments-send-UDpWmJ/packages/client/ui-user-questions/src/client/QuestionComposer.module.css.mjs
++		const css$1 = ".Gvmpwa_frame{padding:6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;justify-content:center;display:flex}.Gvmpwa_card{width:100%;max-width:var(--dsh-chat-content-width);--dsw-elevation-stroke-color:var(--dsw-alias-border-l2-darkmode-thin);border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-input-major);max-height:min(60vh,520px);box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border:0;flex-direction:column;padding:0 0 10px;display:flex;overflow:hidden}.Gvmpwa_card,.Gvmpwa_card *{box-sizing:border-box}.Gvmpwa_cardMinimized{max-height:none}.Gvmpwa_cardMinimized .Gvmpwa_header{padding-bottom:14px}.Gvmpwa_headerActions{flex-shrink:0;align-items:center;gap:4px;display:flex}.Gvmpwa_waitButton{white-space:nowrap}.Gvmpwa_waitStatus{color:var(--dsw-alias-label-secondary);white-space:nowrap;font-size:12px;line-height:24px}.Gvmpwa_header{flex-shrink:0;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 16px 0 24px;display:flex}.Gvmpwa_headingBlock{min-width:0}.Gvmpwa_eyebrow{color:var(--dsw-alias-label-tertiary);margin-bottom:5px;font-size:11px;line-height:16px}.Gvmpwa_title{margin:0;font-size:16px;font-weight:500;line-height:22px}.Gvmpwa_detail{margin:0 2px 8px}.Gvmpwa_footerActions{flex-shrink:0;align-items:center;gap:12px;display:flex}.Gvmpwa_pager{flex-shrink:0;align-items:center;gap:6px;display:flex}.Gvmpwa_progress{color:var(--dsw-alias-label-secondary);white-space:nowrap;word-spacing:-2px;padding:0 4px;font-size:14px;font-weight:500;line-height:24px}.Gvmpwa_iconButton{corner-shape:round;width:24px;height:24px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;place-items:center;padding:0;display:grid}.Gvmpwa_iconButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}.Gvmpwa_iconButton:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.Gvmpwa_body{overscroll-behavior:contain;flex-direction:column;flex:auto;min-height:0;display:flex;overflow-y:auto}.Gvmpwa_options{flex-direction:column;gap:1px;margin:8px 0 0;padding:4px 12px;display:flex}.Gvmpwa_option{border-radius:var(--dsw-radius-md);width:100%;min-height:40px;color:inherit;text-align:left;cursor:pointer;background:0 0;border:1px solid #0000;flex-shrink:0;align-items:flex-start;gap:8px;padding:8px 12px 8px 8px;transition:background-color .12s,border-color .12s;display:flex}.Gvmpwa_option:hover:not(:disabled),.Gvmpwa_optionSelected{background:var(--dsw-alias-interactive-bg-hover)}.Gvmpwa_optionSelected{border-color:var(--dsw-alias-border-l2)}.Gvmpwa_option:disabled{cursor:default}.Gvmpwa_number{border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-overlay);width:20px;height:20px;color:var(--dsw-alias-label-secondary);flex:0 0 20px;place-items:center;margin-top:2px;font-size:12px;font-weight:500;line-height:18px;display:grid}.Gvmpwa_checkbox{flex:0 0 20px;place-items:center;width:20px;height:20px;margin-top:2px;display:grid}.Gvmpwa_checkbox:before{content:\"\";border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-xs);grid-area:1/1;width:14px;height:14px;transition:background-color .12s,border-color .12s}.Gvmpwa_checkbox>svg{grid-area:1/1}.Gvmpwa_checkboxChecked{color:var(--dsw-alias-label-primary-foreground)}.Gvmpwa_checkboxChecked:before{border-color:var(--dsw-alias-label-primary);background:var(--dsw-alias-label-primary)}.Gvmpwa_optionCopy{flex:1;min-width:0}.Gvmpwa_optionLine{flex-wrap:wrap;align-items:baseline;gap:2px 6px;display:flex}.Gvmpwa_optionLabel{font-size:14px;font-weight:500;line-height:24px}.Gvmpwa_badge{border-radius:var(--dsw-radius-xs);background:var(--dsw-specific-sidebar-nav-item-active-accent);color:var(--dsw-alias-button-info-fill);padding:0 4px;font-size:11px;font-weight:600;line-height:18px}.Gvmpwa_description{color:var(--dsw-alias-label-tertiary);font-size:14px;font-weight:400;line-height:24px}.Gvmpwa_reviewNote{color:var(--dsw-alias-label-tertiary);margin:0;padding:8px 12px;font-size:14px;line-height:24px}.Gvmpwa_customRow{border-radius:var(--dsw-radius-md);border:1px solid #0000;flex-shrink:0;align-items:flex-start;gap:8px;width:100%;min-height:40px;padding:8px 12px 8px 8px;transition:background-color .12s,border-color .12s;display:flex}.Gvmpwa_customRow:hover,.Gvmpwa_customRow:focus-within,.Gvmpwa_customRowActive{background:var(--dsw-alias-interactive-bg-hover)}.Gvmpwa_customRow:focus-within,.Gvmpwa_customRowActive{border-color:var(--dsw-alias-border-l2)}.Gvmpwa_field{--dsh-answer-field-padding:0;min-width:0;display:grid}.Gvmpwa_field>*{min-width:0;padding:var(--dsh-answer-field-padding);font:inherit;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;grid-area:1/1;font-size:14px;line-height:24px}.Gvmpwa_fieldMirror{box-sizing:content-box;visibility:hidden;max-height:144px;overflow:hidden}.Gvmpwa_fieldInput{resize:none;color:var(--dsw-alias-label-primary);caret-color:var(--dsw-alias-state-business-primary);background:0 0;border:none;outline:none;overflow-y:auto}.Gvmpwa_fieldInput::placeholder{color:var(--dsw-alias-label-caption)}.Gvmpwa_customInline{flex:1}.Gvmpwa_customBlock{border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-module-platform);--dsh-answer-field-padding:8px 12px;flex-shrink:0;min-height:64px;margin:0 12px}.Gvmpwa_customBlock:focus-within{border-color:var(--dsw-alias-state-business-primary)}.Gvmpwa_footer{flex-shrink:0;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;padding:0 10px 0 18px;display:flex}.Gvmpwa_feedback{min-height:16px;color:var(--dsw-alias-state-error-primary);text-align:right;flex:1;font-size:11px;line-height:16px}@media (width<=720px){.Gvmpwa_card{border-radius:var(--dsw-radius-xl)}.Gvmpwa_header{padding:10px 12px 0 18px}.Gvmpwa_options{padding:4px 8px}.Gvmpwa_title{font-size:15px;line-height:21px}.Gvmpwa_option,.Gvmpwa_customRow{padding:8px 6px}.Gvmpwa_footer{align-items:flex-end;padding:0 10px}.Gvmpwa_footerActions{flex-shrink:0}}@media (prefers-reduced-motion:reduce){.Gvmpwa_option,.Gvmpwa_customRow{transition:none}}";
+ 		const tagId$1 = "@deepseek-ai/dsh-client-ui-user-questions/QuestionComposer.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$1) + "]") === null) {
+ 			const tag = document.createElement("style");
+@@ -615,43 +660,43 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+ 		var QuestionComposer_module_css_default = {
+-			"badge": "NwyCaq_badge",
+-			"body": "NwyCaq_body",
+-			"card": "NwyCaq_card",
+-			"cardMinimized": "NwyCaq_cardMinimized",
+-			"checkbox": "NwyCaq_checkbox",
+-			"checkboxChecked": "NwyCaq_checkboxChecked",
+-			"customBlock": "NwyCaq_customBlock",
+-			"customInline": "NwyCaq_customInline",
+-			"customRow": "NwyCaq_customRow",
+-			"customRowActive": "NwyCaq_customRowActive",
+-			"description": "NwyCaq_description",
+-			"detail": "NwyCaq_detail",
+-			"eyebrow": "NwyCaq_eyebrow",
+-			"feedback": "NwyCaq_feedback",
+-			"field": "NwyCaq_field",
+-			"fieldInput": "NwyCaq_fieldInput",
+-			"fieldMirror": "NwyCaq_fieldMirror",
+-			"footer": "NwyCaq_footer",
+-			"footerActions": "NwyCaq_footerActions",
+-			"frame": "NwyCaq_frame",
+-			"header": "NwyCaq_header",
+-			"headerActions": "NwyCaq_headerActions",
+-			"headingBlock": "NwyCaq_headingBlock",
+-			"iconButton": "NwyCaq_iconButton",
+-			"number": "NwyCaq_number",
+-			"option": "NwyCaq_option",
+-			"optionCopy": "NwyCaq_optionCopy",
+-			"optionLabel": "NwyCaq_optionLabel",
+-			"optionLine": "NwyCaq_optionLine",
+-			"optionSelected": "NwyCaq_optionSelected",
+-			"options": "NwyCaq_options",
+-			"pager": "NwyCaq_pager",
+-			"progress": "NwyCaq_progress",
+-			"reviewNote": "NwyCaq_reviewNote",
+-			"title": "NwyCaq_title",
+-			"waitButton": "NwyCaq_waitButton",
+-			"waitStatus": "NwyCaq_waitStatus"
++			"badge": "Gvmpwa_badge",
++			"body": "Gvmpwa_body",
++			"card": "Gvmpwa_card",
++			"cardMinimized": "Gvmpwa_cardMinimized",
++			"checkbox": "Gvmpwa_checkbox",
++			"checkboxChecked": "Gvmpwa_checkboxChecked",
++			"customBlock": "Gvmpwa_customBlock",
++			"customInline": "Gvmpwa_customInline",
++			"customRow": "Gvmpwa_customRow",
++			"customRowActive": "Gvmpwa_customRowActive",
++			"description": "Gvmpwa_description",
++			"detail": "Gvmpwa_detail",
++			"eyebrow": "Gvmpwa_eyebrow",
++			"feedback": "Gvmpwa_feedback",
++			"field": "Gvmpwa_field",
++			"fieldInput": "Gvmpwa_fieldInput",
++			"fieldMirror": "Gvmpwa_fieldMirror",
++			"footer": "Gvmpwa_footer",
++			"footerActions": "Gvmpwa_footerActions",
++			"frame": "Gvmpwa_frame",
++			"header": "Gvmpwa_header",
++			"headerActions": "Gvmpwa_headerActions",
++			"headingBlock": "Gvmpwa_headingBlock",
++			"iconButton": "Gvmpwa_iconButton",
++			"number": "Gvmpwa_number",
++			"option": "Gvmpwa_option",
++			"optionCopy": "Gvmpwa_optionCopy",
++			"optionLabel": "Gvmpwa_optionLabel",
++			"optionLine": "Gvmpwa_optionLine",
++			"optionSelected": "Gvmpwa_optionSelected",
++			"options": "Gvmpwa_options",
++			"pager": "Gvmpwa_pager",
++			"progress": "Gvmpwa_progress",
++			"reviewNote": "Gvmpwa_reviewNote",
++			"title": "Gvmpwa_title",
++			"waitButton": "Gvmpwa_waitButton",
++			"waitStatus": "Gvmpwa_waitStatus"
+ 		};
+ 		//#endregion
+ 		//#region lib/types/client/QuestionComposer.js
+@@ -761,7 +806,8 @@ window.__ModuleLoader__.load({
+ 				pending: question,
+ 				review,
+ 				t: props.t,
+-				renderSlot: props.renderSlot
++				renderSlot: props.renderSlot,
++				useQuestionCard: props.useQuestionCard
+ 			}, question.key);
+ 		}
+ 		function QuestionFlow({ pending, t, useStore, useQuestionCard, actions }) {
+@@ -1396,8 +1442,8 @@ window.__ModuleLoader__.load({
+ 			}
+ 		};
+ 		//#endregion
+-		//#region \0dsh-css:D:\qwq\desktop\wt-dsh-master\deepseek-harness\packages\client\ui-user-questions\src\client\QuestionReplyView.module.css.mjs
+-		const css = "._6nhyia_row{flex-direction:column;justify-content:flex-end;align-items:flex-end;gap:6px;padding:4px 0;display:flex}._6nhyia_bubble{border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-bubble);max-width:72%;color:var(--dsw-alias-label-primary);cursor:pointer;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));text-align:left;overflow-wrap:anywhere;white-space:pre-wrap;padding:10px 16px}._6nhyia_toggle{width:100%;color:inherit;cursor:pointer;font:inherit;text-align:left;background:0 0;border:0;padding:0}._6nhyia_toggle:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}._6nhyia_bubble:has(._6nhyia_toggle:focus-visible){box-shadow:0 0 0 2px var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary))}._6nhyia_labelRow{align-items:center;gap:3px;display:flex}._6nhyia_caret{color:var(--dsw-alias-label-secondary);display:inline-flex}._6nhyia_caret svg{width:12px;height:12px}._6nhyia_label{color:var(--dsw-alias-label-secondary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px));display:block}._6nhyia_summary{color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size,14px);margin-top:3px;display:block}._6nhyia_text{margin:8px 0 0}._6nhyia_details{border-top:1px solid color-mix(in srgb, var(--dsw-alias-label-secondary) 24%, transparent);margin:8px 0 0;padding-top:8px}._6nhyia_details>div+div{margin-top:12px}._6nhyia_details dt{color:var(--dsw-alias-label-secondary);font-size:12px}._6nhyia_question{gap:3px;display:grid}._6nhyia_header,._6nhyia_detail,._6nhyia_options{color:var(--dsw-alias-label-secondary);font-size:11px}._6nhyia_questionText{color:var(--dsw-alias-label-primary)}._6nhyia_options{margin:0;padding-left:16px}._6nhyia_details dd{margin:4px 0 0}._6nhyia_answer{font-size:14px}._6nhyia_answerLabel{color:var(--dsw-alias-label-secondary);margin-right:4px;font-size:12px}._6nhyia_actions{height:28px;color:var(--dsw-alias-label-tertiary);align-items:center;gap:8px;padding-right:4px;display:flex}._6nhyia_time{white-space:nowrap;padding-right:4px;font-size:13px;line-height:24px}._6nhyia_action{border-radius:var(--dsw-radius-sm);width:28px;height:28px;color:inherit;cursor:pointer;background:0 0;border:none;justify-content:center;align-items:center;padding:6px;display:inline-flex}._6nhyia_action svg{width:15px;height:15px}._6nhyia_action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}";
++		//#region \0dsh-css:/private/tmp/dsh-plan-comments-send-UDpWmJ/packages/client/ui-user-questions/src/client/QuestionReplyView.module.css.mjs
++		const css = ".prwSyG_row{flex-direction:column;justify-content:flex-end;align-items:flex-end;gap:6px;padding:4px 0;display:flex}.prwSyG_bubble{border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-bubble);max-width:72%;color:var(--dsw-alias-label-primary);cursor:pointer;font-size:var(--dsh-content-font-size,14px);line-height:calc(22px + var(--dsh-content-font-delta,0px));text-align:left;overflow-wrap:anywhere;white-space:pre-wrap;padding:10px 16px}.prwSyG_toggle{width:100%;color:inherit;cursor:pointer;font:inherit;text-align:left;background:0 0;border:0;padding:0}.prwSyG_toggle:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}.prwSyG_bubble:has(.prwSyG_toggle:focus-visible){box-shadow:0 0 0 2px var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary))}.prwSyG_labelRow{align-items:center;gap:3px;display:flex}.prwSyG_caret{color:var(--dsw-alias-label-secondary);display:inline-flex}.prwSyG_caret svg{width:12px;height:12px}.prwSyG_label{color:var(--dsw-alias-label-secondary);font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(18px + var(--dsh-content-font-delta-secondary,0px));display:block}.prwSyG_summary{color:var(--dsw-alias-label-primary);font-size:var(--dsh-content-font-size,14px);margin-top:3px;display:block}.prwSyG_text{margin:8px 0 0}.prwSyG_details{border-top:1px solid color-mix(in srgb, var(--dsw-alias-label-secondary) 24%, transparent);margin:8px 0 0;padding-top:8px}.prwSyG_details>div+div{margin-top:12px}.prwSyG_details dt{color:var(--dsw-alias-label-secondary);font-size:12px}.prwSyG_question{gap:3px;display:grid}.prwSyG_header,.prwSyG_detail,.prwSyG_options{color:var(--dsw-alias-label-secondary);font-size:11px}.prwSyG_questionText{color:var(--dsw-alias-label-primary)}.prwSyG_options{margin:0;padding-left:16px}.prwSyG_details dd{margin:4px 0 0}.prwSyG_answer{font-size:14px}.prwSyG_answerLabel{color:var(--dsw-alias-label-secondary);margin-right:4px;font-size:12px}.prwSyG_actions{height:28px;color:var(--dsw-alias-label-tertiary);align-items:center;gap:8px;padding-right:4px;display:flex}.prwSyG_time{white-space:nowrap;padding-right:4px;font-size:13px;line-height:24px}.prwSyG_action{border-radius:var(--dsw-radius-sm);width:28px;height:28px;color:inherit;cursor:pointer;background:0 0;border:none;justify-content:center;align-items:center;padding:6px;display:inline-flex}.prwSyG_action svg{width:15px;height:15px}.prwSyG_action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}";
+ 		const tagId = "@deepseek-ai/dsh-client-ui-user-questions/QuestionReplyView.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+ 			const tag = document.createElement("style");
+@@ -1407,25 +1453,25 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+ 		var QuestionReplyView_module_css_default = {
+-			"action": "_6nhyia_action",
+-			"actions": "_6nhyia_actions",
+-			"answer": "_6nhyia_answer",
+-			"answerLabel": "_6nhyia_answerLabel",
+-			"bubble": "_6nhyia_bubble",
+-			"caret": "_6nhyia_caret",
+-			"detail": "_6nhyia_detail",
+-			"details": "_6nhyia_details",
+-			"header": "_6nhyia_header",
+-			"label": "_6nhyia_label",
+-			"labelRow": "_6nhyia_labelRow",
+-			"options": "_6nhyia_options",
+-			"question": "_6nhyia_question",
+-			"questionText": "_6nhyia_questionText",
+-			"row": "_6nhyia_row",
+-			"summary": "_6nhyia_summary",
+-			"text": "_6nhyia_text",
+-			"time": "_6nhyia_time",
+-			"toggle": "_6nhyia_toggle"
++			"action": "prwSyG_action",
++			"actions": "prwSyG_actions",
++			"answer": "prwSyG_answer",
++			"answerLabel": "prwSyG_answerLabel",
++			"bubble": "prwSyG_bubble",
++			"caret": "prwSyG_caret",
++			"detail": "prwSyG_detail",
++			"details": "prwSyG_details",
++			"header": "prwSyG_header",
++			"label": "prwSyG_label",
++			"labelRow": "prwSyG_labelRow",
++			"options": "prwSyG_options",
++			"question": "prwSyG_question",
++			"questionText": "prwSyG_questionText",
++			"row": "prwSyG_row",
++			"summary": "prwSyG_summary",
++			"text": "prwSyG_text",
++			"time": "prwSyG_time",
++			"toggle": "prwSyG_toggle"
+ 		};
+ 		//#endregion
+ 		//#region lib/types/client/QuestionReplyView.js
+@@ -1913,10 +1959,16 @@ window.__ModuleLoader__.load({
+ 				locale: NS,
+ 				store: questionDraftStore,
+ 				inject: () => ({ keyedHooks: { questionCard: (key) => cards.source(key) } }),
+-				children: { "conversation.plan-review.actions": {
+-					kind: "list",
+-					scope: "session"
+-				} }
++				children: {
++					"conversation.plan-review.actions": {
++						kind: "list",
++						scope: "session"
++					},
++					"conversation.plan-review.surface": {
++						kind: "single",
++						scope: "session"
++					}
++				}
+ 			}, QuestionComposer));
+ 			ctx.uiConversation.events.register(questionReplyDefinition);
+ 			ctx.slots.inject("conversation.chat.node", () => ctx.slots.register({
+diff --git a/lib/types/client/PlanReviewPanel.d.ts b/lib/types/client/PlanReviewPanel.d.ts
+index 80b1d29..7354136 100644
+--- a/lib/types/client/PlanReviewPanel.d.ts
++++ b/lib/types/client/PlanReviewPanel.d.ts
+@@ -3,12 +3,12 @@ import type { PendingQuestion, PlanReview, QuestionComposerProps } from './contr
+ export type PlanReviewPanelProps = {
+     pending: PendingQuestion;
+     review: PlanReview;
+-} & Pick<QuestionComposerProps, 't' | 'renderSlot'>;
++} & Pick<QuestionComposerProps, 't' | 'renderSlot' | 'useQuestionCard'>;
+ /**
+  * Render plan review controls; the submitted document opens in the sidebar.
+  *
+  * @param props - the question domain face, the narrowed plan review, and `t`.
+  * @returns The plan-review takeover for this request.
+  */
+-export declare function PlanReviewPanel({ pending, review, t, renderSlot }: PlanReviewPanelProps): import("react").JSX.Element;
++export declare function PlanReviewPanel({ pending, review, t, renderSlot, useQuestionCard }: PlanReviewPanelProps): import("react").ReactNode;
+ //# sourceMappingURL=PlanReviewPanel.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/contract/slots.d.ts b/lib/types/client/contract/slots.d.ts
+index c05cc2d..7c56148 100644
+--- a/lib/types/client/contract/slots.d.ts
++++ b/lib/types/client/contract/slots.d.ts
+@@ -1,4 +1,5 @@
+ /** Question composer props and one pending Remote waterfall response. */
++import type { ReactNode } from 'react';
+ import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots';
+ import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand';
+ import type { SessionId } from '@deepseek-ai/dsh-session/types';
+@@ -21,6 +22,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+                 requestKey: PendingQuestion['key'];
+             };
+         };
++        /** One replacement for the plan-review card; the provider owns the visual variant. */
++        'conversation.plan-review.surface': {
++            kind: 'single';
++            scope: 'session';
++            owner: {
++                pending: PendingQuestion;
++                review: PlanReview;
++                requestKey: PendingQuestion['key'];
++                preview: ReactNode;
++                card: QuestionCardSnapshot;
++                busy: boolean;
++                error: string | null;
++                approve: () => void;
++                dismiss: () => Promise<boolean>;
++            };
++        };
+     }
+ }
+ /** One structured answer batch covering every question of the request. */
+@@ -265,7 +282,7 @@ export type QuestionWait = PendingQuestion;
+  * standard locale seat; the carrier plus the domain face above carry the
+  * whole behavior surface.
+  */
+-export type QuestionComposerProps = PropsRuntime<'conversation.composer'> & PropsStore<ReturnType<typeof createQuestionDraftStore>> & PropsRenderSlots<'conversation.plan-review.actions'> & InjectFace<{
++export type QuestionComposerProps = PropsRuntime<'conversation.composer'> & PropsStore<ReturnType<typeof createQuestionDraftStore>> & PropsRenderSlots<'conversation.plan-review.actions' | 'conversation.plan-review.surface'> & InjectFace<{
+     keyedHooks: {
+         questionCard: (key: string) => PendingQuestion | undefined;
+     };
