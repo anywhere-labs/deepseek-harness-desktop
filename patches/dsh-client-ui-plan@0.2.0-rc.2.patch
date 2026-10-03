@@ -1,0 +1,1628 @@
+diff --git a/lib/client.js b/lib/client.js
+index f69c03c..a540461 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -7,8 +7,8 @@ window.__ModuleLoader__.load({
+ 		let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
+ 		let react_jsx_runtime = require("react/jsx-runtime");
+ 		let react = require("react");
+-		require("@deepseek-ai/cordis");
+ 		let _deepseek_ai_dsh_client_store = require("@deepseek-ai/dsh-client-store");
++		require("@deepseek-ai/cordis");
+ 		//#region ../../util/crypto/src/index.ts
+ 		/**
+ 		* Random v4 UUID, minted from `crypto.getRandomValues`.
+@@ -22,29 +22,35 @@ window.__ModuleLoader__.load({
+ 			return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:D:\qwq\desktop\wt-dsh-master\deepseek-harness\packages\client\ui-plan\src\client\PlanPreview.module.css.mjs
+-		const css$1 = ".CmIEva_cards{flex-direction:column;gap:10px;display:flex}.CmIEva_card{--plan-card-fill:var(--dsw-static-neutral-50);--plan-card-hover:var(--dsw-static-neutral-100);box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-xl);background:var(--plan-card-fill);width:100%;min-width:0;height:60px;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer;align-items:center;gap:10px;margin:0;padding:8px 10px;transition:background-color .12s;display:flex}body[data-ds-dark-theme] .CmIEva_card{--plan-card-fill:var(--dsw-static-neutral-850);--plan-card-hover:var(--dsw-static-neutral-800)}.CmIEva_card:hover{background:var(--plan-card-hover)}.CmIEva_card:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}.CmIEva_cardIcon{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--plan-card-fill);flex:none;place-items:center;width:40px;height:40px;display:grid}.CmIEva_cardDetails{flex-direction:column;flex:1;gap:2px;min-width:0;display:flex}.CmIEva_cardTitle{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}.CmIEva_cardDescription{text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden}.CmIEva_cardOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}.CmIEva_reviewLink{color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;background:0 0;border:0;align-items:center;gap:4px;padding:0;display:inline-flex}.CmIEva_reviewLink:hover{color:var(--dsw-alias-label-primary)}.CmIEva_reviewLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}.CmIEva_preview{box-sizing:border-box;height:100%;padding:20px 24px 40px;position:relative;overflow:auto}.CmIEva_document{color:var(--dsw-alias-label-primary);overflow-wrap:anywhere;font-size:14px;line-height:1.75}.CmIEva_message{color:var(--dsw-alias-label-secondary);padding:24px;font-size:14px}.CmIEva_titleIcon{flex:none}@media (width<=767px){.CmIEva_preview{padding:16px 18px 32px}}";
+-		const tagId$1 = "@deepseek-ai/dsh-client-ui-plan/PlanPreview.module.css";
+-		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$1) + "]") === null) {
++		//#region \0dsh-css:/private/tmp/dsh-plan-comments-send-UDpWmJ/packages/client/ui-plan/src/client/PlanPreview.module.css.mjs
++		const css$2 = ".Kz2i8a_cards{flex-direction:column;gap:10px;display:flex}.Kz2i8a_card{--plan-card-fill:var(--dsw-static-neutral-50);--plan-card-hover:var(--dsw-static-neutral-100);box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-xl);background:var(--plan-card-fill);width:100%;min-width:0;height:60px;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer;align-items:center;gap:10px;margin:0;padding:8px 10px;transition:background-color .12s;display:flex}body[data-ds-dark-theme] .Kz2i8a_card{--plan-card-fill:var(--dsw-static-neutral-850);--plan-card-hover:var(--dsw-static-neutral-800)}.Kz2i8a_card:hover{background:var(--plan-card-hover)}.Kz2i8a_card:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}.Kz2i8a_cardIcon{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--plan-card-fill);flex:none;place-items:center;width:40px;height:40px;display:grid}.Kz2i8a_cardDetails{flex-direction:column;flex:1;gap:2px;min-width:0;display:flex}.Kz2i8a_cardTitle{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}.Kz2i8a_cardDescription{text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden}.Kz2i8a_cardOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}.Kz2i8a_reviewLink{color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;background:0 0;border:0;align-items:center;gap:4px;padding:0;display:inline-flex}.Kz2i8a_reviewLink:hover{color:var(--dsw-alias-label-primary)}.Kz2i8a_reviewLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}.Kz2i8a_preview{box-sizing:border-box;height:100%;padding:20px 24px 40px;position:relative;overflow:auto}.Kz2i8a_document{color:var(--dsw-alias-label-primary);overflow-wrap:anywhere;font-size:14px;line-height:1.75}.Kz2i8a_documentFrame{position:relative}.Kz2i8a_commentMark{z-index:1;background:color-mix(in srgb, var(--dsw-alias-state-warn-secondary) 20%, transparent);cursor:pointer;border:0;border-radius:3px;margin:0;padding:0;position:absolute}.Kz2i8a_commentMark[aria-disabled=true]{cursor:default}.Kz2i8a_commentMark:hover,.Kz2i8a_commentMark:focus-visible{background:color-mix(in srgb, var(--dsw-alias-state-warn-secondary) 30%, transparent);outline:1px solid var(--dsw-alias-state-warn-label);outline-offset:1px}.Kz2i8a_commentTooltip{z-index:3;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-button-floating-fill);max-width:min(340px,100%);color:var(--dsw-alias-label-primary);box-shadow:var(--dsw-elevation-panel);white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none;padding:8px 10px;font-size:13px;line-height:1.5;position:absolute}.Kz2i8a_commentEditor{box-sizing:border-box;z-index:4;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-button-floating-fill);width:min(360px,100%);color:var(--dsw-alias-label-primary);box-shadow:var(--dsw-elevation-panel);flex-direction:column;gap:8px;padding:12px;display:flex;position:absolute}.Kz2i8a_commentEditor textarea{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-specific-input-major);width:100%;min-height:72px;color:inherit;font:inherit;resize:vertical;padding:8px 24px 8px 8px;font-size:13px;line-height:1.5}.Kz2i8a_commentEditor textarea:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary))}.Kz2i8a_commentEditorActions{justify-content:flex-end;align-items:center;gap:4px;display:flex}.Kz2i8a_commentEditorClose{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;justify-content:center;align-items:center;padding:4px;display:inline-flex;position:absolute;top:14px;right:14px}.Kz2i8a_message{color:var(--dsw-alias-label-secondary);padding:24px;font-size:14px}.Kz2i8a_titleIcon{flex:none}@media (width<=767px){.Kz2i8a_preview{padding:16px 18px 32px}}";
++		const tagId$2 = "@deepseek-ai/dsh-client-ui-plan/PlanPreview.module.css";
++		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$2) + "]") === null) {
+ 			const tag = document.createElement("style");
+ 			tag.dataset.plugin = "@deepseek-ai/dsh-client-ui-plan";
+-			tag.dataset.pluginCss = tagId$1;
+-			tag.textContent = css$1;
++			tag.dataset.pluginCss = tagId$2;
++			tag.textContent = css$2;
+ 			document.head.appendChild(tag);
+ 		}
+ 		var PlanPreview_module_css_default = {
+-			"card": "CmIEva_card",
+-			"cardDescription": "CmIEva_cardDescription",
+-			"cardDetails": "CmIEva_cardDetails",
+-			"cardIcon": "CmIEva_cardIcon",
+-			"cardOpen": "CmIEva_cardOpen",
+-			"cardTitle": "CmIEva_cardTitle",
+-			"cards": "CmIEva_cards",
+-			"document": "CmIEva_document",
+-			"message": "CmIEva_message",
+-			"preview": "CmIEva_preview",
+-			"reviewLink": "CmIEva_reviewLink",
+-			"titleIcon": "CmIEva_titleIcon"
++			"card": "Kz2i8a_card",
++			"cardDescription": "Kz2i8a_cardDescription",
++			"cardDetails": "Kz2i8a_cardDetails",
++			"cardIcon": "Kz2i8a_cardIcon",
++			"cardOpen": "Kz2i8a_cardOpen",
++			"cardTitle": "Kz2i8a_cardTitle",
++			"cards": "Kz2i8a_cards",
++			"commentEditor": "Kz2i8a_commentEditor",
++			"commentEditorActions": "Kz2i8a_commentEditorActions",
++			"commentEditorClose": "Kz2i8a_commentEditorClose",
++			"commentMark": "Kz2i8a_commentMark",
++			"commentTooltip": "Kz2i8a_commentTooltip",
++			"document": "Kz2i8a_document",
++			"documentFrame": "Kz2i8a_documentFrame",
++			"message": "Kz2i8a_message",
++			"preview": "Kz2i8a_preview",
++			"reviewLink": "Kz2i8a_reviewLink",
++			"titleIcon": "Kz2i8a_titleIcon"
+ 		};
+ 		//#endregion
+ 		//#region lib/types/client/PlanCard.js
+@@ -168,66 +174,6 @@ window.__ModuleLoader__.load({
+ 			}
+ 		}
+ 		//#endregion
+-		//#region lib/types/client/PlanPreview.js
+-		/** Read-only Markdown viewer for logged plans and temporary review documents. */
+-		/**
+-		* Render the submitted plan with its complete Markdown.
+-		* @param props - Framework-bound tab identity, resource, and copy.
+-		* @returns the plan document or a localized loading/failure state.
+-		*/
+-		function PlanPreview({ useTabInfo, useResource, t }) {
+-			const tab = useTabInfo();
+-			const resource = useResource(tab.tab.navigation.address);
+-			const temporary = isReviewPreviewAddress(tab.tab.navigation.address);
+-			const params = tab.tab.navigation.params;
+-			const plan = temporary ? params !== void 0 && "planReview" in params ? params.planReview : void 0 : resource.value;
+-			const labels = (0, react.useMemo)(() => ({
+-				code: {
+-					copyLabel: t("copy"),
+-					copiedLabel: t("copied"),
+-					toolbarLabels: {
+-						codeLabel: t("codeBlock.title"),
+-						wrapLabel: t("codeBlock.wrap"),
+-						unwrapLabel: t("codeBlock.unwrap")
+-					}
+-				},
+-				footnotes: t("markdown.footnotes")
+-			}), [t]);
+-			if (plan === void 0) return (0, react_jsx_runtime.jsxs)("div", {
+-				className: PlanPreview_module_css_default.message,
+-				role: "status",
+-				children: [temporary ? t("preview.expired") : resource.status === "none" ? t("preview.unavailable") : resource.status === "failed" ? t("preview.failed") : t("preview.loading"), !temporary && resource.failure !== void 0 && (0, react_jsx_runtime.jsx)("p", { children: planFailureLine(t, resource.failure) })]
+-			});
+-			return (0, react_jsx_runtime.jsx)("section", {
+-				className: PlanPreview_module_css_default.preview,
+-				"data-plan-preview": "callId" in plan ? plan.callId : tab.tab.navigation.address,
+-				"aria-label": plan.title,
+-				children: (0, react_jsx_runtime.jsx)("div", {
+-					className: PlanPreview_module_css_default.document,
+-					children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.MarkdownText, {
+-						text: plan.markdown,
+-						labels
+-					})
+-				})
+-			});
+-		}
+-		/**
+-		* Display a plain file icon and the heading in its tab after resource recovery.
+-		* @param props - Framework-bound tab identity and resource reader.
+-		* @returns a decorative file icon followed by the recovered title or initial localized label.
+-		*/
+-		function PlanTitle({ useTabInfo, useResource }) {
+-			const tab = useTabInfo();
+-			const resource = useResource(tab.tab.navigation.address);
+-			const params = tab.tab.navigation.params;
+-			const plan = isReviewPreviewAddress(tab.tab.navigation.address) ? params !== void 0 && "planReview" in params ? params.planReview : void 0 : resource.value;
+-			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.FileTypeIcon, {
+-				kind: "other",
+-				size: 16,
+-				className: PlanPreview_module_css_default.titleIcon
+-			}), plan?.title ?? tab.tab.title] });
+-		}
+-		//#endregion
+ 		//#region lib/types/client/plan.js
+ 		function record(value) {
+ 			return typeof value === "object" && value !== null && !Array.isArray(value);
+@@ -309,6 +255,1028 @@ window.__ModuleLoader__.load({
+ 			}
+ 		}
+ 		//#endregion
++		//#region lib/types/client/plan-comments.js
++		/** Browser-owned annotations and revision submissions for plan review. */
++		/** Stable empty selection for framework store selectors. */
++		const EMPTY_PLAN_COMMENTS = Object.freeze([]);
++		const STORAGE_KEY = "dsh.plan-comments.v1";
++		function dictionary() {
++			return Object.create(null);
++		}
++		function isObject(value) {
++			return typeof value === "object" && value !== null && !Array.isArray(value);
++		}
++		function isPlanComment(value) {
++			if (!isObject(value)) return false;
++			const { id, planKey, quote, note, start, end, prefix, suffix } = value;
++			return typeof id === "string" && id.length > 0 && typeof planKey === "string" && planKey.length > 0 && typeof quote === "string" && quote.trim().length > 0 && typeof note === "string" && note.trim().length > 0 && typeof start === "number" && Number.isSafeInteger(start) && start >= 0 && typeof end === "number" && Number.isSafeInteger(end) && end > start && end - start === quote.length && (prefix === void 0 || typeof prefix === "string") && (suffix === void 0 || typeof suffix === "string");
++		}
++		function restore(raw) {
++			const commentsByPlan = dictionary();
++			const stagedByPlan = dictionary();
++			if (raw === null) return {
++				commentsByPlan,
++				stagedByPlan
++			};
++			let parsed;
++			try {
++				parsed = JSON.parse(raw);
++			} catch (_error) {
++				return {
++					commentsByPlan,
++					stagedByPlan
++				};
++			}
++			if (!isObject(parsed)) return {
++				commentsByPlan,
++				stagedByPlan
++			};
++			if (isObject(parsed.commentsByPlan)) for (const [planKey, items] of Object.entries(parsed.commentsByPlan)) {
++				if (!Array.isArray(items)) continue;
++				const ids = /* @__PURE__ */ new Set();
++				const valid = items.filter((item) => {
++					if (!isPlanComment(item) || item.planKey !== planKey || ids.has(item.id)) return false;
++					ids.add(item.id);
++					return true;
++				});
++				if (valid.length > 0) commentsByPlan[planKey] = valid;
++			}
++			if (isObject(parsed.stagedByPlan)) for (const [planKey, item] of Object.entries(parsed.stagedByPlan)) {
++				if (!isObject(item) || typeof item.draft !== "string" || item.draft.length === 0 || !Array.isArray(item.ids) || typeof item.afterSeq !== "number" || !Number.isSafeInteger(item.afterSeq) || item.afterSeq < -1) continue;
++				const ids = item.ids.filter((id) => typeof id === "string" && commentsByPlan[planKey]?.some((comment) => comment.id === id) === true);
++				if (ids.length > 0) stagedByPlan[planKey] = {
++					draft: item.draft,
++					ids: [...new Set(ids)],
++					afterSeq: item.afterSeq
++				};
++			}
++			return {
++				commentsByPlan,
++				stagedByPlan
++			};
++		}
++		function readStored(key) {
++			let raw = null;
++			try {
++				raw = typeof localStorage === "undefined" ? null : localStorage.getItem(key);
++			} catch (_error) {}
++			return restore(raw);
++		}
++		function persist(key, state) {
++			if (typeof localStorage === "undefined") return;
++			const serialized = JSON.stringify({
++				commentsByPlan: state.commentsByPlan,
++				stagedByPlan: state.stagedByPlan
++			});
++			try {
++				localStorage.setItem(key, serialized);
++			} catch (_error) {}
++		}
++		function remove(state, planKey, ids) {
++			const current = state.commentsByPlan[planKey];
++			if (current === void 0) return;
++			const selected = new Set(ids);
++			const next = current.filter((item) => !selected.has(item.id));
++			if (next.length === current.length) return;
++			if (next.length === 0) delete state.commentsByPlan[planKey];
++			else state.commentsByPlan[planKey] = next;
++		}
++		function confirm(state, planKey, text, seq) {
++			const revision = state.stagedByPlan[planKey];
++			if (revision === void 0 || revision.draft !== text || seq <= revision.afterSeq) return;
++			remove(state, planKey, revision.ids);
++			delete state.stagedByPlan[planKey];
++		}
++		/**
++		* Declare one session-scoped store shared by card, preview, and delivery confirmation.
++		* @returns a registration handle with validated, non-fatal browser persistence.
++		*/
++		function createPlanCommentsStore() {
++			const handle = (0, _deepseek_ai_dsh_client_store.defineStore)({
++				init: () => ({
++					commentsByPlan: dictionary(),
++					editableByPlan: dictionary(),
++					sendingByPlan: dictionary(),
++					missingByPlan: dictionary(),
++					stagedByPlan: dictionary()
++				}),
++				actions: {
++					adopt: (state, planKey) => {
++						const identity = planKey.slice(0, planKey.lastIndexOf(":") + 1);
++						const previous = Object.keys(state.commentsByPlan).filter((key) => key !== planKey && key.startsWith(identity));
++						if (previous.length === 0) return;
++						const current = [...state.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS];
++						const ids = new Set(current.map((comment) => comment.id));
++						for (const key of previous) {
++							for (const comment of state.commentsByPlan[key] ?? EMPTY_PLAN_COMMENTS) {
++								if (ids.has(comment.id)) continue;
++								current.push({
++									...comment,
++									planKey
++								});
++								ids.add(comment.id);
++							}
++							delete state.commentsByPlan[key];
++							delete state.editableByPlan[key];
++							delete state.missingByPlan[key];
++							delete state.stagedByPlan[key];
++						}
++						state.commentsByPlan[planKey] = current;
++					},
++					save: (state, comment) => {
++						const current = [...state.commentsByPlan[comment.planKey] ?? EMPTY_PLAN_COMMENTS];
++						const index = current.findIndex((item) => item.id === comment.id);
++						const previous = current[index];
++						if (index === -1) current.push(comment);
++						else current[index] = comment;
++						state.commentsByPlan[comment.planKey] = current;
++						const staged = state.stagedByPlan[comment.planKey];
++						if (staged !== void 0 && previous !== void 0 && (previous.note !== comment.note || previous.quote !== comment.quote)) {
++							const ids = staged.ids.filter((id) => id !== comment.id);
++							if (ids.length === 0) delete state.stagedByPlan[comment.planKey];
++							else state.stagedByPlan[comment.planKey] = {
++								...staged,
++								ids
++							};
++						}
++					},
++					remove,
++					clear: (state, planKey) => {
++						delete state.commentsByPlan[planKey];
++						delete state.missingByPlan[planKey];
++						delete state.stagedByPlan[planKey];
++					},
++					setEditable: (state, planKey, editable) => {
++						if (editable) state.editableByPlan[planKey] = true;
++						else delete state.editableByPlan[planKey];
++					},
++					setSending: (state, planKey, sending) => {
++						if (sending) state.sendingByPlan[planKey] = true;
++						else delete state.sendingByPlan[planKey];
++					},
++					setMissing: (state, planKey, ids) => {
++						const current = state.missingByPlan[planKey];
++						if (ids.length === 0) {
++							if (current !== void 0) delete state.missingByPlan[planKey];
++						} else if (current === void 0 || current.length !== ids.length || current.some((id, index) => id !== ids[index])) state.missingByPlan[planKey] = [...ids];
++					},
++					stage: (state, planKey, draft, ids, afterSeq) => {
++						state.stagedByPlan[planKey] = {
++							draft,
++							ids: [...ids],
++							afterSeq
++						};
++					},
++					unstage: (state, planKey, draft) => {
++						if (state.stagedByPlan[planKey]?.draft === draft) delete state.stagedByPlan[planKey];
++					},
++					confirm,
++					confirmSubmitted: (state, text, seq) => {
++						for (const planKey of Object.keys(state.stagedByPlan)) confirm(state, planKey, text, seq);
++					}
++				}
++			});
++			return {
++				spec: handle.spec,
++				create: (scopeKey) => {
++					const instance = handle.create(scopeKey);
++					const key = scopeKey === void 0 ? STORAGE_KEY : `${STORAGE_KEY}.${scopeKey}`;
++					instance.store.set({
++						...readStored(key),
++						editableByPlan: dictionary(),
++						sendingByPlan: dictionary(),
++						missingByPlan: dictionary()
++					});
++					instance.subscribe(() => {
++						persist(key, instance.getSnapshot());
++					});
++					return {
++						...instance,
++						clearPersisted: () => {
++							if (typeof localStorage === "undefined") return;
++							try {
++								localStorage.removeItem(key);
++							} catch (_error) {}
++						}
++					};
++				}
++			};
++		}
++		function hash(text) {
++			let value = 2166136261;
++			for (let index = 0; index < text.length; index += 1) {
++				value ^= text.charCodeAt(index);
++				value = Math.imul(value, 16777619);
++			}
++			return (value >>> 0).toString(36);
++		}
++		/**
++		* Identify a plan by its session, invocation (or unnamed request), and Markdown.
++		* @param sessionId - the owning Session.
++		* @param requestKey - tool call id, or the pending unnamed request key.
++		* @param markdown - exact plan text.
++		* @returns the browser-owned plan key.
++		*/
++		function planCommentKey(sessionId, requestKey, markdown) {
++			return `${encodeURIComponent(sessionId)}:${encodeURIComponent(requestKey)}:${hash(markdown)}`;
++		}
++		function contextMatches(text, start, comment) {
++			const end = start + comment.quote.length;
++			return (comment.prefix === void 0 || text.slice(Math.max(0, start - comment.prefix.length), start) === comment.prefix) && (comment.suffix === void 0 || text.slice(end, end + comment.suffix.length) === comment.suffix);
++		}
++		/**
++		* Resolve an annotation only when its original offset or text context identifies it.
++		* @param text - current rendered plan text.
++		* @param comment - persisted quote and text offsets.
++		* @returns exact text offsets, or undefined for a missing or ambiguous quote.
++		*/
++		function locatePlanComment(text, comment) {
++			if (text.slice(comment.start, comment.end) === comment.quote && contextMatches(text, comment.start, comment)) return {
++				start: comment.start,
++				end: comment.end
++			};
++			const candidates = [];
++			let offset = text.indexOf(comment.quote);
++			while (offset !== -1) {
++				candidates.push(offset);
++				offset = text.indexOf(comment.quote, offset + 1);
++			}
++			if (candidates.length === 1) {
++				const start = candidates[0];
++				return {
++					start,
++					end: start + comment.quote.length
++				};
++			}
++			const contextual = candidates.filter((start) => contextMatches(text, start, comment));
++			if (contextual.length !== 1) return void 0;
++			const start = contextual[0];
++			return {
++				start,
++				end: start + comment.quote.length
++			};
++		}
++		//#endregion
++		//#region lib/types/client/comment-dom.js
++		function textNodes(root) {
++			const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
++			const nodes = [];
++			let node = walker.nextNode();
++			while (node !== null) {
++				if (node.parentElement?.closest("button, input, textarea, select, script, style, svg, [aria-hidden=\"true\"], [data-code-block-banner]") === null) nodes.push(node);
++				node = walker.nextNode();
++			}
++			return nodes;
++		}
++		/**
++		* Read selectable Markdown content, excluding its generated controls.
++		* @param root - Markdown-only document element.
++		* @returns the text whose offsets identify comments.
++		*/
++		function renderedPlanText(root) {
++			return textNodes(root).map((node) => node.data).join("");
++		}
++		function offsetAt(root, container, offset, nodes) {
++			const prefix = root.ownerDocument.createRange();
++			prefix.selectNodeContents(root);
++			prefix.setEnd(container, offset);
++			let cursor = 0;
++			for (const node of nodes) if (prefix.comparePoint(node, node.length) <= 0) cursor += node.length;
++			else if (prefix.comparePoint(node, 0) <= 0) return cursor + (node === container ? offset : 0);
++			else return cursor;
++			return cursor;
++		}
++		/**
++		* Capture a selection with trimmed text and matching offsets across inline nodes.
++		* @param root - Markdown-only document element.
++		* @param range - User selection, in either selection direction.
++		* @returns a nonempty anchor when both endpoints belong to the document.
++		*/
++		function selectionPlanAnchor(root, range) {
++			if (range.collapsed || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return void 0;
++			const nodes = textNodes(root);
++			const text = nodes.map((node) => node.data).join("");
++			let start = offsetAt(root, range.startContainer, range.startOffset, nodes);
++			let end = offsetAt(root, range.endContainer, range.endOffset, nodes);
++			const raw = text.slice(start, end);
++			start += raw.length - raw.trimStart().length;
++			end -= raw.length - raw.trimEnd().length;
++			if (end <= start) return void 0;
++			return {
++				quote: text.slice(start, end),
++				start,
++				end,
++				prefix: text.slice(Math.max(0, start - 32), start),
++				suffix: text.slice(end, end + 32)
++			};
++		}
++		/**
++		* Resolve rendered-text offsets into a Range, retaining inline Markdown nodes.
++		* @param root - Markdown-only document element.
++		* @param start - Inclusive text offset.
++		* @param end - Exclusive text offset.
++		* @returns the anchored Range or undefined when offsets exceed the document.
++		*/
++		function planTextRange(root, start, end) {
++			if (start < 0 || end <= start) return void 0;
++			const range = root.ownerDocument.createRange();
++			let cursor = 0;
++			let started = false;
++			for (const node of textNodes(root)) {
++				const next = cursor + node.length;
++				if (!started && start < next) {
++					range.setStart(node, start - cursor);
++					started = true;
++				}
++				if (started && end <= next) {
++					range.setEnd(node, end - cursor);
++					return range;
++				}
++				cursor = next;
++			}
++		}
++		/**
++		* Split a comment into text-only Ranges so highlights exclude banners and block boxes.
++		* @param root - Markdown-only document element.
++		* @param start - Inclusive text offset.
++		* @param end - Exclusive text offset.
++		* @returns each inline text segment, or an empty array for invalid offsets.
++		*/
++		function planHighlightRanges(root, start, end) {
++			if (planTextRange(root, start, end) === void 0) return [];
++			const ranges = [];
++			let cursor = 0;
++			for (const node of textNodes(root)) {
++				const first = Math.max(0, start - cursor);
++				const last = Math.min(node.length, end - cursor);
++				if (last > first) {
++					const range = root.ownerDocument.createRange();
++					range.setStart(node, first);
++					range.setEnd(node, last);
++					ranges.push(range);
++				}
++				cursor += node.length;
++				if (cursor >= end) break;
++			}
++			return ranges;
++		}
++		//#endregion
++		//#region lib/types/client/PlanPreview.js
++		/** Markdown plan viewer with client-owned selection comments. */
++		function randomCommentId() {
++			return crypto.randomUUID();
++		}
++		/**
++		* Render complete Markdown and floating comments for the current live review.
++		* @param props - Framework-bound tab identity, resource, comment store, and copy.
++		* @returns the plan document or a localized loading/failure state.
++		*/
++		function PlanPreview({ useTabInfo, useResource, t, sessionId, useStore, actions, holdReviewFocus, releaseReviewFocus }) {
++			const tab = useTabInfo();
++			const resource = useResource(tab.tab.navigation.address);
++			const temporary = isReviewPreviewAddress(tab.tab.navigation.address);
++			const params = tab.tab.navigation.params;
++			const target = temporary ? void 0 : parsePlanAddress(tab.tab.navigation.address);
++			const plan = temporary ? params !== void 0 && "planReview" in params ? params.planReview : void 0 : resource.value;
++			const requestKey = temporary ? params !== void 0 && "planCommentRequestKey" in params && typeof params.planCommentRequestKey === "string" ? params.planCommentRequestKey : void 0 : plan !== void 0 && "callId" in plan && typeof plan.callId === "string" ? plan.callId : void 0;
++			const commentSessionId = target?.session.kind === "subagent" ? target.session.childSessionId : target?.session.sessionId ?? sessionId;
++			const planKey = plan === void 0 || commentSessionId === void 0 || requestKey === void 0 ? void 0 : planCommentKey(commentSessionId, requestKey, plan.markdown);
++			const comments = useStore((state) => planKey === void 0 ? EMPTY_PLAN_COMMENTS : state.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS);
++			const editable = useStore((state) => planKey !== void 0 && state.editableByPlan[planKey] === true && (temporary || target?.session.kind === "session" && target.session.sessionId === sessionId));
++			const documentRef = (0, react.useRef)(null);
++			const editorRef = (0, react.useRef)(null);
++			const composing = (0, react.useRef)(false);
++			const [editor, setEditor] = (0, react.useState)();
++			const [note, setNote] = (0, react.useState)("");
++			const [rects, setRects] = (0, react.useState)([]);
++			const [hovered, setHovered] = (0, react.useState)();
++			const closeEditor = (0, react.useCallback)(() => {
++				composing.current = false;
++				setEditor(void 0);
++				setNote("");
++			}, []);
++			const editing = editor !== void 0 && editable;
++			(0, react.useEffect)(() => {
++				if (planKey !== void 0) actions.adopt(planKey);
++				closeEditor();
++				setHovered(void 0);
++			}, [
++				actions,
++				closeEditor,
++				planKey,
++				editable
++			]);
++			(0, react.useEffect)(() => {
++				if (!editing || planKey === void 0) return;
++				holdReviewFocus(planKey);
++				return () => {
++					releaseReviewFocus(planKey);
++				};
++			}, [
++				editing,
++				planKey,
++				holdReviewFocus,
++				releaseReviewFocus
++			]);
++			(0, react.useEffect)(() => {
++				if (!editing) return;
++				const dismissOutside = (event) => {
++					if (event.target instanceof Node && !editorRef.current?.contains(event.target)) closeEditor();
++				};
++				const dismissEscape = (event) => {
++					if (event.key === "Escape" && !event.isComposing && !composing.current) {
++						event.preventDefault();
++						closeEditor();
++					}
++				};
++				document.addEventListener("pointerdown", dismissOutside);
++				document.addEventListener("keydown", dismissEscape);
++				return () => {
++					document.removeEventListener("pointerdown", dismissOutside);
++					document.removeEventListener("keydown", dismissEscape);
++				};
++			}, [editing, closeEditor]);
++			(0, react.useLayoutEffect)(() => {
++				const root = documentRef.current;
++				if (root === null) return;
++				const measure = () => {
++					const origin = root.getBoundingClientRect();
++					const text = renderedPlanText(root);
++					const next = [];
++					const missing = [];
++					for (const comment of comments) {
++						const anchor = locatePlanComment(text, comment);
++						const ranges = anchor === void 0 ? [] : planHighlightRanges(root, anchor.start, anchor.end);
++						if (ranges.length === 0) {
++							missing.push(comment.id);
++							continue;
++						}
++						for (const range of ranges) for (const rect of range.getClientRects()) if (rect.width > 0 && rect.height > 0) next.push({
++							id: comment.id,
++							left: rect.left - origin.left,
++							top: rect.top - origin.top,
++							width: rect.width,
++							height: rect.height
++						});
++					}
++					setRects(next);
++					if (planKey !== void 0) actions.setMissing(planKey, missing);
++				};
++				measure();
++				const resize = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(measure);
++				resize?.observe(root);
++				window.addEventListener("resize", measure);
++				return () => {
++					resize?.disconnect();
++					window.removeEventListener("resize", measure);
++				};
++			}, [
++				actions,
++				comments,
++				planKey,
++				plan?.markdown,
++				t
++			]);
++			(0, react.useLayoutEffect)(() => {
++				if (!editing || editor === void 0) return;
++				const root = documentRef.current;
++				const dialog = editorRef.current;
++				const viewport = root?.parentElement?.parentElement;
++				if (root === null || dialog === null || viewport === void 0 || viewport === null) return;
++				const origin = root.getBoundingClientRect();
++				const bounds = viewport.getBoundingClientRect();
++				const height = dialog.getBoundingClientRect().height;
++				const top = Math.max(0, Math.min(editor.top, bounds.bottom - origin.top - height - 8));
++				if (height > 0 && top !== editor.top) setEditor({
++					...editor,
++					top
++				});
++			}, [editing, editor]);
++			const openEditor = (0, react.useCallback)((next, rect) => {
++				if (!editable || planKey === void 0) return;
++				const root = documentRef.current;
++				if (root === null) return;
++				const origin = root.getBoundingClientRect();
++				const width = Math.min(360, root.clientWidth || 360);
++				const left = Math.max(0, Math.min(rect.left - origin.left, (root.clientWidth || width) - width));
++				setEditor({
++					...next,
++					left,
++					top: Math.max(0, rect.bottom - origin.top + 8)
++				});
++				setHovered(void 0);
++				setNote(next.id === void 0 ? "" : comments.find((item) => item.id === next.id)?.note ?? "");
++			}, [
++				comments,
++				editable,
++				planKey
++			]);
++			const onSelection = (0, react.useCallback)(() => {
++				if (!editable) return;
++				const root = documentRef.current;
++				const selection = window.getSelection();
++				if (root === null || selection === null || selection.rangeCount === 0) return;
++				const range = selection.getRangeAt(0);
++				const anchor = selectionPlanAnchor(root, range);
++				if (anchor !== void 0) openEditor(anchor, range.getBoundingClientRect());
++			}, [editable, openEditor]);
++			const submitComment = (0, react.useCallback)(() => {
++				if (!editable || planKey === void 0 || editor === void 0 || note.trim() === "") return;
++				actions.save({
++					id: editor.id ?? randomCommentId(),
++					planKey,
++					quote: editor.quote,
++					note: note.trim(),
++					start: editor.start,
++					end: editor.end,
++					...editor.prefix === void 0 ? {} : { prefix: editor.prefix },
++					...editor.suffix === void 0 ? {} : { suffix: editor.suffix }
++				});
++				window.getSelection()?.removeAllRanges();
++				closeEditor();
++			}, [
++				actions,
++				closeEditor,
++				editable,
++				editor,
++				note,
++				planKey
++			]);
++			const deleteComment = (0, react.useCallback)(() => {
++				if (!editable || planKey === void 0 || editor?.id === void 0) return;
++				actions.remove(planKey, [editor.id]);
++				closeEditor();
++			}, [
++				actions,
++				closeEditor,
++				editable,
++				editor?.id,
++				planKey
++			]);
++			const labels = (0, react.useMemo)(() => ({
++				code: {
++					copyLabel: t("copy"),
++					copiedLabel: t("copied"),
++					toolbarLabels: {
++						codeLabel: t("codeBlock.title"),
++						wrapLabel: t("codeBlock.wrap"),
++						unwrapLabel: t("codeBlock.unwrap")
++					}
++				},
++				footnotes: t("markdown.footnotes")
++			}), [t]);
++			if (plan === void 0) return (0, react_jsx_runtime.jsxs)("div", {
++				className: PlanPreview_module_css_default.message,
++				role: "status",
++				children: [temporary ? t("preview.expired") : resource.status === "none" ? t("preview.unavailable") : resource.status === "failed" ? t("preview.failed") : t("preview.loading"), !temporary && resource.failure !== void 0 && (0, react_jsx_runtime.jsx)("p", { children: planFailureLine(t, resource.failure) })]
++			});
++			const hoverRect = rects.find((rect) => rect.id === hovered);
++			const hoverComment = comments.find((comment) => comment.id === hovered);
++			return (0, react_jsx_runtime.jsx)("section", {
++				className: PlanPreview_module_css_default.preview,
++				"data-plan-preview": "callId" in plan ? plan.callId : tab.tab.navigation.address,
++				"aria-label": plan.title,
++				children: (0, react_jsx_runtime.jsxs)("div", {
++					className: PlanPreview_module_css_default.documentFrame,
++					children: [
++						(0, react_jsx_runtime.jsx)("div", {
++							ref: documentRef,
++							className: PlanPreview_module_css_default.document,
++							onMouseUp: onSelection,
++							onKeyUp: onSelection,
++							children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.MarkdownText, {
++								text: plan.markdown,
++								labels
++							})
++						}),
++						rects.map((rect, index) => (0, react_jsx_runtime.jsx)("button", {
++							type: "button",
++							className: PlanPreview_module_css_default.commentMark,
++							"data-plan-comment-mark": rect.id,
++							tabIndex: rects.findIndex((item) => item.id === rect.id) === index ? 0 : -1,
++							style: {
++								left: rect.left,
++								top: rect.top,
++								width: rect.width,
++								height: rect.height
++							},
++							"aria-label": comments.find((comment) => comment.id === rect.id)?.note,
++							"aria-disabled": !editable,
++							onMouseEnter: () => {
++								setHovered(rect.id);
++							},
++							onMouseLeave: () => {
++								setHovered(void 0);
++							},
++							onFocus: () => {
++								setHovered(rect.id);
++							},
++							onBlur: () => {
++								setHovered(void 0);
++							},
++							onClick: (event) => {
++								const comment = comments.find((item) => item.id === rect.id);
++								if (comment !== void 0) openEditor(comment, event.currentTarget.getBoundingClientRect());
++							}
++						}, `${rect.id}:${index}`)),
++						!editing && hoverRect !== void 0 && hoverComment !== void 0 && (0, react_jsx_runtime.jsx)("div", {
++							role: "tooltip",
++							className: PlanPreview_module_css_default.commentTooltip,
++							style: {
++								left: Math.max(0, Math.min(hoverRect.left, (documentRef.current?.clientWidth || 340) - 340)),
++								top: hoverRect.top + hoverRect.height + 6
++							},
++							children: hoverComment.note
++						}),
++						editing && editor !== void 0 && (0, react_jsx_runtime.jsxs)("div", {
++							ref: editorRef,
++							className: PlanPreview_module_css_default.commentEditor,
++							style: {
++								left: editor.left,
++								top: editor.top
++							},
++							role: "dialog",
++							"aria-label": t("comment.editor"),
++							children: [
++								(0, react_jsx_runtime.jsx)("textarea", {
++									autoFocus: true,
++									rows: 3,
++									value: note,
++									"aria-label": t("comment.editor"),
++									placeholder: t("comment.placeholder"),
++									onChange: (event) => {
++										setNote(event.target.value);
++									},
++									onCompositionStart: () => {
++										composing.current = true;
++									},
++									onCompositionEnd: () => {
++										composing.current = false;
++									},
++									onKeyDown: (event) => {
++										if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing && !composing.current) {
++											event.preventDefault();
++											submitComment();
++										}
++									}
++								}),
++								(0, react_jsx_runtime.jsxs)("div", {
++									className: PlanPreview_module_css_default.commentEditorActions,
++									children: [
++										editor.id !== void 0 && (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++											size: "sm",
++											variant: "ghost",
++											onClick: deleteComment,
++											children: t("comment.delete")
++										}),
++										(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++											size: "sm",
++											variant: "ghost",
++											onClick: closeEditor,
++											children: t("comment.cancel")
++										}),
++										(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++											size: "sm",
++											variant: "primary",
++											disabled: note.trim() === "",
++											onClick: submitComment,
++											children: t("comment.save")
++										})
++									]
++								}),
++								(0, react_jsx_runtime.jsx)("button", {
++									type: "button",
++									className: PlanPreview_module_css_default.commentEditorClose,
++									"aria-label": t("comment.close"),
++									onClick: closeEditor,
++									children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconCloseOutlineRegular, { size: 14 })
++								})
++							]
++						})
++					]
++				})
++			});
++		}
++		/**
++		* Display a plain file icon and the heading in its tab after resource recovery.
++		* @param props - Framework-bound tab identity and resource reader.
++		* @returns a decorative file icon followed by the recovered title or initial localized label.
++		*/
++		function PlanTitle({ useTabInfo, useResource }) {
++			const tab = useTabInfo();
++			const resource = useResource(tab.tab.navigation.address);
++			const params = tab.tab.navigation.params;
++			const plan = isReviewPreviewAddress(tab.tab.navigation.address) ? params !== void 0 && "planReview" in params ? params.planReview : void 0 : resource.value;
++			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.FileTypeIcon, {
++				kind: "other",
++				size: 16,
++				className: PlanPreview_module_css_default.titleIcon
++			}), plan?.title ?? tab.tab.title] });
++		}
++		//#endregion
++		//#region \0dsh-css:/private/tmp/dsh-plan-comments-send-UDpWmJ/packages/client/ui-plan/src/client/PlanReviewSurface.module.css.mjs
++		const css$1 = "._3IkRhG_frame{padding:6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;justify-content:center;display:flex}._3IkRhG_card{width:100%;max-width:var(--dsh-chat-content-width);border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-input-major);box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);flex-direction:column;display:flex;overflow:hidden}._3IkRhG_strip{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-primary);flex-shrink:0;align-items:center;gap:8px;padding:12px 16px;font-size:14px;line-height:20px;display:flex}._3IkRhG_previewActions{align-items:center;margin-left:auto;display:flex}._3IkRhG_summary{min-width:0;padding:14px 16px 12px}._3IkRhG_title{text-overflow:ellipsis;white-space:nowrap;margin:0;font-size:15px;font-weight:500;line-height:22px;overflow:hidden}._3IkRhG_description{-webkit-line-clamp:2;color:var(--dsw-alias-label-secondary);-webkit-box-orient:vertical;margin:8px 0 0;font-size:14px;line-height:24px;display:-webkit-box;overflow:hidden}._3IkRhG_commentList{flex-direction:column;gap:6px;max-height:240px;padding:12px 16px 4px;display:flex;overflow-y:auto}._3IkRhG_commentRow{border-radius:var(--dsw-radius-sm);background:var(--dsw-static-neutral-50);align-items:flex-start;gap:8px;padding:8px;display:flex}body[data-ds-dark-theme] ._3IkRhG_commentRow{background:var(--dsw-static-neutral-850)}._3IkRhG_commentRow input{accent-color:var(--dsw-alias-state-business-primary);margin-top:4px}._3IkRhG_commentBody{flex-direction:column;flex:1;gap:2px;min-width:0;font-size:13px;line-height:20px;display:flex}._3IkRhG_commentBody strong{text-overflow:ellipsis;white-space:nowrap;font-weight:500;overflow:hidden}._3IkRhG_commentBody span{color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}._3IkRhG_delete{color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:0;justify-content:center;align-items:center;padding:4px;display:inline-flex}._3IkRhG_delete:hover{color:var(--dsw-alias-state-error-primary)}._3IkRhG_delete:disabled{cursor:default;opacity:.5}._3IkRhG_delete:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}._3IkRhG_changed{color:var(--dsw-alias-state-warn-primary)}._3IkRhG_feedback{min-width:0;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere;font-size:13px}._3IkRhG_footer{justify-content:space-between;align-items:center;gap:12px;padding:8px 16px 12px;display:flex}._3IkRhG_actions{align-items:center;gap:8px;margin-left:auto;display:flex}@media (width<=720px){._3IkRhG_footer{flex-wrap:wrap;align-items:flex-end;padding:8px 12px 10px}._3IkRhG_frame{padding-inline:12px}}";
++		const tagId$1 = "@deepseek-ai/dsh-client-ui-plan/PlanReviewSurface.module.css";
++		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$1) + "]") === null) {
++			const tag = document.createElement("style");
++			tag.dataset.plugin = "@deepseek-ai/dsh-client-ui-plan";
++			tag.dataset.pluginCss = tagId$1;
++			tag.textContent = css$1;
++			document.head.appendChild(tag);
++		}
++		var PlanReviewSurface_module_css_default = {
++			"actions": "_3IkRhG_actions",
++			"card": "_3IkRhG_card",
++			"changed": "_3IkRhG_changed",
++			"commentBody": "_3IkRhG_commentBody",
++			"commentList": "_3IkRhG_commentList",
++			"commentRow": "_3IkRhG_commentRow",
++			"delete": "_3IkRhG_delete",
++			"description": "_3IkRhG_description",
++			"feedback": "_3IkRhG_feedback",
++			"footer": "_3IkRhG_footer",
++			"frame": "_3IkRhG_frame",
++			"previewActions": "_3IkRhG_previewActions",
++			"strip": "_3IkRhG_strip",
++			"summary": "_3IkRhG_summary",
++			"title": "_3IkRhG_title"
++		};
++		//#endregion
++		//#region lib/types/client/PlanReviewSurface.js
++		/** One composer review surface, switching to revision when comments exist. */
++		/**
++		* Render one card, retaining annotations until a revision is durably submitted.
++		* @param props - Owner lifecycle, Session comment store, preview opener, and copy.
++		* @returns the sole plan-review composer surface.
++		*/
++		function PlanReviewSurface({ pending, review, requestKey, preview, card, busy, error, approve, dismiss, sessionId, t, useStore, actions, bindReview, submissionCursor, sendRevision, focusComposer }) {
++			const planKey = planCommentKey(sessionId, review.callId === void 0 ? requestKey : String(review.callId), review.plan);
++			const comments = useStore((state) => state.commentsByPlan[planKey] ?? EMPTY_PLAN_COMMENTS);
++			const missing = useStore((state) => state.missingByPlan[planKey]);
++			const staged = useStore((state) => state.stagedByPlan[planKey]);
++			const sending = useStore((state) => state.sendingByPlan[planKey] === true);
++			const [sendError, setSendError] = (0, react.useState)(null);
++			const sendingRef = (0, react.useRef)(false);
++			const mountedRef = (0, react.useRef)(true);
++			(0, react.useEffect)(() => {
++				mountedRef.current = true;
++				return () => {
++					mountedRef.current = false;
++				};
++			}, []);
++			const readOnly = pending.review !== void 0 || card.closed || card.channel === "none";
++			const actionBusy = busy || sending;
++			const locked = readOnly || actionBusy;
++			const [selected, setSelected] = (0, react.useState)([]);
++			const selectedIds = selected.filter((id) => comments.some((comment) => comment.id === id));
++			const selectedSet = new Set(selectedIds);
++			(0, react.useEffect)(() => bindReview(planKey, pending), [
++				bindReview,
++				pending,
++				planKey
++			]);
++			(0, react.useEffect)(() => {
++				actions.adopt(planKey);
++			}, [actions, planKey]);
++			(0, react.useEffect)(() => {
++				actions.setEditable(planKey, !locked);
++				return () => {
++					actions.setEditable(planKey, false);
++				};
++			}, [
++				actions,
++				locked,
++				planKey
++			]);
++			const summary = (0, react.useMemo)(() => {
++				const title = (0, _deepseek_ai_dsh_client_ui_primitives.extractMarkdownPlainText)(review.plan, { mode: "first-line" });
++				const description = (0, _deepseek_ai_dsh_client_ui_primitives.extractMarkdownPlainText)(review.plan, { mode: "first-paragraph" });
++				return {
++					title,
++					description: description === title ? "" : description
++				};
++			}, [review.plan]);
++			const revision = comments.length > 0;
++			const revisionText = [
++				t("review.prompt"),
++				"",
++				...comments.flatMap((comment, index) => [`${index + 1}. “${comment.quote}”`, `   ${t("review.note", { note: comment.note })}`])
++			].join("\n");
++			const awaitingReceipt = staged?.draft === revisionText && comments.every((comment) => staged.ids.includes(comment.id));
++			const remove = (ids) => {
++				if (locked) return;
++				actions.remove(planKey, ids);
++				setSelected([]);
++			};
++			const revise = async () => {
++				if (comments.length === 0 || locked || sendingRef.current) return;
++				sendingRef.current = true;
++				actions.setSending(planKey, true);
++				setSendError(null);
++				try {
++					if (!awaitingReceipt) {
++						actions.stage(planKey, revisionText, comments.map((comment) => comment.id), submissionCursor());
++						try {
++							await sendRevision(revisionText);
++						} catch (cause) {
++							actions.unstage(planKey, revisionText);
++							throw cause;
++						}
++					}
++					if (pending.snapshot().channel === "waterfall") await pending.answer({ answers: [{
++						id: review.id,
++						selected: review.decline === void 0 ? [] : [review.decline.label]
++					}] });
++					await dismiss();
++				} catch (cause) {
++					if (mountedRef.current) setSendError(cause instanceof Error ? cause.message : String(cause));
++				} finally {
++					sendingRef.current = false;
++					actions.setSending(planKey, false);
++				}
++			};
++			const cancel = async () => {
++				if (locked || !await dismiss()) return;
++				actions.clear(planKey);
++				focusComposer();
++			};
++			return (0, react_jsx_runtime.jsx)("div", {
++				className: PlanReviewSurface_module_css_default.frame,
++				"data-plan-review-key": pending.key,
++				"data-plan-review-surface": true,
++				"data-plan-review-variant": revision ? "revision" : "review",
++				children: (0, react_jsx_runtime.jsxs)("section", {
++					className: PlanReviewSurface_module_css_default.card,
++					"aria-label": review.question,
++					"aria-busy": actionBusy,
++					children: [
++						(0, react_jsx_runtime.jsxs)("div", {
++							className: PlanReviewSurface_module_css_default.strip,
++							children: [
++								(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.StateDot, { state: actionBusy ? "ongoing" : "warning" }),
++								(0, react_jsx_runtime.jsx)("span", { children: revision ? t("review.header") : t("review.waiting") }),
++								(0, react_jsx_runtime.jsx)("div", {
++									className: PlanReviewSurface_module_css_default.previewActions,
++									children: preview
++								})
++							]
++						}),
++						!revision ? (0, react_jsx_runtime.jsxs)("div", {
++							className: PlanReviewSurface_module_css_default.summary,
++							children: [(0, react_jsx_runtime.jsx)("h3", {
++								className: PlanReviewSurface_module_css_default.title,
++								children: summary.title
++							}), summary.description !== "" && (0, react_jsx_runtime.jsx)("p", {
++								className: PlanReviewSurface_module_css_default.description,
++								children: summary.description
++							})]
++						}) : (0, react_jsx_runtime.jsx)("div", {
++							className: PlanReviewSurface_module_css_default.commentList,
++							children: comments.map((comment) => (0, react_jsx_runtime.jsxs)("div", {
++								className: PlanReviewSurface_module_css_default.commentRow,
++								"data-plan-comment-item": comment.id,
++								children: [
++									!readOnly && (0, react_jsx_runtime.jsx)("input", {
++										type: "checkbox",
++										"aria-label": t("comment.select", { quote: comment.quote }),
++										checked: selectedSet.has(comment.id),
++										disabled: actionBusy,
++										onChange: (event) => {
++											setSelected((ids) => event.target.checked ? [...ids, comment.id] : ids.filter((id) => id !== comment.id));
++										}
++									}),
++									(0, react_jsx_runtime.jsxs)("span", {
++										className: PlanReviewSurface_module_css_default.commentBody,
++										children: [
++											(0, react_jsx_runtime.jsxs)("strong", { children: [
++												"“",
++												comment.quote,
++												"”"
++											] }),
++											(0, react_jsx_runtime.jsx)("span", { children: comment.note }),
++											missing?.includes(comment.id) && (0, react_jsx_runtime.jsx)("small", {
++												className: PlanReviewSurface_module_css_default.changed,
++												children: t("review.changed")
++											})
++										]
++									}),
++									!readOnly && (0, react_jsx_runtime.jsx)("button", {
++										type: "button",
++										className: PlanReviewSurface_module_css_default.delete,
++										"aria-label": t("comment.delete"),
++										disabled: actionBusy,
++										onClick: () => {
++											remove([comment.id]);
++										},
++										children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconTrashOutlineRegular, { size: 14 })
++									})
++								]
++							}, comment.id))
++						}),
++						(0, react_jsx_runtime.jsxs)("div", {
++							className: PlanReviewSurface_module_css_default.footer,
++							children: [
++								(0, react_jsx_runtime.jsx)("div", {
++									className: PlanReviewSurface_module_css_default.feedback,
++									role: "status",
++									children: sendError ?? error
++								}),
++								revision && selectedIds.length > 0 && !readOnly && (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++									size: "sm",
++									variant: "ghost",
++									disabled: actionBusy,
++									onClick: () => {
++										remove(selectedIds);
++									},
++									children: t("comment.deleteSelected")
++								}),
++								readOnly && (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++									variant: "outline",
++									disabled: actionBusy,
++									onClick: () => {
++										dismiss();
++									},
++									children: t("review.close")
++								}),
++								!readOnly && (0, react_jsx_runtime.jsx)("div", {
++									className: PlanReviewSurface_module_css_default.actions,
++									children: !revision ? (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++										variant: "outline",
++										icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconEditOutlineRegular, { size: 14 }),
++										disabled: actionBusy,
++										onClick: () => {
++											cancel();
++										},
++										children: t("review.discuss")
++									}), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++										variant: "primary",
++										disabled: actionBusy,
++										onClick: approve,
++										children: t("review.approve")
++									})] }) : (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++										variant: "outline",
++										disabled: actionBusy,
++										onClick: () => {
++											cancel();
++										},
++										children: t("review.cancel")
++									}), (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {
++										variant: "primary",
++										disabled: actionBusy,
++										onClick: () => {
++											revise();
++										},
++										children: t("review.fix")
++									})] })
++								})
++							]
++						})
++					]
++				})
++			});
++		}
++		//#endregion
++		//#region lib/types/client/PlanRevisionReceipt.js
++		/** Cleanup annotations only when an ordinary user message is recorded. */
++		/**
++		* Retain comments through failed sends and queue admission.
++		* @param props - Framework-bound comment store and durable submission observer.
++		* @returns no additional input or review UI.
++		*/
++		function PlanRevisionReceipt({ actions, watchSubmitted }) {
++			(0, react.useEffect)(() => watchSubmitted(actions.confirmSubmitted), [actions, watchSubmitted]);
++			return null;
++		}
++		//#endregion
++		//#region lib/types/client/revision-submissions.js
++		function submittedText(entry) {
++			if (entry.type !== "event" || entry.event.type !== "user/message" || entry.event.data.source.kind !== "user") return void 0;
++			return entry.event.data.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
++		}
++		/**
++		* Read history once on mount, then consume only the feed's exact deltas.
++		* @param source - The Session's contiguous event window.
++		* @param onSubmitted - Called only for durably recorded user text.
++		* @returns subscription disposer.
++		*/
++		function watchRevisionSubmissions(source, onSubmitted) {
++			const inspect = (entries) => {
++				for (const entry of entries) {
++					const text = submittedText(entry);
++					if (text !== void 0) onSubmitted(text, entry.event.seq);
++				}
++			};
++			let revision = source.getSnapshot().revision;
++			const dispose = source.subscribe(() => {
++				const snapshot = source.getSnapshot();
++				if (snapshot.revision === revision) return;
++				revision = snapshot.revision;
++				if (snapshot.change.kind !== "settle-assistant") inspect(snapshot.change.entries);
++			});
++			inspect(source.getSnapshot().entries);
++			return dispose;
++		}
++		//#endregion
+ 		//#region lib/types/client/plan-definition.js
+ 		/** One card per invocation; a later PTC settlement retains the original card position. */
+ 		const planDefinition = {
+@@ -475,8 +1443,8 @@ window.__ModuleLoader__.load({
+ 			});
+ 		}
+ 		//#endregion
+-		//#region \0dsh-css:D:\qwq\desktop\wt-dsh-master\deepseek-harness\packages\client\ui-plan\src\client\PlanModeControl.module.css.mjs
+-		const css = ".yuR66q_wrap{align-items:center;gap:6px;display:inline-flex}.yuR66q_chip{border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-state-business-tertiary);min-width:34px;height:28px;color:var(--dsw-alias-state-business-primary);cursor:pointer;border:none;align-items:center;gap:4px;padding:0 8px;font-size:13px;font-weight:500;line-height:20px;display:inline-flex}.yuR66q_chip:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-state-business-tertiary), var(--dsw-alias-state-business-primary) 6%)}.yuR66q_chip:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}.yuR66q_chip:disabled{opacity:.6;cursor:default}.yuR66q_glyph{color:currentColor;flex:none;width:14px;height:14px;display:inline-flex}.yuR66q_hoverGlyph,.yuR66q_chip:hover:not(:disabled) .yuR66q_restGlyph,.yuR66q_chip:focus-visible .yuR66q_restGlyph{display:none}.yuR66q_chip:hover:not(:disabled) .yuR66q_hoverGlyph,.yuR66q_chip:focus-visible .yuR66q_hoverGlyph{display:block}.yuR66q_error{color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}";
++		//#region \0dsh-css:/private/tmp/dsh-plan-comments-send-UDpWmJ/packages/client/ui-plan/src/client/PlanModeControl.module.css.mjs
++		const css = ".p0Xvaa_wrap{align-items:center;gap:6px;display:inline-flex}.p0Xvaa_chip{border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-state-business-tertiary);min-width:34px;height:28px;color:var(--dsw-alias-state-business-primary);cursor:pointer;border:none;align-items:center;gap:4px;padding:0 8px;font-size:13px;font-weight:500;line-height:20px;display:inline-flex}.p0Xvaa_chip:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-state-business-tertiary), var(--dsw-alias-state-business-primary) 6%)}.p0Xvaa_chip:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}.p0Xvaa_chip:disabled{opacity:.6;cursor:default}.p0Xvaa_glyph{color:currentColor;flex:none;width:14px;height:14px;display:inline-flex}.p0Xvaa_hoverGlyph,.p0Xvaa_chip:hover:not(:disabled) .p0Xvaa_restGlyph,.p0Xvaa_chip:focus-visible .p0Xvaa_restGlyph{display:none}.p0Xvaa_chip:hover:not(:disabled) .p0Xvaa_hoverGlyph,.p0Xvaa_chip:focus-visible .p0Xvaa_hoverGlyph{display:block}.p0Xvaa_error{color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}";
+ 		const tagId = "@deepseek-ai/dsh-client-ui-plan/PlanModeControl.module.css";
+ 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
+ 			const tag = document.createElement("style");
+@@ -486,12 +1454,12 @@ window.__ModuleLoader__.load({
+ 			document.head.appendChild(tag);
+ 		}
+ 		var PlanModeControl_module_css_default = {
+-			"chip": "yuR66q_chip",
+-			"error": "yuR66q_error",
+-			"glyph": "yuR66q_glyph",
+-			"hoverGlyph": "yuR66q_hoverGlyph",
+-			"restGlyph": "yuR66q_restGlyph",
+-			"wrap": "yuR66q_wrap"
++			"chip": "p0Xvaa_chip",
++			"error": "p0Xvaa_error",
++			"glyph": "p0Xvaa_glyph",
++			"hoverGlyph": "p0Xvaa_hoverGlyph",
++			"restGlyph": "p0Xvaa_restGlyph",
++			"wrap": "p0Xvaa_wrap"
+ 		};
+ 		//#endregion
+ 		//#region lib/types/client/PlanModeControl.js
+@@ -575,7 +1543,25 @@ window.__ModuleLoader__.load({
+ 			"preview.expired": "临时计划预览已失效，请从仍在等待审批的卡片重新打开。",
+ 			"chip.on.aria": "计划模式已开启，按下关闭",
+ 			"chip.on.title": "计划模式已开启 — 点击关闭（/plan off）",
+-			"chip.exitFailed": "退出计划模式失败"
++			"chip.exitFailed": "退出计划模式失败",
++			"review.waiting": "计划待审",
++			"review.header": "计划修正",
++			"review.approve": "同意执行",
++			"review.discuss": "要求修改",
++			"review.cancel": "取消计划",
++			"review.close": "关闭",
++			"review.fix": "修正计划",
++			"review.prompt": "请根据以下计划批注修正：",
++			"review.note": "修改意见：{note}",
++			"review.changed": "原文已变化",
++			"comment.editor": "计划评论",
++			"comment.placeholder": "输入评论…",
++			"comment.delete": "删除评论",
++			"comment.deleteSelected": "删除所选",
++			"comment.select": "选择评论：{quote}",
++			"comment.cancel": "取消",
++			"comment.close": "关闭评论",
++			"comment.save": "保存"
+ 		};
+ 		/** English dictionary, checked complete against the zh key set. */
+ 		const en = {
+@@ -595,7 +1581,25 @@ window.__ModuleLoader__.load({
+ 			"preview.expired": "This temporary plan preview has expired. Reopen it from the pending review card.",
+ 			"chip.on.aria": "Plan mode on, press to turn off",
+ 			"chip.on.title": "Plan mode on — click to turn off (/plan off)",
+-			"chip.exitFailed": "Failed to exit plan mode"
++			"chip.exitFailed": "Failed to exit plan mode",
++			"review.waiting": "Plan review",
++			"review.header": "Plan revision",
++			"review.approve": "Approve",
++			"review.discuss": "Request changes",
++			"review.cancel": "Cancel plan",
++			"review.close": "Close",
++			"review.fix": "Revise plan",
++			"review.prompt": "Please revise the plan using these comments:",
++			"review.note": "Requested change: {note}",
++			"review.changed": "Original text changed",
++			"comment.editor": "Plan comment",
++			"comment.placeholder": "Add a comment…",
++			"comment.delete": "Delete comment",
++			"comment.deleteSelected": "Delete selected",
++			"comment.select": "Select comment: {quote}",
++			"comment.cancel": "Cancel",
++			"comment.close": "Close comment",
++			"comment.save": "Save"
+ 		};
+ 		//#endregion
+ 		//#region lib/types/client/index.js
+@@ -651,6 +1655,26 @@ window.__ModuleLoader__.load({
+ 			} });
+ 			const reviewWindow = randomUUID();
+ 			const reviewStore = createPlanReviewStore();
++			const commentsStore = createPlanCommentsStore();
++			const focus = /* @__PURE__ */ new Map();
++			const previewFocus = {
++				holdReviewFocus: (planKey) => {
++					const binding = focus.get(planKey);
++					if (binding === void 0 || binding.held) return;
++					binding.held = true;
++					binding.pending.holdFocus();
++				},
++				releaseReviewFocus: (planKey) => {
++					const binding = focus.get(planKey);
++					if (binding === void 0 || !binding.held) return;
++					binding.held = false;
++					binding.pending.releaseFocus();
++				}
++			};
++			ctx.effect(() => () => {
++				for (const binding of focus.values()) if (binding.held) binding.pending.releaseFocus();
++				focus.clear();
++			}, "ui-plan: review focus");
+ 			ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({
+ 				name: "conversation.chat.turnTail",
+ 				id: previewId,
+@@ -680,18 +1704,69 @@ window.__ModuleLoader__.load({
+ 							open(sessionId).openPlan(review.callId);
+ 							return;
+ 						}
+-						ctx.sidebarRight.openResource(reviewPreviewAddress(sessionId, `${reviewWindow}:${requestKey}`), { params: { planReview: {
+-							markdown: review.plan,
+-							title: (0, _deepseek_ai_dsh_client_ui_primitives.extractMarkdownPlainText)(review.plan, { mode: "first-line" })
+-						} } });
++						ctx.sidebarRight.openResource(reviewPreviewAddress(sessionId, `${reviewWindow}:${requestKey}`), { params: {
++							planReview: {
++								markdown: review.plan,
++								title: (0, _deepseek_ai_dsh_client_ui_primitives.extractMarkdownPlainText)(review.plan, { mode: "first-line" })
++							},
++							planCommentRequestKey: requestKey
++						} });
+ 					},
+ 					hooks: { sidebarMounted: ctx.sidebarRight.mounted }
+ 				})
+ 			}, PlanReviewOpen));
++			ctx.slots.inject("conversation.plan-review.surface", () => ctx.slots.register({
++				name: "conversation.plan-review.surface",
++				locale: NS,
++				store: commentsStore,
++				inject: (sessionId) => ({
++					submissionCursor: () => ctx.sessions.binding(sessionId)?.eventSource.getSnapshot().entries.at(-1)?.event.seq ?? -1,
++					sendRevision: async (text) => {
++						const binding = ctx.sessions.binding(sessionId);
++						if (binding === void 0) throw new Error(`ui-plan: unknown session "${sessionId}"`);
++						const result = await binding.session.prompt([{
++							type: "text",
++							text
++						}], "steer");
++						if (!result.ok) throw new Error(`ui-plan revision failed: ${result.error.code}: ${result.error.message}`);
++					},
++					focusComposer: () => {
++						requestAnimationFrame(() => {
++							if (ctx.sidebarRight.mounted.getSnapshot() !== sessionId) return;
++							const binding = ctx.sessions.binding(sessionId);
++							if (binding !== void 0) binding.ctx.get("conversation")?.input.for(binding.ctx).focus();
++						});
++					},
++					bindReview: (planKey, pending) => {
++						const binding = {
++							pending,
++							held: false
++						};
++						focus.set(planKey, binding);
++						return () => {
++							if (focus.get(planKey) !== binding) return;
++							if (binding.held) pending.releaseFocus();
++							focus.delete(planKey);
++						};
++					}
++				})
++			}, PlanReviewSurface));
++			ctx.slots.inject("conversation.input.overlay", () => ctx.slots.register({
++				name: "conversation.input.overlay",
++				id: previewId,
++				store: commentsStore,
++				inject: (sessionId) => {
++					const binding = ctx.sessions.binding(sessionId);
++					if (binding === void 0) throw new Error(`ui-plan: unknown session "${sessionId}"`);
++					return { watchSubmitted: (onSubmitted) => watchRevisionSubmissions(binding.eventSource, onSubmitted) };
++				}
++			}, PlanRevisionReceipt));
+ 			ctx.slots.inject("sidebar.right.pane.tab", () => ctx.slots.register({
+ 				name: "sidebar.right.pane.tab",
+ 				key: previewId,
+-				locale: NS
++				locale: NS,
++				store: commentsStore,
++				inject: () => previewFocus
+ 			}, PlanPreview));
+ 			ctx.slots.inject("sidebar.right.pane.tab.title", () => ctx.slots.register({
+ 				name: "sidebar.right.pane.tab.title",
+diff --git a/lib/types/client/PlanPreview.d.ts b/lib/types/client/PlanPreview.d.ts
+index fe954be..ab4f2a9 100644
+--- a/lib/types/client/PlanPreview.d.ts
++++ b/lib/types/client/PlanPreview.d.ts
+@@ -1,11 +1,19 @@
+-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
+-type PlanPreviewProps = PropsRuntime<'sidebar.right.pane.tab'> & PropsLocale<'plan'>;
++import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots';
++import { type createPlanCommentsStore } from './plan-comments.ts';
++type PlanPreviewProps = PropsRuntime<'sidebar.right.pane.tab'> & PropsLocale<'plan'> & PropsStore<ReturnType<typeof createPlanCommentsStore>> & InjectFace<PlanPreviewInjected>;
++/** Callbacks to the live review that owns the preview's comments. */
++export interface PlanPreviewInjected {
++    /** Hold its existing countdown while a comment editor is open. */
++    holdReviewFocus: (planKey: string) => void;
++    /** Release that hold after the editor closes or unmounts. */
++    releaseReviewFocus: (planKey: string) => void;
++}
+ /**
+- * Render the submitted plan with its complete Markdown.
+- * @param props - Framework-bound tab identity, resource, and copy.
++ * Render complete Markdown and floating comments for the current live review.
++ * @param props - Framework-bound tab identity, resource, comment store, and copy.
+  * @returns the plan document or a localized loading/failure state.
+  */
+-export declare function PlanPreview({ useTabInfo, useResource, t }: PlanPreviewProps): import("react").JSX.Element;
++export declare function PlanPreview({ useTabInfo, useResource, t, sessionId, useStore, actions, holdReviewFocus, releaseReviewFocus }: PlanPreviewProps): import("react").JSX.Element;
+ /**
+  * Display a plain file icon and the heading in its tab after resource recovery.
+  * @param props - Framework-bound tab identity and resource reader.
+diff --git a/lib/types/client/PlanReviewSurface.d.ts b/lib/types/client/PlanReviewSurface.d.ts
+new file mode 100644
+index 0000000..cb755ad
+--- /dev/null
++++ b/lib/types/client/PlanReviewSurface.d.ts
+@@ -0,0 +1,22 @@
++import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots';
++import { type createPlanCommentsStore } from './plan-comments.ts';
++/** Session-owned link between the review carrier and its preview editor. */
++export interface PlanReviewSurfaceInjected {
++    /** Bind focus holding for this live review; the disposer removes only this binding. */
++    bindReview: (planKey: string, pending: PropsRuntime<'conversation.plan-review.surface'>['pending']) => () => void;
++    /** Last recorded event before the revision prompt is submitted. */
++    submissionCursor: () => number;
++    /** Send only the revision prompt, preserving the user's draft and attachments. */
++    sendRevision: (text: string) => Promise<void>;
++    /** Restore the Session input's focus after the review seat closes. */
++    focusComposer: () => void;
++}
++type SurfaceProps = PropsRuntime<'conversation.plan-review.surface'> & PropsLocale<'plan'> & PropsStore<ReturnType<typeof createPlanCommentsStore>> & InjectFace<PlanReviewSurfaceInjected>;
++/**
++ * Render one card, retaining annotations until a revision is durably submitted.
++ * @param props - Owner lifecycle, Session comment store, preview opener, and copy.
++ * @returns the sole plan-review composer surface.
++ */
++export declare function PlanReviewSurface({ pending, review, requestKey, preview, card, busy, error, approve, dismiss, sessionId, t, useStore, actions, bindReview, submissionCursor, sendRevision, focusComposer }: SurfaceProps): import("react").JSX.Element;
++export {};
++//# sourceMappingURL=PlanReviewSurface.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/PlanRevisionReceipt.d.ts b/lib/types/client/PlanRevisionReceipt.d.ts
+new file mode 100644
+index 0000000..758d493
+--- /dev/null
++++ b/lib/types/client/PlanRevisionReceipt.d.ts
+@@ -0,0 +1,14 @@
++import type { InjectFace, PropsStore } from '@deepseek-ai/dsh-client-ui-slots';
++import type { createPlanCommentsStore } from './plan-comments.ts';
++/** Session-bound observation of recorded user submissions. */
++export interface PlanRevisionReceiptInjected {
++    /** Observe recorded user text, including a restored successful submission. */
++    watchSubmitted: (onSubmitted: (text: string, seq: number) => void) => () => void;
++}
++/**
++ * Retain comments through failed sends and queue admission.
++ * @param props - Framework-bound comment store and durable submission observer.
++ * @returns no additional input or review UI.
++ */
++export declare function PlanRevisionReceipt({ actions, watchSubmitted }: PropsStore<ReturnType<typeof createPlanCommentsStore>> & InjectFace<PlanRevisionReceiptInjected>): null;
++//# sourceMappingURL=PlanRevisionReceipt.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/comment-dom.d.ts b/lib/types/client/comment-dom.d.ts
+new file mode 100644
+index 0000000..70cbed3
+--- /dev/null
++++ b/lib/types/client/comment-dom.d.ts
+@@ -0,0 +1,34 @@
++/** Read plan text and create browser Ranges without changing Markdown's DOM. */
++import type { PlanComment } from './plan-comments.ts';
++/** Text offsets and surrounding context captured from a plan selection. */
++export type PlanTextAnchor = Pick<PlanComment, 'quote' | 'start' | 'end' | 'prefix' | 'suffix'>;
++/**
++ * Read selectable Markdown content, excluding its generated controls.
++ * @param root - Markdown-only document element.
++ * @returns the text whose offsets identify comments.
++ */
++export declare function renderedPlanText(root: HTMLElement): string;
++/**
++ * Capture a selection with trimmed text and matching offsets across inline nodes.
++ * @param root - Markdown-only document element.
++ * @param range - User selection, in either selection direction.
++ * @returns a nonempty anchor when both endpoints belong to the document.
++ */
++export declare function selectionPlanAnchor(root: HTMLElement, range: Range): PlanTextAnchor | undefined;
++/**
++ * Resolve rendered-text offsets into a Range, retaining inline Markdown nodes.
++ * @param root - Markdown-only document element.
++ * @param start - Inclusive text offset.
++ * @param end - Exclusive text offset.
++ * @returns the anchored Range or undefined when offsets exceed the document.
++ */
++export declare function planTextRange(root: HTMLElement, start: number, end: number): Range | undefined;
++/**
++ * Split a comment into text-only Ranges so highlights exclude banners and block boxes.
++ * @param root - Markdown-only document element.
++ * @param start - Inclusive text offset.
++ * @param end - Exclusive text offset.
++ * @returns each inline text segment, or an empty array for invalid offsets.
++ */
++export declare function planHighlightRanges(root: HTMLElement, start: number, end: number): readonly Range[];
++//# sourceMappingURL=comment-dom.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/locales.d.ts b/lib/types/client/locales.d.ts
+index 938fe19..3e7e6b5 100644
+--- a/lib/types/client/locales.d.ts
++++ b/lib/types/client/locales.d.ts
+@@ -18,6 +18,24 @@ export declare const zh: {
+     'chip.on.aria': string;
+     'chip.on.title': string;
+     'chip.exitFailed': string;
++    'review.waiting': string;
++    'review.header': string;
++    'review.approve': string;
++    'review.discuss': string;
++    'review.cancel': string;
++    'review.close': string;
++    'review.fix': string;
++    'review.prompt': string;
++    'review.note': string;
++    'review.changed': string;
++    'comment.editor': string;
++    'comment.placeholder': string;
++    'comment.delete': string;
++    'comment.deleteSelected': string;
++    'comment.select': string;
++    'comment.cancel': string;
++    'comment.close': string;
++    'comment.save': string;
+ };
+ /** The plan namespace key union. */
+ export type PlanKey = keyof typeof zh;
+@@ -40,5 +58,23 @@ export declare const en: {
+     'chip.on.aria': string;
+     'chip.on.title': string;
+     'chip.exitFailed': string;
++    'review.waiting': string;
++    'review.header': string;
++    'review.approve': string;
++    'review.discuss': string;
++    'review.cancel': string;
++    'review.close': string;
++    'review.fix': string;
++    'review.prompt': string;
++    'review.note': string;
++    'review.changed': string;
++    'comment.editor': string;
++    'comment.placeholder': string;
++    'comment.delete': string;
++    'comment.deleteSelected': string;
++    'comment.select': string;
++    'comment.cancel': string;
++    'comment.close': string;
++    'comment.save': string;
+ };
+ //# sourceMappingURL=locales.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/plan-comments.d.ts b/lib/types/client/plan-comments.d.ts
+new file mode 100644
+index 0000000..5a7ed30
+--- /dev/null
++++ b/lib/types/client/plan-comments.d.ts
+@@ -0,0 +1,68 @@
++/** Browser-owned annotations and revision submissions for plan review. */
++import { type EngineStoreHandle } from '@deepseek-ai/dsh-client-store';
++import type { SessionId } from '@deepseek-ai/dsh-session/types';
++/** One note anchored to a plan's rendered text. */
++export interface PlanComment {
++    readonly id: string;
++    readonly planKey: string;
++    readonly quote: string;
++    readonly note: string;
++    readonly start: number;
++    readonly end: number;
++    readonly prefix?: string;
++    readonly suffix?: string;
++}
++/** Comments included in submitted revision text awaiting durable delivery. */
++export interface PlanCommentRevision {
++    readonly draft: string;
++    readonly ids: readonly string[];
++    readonly afterSeq: number;
++}
++/** Shared interaction state for the plan card and full-text preview. */
++export interface PlanCommentsState {
++    commentsByPlan: Record<string, readonly PlanComment[]>;
++    editableByPlan: Record<string, boolean>;
++    sendingByPlan: Record<string, boolean>;
++    missingByPlan: Record<string, readonly string[]>;
++    stagedByPlan: Record<string, PlanCommentRevision>;
++}
++/** Declared mutations for the shared plan review state. */
++export type PlanCommentsActions = {
++    adopt: (state: PlanCommentsState, planKey: string) => void;
++    save: (state: PlanCommentsState, comment: PlanComment) => void;
++    remove: (state: PlanCommentsState, planKey: string, ids: readonly string[]) => void;
++    clear: (state: PlanCommentsState, planKey: string) => void;
++    setEditable: (state: PlanCommentsState, planKey: string, editable: boolean) => void;
++    setSending: (state: PlanCommentsState, planKey: string, sending: boolean) => void;
++    setMissing: (state: PlanCommentsState, planKey: string, ids: readonly string[]) => void;
++    stage: (state: PlanCommentsState, planKey: string, draft: string, ids: readonly string[], afterSeq: number) => void;
++    unstage: (state: PlanCommentsState, planKey: string, draft: string) => void;
++    confirm: (state: PlanCommentsState, planKey: string, draft: string, seq: number) => void;
++    confirmSubmitted: (state: PlanCommentsState, text: string, seq: number) => void;
++};
++/** Stable empty selection for framework store selectors. */
++export declare const EMPTY_PLAN_COMMENTS: readonly PlanComment[];
++/**
++ * Declare one session-scoped store shared by card, preview, and delivery confirmation.
++ * @returns a registration handle with validated, non-fatal browser persistence.
++ */
++export declare function createPlanCommentsStore(): EngineStoreHandle<PlanCommentsState, PlanCommentsActions>;
++/**
++ * Identify a plan by its session, invocation (or unnamed request), and Markdown.
++ * @param sessionId - the owning Session.
++ * @param requestKey - tool call id, or the pending unnamed request key.
++ * @param markdown - exact plan text.
++ * @returns the browser-owned plan key.
++ */
++export declare function planCommentKey(sessionId: SessionId, requestKey: string, markdown: string): string;
++/**
++ * Resolve an annotation only when its original offset or text context identifies it.
++ * @param text - current rendered plan text.
++ * @param comment - persisted quote and text offsets.
++ * @returns exact text offsets, or undefined for a missing or ambiguous quote.
++ */
++export declare function locatePlanComment(text: string, comment: PlanComment): {
++    start: number;
++    end: number;
++} | undefined;
++//# sourceMappingURL=plan-comments.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/review-preview.d.ts b/lib/types/client/review-preview.d.ts
+index c896428..c8d2908 100644
+--- a/lib/types/client/review-preview.d.ts
++++ b/lib/types/client/review-preview.d.ts
+@@ -6,6 +6,7 @@ declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
+         /** Review text without a logged invocation; never persisted in sidebar layout. */
+         'plan-review': {
+             planReview: PlanDocument;
++            planCommentRequestKey?: string;
+         };
+     }
+ }
+diff --git a/lib/types/client/revision-submissions.d.ts b/lib/types/client/revision-submissions.d.ts
+new file mode 100644
+index 0000000..068e67f
+--- /dev/null
++++ b/lib/types/client/revision-submissions.d.ts
+@@ -0,0 +1,10 @@
++/** Durable user-message acknowledgements for staged plan revisions. */
++import type { SessionEventSource } from '@deepseek-ai/dsh-api-session-controller/client';
++/**
++ * Read history once on mount, then consume only the feed's exact deltas.
++ * @param source - The Session's contiguous event window.
++ * @param onSubmitted - Called only for durably recorded user text.
++ * @returns subscription disposer.
++ */
++export declare function watchRevisionSubmissions(source: SessionEventSource, onSubmitted: (text: string, seq: number) => void): () => void;
++//# sourceMappingURL=revision-submissions.d.ts.map
+\ No newline at end of file
