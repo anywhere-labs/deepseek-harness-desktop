@@ -42,7 +42,6 @@ The `dsh-desktop.mode` field in the DSH home `settings.yaml` document is the sin
 dsh-desktop:
   mode: compatibility # compatibility, extended, or advanced
   macosMaterial: transparent # off or transparent
-  windowsMaterial: acrylic # off, acrylic, or mica when supported
 ```
 
 The launcher reads the same file resolved by the active `@deepseek-ai/dsh-settings-file` row before composing a generation. The Host registers the `dsh-desktop` namespace with the standard settings service. There is no parallel mode value in the profile manifest.
@@ -75,7 +74,7 @@ The command bar remains visible and draggable while upstream overlays are open. 
 
 The DOM declares the command bar as the Desktop frame and the shifted upstream root as its content viewport. The `shell.overlay` layer becomes the containing block for fixed plugin surfaces, while dialogs portalled directly to `body` receive the same content offset. Both paths are therefore bounded below the 36-pixel frame instead of darkening or intercepting it.
 
-Custom-window material is independent from mode. macOS offers **Off** and **Transparent**. Windows offers **Off** and native **Acrylic**; **Mica** appears only on Windows 11 build 22621 or newer. Windows 10 therefore uses native Acrylic rather than a CSS imitation. An unsupported persisted Mica preference is capability-gated to Acrylic. Changing mode or material performs an orderly restart.
+Custom-window material is independent from mode. macOS offers **Off** and **Transparent**. Windows has no material choice, so every Windows window is an ordinary opaque window. The removed `windowsMaterial` values `acrylic` and `mica` stay readable so older settings still boot, and both resolve to off. Changing mode or material performs an orderly restart.
 
 ## Enhanced mode
 

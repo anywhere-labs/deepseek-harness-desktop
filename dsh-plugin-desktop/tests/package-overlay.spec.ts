@@ -93,6 +93,21 @@ describe('Desktop package overlay', () => {
       .toThrow('cannot resolve package "@scope/plugin"')
   })
 
+  it('ignores stale ancestor projections for bundle preparation as well as imports', () => {
+    const state = fixture()
+    installPackage(state.install, '@scope/plugin', '1.0.0')
+    installPackage(state.root, '@scope/plugin', '99.0.0')
+    expect(resolveOverlayPackage('@scope/plugin', state.options).selected.source).toBe('install')
+    expect(resolveOverlayPackage('@scope/plugin', state.options).profile).toBeUndefined()
+    const nested = join(state.profile, 'profiles', 'active')
+    mkdirSync(nested, { recursive: true })
+    writeFileSync(join(nested, 'package.json'), '{}')
+    installPackage(state.profile, 'ancestor-only', '1.0.0')
+    expect(findOverlayPackage('ancestor-only', {
+      ...state.options, profilePackageUrl: pathToFileURL(join(nested, 'package.json')).href,
+    })).toBeUndefined()
+  })
+
   it('selects the newer semantic version in either direction', () => {
     const profileNewer = fixture()
     installPackage(profileNewer.install, '@scope/plugin', '1.9.9')

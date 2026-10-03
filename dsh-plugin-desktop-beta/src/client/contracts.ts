@@ -36,11 +36,9 @@ export interface DesktopWindowService {
   readonly mode: 'compatibility' | 'extended' | 'advanced'
   readonly platform: 'darwin' | 'win32' | 'linux'
   /** Capability-gated native material active behind this renderer. */
-  readonly material: 'off' | 'transparent' | 'mica'
-  /** Windows Mica capability after the operating-system build gate. */
-  readonly micaSupported: boolean
-  /** Materials available on the active platform and operating-system build. */
-  readonly availableMaterials: readonly ('off' | 'transparent' | 'mica')[]
+  readonly material: 'off' | 'transparent'
+  /** Materials available on the active platform. */
+  readonly availableMaterials: readonly ('off' | 'transparent')[]
   /** Content insets owned by the active Desktop presentation. */
   readonly safeAreaInsets: DesktopWindowInsets
   /** Top caption geometry; interactive children must opt out of app dragging. */

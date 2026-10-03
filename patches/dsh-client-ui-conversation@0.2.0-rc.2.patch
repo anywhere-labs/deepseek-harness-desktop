@@ -1,0 +1,35 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -3163,7 +3163,7 @@
+ 		//#endregion
+ 		//#region lib/types/client/stores.js
+ 		/** Per-session Conversation store shared by the shell body and header. */
+-		const CONVERSATION_STORE_KEY = "dsh.conversation";
++		const CONVERSATION_STORE_KEY = globalThis.__DSH_SESSION_WINDOW_TARGET__ ? "dsh.session-window.conversation" : "dsh.conversation";
+ 		/**
+ 		* Declare per-session draft persistence and View selection.
+ 		* @returns the store handle.
+@@ -16367,12 +16367,13 @@
+ 			const blank = session === void 0 || conversation === void 0 || session.blank && conversationPhase(session, conversation) === "blank";
+ 			return (0, react_jsx_runtime.jsxs)("header", {
+ 				className: clsx(ConversationRoot_module_css_default.header, blank && ConversationRoot_module_css_default.headerBlank, sessionId === void 0 && ConversationRoot_module_css_default.headerSessionless),
++				"data-conversation-header": "",
+ 				"data-window-drag": true,
+ 				children: [(0, react_jsx_runtime.jsx)("div", {
+ 					className: ConversationRoot_module_css_default.headerLeading,
+ 					"data-conversation-header-leading": "",
+ 					children: renderSlot("conversation.header.leading", {})
+-				}), sessionId === void 0 ? (0, react_jsx_runtime.jsx)("div", { className: ConversationRoot_module_css_default.titleRow }) : renderSlot("conversation.session.header", { hideChrome: blank })]
++				}), sessionId === void 0 ? (0, react_jsx_runtime.jsx)("div", { className: ConversationRoot_module_css_default.titleRow, "data-conversation-title-row": "" }) : renderSlot("conversation.session.header", { hideChrome: blank })]
+ 			});
+ 		}
+ 		/**
+@@ -16460,6 +16461,7 @@
+ 			const showTabs = !hideChrome && tabs.length > 1;
+ 			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsxs)("div", {
+ 				className: ConversationRoot_module_css_default.titleRow,
++				"data-conversation-title-row": "",
+ 				children: [!hideChrome && (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsxs)("div", {
+ 					className: ConversationRoot_module_css_default.titleCluster,
+ 					children: [(0, react_jsx_runtime.jsxs)("nav", {

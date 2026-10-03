@@ -1,0 +1,55 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -892,6 +892,7 @@
+ 				return result.value;
+ 			}
+ 			watchNavigation() {
++				if (globalThis.__DSH_SESSION_WINDOW_TARGET__) return () => { this.lifetime.abort(); };
+ 				let initial = "waiting";
+ 				const reconcile = () => {
+ 					if (this.lifetime.signal.aborted) return;
+@@ -1594,6 +1595,7 @@
+ 					role: "treeitem",
+ 					"aria-selected": selected,
+ 					"aria-description": row.archived ? t("toast.archivedNotOpenable") : void 0,
++					onContextMenu: globalThis.__DSH_SESSION_WINDOW_UI__ ? (e) => { if (!row.blank) { e.preventDefault(); e.stopPropagation(); setMenuOpen(true); } } : void 0,
+ 					onClick: () => {
+ 						onOpen(node.id);
+ 					},
+@@ -1601,11 +1603,12 @@
+ 					onPointerLeave: marquee.leave,
+ 					draggable,
+ 					onDragStart: !draggable ? void 0 : (e) => {
++						if (globalThis.__DSH_SESSION_WINDOW_UI__ && !globalThis.__DSH_SESSION_WINDOW_UI__.start(node.id)) { e.preventDefault(); return; }
+ 						e.dataTransfer.effectAllowed = "move";
+ 						e.dataTransfer.setData("text/plain", node.id);
+ 						drag.start();
+ 					},
+-					onDragEnd: !draggable ? void 0 : drag.end,
++					onDragEnd: !draggable ? void 0 : (e) => { drag.end(globalThis.__DSH_SESSION_WINDOW_UI__?.end(node.id, e) === true); },
+ 					onDragOver: drag === void 0 ? void 0 : (e) => {
+ 						if (!drag.active) return;
+ 						e.preventDefault();
+@@ -2575,8 +2578,8 @@
+ 										half: normalizeHalf(half)
+ 									});
+ 								},
+-								end: () => {
+-									if (drag?.over !== null && drag?.over !== void 0) commitSessionDrag(drag, drag.over);
++								end: (cancel = false) => {
++									if (!cancel && drag?.over !== null && drag?.over !== void 0) commitSessionDrag(drag, drag.over);
+ 									else setDrag(null);
+ 									sessionDropCommitted.current = false;
+ 								}
+@@ -2709,8 +2712,8 @@
+ 										half: normalizeHalf(half)
+ 									});
+ 								},
+-								end: () => {
+-									if (drag?.over !== null && drag?.over !== void 0) commitDrag(drag, drag.over);
++								end: (cancel = false) => {
++									if (!cancel && drag?.over !== null && drag?.over !== void 0) commitDrag(drag, drag.over);
+ 									else setDrag(null);
+ 									dropCommitted.current = false;
+ 								}

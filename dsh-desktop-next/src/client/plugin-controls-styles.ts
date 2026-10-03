@@ -7,6 +7,9 @@ const STYLES = `
 .dshNextPluginControls .dshDesktopSettingsHint,
 .dshNextPluginControls .dshDesktopSettingsGroupIntro { font-size: 13px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .dshNextPluginControls .dshDesktopSettingsGroupIntro { margin-top: 4px; }
+.dshNextMarketHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.dshNextMarketHeader > div { min-width: 0; }
+.dshNextMarketHeader > [role="switch"] { flex: none; }
 .dshNextMarketChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .dshNextPluginSections { display: grid; gap: 2px; }
 .dshNextPluginCard { position: relative; display: flex; align-items: center; min-width: 0; gap: 14px; margin: 0 -8px; padding: 8px; border-radius: 12px; }

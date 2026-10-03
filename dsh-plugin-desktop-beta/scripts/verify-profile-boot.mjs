@@ -1,5 +1,6 @@
 /** Headless smoke for the complete published DSH Web profile and renderer manifest. */
 
+import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -96,6 +97,20 @@ try {
     uvPath: '', uvPypiIndexUrl: '', uvPythonInstallMirror: '', syncIntervalSeconds: 37,
   }
   if (aaRequested && !brokenAa) {
+    // Older releases left an installation projection above the active Profile.
+    // Its lexically larger build hash must not override the current AA artifact,
+    // including during rc.2's compatibility preflight before Loader starts.
+    const aaPackage = '@agents-anywhere/dsh-bridge-next'
+    const installedManifest = createRequire(import.meta.url).resolve(`${aaPackage}/package.json`)
+    const stalePackage = join(home, 'profiles', 'node_modules', aaPackage)
+    mkdirSync(stalePackage, { recursive: true })
+    const staleManifest = JSON.parse(readFileSync(installedManifest, 'utf8'))
+    staleManifest.version = '0.1.0-dev.0.desktop.ca022d9286dd0.rc4b2a1d2'
+    staleManifest.peerDependencies['@deepseek-ai/dsh-session'] = '0.1.5-rc.2'
+    writeFileSync(join(stalePackage, 'package.json'), JSON.stringify(staleManifest))
+    cpSync(new URL('./cordis.patch.yml', pathToFileURL(installedManifest)), join(stalePackage, 'cordis.patch.yml'))
+    mkdirSync(join(stalePackage, 'lib', 'bundled-connector'), { recursive: true })
+    writeFileSync(join(stalePackage, 'lib', 'bundled-connector', 'pyproject.toml'), '')
     mkdirSync(join(home, 'aa-smoke-state'))
     writeFileSync(join(home, 'aa-smoke-state', 'connector-settings.json'), JSON.stringify(aaSettings))
   }
@@ -123,6 +138,8 @@ try {
   )
   prepared.overlays = [
     { insert: [{ id: 'desktop-host-services-smoke-plugin', name: HOST_SERVICE_PLUGIN_NAME }] },
+    // The smoke's explicit Profile home must also own account credentials.
+    { id: 'credentials', config: { dshHome: home } },
     // Isolate the bridge from the operator's real AA account on every reload.
     ...(prepared.aaEnabled ? [{ id: 'agents-anywhere-bridge-next', config: {
       dshHome: home, stateRoot: join(home, 'aa-smoke-state'), uvPath: 'uv',
@@ -145,7 +162,6 @@ try {
   releasePackageResolver = installProfilePackageResolver(prepared.bareModuleBaseUrl)
   const runtime = {
     platform: 'win32',
-    windowsBuild: 22_631,
     locale: 'en',
     updates: {
       isPackaged: false,
@@ -311,7 +327,7 @@ try {
     throw new Error(`assembled Windows browse picker listed ${listing.path} instead of ${home}`)
   }
 
-  const expectedUrl = `http://127.0.0.1:${String(ctx.webServer.port)}/?dsh-desktop-mode=advanced&dsh-desktop-platform=win32&dsh-desktop-version=2.0.0&dsh-desktop-material=off&dsh-desktop-mica=1`
+  const expectedUrl = `http://127.0.0.1:${String(ctx.webServer.port)}/?dsh-desktop-mode=advanced&dsh-desktop-platform=win32&dsh-desktop-version=2.0.0&dsh-desktop-material=off`
   if (mountedSpec?.url !== expectedUrl) {
     throw new Error(`desktop plugin produced an unexpected renderer URL: ${String(mountedSpec?.url)}`)
   }
@@ -393,6 +409,13 @@ try {
     },
   })
   const html = await response.text()
+  if (process.argv.includes('--onboarding')) {
+    const { verifyDesktopOnboardingBrowser } = await import('../../scripts/verify-desktop-onboarding-browser.mjs')
+    await verifyDesktopOnboardingBrowser({
+      url: expectedUrl, cookie,
+      headers: { [BROWSER_ACCESS.rendererHeader.name]: BROWSER_ACCESS.rendererHeader.value },
+    })
+  }
   if (response.status !== 200) {
     throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)
   }
@@ -427,6 +450,8 @@ try {
   for (const id of [
     'dsh-plugin-desktop-beta',
     '@deepseek-ai/dsh-client-file-upload',
+    '@deepseek-ai/dsh-client-shortcuts',
+    '@deepseek-ai/dsh-client-ui-shortcuts',
     '@deepseek-ai/dsh-client-ui-conversation',
     '@deepseek-ai/dsh-client-ui-sidebar',
     '@deepseek-ai/dsh-client-ui-directory-picker-browse',

@@ -1,11 +1,14 @@
 /** Persist the Next data location outside the selected home so it survives relaunch. */
 import { readdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { privateDirectory, readPrivateFile } from './private-files.ts'
 
-export function readDataDirectory(defaultHome: string): { home: string; error?: string } {
+export function defaultDataDirectory(userHome = homedir()): string { return join(userHome, '.dsh') }
+
+export function readDataDirectory(defaultHome: string, locationRoot = defaultHome): { home: string; error?: string } {
   try {
-    const value = JSON.parse(readPrivateFile(join(defaultHome, 'desktop-next-location.json')) ?? 'null') as unknown
+    const value = JSON.parse(readPrivateFile(join(locationRoot, 'desktop-next-location.json')) ?? 'null') as unknown
     if (value === null) return { home: defaultHome }
     if (typeof value !== 'object' || !('home' in value) || typeof value.home !== 'string' || !isAbsolute(value.home)) throw new Error('Invalid Next data directory')
     privateDirectory(value.home)

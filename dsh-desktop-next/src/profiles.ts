@@ -2,27 +2,32 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, unlinkSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { initProfile, loadProfileDirectory, PROFILE_TEMPLATES, type Profile } from '@deepseek-ai/dsh-app-boot'
+import { initProfile, loadOverlayPatches, loadProfileDirectory, PROFILE_TEMPLATES, readProfilePatches, type Profile, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { atomicJson, atomicText, readPrivateFile } from './private-files.ts'
 import { NextRecovery } from './recovery.ts'
 import { DEFAULT_PROFILE } from './desktop-contract.ts'
 import { computerUsePatch } from './profile-computer-use.ts'
+import { legacySchedulePatch, SCHEDULE_BUNDLE } from './profile-schedule.ts'
+import { removeLinkProjectionsSafely } from '../../dsh-plugin-desktop-beta/src/link-projections.ts'
 
 export const NEXT_PACKAGE = fileURLToPath(new URL('../package.json', import.meta.url))
-export const WEB_BUNDLES = [...PROFILE_TEMPLATES.web!.bundles, 'dsh-desktop-next']
+export const WEB_BUNDLES = [...PROFILE_TEMPLATES.web!.bundles]
+const NEXT_BUNDLE_PATCH = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))
 export const AA_PACKAGE = '@agents-anywhere/dsh-bridge-next'
 export const COMMUNITY_MARKET_PACKAGE = 'dsh-community-market'
 export const DSH_MARKET_PACKAGE = 'dshmarket'
 /** Legacy shell shape, now projected from the standard Profile bundle selection. */
 export interface Features { remoteControl: boolean; market: boolean; dshMarket?: boolean }
 export interface OnboardingChoices { features: Features; computerUse: boolean }
-export const DEFAULT_FEATURES: Readonly<Features> = { remoteControl: false, market: true }
+export const DEFAULT_FEATURES: Readonly<Features> = { remoteControl: false, market: false }
 
 interface ProfileManifest {
   dsh: {
     desktopNextPlugins?: number
-    desktopNextOnboarding?: { version: number; outcome: 'completed' | 'skipped' }
+    /** Set once the rc.2 Web-row Scheduled Tasks choices were carried onto the optional bundle. */
+    desktopNextScheduleBundle?: number
+    desktopNextOnboarding?: { version: number; outcome: 'completed' | 'skipped'; accountPending?: boolean }
     /** Names recovery removed from `profile.bundles`; a UI ledger, never a policy. */
     desktopNextDeselectedBundles?: string[]
     profile: { bundles: string[] }
@@ -85,7 +90,8 @@ export class NextProfiles {
       const value = JSON.parse(readPrivateFile(join(this.directory(name), 'package.json')) ?? 'null') as { dsh?: { profile?: { bundles?: unknown } } } | null
       const bundles = value?.dsh?.profile?.bundles
       this.features(name)
-      return Array.isArray(bundles) && bundles.every(item => typeof item === 'string') && bundles.includes('dsh-desktop-next')
+      return Array.isArray(bundles) && bundles.every(item => typeof item === 'string')
+        && PROFILE_TEMPLATES.web!.bundles.every(bundle => bundles.includes(bundle))
     } catch { return false }
   }
   list(): string[] {
@@ -98,8 +104,21 @@ export class NextProfiles {
   }
   ensure(name: string): string {
     const dir = this.directory(name)
-    initProfile(dir, WEB_BUNDLES)
-    this.migrateFeatures(name)
+    const existing = existsSync(join(dir, 'package.json'))
+    if (!existing) initProfile(dir, WEB_BUNDLES)
+    if (existing) {
+      const manifest = this.manifest(name)
+      if (manifest.dsh.profile.bundles.includes('dsh-desktop-next')) {
+        // Retire the former Next-specific selection from the shared manifest.
+        // Other launchers must not inherit this application's capability.
+        new NextRecovery(this).backup(name, 'before-next-bundle-removal')
+        this.migrateFeatures(name)
+        const migrated = this.manifest(name)
+        migrated.dsh.profile.bundles = migrated.dsh.profile.bundles.filter(bundle => bundle !== 'dsh-desktop-next')
+        atomicJson(join(dir, 'package.json'), migrated)
+      }
+    } else this.setFeatures(name, DEFAULT_FEATURES)
+    this.migrateSchedule(name)
     return dir
   }
   create(name: string): string {
@@ -107,12 +126,13 @@ export class NextProfiles {
     mkdirSync(dirname(dir), { recursive: true, mode: 0o700 })
     mkdirSync(dir, { mode: 0o700 })
     initProfile(dir, WEB_BUNDLES)
-    this.migrateFeatures(name)
+    this.setFeatures(name, DEFAULT_FEATURES)
+    this.migrateSchedule(name)
     return dir
   }
   features(name: string): Features {
     const manifest = this.manifest(name)
-    if (manifest.dsh.desktopNextPlugins === 1) {
+    if (manifest.dsh.desktopNextPlugins === 1 || !manifest.dsh.profile.bundles.includes('dsh-desktop-next')) {
       const bundles = manifest.dsh.profile.bundles
       return { remoteControl: bundles.includes(AA_PACKAGE), market: bundles.includes(COMMUNITY_MARKET_PACKAGE),
         ...(bundles.includes(DSH_MARKET_PACKAGE) ? { dshMarket: true } : {}) }
@@ -130,6 +150,15 @@ export class NextProfiles {
   onboardingRequired(name: string): boolean {
     const saved = this.manifest(name).dsh.desktopNextOnboarding
     return saved?.version !== 1 || !['completed', 'skipped'].includes(saved.outcome)
+  }
+  accountSetupPending(name: string): boolean {
+    return !this.onboardingRequired(name) && this.manifest(name).dsh.desktopNextOnboarding?.accountPending === true
+  }
+  dismissAccountSetup(name: string): void {
+    const manifest = this.manifest(name)
+    if (manifest.dsh.desktopNextOnboarding?.accountPending !== true) return
+    delete manifest.dsh.desktopNextOnboarding.accountPending
+    atomicJson(join(this.directory(name), 'package.json'), manifest)
   }
   /** Read the saved native-provider choice without importing any user plugin. */
   computerUseEnabled(name: string): boolean {
@@ -152,7 +181,8 @@ export class NextProfiles {
       nextPatch = computerUsePatch(originalPatch ?? '[]\n', choices.computerUse).text
       applyFeatures(manifest, features)
     }
-    manifest.dsh.desktopNextOnboarding = { version: 1, outcome: value === undefined ? 'skipped' : 'completed' }
+    manifest.dsh.desktopNextOnboarding = { version: 1, outcome: value === undefined ? 'skipped' : 'completed',
+      ...(value === undefined ? {} : { accountPending: true }) }
     const patchChanged = nextPatch !== undefined && nextPatch !== originalPatch
     if (patchChanged && nextPatch !== undefined) atomicText(patchPath, nextPatch)
     try {
@@ -171,6 +201,32 @@ export class NextProfiles {
     const manifest = this.manifest(name)
     if (manifest.dsh.desktopNextPlugins === 1) return
     this.setFeatures(name, { ...this.features(name), dshMarket: manifest.dsh.profile.bundles.includes(DSH_MARKET_PACKAGE) })
+  }
+  /**
+   * Once per Profile: rc.2 enabled Scheduled Tasks by patching three Web rows
+   * that upstream has since moved into an optional bundle. Those patches now
+   * match nothing, so select the bundle for users who had it on and drop the
+   * stale toggles. The marker stops a later deselection from being undone by
+   * the same row ids the bundle's own switches write.
+   */
+  private migrateSchedule(name: string): void {
+    const manifest = this.manifest(name)
+    if (manifest.dsh.desktopNextScheduleBundle === 1) return
+    const patchPath = join(this.directory(name), 'cordis.patch.yml')
+    let legacy: ReturnType<typeof legacySchedulePatch>
+    if (!manifest.dsh.profile.bundles.includes(SCHEDULE_BUNDLE)) {
+      // A malformed patch is left for recovery to handle; retry on the next start.
+      try { legacy = legacySchedulePatch(readPrivateFile(patchPath) ?? '[]\n') } catch { return }
+    }
+    if (legacy) {
+      new NextRecovery(this).backup(name, 'before-schedule-bundle-migration')
+      if (legacy.select) manifest.dsh.profile.bundles = [...manifest.dsh.profile.bundles, SCHEDULE_BUNDLE]
+    }
+    manifest.dsh.desktopNextScheduleBundle = 1
+    // Selection first: if the patch write is interrupted, the leftover toggles still
+    // address the selected bundle's rows with the same meaning.
+    atomicJson(join(this.directory(name), 'package.json'), manifest)
+    if (legacy) atomicText(patchPath, legacy.text)
   }
   private manifest(name: string): ProfileManifest {
     const value = JSON.parse(readPrivateFile(join(this.directory(name), 'package.json')) ?? 'null')
@@ -200,11 +256,28 @@ export class NextProfiles {
   }
 }
 
+/**
+ * Remove the package links a dsh 0.1.5 launcher (Stable before 2.0.14, the 0.1.5 CLI)
+ * projected into this shared Profile. They point at that launcher's installation, so the
+ * Host would load a second copy of every Harness package through them: a second
+ * `dsh-scope` loses preset scope tags and new sessions fail with `agent-preset/invalid`.
+ * Upstream sweeps them in `loadProfile`, which Next bypasses. A locked link must not keep
+ * the Host from starting; the next launch retries.
+ */
+function retireLinkProjections(projectDir: string): void {
+  try {
+    removeLinkProjectionsSafely(projectDir)
+  } catch (cause) {
+    process.stderr.write(`dsh-desktop-next: could not remove dsh 0.1.5 link projections from ${projectDir}: ${String(cause)}\n`)
+  }
+}
+
 /** Add product capabilities without replacing the upstream Web presentation. */
 export function loadNextProfile(projectDir: string, home: string, installAnchor = NEXT_PACKAGE): Profile {
   const manager = new NextProfiles(home)
   if (manager.directory(basename(projectDir)) !== resolve(projectDir)) throw new Error('Profile must belong to Next home')
-  manager.migrateFeatures(basename(projectDir))
+  manager.ensure(basename(projectDir))
+  retireLinkProjections(projectDir)
   // Upstream bundle discovery walks physical node_modules before installing its
   // runtime resolver. Project only this application's bundle, not its dependency
   // tree; the alpha.2 runtime resolver owns all other package fallbacks.
@@ -219,15 +292,31 @@ export function loadNextProfile(projectDir: string, home: string, installAnchor 
   if (existingLink && resolve(modules, readlinkSync(link)) !== target) unlinkSync(link)
   if (!lstatSync(link, { throwIfNoEntry: false })) symlinkSync(target, link, 'junction')
   const profile = loadProfileDirectory('dsh-desktop-next', projectDir, installAnchor)
-  if (!profile.layers.some(layer => layer.packageName === 'dsh-desktop-next')) {
-    throw new Error('Next profile is missing its required dsh-desktop-next bundle')
-  }
+  profile.layers.push({ packageName: 'dsh-desktop-next', packageDir: target,
+    patchPaths: [NEXT_BUNDLE_PATCH], patches: loadOverlayPatches('dsh-desktop-next', NEXT_BUNDLE_PATCH) })
   const overlay = [
     { id: 'agents-anywhere-bridge-next', config: {
-      dshHome: home, stateRoot: join(home, 'agents-anywhere', basename(projectDir)),
+      dshHome: home,
     } },
   ]
-  // Only supply per-Profile storage paths. The official manager owns bundle/row enablement.
+  // Leave AA stateRoot unset to share its default credentials and device binding with Stable/Beta.
+  // Rewriting the generated overlay also removes the former per-Profile stateRoot on upgrade.
+  // The official manager still owns per-Profile bundle/row enablement.
   atomicJson(join(projectDir, 'desktop-next.cordis.patch.json'), overlay)
   return profile
+}
+
+/** Recompose Next's own layer before user/global patches on every manager or HMR read. */
+export function readNextProfilePatches(projectDir: string, home: string, overlays: readonly string[], profilePatches?: readonly Profile['patches'][number][]) {
+  const profile = loadProfileDirectory('dsh-desktop-next', projectDir, NEXT_PACKAGE, { userLayer: false })
+  profile.layers.push({ packageName: 'dsh-desktop-next', packageDir: dirname(NEXT_PACKAGE),
+    patchPaths: [NEXT_BUNDLE_PATCH], patches: loadOverlayPatches('dsh-desktop-next', NEXT_BUNDLE_PATCH) })
+  profile.patches = profilePatches === undefined
+    ? existsSync(profile.patchPath) ? loadOverlayPatches('dsh-desktop-next', profile.patchPath) : []
+    : [...profilePatches]
+  const context: ProfileContext = { name: basename(projectDir), dir: projectDir, patchPath: profile.patchPath,
+    installAnchor: NEXT_PACKAGE, cwd: process.cwd(), home, startedBundles: profile.layers.map(layer => layer.packageName),
+    overlays: overlays.flatMap(path => loadOverlayPatches('dsh-desktop-next', path)),
+    telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED }
+  return readProfilePatches('dsh-desktop-next', context, profile)
 }

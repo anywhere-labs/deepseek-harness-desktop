@@ -5,7 +5,7 @@ export type DesktopClientMode = 'compatibility' | 'extended' | 'advanced'
 export type DesktopClientPlatform = 'darwin' | 'win32' | 'linux'
 
 /** Native material selected for the current renderer generation. */
-export type DesktopClientMaterial = 'off' | 'transparent' | 'mica'
+export type DesktopClientMaterial = 'off' | 'transparent'
 
 /** Validated renderer environment supplied by the Electron Host. */
 export interface DesktopClientEnvironment {
@@ -17,8 +17,6 @@ export interface DesktopClientEnvironment {
   platform: DesktopClientPlatform
   /** Capability-gated native material active behind this renderer. */
   material: DesktopClientMaterial
-  /** Whether Windows exposes its supported Mica system backdrop. */
-  micaSupported: boolean
 }
 
 const MODES = new Set<DesktopClientMode>(['compatibility', 'extended', 'advanced'])
@@ -47,25 +45,19 @@ export function parseDesktopClientEnvironment(search: string): DesktopClientEnvi
   if (!MATERIAL_MARKERS.has(materialMarker ?? '')) {
     throw new Error(`dsh-plugin-desktop: invalid or missing dsh-desktop-material ${JSON.stringify(materialMarker)}`)
   }
-  // Accept an old Host marker without reintroducing Acrylic as an effective
-  // client capability. It is rendered as the safe opaque material.
-  const material: DesktopClientMaterial = materialMarker === 'acrylic'
+  // Accept old Host markers without reintroducing Acrylic or Mica as an
+  // effective client capability. They are rendered as the safe opaque material,
+  // and an old Host's dsh-desktop-mica capability marker is ignored.
+  const material: DesktopClientMaterial = materialMarker === 'acrylic' || materialMarker === 'mica'
     ? 'off'
     : materialMarker as DesktopClientMaterial
   if (version === null || version.length > 64 || !VERSION_PATTERN.test(version)) {
     throw new Error(`dsh-plugin-desktop: invalid or missing dsh-desktop-version ${JSON.stringify(version)}`)
   }
-  const micaMarker = params.get('dsh-desktop-mica')
-  const micaSupported = platform === 'win32'
-    ? micaMarker === '1' ? true : micaMarker === '0' ? false : undefined
-    : micaMarker === null ? false : undefined
-  if (micaSupported === undefined) {
-    throw new Error(`dsh-plugin-desktop: invalid dsh-desktop-mica ${JSON.stringify(micaMarker)}`)
-  }
   if ((platform === 'darwin' && materialMarker !== 'off' && materialMarker !== 'transparent')
     || (platform === 'win32' && materialMarker === 'transparent')
-    || (platform === 'linux' && material !== 'off')
-    || (material === 'mica' && !micaSupported)) {
+    // Only Windows Hosts ever emitted Mica, so it stays malformed on Linux.
+    || (platform === 'linux' && (material !== 'off' || materialMarker === 'mica'))) {
     throw new Error('dsh-plugin-desktop: renderer material is incompatible with its mode or platform')
   }
   return {
@@ -73,6 +65,5 @@ export function parseDesktopClientEnvironment(search: string): DesktopClientEnvi
     mode: mode as DesktopClientMode,
     platform: platform as DesktopClientPlatform,
     material,
-    micaSupported,
   }
 }

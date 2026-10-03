@@ -6,7 +6,7 @@ import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { loadNextProfile, NEXT_PACKAGE } from '../profiles.ts'
+import { loadNextProfile, NEXT_PACKAGE, readNextProfilePatches } from '../profiles.ts'
 import { bundledPnpmEntry } from '../extensions.ts'
 import { withDesktopPnpmPolicy } from '../pnpm-policy.ts'
 import { configureNextBrowserAccess } from '../desktop-browser-access.ts'
@@ -46,7 +46,9 @@ export async function main(): Promise<void> {
   for (const line of [proxy.summary, ...proxy.diagnostics]) process.stderr.write(`dsh-desktop-next: ${maskSecrets(line)}\n`)
   const application = runProfile({
     environment, profile: basename(projectDir),
-    resolvedProfile: { profile, installAnchor: NEXT_PACKAGE },
+    resolvedProfile: { profile, installAnchor: NEXT_PACKAGE,
+      readPatches: profilePatches => readNextProfilePatches(projectDir, home,
+        [join(runtimeDir, 'host.cordis.patch.yml'), join(projectDir, 'desktop-next.cordis.patch.json'), runtimePatch], profilePatches) },
     patchFiles: [join(runtimeDir, 'host.cordis.patch.yml'), join(projectDir, 'desktop-next.cordis.patch.json'), runtimePatch], args: ['--no-open', '--port', String(preferences.port)],
     packageManager: {
       command: process.execPath, args: ['--expose-internals', bundledPnpmEntry(NEXT_PACKAGE), ...withDesktopPnpmPolicy([])],

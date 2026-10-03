@@ -3,7 +3,8 @@
 export type DesktopSetupWizardPlatform = 'darwin' | 'win32' | 'linux'
 export type DesktopSetupWizardMode = 'compatibility' | 'extended' | 'advanced'
 export type DesktopSetupWizardMacosMaterial = 'off' | 'transparent'
-export type DesktopSetupWizardWindowsMaterial = 'off' | 'mica'
+/** Windows has no selectable material; Setup always keeps the opaque window. */
+export type DesktopSetupWizardWindowsMaterial = 'off'
 export type DesktopSetupWizardNetworkExposure = 'loopback' | 'lan'
 export type DesktopSetupWizardMarket = 'disabled' | 'community-market' | 'dsh-market'
 
@@ -13,6 +14,8 @@ export interface DesktopSetupWizardNotifications {
   readonly notifyOnTurnFailure: boolean
   readonly notifyOnJobCompletion: boolean
   readonly notifyOnJobFailure: boolean
+  readonly notifyOnScheduleCompletion: boolean
+  readonly notifyOnScheduleFailure: boolean
 }
 
 /** Every value the launcher needs to persist after Setup completes. */
@@ -27,12 +30,11 @@ export interface DesktopSetupWizardSelection {
   readonly notifications: DesktopSetupWizardNotifications
 }
 
-/** Fixed capabilities and current values supplied before the Host is started. */
+/** Fixed capabilities and current values supplied when Desktop setup is opened. */
 export interface DesktopSetupWizardInput extends DesktopSetupWizardSelection {
   readonly appVersion: string
   readonly profileName: string
   readonly platform: DesktopSetupWizardPlatform
-  readonly micaSupported: boolean
 }
 
 export type DesktopSetupWizardResult =
@@ -55,7 +57,6 @@ const INPUT_KEYS = Object.freeze([
   'appVersion',
   'profileName',
   'platform',
-  'micaSupported',
 ] as const)
 const NOTIFICATION_KEYS = Object.freeze([
   'enabled',
@@ -63,6 +64,8 @@ const NOTIFICATION_KEYS = Object.freeze([
   'notifyOnTurnFailure',
   'notifyOnJobCompletion',
   'notifyOnJobFailure',
+  'notifyOnScheduleCompletion',
+  'notifyOnScheduleFailure',
 ] as const)
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -83,7 +86,7 @@ function isMacosMaterial(value: unknown): value is DesktopSetupWizardMacosMateri
 }
 
 function isWindowsMaterial(value: unknown): value is DesktopSetupWizardWindowsMaterial {
-  return value === 'off' || value === 'mica'
+  return value === 'off'
 }
 
 function isNetworkExposure(value: unknown): value is DesktopSetupWizardNetworkExposure {
@@ -148,20 +151,16 @@ export function isDesktopSetupWizardInput(value: unknown): value is DesktopSetup
     && !/[. ]$/u.test(value.profileName)
     && !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/iu.test(value.profileName)
     && isPlatform(value.platform)
-    && typeof value.micaSupported === 'boolean'
 }
 
 /** Reject selections the current platform cannot actually present. */
 export function desktopSetupWizardSelectionIsAvailable(
   selection: DesktopSetupWizardSelection,
-  capabilities: Pick<DesktopSetupWizardInput, 'platform' | 'micaSupported'>,
+  capabilities: Pick<DesktopSetupWizardInput, 'platform'>,
 ): boolean {
   if (selection.openBrowser && selection.mode !== 'compatibility') return false
   if (!selection.openBrowser && selection.networkExposure === 'lan') return false
-  if (capabilities.platform === 'linux' && selection.mode !== 'compatibility') return false
-  return capabilities.platform !== 'win32'
-    || selection.windowsMaterial !== 'mica'
-    || capabilities.micaSupported
+  return capabilities.platform !== 'linux' || selection.mode === 'compatibility'
 }
 
 /** LAN always needs a fresh confirmation when moving away from loopback-only access. */

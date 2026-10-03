@@ -9,13 +9,6 @@ const STYLES = `
 html[data-next-material='off'][data-platform='darwin'] :has(> [data-shell-overlay]) {
   background: var(--dsw-alias-bg-base);
 }
-html[data-next-material='mica'][data-platform='win32'] :has(> [data-shell-overlay]) {
-  background: transparent;
-}
-html[data-next-material='mica'][data-platform='win32'] :has(> [data-shell-overlay])::before,
-html[data-next-material='mica'][data-platform='win32'] :has(> [data-shell-overlay]) > div:first-child {
-  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 60%, transparent);
-}
 /* The stable main column owns an invisible caption region. The official page
    and its title keep their original layout and scroll underneath it. */
 html[data-platform='darwin'] :has(> [data-shell-overlay]) > :has([data-plugin-panel]) {

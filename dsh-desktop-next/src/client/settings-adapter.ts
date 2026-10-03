@@ -8,7 +8,7 @@ import { DEFAULT_PROFILE, type DesktopBridge, type DesktopBrowserLinks, type Des
 type DesktopConfigForm<T> = Pick<ConfigForm<T>, 'getSnapshot' | 'subscribe' | 'set'>
 
 const shellFields = { macosMaterial: 'macosMaterial', windowsMaterial: 'windowsMaterial', linuxMaterial: 'linuxMaterial', port: 'port', openBrowser: 'browserAccess', networkExposure: 'networkExposure', logLevel: 'logLevel' } as const
-const notificationFields = { enabled: 'notifications', notifyOnTurnCompletion: 'turnCompleted', notifyOnTurnFailure: 'turnFailed', notifyOnJobCompletion: 'jobCompleted', notifyOnJobFailure: 'jobFailed' } as const
+const notificationFields = { enabled: 'notifications', notifyOnTurnCompletion: 'turnCompleted', notifyOnTurnFailure: 'turnFailed', notifyOnJobCompletion: 'jobCompleted', notifyOnJobFailure: 'jobFailed', notifyOnScheduleCompletion: 'scheduleCompleted', notifyOnScheduleFailure: 'scheduleFailed' } as const
 
 export function projectSettings(state: DesktopState, links: DesktopBrowserLinks = { localUrl: null, lanUrls: [] }): DesktopSettingsView {
   const enabled = !state.safeMode && state.phase === 'ready'
@@ -49,7 +49,7 @@ export class NextSettingsAdapter {
       this.current = state
       const p = state.preferences
       this.shellSnapshot = this.snapshot({ mode: 'compatibility', macosMaterial: p.macosMaterial, windowsMaterial: p.windowsMaterial, linuxMaterial: p.linuxMaterial, port: p.port, openBrowser: p.browserAccess, networkExposure: p.networkExposure, logLevel: p.logLevel }, !state.busy && !state.safeMode)
-      this.notificationSnapshot = this.snapshot({ enabled: p.notifications, notifyOnTurnCompletion: p.turnCompleted, notifyOnTurnFailure: p.turnFailed, notifyOnJobCompletion: p.jobCompleted, notifyOnJobFailure: p.jobFailed }, !state.busy && state.notificationsAvailable)
+      this.notificationSnapshot = this.snapshot({ enabled: p.notifications, notifyOnTurnCompletion: p.turnCompleted, notifyOnTurnFailure: p.turnFailed, notifyOnJobCompletion: p.jobCompleted, notifyOnJobFailure: p.jobFailed, notifyOnScheduleCompletion: p.scheduleCompleted, notifyOnScheduleFailure: p.scheduleFailed }, !state.busy && !state.safeMode && state.notificationsAvailable)
       for (const listener of this.listeners) listener()
     }
     return state

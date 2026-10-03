@@ -10,6 +10,7 @@ import type {
   MacosWindowMaterial,
   PersistedWindowsWindowMaterial,
 } from './window-material.ts'
+import type { DesktopSetupWizardSettings } from './setup-wizard-settings.ts'
 
 /** Electron platforms supported by the DSH Desktop native adapter. */
 export type DesktopPlatform = 'darwin' | 'win32' | 'linux'
@@ -146,10 +147,8 @@ export interface DesktopTerminalSpec {
 
 /** Values the desktop-shell plugin hands to the Electron adapter. */
 export interface DesktopShellSpec extends DesktopWindowConfig {
-  /** Actual material after platform and Windows-build capability gating. */
+  /** Actual material after platform capability gating. */
   material: DesktopWindowMaterial
-  /** Windows build used for material capability reporting, when applicable. */
-  windowsBuild?: number
   /** Unmodified Web root served by the active DSH profile. */
   url: string
   /** Official one-time launch URL used to mint this Electron session's browser cookie. */
@@ -172,6 +171,12 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
   requestQuit(code: number): void
   /** Persist another mode through the registered desktop settings scope. */
   requestModeChange(mode: DesktopShellMode): Promise<void>
+  /**
+   * Persist first-run Setup choices through the registered settings scopes, the
+   * same Profile patch layer the mode picker writes. The running generation keeps
+   * its presentation; Setup's own continuation offers the restart that applies it.
+   */
+  applySetupSettings?(settings: DesktopSetupWizardSettings): Promise<void>
   readRemoteControl?(): Promise<boolean>
   enableRemoteControl?(): Promise<void>
 }
@@ -180,9 +185,6 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
 export interface DesktopRuntime {
   /** Current Electron platform. */
   readonly platform: DesktopPlatform
-
-  /** NT build number used to gate system backdrop materials. */
-  readonly windowsBuild: number | undefined
 
   /** Locale currently used for native tray contributions. */
   readonly locale: DesktopLocale

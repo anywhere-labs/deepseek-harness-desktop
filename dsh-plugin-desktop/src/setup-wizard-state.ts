@@ -264,6 +264,46 @@ export function readDesktopSetupWizardState(
   return parseState(text, desktopSetupWizardProfileHash(profileDir))
 }
 
+/** Host boot can create usage history before onboarding finishes. Keep that run resumable. */
+export function desktopSetupWizardPending(userDataDir: string, profileDir: string): boolean {
+  const path = desktopSetupWizardStatePath(userDataDir, profileDir)
+  if (existingPathInfo(dirname(dirname(path))) === undefined) return false
+  assertPrivateDirectory(dirname(dirname(path)))
+  if (existingPathInfo(dirname(path)) === undefined) return false
+  assertPrivateDirectory(dirname(path))
+  const value = readStateBytes(`${path}.pending`)
+  if (value !== undefined && value !== 'pending\n') throw invalid('invalid pending marker')
+  return value !== undefined
+}
+
+export async function beginDesktopSetupWizard(userDataDir: string, profileDir: string): Promise<void> {
+  const path = desktopSetupWizardStatePath(userDataDir, profileDir)
+  ensurePrivateDirectory(dirname(dirname(path)))
+  ensurePrivateDirectory(dirname(path))
+  assertSafeStateTarget(`${path}.pending`)
+  await writeFileAtomic(`${path}.pending`, 'pending\n', { mode: STATE_FILE_MODE, dirMode: STATE_DIRECTORY_MODE })
+}
+
+/** Resume the optional official login entry after applying Desktop preferences. */
+export function desktopSetupAccountPending(userDataDir: string, profileDir: string): boolean {
+  const path = desktopSetupWizardStatePath(userDataDir, profileDir)
+  if (readDesktopSetupWizardState(userDataDir, profileDir) === undefined) return false
+  const text = readStateBytes(`${path}.account`)
+  if (text !== undefined && text !== 'pending\n') throw invalid('invalid account continuation')
+  return text !== undefined
+}
+
+export function dismissDesktopSetupAccount(userDataDir: string, profileDir: string): void {
+  if (!desktopSetupAccountPending(userDataDir, profileDir)) return
+  unlinkSync(`${desktopSetupWizardStatePath(userDataDir, profileDir)}.account`)
+}
+
+function clearPending(path: string): void {
+  if (existingPathInfo(`${path}.pending`) === undefined) return
+  assertSafeStateTarget(`${path}.pending`)
+  unlinkSync(`${path}.pending`)
+}
+
 /** Setup is a one-time Profile decision; recorded versions are diagnostic only. */
 export function desktopSetupWizardRequired(
   state: DesktopSetupWizardState | undefined,
@@ -303,11 +343,16 @@ export async function completeOrSkipDesktopSetupWizard(
   assertSafeStateTarget(path)
   const current = readStateBytes(path)
   if (current !== undefined) parseState(current, profileHash)
+  assertSafeStateTarget(`${path}.account`)
+  if (outcome === 'completed') {
+    await writeFileAtomic(`${path}.account`, 'pending\n', { mode: STATE_FILE_MODE, dirMode: STATE_DIRECTORY_MODE })
+  } else if (existingPathInfo(`${path}.account`) !== undefined) unlinkSync(`${path}.account`)
   await writeFileAtomic(path, `${JSON.stringify(state, undefined, 2)}\n`, {
     mode: STATE_FILE_MODE,
     dirMode: STATE_DIRECTORY_MODE,
   })
   if (CHECK_POSIX_MODE) chmodSync(path, STATE_FILE_MODE)
+  clearPending(path)
   return state
 }
 
@@ -321,6 +366,9 @@ export function clearDesktopSetupWizardStateSync(
   assertPrivateDirectory(dirname(dirname(path)))
   if (existingPathInfo(dirname(path)) === undefined) return
   assertPrivateDirectory(dirname(path))
+  clearPending(path)
+  assertSafeStateTarget(`${path}.account`)
+  if (existingPathInfo(`${path}.account`) !== undefined) unlinkSync(`${path}.account`)
   const info = existingPathInfo(path)
   if (info === undefined) return
   assertSafeStateTarget(path)

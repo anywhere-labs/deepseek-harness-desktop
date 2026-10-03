@@ -29,7 +29,7 @@ export function desktopPermission(value: unknown): DesktopPermission {
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** Next native renderer or Host; absent in ordinary browsers. */
+    /** Desktop native renderer or Host; absent in ordinary browsers. */
     desktopPermissions: DesktopPermissions
   }
 }

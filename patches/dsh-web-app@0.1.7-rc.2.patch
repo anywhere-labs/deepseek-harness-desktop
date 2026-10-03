@@ -1,0 +1,24 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -43,6 +43,7 @@
+ const ALL_INTERFACES_HOST = "0.0.0.0";
+ const BROWSER_OPENER_MODULE = import.meta.resolve("open");
+ const BROWSER_OPENER_PROGRAM = `
++for (const name of Object.keys(process.env)) if (name.toUpperCase() === 'ELECTRON_RUN_AS_NODE') delete process.env[name]
+ try {
+   const { default: open } = await import(${JSON.stringify(BROWSER_OPENER_MODULE)})
+   const launcher = await open(process.argv[1])
+@@ -122,7 +123,11 @@
+ 		"--",
+ 		url
+ 	], {
+-		env: scrubbedParentEnv(),
++		windowsHide: true,
++		env: {
++			...scrubbedParentEnv(),
++			ELECTRON_RUN_AS_NODE: "1"
++		},
+ 		stdio: [
+ 			"ignore",
+ 			"inherit",

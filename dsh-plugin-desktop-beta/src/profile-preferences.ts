@@ -43,6 +43,8 @@ const NOTIFICATION_KEYS = Object.freeze([
   'enabled',
   'notifyOnJobCompletion',
   'notifyOnJobFailure',
+  'notifyOnScheduleCompletion',
+  'notifyOnScheduleFailure',
   'notifyOnTurnCompletion',
   'notifyOnTurnFailure',
 ] as const)
@@ -147,10 +149,11 @@ function normalizedNotifications(
   value: unknown,
   error: ErrorFactory,
 ): Readonly<DesktopNotificationSettings> {
-  if (!isRecord(value) || !hasExactKeys(value, NOTIFICATION_KEYS)) {
-    throw error('notifications must contain exactly the five supported boolean fields')
+  if (!isRecord(value) || !(hasExactKeys(value, NOTIFICATION_KEYS)
+    || hasExactKeys(value, NOTIFICATION_KEYS.filter(key => key !== 'notifyOnScheduleCompletion' && key !== 'notifyOnScheduleFailure')))) {
+    throw error('notifications must contain exactly the supported boolean fields')
   }
-  if (NOTIFICATION_KEYS.some(key => typeof value[key] !== 'boolean')) {
+  if (NOTIFICATION_KEYS.some(key => value[key] !== undefined && typeof value[key] !== 'boolean')) {
     throw error('notification values must be booleans')
   }
   return Object.freeze({
@@ -159,6 +162,8 @@ function normalizedNotifications(
     notifyOnTurnFailure: value.notifyOnTurnFailure as boolean,
     notifyOnJobCompletion: value.notifyOnJobCompletion as boolean,
     notifyOnJobFailure: value.notifyOnJobFailure as boolean,
+    notifyOnScheduleCompletion: (value.notifyOnScheduleCompletion ?? true) as boolean,
+    notifyOnScheduleFailure: (value.notifyOnScheduleFailure ?? true) as boolean,
   })
 }
 

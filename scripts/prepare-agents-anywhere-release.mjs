@@ -39,9 +39,9 @@ function invocation(name, args) {
   return [name, args]
 }
 
-function run(name, args, cwd) {
+function run(name, args, cwd, extraEnvironment = {}) {
   const [binary, argv] = invocation(name, args)
-  const result = spawnSync(binary, argv, { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(name === 'corepack' && args[1] === 'install' ? { YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' } : {}) }, stdio: 'inherit', timeout: 600_000 })
+  const result = spawnSync(binary, argv, { cwd, env: { ...process.env, ...extraEnvironment, GIT_TERMINAL_PROMPT: '0', ...(name === 'corepack' && args[1] === 'install' ? { YARN_ENABLE_IMMUTABLE_INSTALLS: 'false' } : {}) }, stdio: 'inherit', timeout: 600_000 })
   if (result.error !== undefined) throw result.error
   if (result.status !== 0) throw new Error(`${name} exited with ${String(result.status)}`)
 }
@@ -204,7 +204,11 @@ function prepare() {
     // Declare an independent Yarn project even when a parent temp directory has a manifest.
     if (!existsSync(join(packageRoot, 'yarn.lock'))) writeFileSync(join(packageRoot, 'yarn.lock'), '')
     const { sourceVersion } = patchManifest(packageRoot, peerRanges)
-    run('corepack', ['yarn', 'install', '--mode=skip-build'], packageRoot)
+    // The isolated checkout cannot inherit Desktop's .yarnrc.yml. Use the same
+    // publication-day policy there, preserving an explicit operator override.
+    run('corepack', ['yarn', 'install', '--mode=skip-build'], packageRoot, {
+      YARN_NPM_MINIMAL_AGE_GATE: process.env.YARN_NPM_MINIMAL_AGE_GATE ?? '0',
+    })
     run('corepack', ['yarn', 'build'], packageRoot)
     run('corepack', ['yarn', 'typecheck'], packageRoot)
     run('corepack', ['yarn', 'check:build'], packageRoot)

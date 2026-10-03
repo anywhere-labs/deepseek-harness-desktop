@@ -16,7 +16,7 @@ it('declares every official optional bundle as a discoverable, version-aligned i
 
 it('keeps Next installer topology, native modules, fuses and Composer source aligned with Beta', () => {
   const next = read('../package.json'); const beta = read('../../dsh-plugin-desktop-beta/package.json')
-  expect(next.version).toBe('2.0.14-next')
+  expect(next.version).toBe('2.0.17-next')
   expect(next.build.appId).toBe('ai.deepseek.dsh.desktop.next')
   expect(next.build.asar).toBe(false)
   expect(next.build.electronFuses).toEqual(beta.build.electronFuses)

@@ -138,7 +138,7 @@ it('carries sign-in requests from the Host to the native runtime and refuses for
   })) as [HostRpc, HostRpc]
   const platformLogin = vi.fn()
   const native = {
-    platform: 'win32', windowsBuild: 22631, locale: 'en',
+    platform: 'win32', locale: 'en',
     updates: { isPackaged: true, canDownload: true, currentVersion: '2.0.7-beta.1', statePath: '/tmp/update' },
     platformLogin,
   } as unknown as DesktopRuntime

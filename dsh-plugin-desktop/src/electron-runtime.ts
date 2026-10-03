@@ -69,7 +69,6 @@ import {
 } from './windows-volume-diagnostics.ts'
 import { ElectronWorkspaceAdmission } from './workspace-admission.ts'
 import { ProfileCreateWindow, type ProfileCreateWindowOptions } from './profile-create-window.ts'
-import { windowsBuildNumber } from './window-material.ts'
 import { desktopNativeCopy } from './native-dialog-copy.ts'
 import {
   FileMainWindowStateStore,
@@ -104,9 +103,9 @@ const NULL_BODY_STATUSES = new Set([204, 205, 304])
 
 /**
  * Download-request adapter over Electron `net.request`. `net.fetch` cannot
- * back the download origin gate: its Response carries an empty `url` (a
+ * supply the HTTPS check: its Response carries an empty `url` (a
  * documented Electron limitation), so redirects are followed here and the
- * settled URL is reported alongside the response for the gate to validate.
+ * settled URL is reported alongside the response for validation.
  */
 export function requestDesktopArtifact(url: string, init: RequestInit): Promise<UpdateArtifactResponse> {
   return new Promise((resolve, reject) => {
@@ -180,8 +179,8 @@ export function requestDesktopArtifact(url: string, init: RequestInit): Promise<
 
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
+  setupOnboarding?: import('./setup-onboarding-bridge.ts').DesktopOnboardingBridge
   readonly platform: DesktopPlatform
-  readonly windowsBuild: number | undefined
   private readonly platformStrategy: ElectronPlatformStrategy
   readonly updates: DesktopUpdateAdapter
 
@@ -211,7 +210,6 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   ) {
     this.platformStrategy = electronPlatformStrategy()
     this.platform = this.platformStrategy.platform
-    this.windowsBuild = this.platform === 'win32' ? windowsBuildNumber() : undefined
     const platformStrategy = this.platformStrategy
     this.workspaceAdmission = new ElectronWorkspaceAdmission({
       platform: this.platform,
@@ -328,6 +326,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         platform: this.platformStrategy,
         spec,
         preloadPath: desktopPreloadPath(),
+        pickDirectory: () => this.pickDirectory(),
         buildApplicationMenuItems: () => this.buildApplicationMenuItems(),
         isQuitting: () => this.quitting,
         buildTrayTemplate: () => this.buildTrayTemplate(spec),
@@ -339,6 +338,7 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
         logError: message => { this.logError(message) },
         mainWindowState: this.mainWindowState,
         platformLoginTitle: () => PLATFORM_LOGIN_TITLE[this.currentLocale],
+        setupOnboarding: this.setupOnboarding,
         chromeActions: {
           ...(remoteOffer ? { remoteControl: {
             read: () => remoteOffer.read(),
@@ -613,10 +613,6 @@ export class ElectronDesktopRuntime implements DesktopRuntime {
   setThemeSource(source: DesktopThemeSource): void {
     if (this.platform !== 'linux' && this.generation !== undefined) {
       nativeTheme.themeSource = source
-      // Windows can retain the preceding DWM Mica palette until the window is
-      // recomposed (for example after minimize/restore). Reapplying the active
-      // material invalidates the backdrop immediately after a live theme change.
-      this.generation.refreshThemeMaterial()
     }
   }
 

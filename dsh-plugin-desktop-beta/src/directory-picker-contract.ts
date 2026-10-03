@@ -1,6 +1,9 @@
 /** Same-origin endpoint used by the Windows browse panel's native-picker shortcut. */
 export const DESKTOP_DIRECTORY_PICKER_PATH = '/_dsh/desktop/pick-directory'
 
+/** macOS preload-to-main picker, available before the official client plugins load. */
+export const DESKTOP_NATIVE_DIRECTORY_PICKER_CHANNEL = 'dsh-desktop:native-directory-picker'
+
 /** Same-origin endpoint used before either workspace picker accepts a path. */
 export const DESKTOP_DIRECTORY_VALIDATOR_PATH = '/_dsh/desktop/validate-directory'
 

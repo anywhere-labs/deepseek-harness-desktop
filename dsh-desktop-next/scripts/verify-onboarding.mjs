@@ -1,188 +1,182 @@
-/** Render the shipped native wizard headlessly: no Electron launch, Host, network or user data. */
+/** Exercise Desktop continuation in the actual official frontend and Loader, in a temporary home. */
 import assert from 'node:assert/strict'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
-import { serveWebDocument } from '../lib/web-document.js'
+import { DesktopHostProcess } from '../lib/host-process.js'
+import { NextProfiles } from '../lib/profiles.js'
+import { authenticateWebHost, serveWebDocument } from '../lib/web-document.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
+const require = createRequire(import.meta.url)
+const webRoot = dirname(require.resolve('@deepseek-ai/dsh-web-frontend/dist/index.html'))
+const home = mkdtempSync(join(tmpdir(), 'dsh-official-onboarding-'))
+const profiles = new NextProfiles(home)
+profiles.ensure('desktop')
+profiles.setFeatures('desktop', { market: false, remoteControl: false })
+// Exercise both fresh official progress and an already completed official flow.
+// Desktop eligibility must not depend on either condition.
+const officialPending = process.argv.includes('--official-pending')
+writeFileSync(join(profiles.directory('desktop'), 'cordis.patch.yml'), JSON.stringify([
+  { id: 'ui-settings-account', config: { step: officialPending ? 'welcome' : 'done', completion: officialPending ? null : 'skipped' } },
+]), { mode: 0o600 })
+const host = new DesktopHostProcess(process.execPath, root, profiles.directory('desktop'), undefined,
+  { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, undefined, undefined, undefined, join(root, 'lib/host.js'))
 const screenshots = join(root, '.desktop-next/verification')
 mkdirSync(screenshots, { recursive: true })
-const browser = await chromium.launch({ headless: true,
-  ...(process.env.DSH_NEXT_TEST_BROWSER_CHANNEL ? { channel: process.env.DSH_NEXT_TEST_BROWSER_CHANNEL } : {}),
-})
-const context = await browser.newContext({ viewport: { width: 1040, height: 720 }, locale: 'zh-CN', colorScheme: 'dark' })
-const page = await context.newPage()
-const errors = []
-page.on('pageerror', error => errors.push(error.message))
-page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
-let rejectSave = false
-const commands = []
-const permissionCalls = []
-const grants = { screen: 'not-determined', accessibility: 'denied', microphone: 'granted' }
-const state = {
-  selected: 'desktop', profiles: ['desktop'], unavailableProfiles: [], features: { market: true, remoteControl: false },
-  preferences: {}, phase: 'starting', busy: false, failure: '', safeMode: false, onboarding: true, onboardingComputerUse: false, logs: '',
-}
-await page.exposeFunction('__state', () => structuredClone(state))
-await page.exposeFunction('__command', command => {
-  if (rejectSave) { rejectSave = false; throw new Error('Fixture: could not save Profile') }
-  commands.push(command)
-})
-await page.exposeFunction('__permission', (action, permission) => {
-  permissionCalls.push({ action, permission })
-  if (action === 'request') grants[permission] = 'granted'
-  return { permission, status: grants[permission], canRequest: grants[permission] === 'not-determined', canOpenSettings: true }
-})
-await page.addInitScript(() => { window.desktopNext = {
-  state: () => window.__state(), command: value => window.__command(value),
-  permissions: {
-    query: permission => window.__permission('query', permission),
-    request: permission => window.__permission('request', permission),
-    openSettings: permission => window.__permission('openSettings', permission),
-  },
-} })
-await page.route('http://next-onboarding.test/**', async route => {
-  const response = await serveWebDocument(new Request(route.request().url()), join(root, 'lib/native-ui'), false)
-  response.headers.set('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-src 'none'; base-uri 'none'")
-  await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) })
-})
-const open = async (locale = 'zh') => {
-  await page.goto('about:blank')
-  await page.goto(`http://next-onboarding.test/?locale=${locale}&platform=darwin&frame=true#onboarding`)
-  await page.locator('[data-page="0"]').waitFor()
-}
-const next = async number => {
-  await page.getByRole('button', { name: /下一步|Continue/, exact: true }).click()
-  await page.locator(`[data-page="${number}"]`).waitFor()
-}
-const capture = name => page.screenshot({ path: join(screenshots, `onboarding-${name}.png`), animations: 'disabled' })
+let browser, page
+let required = true, accountPending = false, rejectDismiss = true, rejectSave = false, rejectRead = true
+const finishes = [], errors = []
+const selection = { mode: 'compatibility', macosMaterial: 'off', windowsMaterial: 'off', openBrowser: false,
+  networkExposure: 'loopback', market: 'community-market', aaEnabled: false,
+  notifications: { enabled: true, notifyOnTurnCompletion: true, notifyOnTurnFailure: true, notifyOnJobCompletion: false, notifyOnJobFailure: false } }
 try {
-  await open()
-  assert.equal(await page.getByRole('button', { name: '上一步', exact: true }).count(), 0)
-  assert.equal(await page.locator('.next-onboarding-eyebrow, img').count(), 0)
-  assert.equal(await page.locator('.next-onboarding-wordmark').innerText(), 'NEXT')
-  assert.notEqual(await page.locator('.next-onboarding-whale').evaluate(mark => getComputedStyle(mark).maskImage), 'none')
-  await capture('welcome')
-  await next(1)
-  const back = await page.getByRole('button', { name: '上一步', exact: true }).boundingBox()
-  const skip = await page.getByRole('button', { name: '跳过全部', exact: true }).boundingBox()
-  assert.ok(back.x < 100 && skip.x > 800 && Math.abs(back.y - skip.y) < 1)
-  await page.getByRole('radio', { name: 'dsh-market', exact: true }).check()
-  await capture('market')
-  await next(2)
-  await page.getByRole('switch', { name: '启用远程控制', exact: true }).check()
-  assert.equal(await page.locator('.next-onboarding-copy [role="switch"]').count(), 1)
-  assert.equal(await page.locator('.next-onboarding-panel [role="switch"]').count(), 0)
-  await page.waitForFunction(() => {
-    const images = [...document.querySelectorAll('.next-onboarding-devices img')]
-    return images.length === 2 && images.every(image => image.complete && image.naturalWidth > 0)
+  const ready = await host.start()
+  const origin = new URL(ready.url).origin
+  const cookie = await authenticateWebHost(ready.url), separator = cookie.indexOf('=')
+  const document = await (await serveWebDocument(new Request('dsh-app://app/'), webRoot)).text()
+  browser = await chromium.launch({ headless: true, ...(process.env.DSH_NEXT_TEST_BROWSER_CHANNEL ? { channel: process.env.DSH_NEXT_TEST_BROWSER_CHANNEL } : {}) })
+  const context = await browser.newContext({ viewport: { width: 1040, height: 720 }, locale: 'zh-CN', colorScheme: 'dark' })
+  await context.grantPermissions(['local-network-access'], { origin })
+  await context.addCookies([{ url: origin, name: cookie.slice(0, separator), value: cookie.slice(separator + 1) }])
+  await context.route(origin + '/', route => route.fulfill({ contentType: 'text/html', body: document }))
+  await context.exposeFunction('__boot', async () => ({ injections: await host.collectInjections(), streamBaseUrl: origin }))
+  await context.exposeFunction('__bootFailed', message => { errors.push(message) })
+  await context.exposeFunction('__readSetup', () => {
+    if (rejectRead) { rejectRead = false; throw new Error('Fixture: setup state unavailable') }
+    return { required, accountPending, edition: 'next', profile: 'desktop', computerUse: false,
+      input: { ...selection, appVersion: '2.0.14-next', platform: 'darwin', profileName: 'desktop' } }
   })
-  await capture('remote')
-  await page.getByRole('button', { name: '上一步', exact: true }).click()
-  await page.locator('[data-page="1"]').waitFor()
-  assert.equal(await page.getByRole('radio', { name: 'dsh-market', exact: true }).getAttribute('aria-checked'), 'true')
-  await next(2)
-  assert.equal(await page.getByRole('switch', { name: '启用远程控制', exact: true }).getAttribute('aria-checked'), 'true')
-  await next(3)
-  const cuaSwitch = page.getByRole('switch', { name: '启用 Computer Use', exact: true })
-  assert.equal(await cuaSwitch.getAttribute('aria-checked'), 'false')
-  await cuaSwitch.check()
-  const gear = page.getByRole('button', { name: '授权设置', exact: true })
-  assert.ok((await gear.boundingBox()).x < (await cuaSwitch.boundingBox()).x)
-  assert.deepEqual(permissionCalls, [])
-  await capture('computer-use')
-  await gear.click()
-  const permissions = page.getByRole('dialog', { name: '系统权限', exact: true })
-  await permissions.waitFor()
-  const screen = permissions.getByRole('group', { name: '屏幕录制', exact: true })
-  await screen.getByText('尚未授权', { exact: true }).waitFor()
-  assert.equal(permissionCalls.length, 3)
-  assert.ok(permissionCalls.every(call => call.action === 'query'))
-  await capture('computer-use-permissions')
-  await screen.getByRole('button', { name: '请求授权', exact: true }).click()
-  await screen.getByText('已允许', { exact: true }).waitFor()
-  await permissions.getByRole('group', { name: '辅助功能', exact: true }).getByRole('button', { name: '打开系统设置', exact: true }).click()
-  assert.deepEqual(permissionCalls.filter(call => call.action !== 'query'), [
-    { action: 'request', permission: 'screen' }, { action: 'openSettings', permission: 'accessibility' },
-  ])
-  await page.keyboard.press('Tab')
-  assert.equal(await permissions.evaluate(dialog => dialog.contains(document.activeElement)), true,
-    await page.evaluate(() => document.activeElement?.outerHTML))
-  await page.keyboard.press('Escape')
-  await permissions.waitFor({ state: 'hidden' })
-  assert.equal(await gear.evaluate(button => document.activeElement === button), true)
-  await page.getByRole('button', { name: '上一步', exact: true }).click()
-  await page.locator('[data-page="2"]').waitFor()
-  await next(3)
-  assert.equal(await cuaSwitch.getAttribute('aria-checked'), 'true')
-  await next(4)
-  await capture('recovery')
-  assert.deepEqual(commands, [])
-  rejectSave = true
-  await page.getByRole('button', { name: '完成并开始', exact: true }).click()
-  await page.getByRole('alert').filter({ hasText: 'Fixture: could not save Profile' }).waitFor()
-  await page.getByRole('button', { name: '完成并开始', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('main').getAttribute('aria-busy') === 'true')
-  assert.deepEqual(commands, [{ type: 'onboarding-complete', profile: 'desktop', computerUse: true, features: { market: false, dshMarket: true, remoteControl: true } }])
-
-  // Skip is available on every page and does not submit partially edited choices.
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  for (let index = 0; index < 5; index++) {
-    await open()
-    for (let step = 1; step <= index; step++) await next(step)
-    if (index === 1) await page.getByRole('radio', { name: '暂不开启', exact: true }).check()
-    if (index === 2) await page.getByRole('switch', { name: '启用远程控制', exact: true }).check()
-    if (index === 3) await cuaSwitch.check()
-    assert.equal(await page.locator('.next-onboarding-slide').evaluate(element => getComputedStyle(element).animationName), 'none')
-    await page.getByRole('button', { name: '跳过全部', exact: true }).click()
-    assert.deepEqual(commands.at(-1), { type: 'onboarding-skip', profile: 'desktop' })
+  await context.exposeFunction('__finishSetup', (profile, value) => {
+    if (rejectSave) { rejectSave = false; throw new Error('Fixture: could not save Profile') }
+    finishes.push({ profile, selection: value }); required = false; accountPending = value !== undefined
+  })
+  await context.exposeFunction('__dismissAccount', profile => {
+    assert.equal(profile, 'desktop')
+    if (rejectDismiss) { rejectDismiss = false; throw new Error('Fixture: account choice save failed') }
+    accountPending = false
+  })
+  await context.addInitScript(() => {
+    globalThis.dshDesktop = { protocolVersion: 1 }
+    globalThis.dshDesktopBoot = { ready: () => globalThis.__boot(), failed: message => globalThis.__bootFailed(message) }
+    globalThis.dshDesktopSetup = { read: () => globalThis.__readSetup(), finish: (profile, value) => globalThis.__finishSetup(profile, value), dismissAccount: profile => globalThis.__dismissAccount(profile) }
+  })
+  page = await context.newPage(); page.setDefaultTimeout(20_000)
+  page.on('pageerror', error => errors.push(error.stack ?? error.message))
+  const surface = page.locator('[data-desktop-onboarding="desktop-extension"]')
+  const captureAccount = async name => {
+    await page.evaluate(async () => {
+      await Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map(animation => animation.finished.catch(() => {})))
+    })
+    await page.screenshot({ path: join(screenshots, name) })
   }
-  assert.equal(commands.length, 6)
-  // Reopening setup preselects all of the current Profile's saved choices.
-  state.features = { market: false, dshMarket: true, remoteControl: true }
-  state.onboardingComputerUse = true
+  const navigate = async (name, delta) => {
+    const current = Number(await surface.locator('[data-page]').getAttribute('data-page'))
+    await surface.getByRole('button', { name }).click()
+    await surface.locator(`[data-page="${current + delta}"]`).waitFor()
+  }
+  const next = () => navigate(/^(下一步|Continue)$/, 1)
+  const finish = () => surface.getByRole('button', { name: /^(完成并开始|Finish and start)$/ }).click()
+  const skip = () => surface.getByRole('button', { name: /^(跳过|Skip)$/ }).click()
+  const back = () => navigate(/^(上一步|Back)$/, -1)
+  const open = async () => {
+    await page.goto(origin); await surface.waitFor()
+    // Activate native macOS CSS after the browser-only Host boot (which has no
+    // native shortcut service). Click tests alone do not cover app drag regions.
+    await page.evaluate(() => { document.documentElement.dataset.platform = 'darwin' })
+  }
   await open()
-  await next(1)
-  assert.equal(await page.getByRole('radio', { name: 'dsh-market', exact: true }).getAttribute('aria-checked'), 'true')
-  await next(2)
-  assert.equal(await page.getByRole('switch', { name: '启用远程控制', exact: true }).getAttribute('aria-checked'), 'true')
-  await next(3)
-  assert.equal(await cuaSwitch.getAttribute('aria-checked'), 'true')
-
-  // Small windows remain scrollable; light theme and English share the same flow.
+  await surface.getByRole('alert').filter({ hasText: 'setup state unavailable' }).waitFor()
+  await surface.getByRole('button', { name: /^(重试|Retry)$/ }).first().click()
+  await surface.locator('[data-page="0"]').waitFor()
+  assert.notEqual(await surface.evaluate(element => getComputedStyle(element).getPropertyValue('--spacing').trim()), '')
+  assert.match(await surface.locator('h1').innerText(), /DSH NEXT/)
+  assert.equal(await page.locator('#root').evaluate(element => element.inert), true)
+  await page.screenshot({ path: join(screenshots, 'onboarding-official-welcome.png') })
+  await next()
+  const backBounds = await surface.getByRole('button', { name: /^(上一步|Back)$/ }).boundingBox()
+  const progressBounds = await surface.locator('.next-onboarding-progress').boundingBox()
+  const mainBounds = await surface.locator('main').boundingBox()
+  assert.ok(progressBounds.y >= 36 && progressBounds.y + progressBounds.height <= mainBounds.y, 'Progress belongs above the content, clear of traffic lights')
+  assert.ok(backBounds.y >= mainBounds.y + mainBounds.height, 'Official Back navigation belongs below the content')
+  for (const element of await surface.locator('.next-onboarding-choice, [role="radio"]').all()) {
+    assert.equal(await element.evaluate(node => getComputedStyle(node).getPropertyValue('-webkit-app-region')), 'no-drag', 'Choice cards and radio controls must subtract the official drag region')
+  }
+  await surface.getByText('dsh-market', { exact: true }).click()
+  await page.screenshot({ path: join(screenshots, 'onboarding-official-market-macos.png') })
+  await next()
+  await surface.getByRole('switch').check()
+  assert.equal(await surface.getByRole('switch').evaluate(node => getComputedStyle(node).getPropertyValue('-webkit-app-region')), 'no-drag')
+  assert.equal(await surface.locator('img').evaluateAll(images => images.every(image => image.complete && image.naturalWidth > 0)), true)
+  await back()
+  assert.equal(await surface.getByRole('radio', { name: 'dsh-market', exact: true }).isChecked(), true)
+  await next()
+  assert.equal(await surface.getByRole('switch').isChecked(), true)
+  await next()
+  await surface.getByRole('switch').check()
+  await surface.getByRole('button', { name: /^(权限设置|Permission settings)$/ }).click()
+  const permissions = page.getByRole('dialog', { name: /^(系统权限|System permissions)$/ })
+  await permissions.waitFor()
+  await permissions.getByRole('button', { name: /^(关闭|Close)$/ }).click()
+  await permissions.waitFor({ state: 'hidden' })
+  await page.screenshot({ path: join(screenshots, 'onboarding-official-computer-use.png') })
+  await next()
+  rejectSave = true
+  await finish()
+  await surface.getByRole('alert').filter({ hasText: 'could not save Profile' }).waitFor()
+  await finish()
+  await surface.waitFor({ state: 'hidden' })
+  assert.equal(finishes.length, 1)
+  assert.deepEqual(finishes[0], { profile: 'desktop', selection: { ...selection, market: 'dsh-market', aaEnabled: true, computerUse: true } })
+  // The native app restarts after saving. No authorization should start in the old renderer.
+  await page.reload()
+  await surface.getByRole('heading', { name: '桌面设置已完成' }).waitFor()
+  await captureAccount('onboarding-official-account-choice.png')
+  await surface.getByRole('button', { name: '登录 DeepSeek' }).click()
+  await surface.getByRole('alert').filter({ hasText: 'account choice save failed' }).waitFor()
+  await surface.getByRole('button', { name: '重试', exact: true }).click()
+  await surface.getByRole('button', { name: '登录 DeepSeek' }).click()
+  const login = page.getByRole('dialog', { name: '开始使用', exact: true })
+  await login.waitFor()
+  await surface.waitFor({ state: 'hidden' })
+  assert.equal(await surface.count(), 0)
+  await captureAccount('onboarding-official-account-login.png')
+  await login.getByRole('button', { name: '添加 API Key', exact: true }).click()
+  await login.waitFor({ state: 'hidden' })
+  await page.getByRole('dialog').filter({ hasText: 'API Key' }).waitFor()
+  await page.reload()
+  await page.getByRole('button', { name: /^(插件|Plugins)$/ }).waitFor()
+  assert.equal(await surface.count(), 0)
+  accountPending = true
+  await page.reload()
+  await surface.getByRole('button', { name: '暂时跳过', exact: true }).click()
+  await surface.waitFor({ state: 'hidden' })
+  assert.equal(accountPending, false)
+  assert.equal(await page.locator('#root').evaluate(element => element.inert), false)
+  required = true
+  await open(); await next()
   await page.setViewportSize({ width: 680, height: 560 })
-  await page.emulateMedia({ colorScheme: 'light' })
-  await open('en')
-  for (let step = 1; step <= 4; step++) {
-    await next(step)
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
-    const button = page.getByRole('button', { name: step === 4 ? 'Finish and start' : 'Continue', exact: true })
-    await button.scrollIntoViewIfNeeded()
-    assert.ok(await button.isVisible())
-    if (step === 3) {
-      await capture('computer-use-small-light')
-      await page.getByRole('button', { name: 'Permissions', exact: true }).click()
-      const dialog = page.getByRole('dialog', { name: 'System permissions', exact: true })
-      await dialog.getByRole('group', { name: 'Screen recording', exact: true }).getByText('Allowed', { exact: true }).waitFor()
-      const bounds = await dialog.boundingBox()
-      assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 680 && bounds.y + bounds.height <= 560)
-      await capture('computer-use-permissions-small-light')
-      await dialog.getByRole('button', { name: 'Close', exact: true }).click()
-    }
-  }
-  await capture('recovery-small-light')
-  // Returning to the first page also restores focus, without losing the current Profile.
-  for (let step = 3; step >= 0; step--) {
-    await page.getByRole('button', { name: 'Back', exact: true }).click()
-    await page.locator(`[data-page="${step}"]`).waitFor()
-    assert.equal(await page.locator('h1').evaluate(heading => document.activeElement === heading), true)
-  }
+  const headingBounds = await surface.locator('h1').boundingBox()
+  const footerBounds = await surface.locator('footer').boundingBox()
+  assert.ok(headingBounds.y >= 0 && footerBounds.y + footerBounds.height <= 560)
+  assert.equal(await surface.locator('h1').evaluate(heading => heading === document.activeElement), true)
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  await page.screenshot({ path: join(screenshots, 'onboarding-official-next-small.png') })
+  await next(); await surface.getByRole('switch').check(); await skip()
+  await surface.waitFor({ state: 'hidden' })
+  assert.equal(finishes.at(-1).selection, undefined)
   assert.deepEqual(errors, [])
-  console.log('Next onboarding passed: five pages, Back and Skip all, retained choices, exclusive market selection, Computer Use opt-in and official permission dialog, explicit permission actions, completion and retry, reduced motion, keyboard focus, small-window scrolling and dark/light bilingual rendering. No Host, graphical app or OS permission prompt was started.')
+  console.log(`Original Next onboarding passed inside the official surface: independent native eligibility, official progress ${officialPending ? 'unfinished' : 'completed'}, state-read and save retries, five original pages, artwork, back navigation, choices, skip, completion, inert cleanup, and no repeat.`)
 } catch (error) {
-  await capture('failure').catch(() => {})
-  console.error(await page.locator('body').innerText())
+  console.error(errors)
+  if (page) { console.error(await page.locator('body').innerText()); await page.screenshot({ path: join(screenshots, 'onboarding-failure.png') }).catch(() => {}) }
   throw error
-} finally { await browser.close() }
+} finally {
+  await browser?.close()
+  await host.stop()
+  rmSync(home, { recursive: true, force: true })
+}

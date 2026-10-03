@@ -70,7 +70,7 @@ describe('isolated compatibility shell', () => {
 
   it.each([
     ['darwin', 'extended', 'transparent', true],
-    ['win32', 'extended', 'mica', true],
+    ['win32', 'extended', 'off', false],
     ['darwin', 'extended', 'off', false],
     ['darwin', 'compatibility', 'transparent', false],
   ] as const)('preserves the content material boundary for %s %s %s', (platform, mode, material, transparent) => {

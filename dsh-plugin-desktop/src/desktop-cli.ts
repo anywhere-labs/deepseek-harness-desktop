@@ -87,7 +87,7 @@ export function desktopCliProfileManifestUrl(
  */
 export async function runDesktopDshCli(
   environment: NodeJS.ProcessEnv = process.env,
-  load: (url: string) => Promise<{ runCli(options: { allowDesktopProfile: boolean }): Promise<void> }> = url => import(url),
+  load: (url: string) => Promise<{ runCli(options: { manageDesktopProfile: boolean }): Promise<void> }> = url => import(url),
   argv: string[] = process.argv,
   asarProcess: AsarArchiveProcess = process,
 ): Promise<void> {
@@ -109,13 +109,13 @@ export async function runDesktopDshCli(
   // Keep it until process exit rather than treating CLI settlement as app
   // shutdown. A packaged CLI process owns exactly one Profile invocation.
   if (releaseResolver === undefined) {
-    await (await load(DSH_ENTRY_URL)).runCli({ allowDesktopProfile: true })
+    await (await load(DSH_ENTRY_URL)).runCli({ manageDesktopProfile: true })
     return
   }
   const releaseAtExit = (): void => { releaseResolver() }
   process.once('exit', releaseAtExit)
   try {
-    await (await load(DSH_ENTRY_URL)).runCli({ allowDesktopProfile: true })
+    await (await load(DSH_ENTRY_URL)).runCli({ manageDesktopProfile: true })
   } catch (cause) {
     process.off('exit', releaseAtExit)
     releaseResolver()

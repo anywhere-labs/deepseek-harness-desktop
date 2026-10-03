@@ -22,11 +22,7 @@ function frozenDragRegion(height: number, leftInset: number, rightInset: number)
 export function desktopWindowService(environment: DesktopClientEnvironment): DesktopWindowService {
   const availableMaterials = Object.freeze(environment.platform === 'darwin'
     ? ['off', 'transparent'] as const
-    : environment.platform === 'win32'
-      ? environment.micaSupported
-        ? ['off', 'mica'] as const
-        : ['off'] as const
-      : ['off'] as const)
+    : ['off'] as const)
   if (environment.mode === 'compatibility' || environment.mode === 'extended') {
     return Object.freeze({
       ...environment,

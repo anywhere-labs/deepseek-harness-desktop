@@ -28,6 +28,7 @@ import {
   readDesktopShellMode,
   resolveDesktopSettingsDocument,
   shippedSkillRoot,
+  UPSTREAM_PRODUCT_ANALYTICS_ROW_IDS,
   validateDshMarketBundlePatches,
 } from '../src/profile.ts'
 import { setDesktopProfileBundleSelected } from '../src/desktop-plugins.ts'
@@ -685,6 +686,21 @@ virtualStoreDirMaxLength: 60
     }])).toThrow('must insert exactly the canonical dsh-market row')
   })
 
+  it('keeps upstream Desktop product analytics off even when a user patch enables it', () => {
+    const home = temporaryHome()
+    writeFileSync(join(ensureDesktopProfile(home), 'cordis.patch.yml'), [
+      '- id: product-analytics',
+      '  disabled: false',
+      '',
+    ].join('\n'))
+
+    const rows = composeEntries([prepareDesktopProfile(undefined, home, 'darwin').patches])
+
+    for (const id of UPSTREAM_PRODUCT_ANALYTICS_ROW_IDS) {
+      expect(rows.find(row => row.id === id)).toEqual(expect.objectContaining({ disabled: true }))
+    }
+  })
+
   it('boots a selected Web profile without overriding its compatibility UI rows', () => {
     const home = temporaryHome()
     const webDir = join(home, 'profiles', 'web')
@@ -767,6 +783,7 @@ virtualStoreDirMaxLength: 60
     const edited = {
       mode: 'advanced',
       macosMaterial: 'transparent',
+      // A legacy value the schema still accepts; it resolves to 'off' at runtime.
       windowsMaterial: 'mica',
       linuxMaterial: 'transparent',
       port: 43_189,
@@ -816,6 +833,33 @@ virtualStoreDirMaxLength: 60
     expect(pending.profile.layers.map(layer => layer.packageName))
       .toEqual(prepareDesktopProfile(undefined, home, 'darwin').profile.layers.map(layer => layer.packageName))
     expect(prepareDesktopProfile(undefined, home, 'darwin').mode).toBe('compatibility')
+  })
+
+  it.each([
+    ['compatibility', 'extended', false],
+    ['extended', 'compatibility', true],
+    ['advanced', 'compatibility', true],
+  ] as const)('keeps the %s generation\'s layout rows after the Profile switches to %s', (running, stored, disabled) => {
+    // First-run Setup and the mode picker both save the mode into the patch layer
+    // while the window keeps its renderer, and the save hot-reloads the Profile.
+    // Recomposing the layout rows from the stored mode dropped (or restored)
+    // `ui-layout` under a page built for the other layout owner, so the client
+    // plugins waited on a layout service forever and the window went to recovery.
+    const home = temporaryHome()
+    writeDesktopShellPreferences(home, [`mode: ${stored}`])
+
+    const reloaded = prepareDesktopProfile(undefined, home, 'win32', undefined, undefined, undefined, {
+      generationMode: running,
+    })
+    const rows = composeEntries([reloaded.patches])
+
+    expect(reloaded.mode).toBe(stored)
+    expect(rows.find(row => row.id === 'desktop-shell')?.config).toEqual(expect.objectContaining({ mode: stored }))
+    expect(rows.find(row => row.id === 'ui-layout')?.disabled ?? false).toBe(disabled)
+    expect(rows.find(row => row.id === 'ui-sidebar')?.disabled ?? false).toBe(false)
+    // The next generation composes from what was saved.
+    const next = composeEntries([prepareDesktopProfile(undefined, home, 'win32').patches])
+    expect(next.find(row => row.id === 'ui-layout')?.disabled ?? false).toBe(stored !== 'compatibility')
   })
 
   it('renames its own legacy settings sections to the entry ids 0.1.7 imports by', () => {
@@ -931,13 +975,96 @@ virtualStoreDirMaxLength: 60
   it('migrates the settings document while preparing the profile', () => {
     const home = temporaryHome()
     ensureDesktopProfile(home)
-    writeFileSync(join(home, 'settings.yaml'), ['dsh-desktop:', '  mode: advanced', ''].join('\n'))
+    writeFileSync(join(home, 'settings.yaml'), [
+      'dsh-desktop-notifications:',
+      '  enabled: false',
+      'agent-presets:',
+      '  default: minimal',
+      '',
+    ].join('\n'))
 
     prepareDesktopProfile(undefined, home, 'darwin')
 
-    // The Loader has not started yet, so upstream's import still finds the section.
-    expect(readFileSync(join(home, 'settings.yaml'), 'utf8'))
-      .toBe(['desktop-shell:', '  mode: advanced', ''].join('\n'))
+    // The Loader has not started yet, so upstream's import still finds the sections.
+    expect(readFileSync(join(home, 'settings.yaml'), 'utf8')).toBe([
+      'desktop-notifications:',
+      '  enabled: false',
+      'agent-preset-registry:',
+      '  selectedDefault: minimal',
+      '',
+    ].join('\n'))
+  })
+
+  it('starts in the mode the not-yet-imported settings document is about to apply', () => {
+    // The setup wizard (and every 0.1.6 install) leaves the chosen mode in the
+    // harness-home document, which 0.1.7 only merges into the profile after the
+    // Loader is up. Reading the composed row alone opened the first window in
+    // compatibility mode while the reloaded generation dropped `ui-layout`, so
+    // nothing provided a layout and the renderer landed in recovery.
+    //
+    // Supplying the pending values to the first generation alone is not enough:
+    // the import renames the document before it writes, and a recomposition in
+    // between (profile HMR notices the rename) would see neither and flip the row
+    // back underneath the running shell. So the launcher lands the section in the
+    // profile itself, before the Loader starts.
+    const home = temporaryHome()
+    writeDesktopShellPreferences(home, ['mode: compatibility', 'port: 43189'])
+    const settingsPath = join(home, 'settings.yaml')
+    const patchPath = join(ensureDesktopProfile(home), 'cordis.patch.yml')
+    writeFileSync(settingsPath, ['dsh-desktop:', '  mode: extended', 'agent-presets:', '  default: minimal', ''].join('\n'))
+
+    const first = prepareDesktopProfile(undefined, home, 'win32')
+    const rows = composeEntries([first.patches])
+
+    // Merged field by field, like the import: the document's mode, the row's port.
+    expect(first).toMatchObject({ mode: 'extended', port: 43_189 })
+    expect(rows.find(row => row.id === 'ui-layout')?.disabled).toBe(true)
+    expect(rows.find(row => row.id === 'ui-sidebar')?.disabled).toBe(false)
+    expect(rows.find(row => row.id === 'desktop-shell')?.config)
+      .toEqual(expect.objectContaining({ mode: 'extended', port: 43_189 }))
+    // Persisted in the profile's own row, where the config editor edits it later;
+    // the launcher pins nothing, so those edits are never shadowed.
+    expect(readFileSync(patchPath, 'utf8'))
+      .toBe(['- id: desktop-shell', '  config:', '    mode: extended', '    port: 43189', ''].join('\n'))
+    expect(first.patches.findLast(patch => patch.id === 'desktop-shell')).toEqual({ id: 'desktop-shell', disabled: false })
+    // Only Desktop's shell section leaves the document; the import still merges the rest.
+    expect(readFileSync(settingsPath, 'utf8')).toBe(['agent-preset-registry:', '  selectedDefault: minimal', ''].join('\n'))
+    // Every later composition (HMR, the import's own) reads the same row.
+    expect(prepareDesktopProfile(undefined, home, 'win32').mode).toBe('extended')
+
+    // A profile without its own desktop-shell row gets one, shaped as the editor writes it.
+    const fresh = temporaryHome()
+    const freshPatch = join(ensureDesktopProfile(fresh), 'cordis.patch.yml')
+    writeFileSync(join(fresh, 'settings.yaml'), ['desktop-shell:', '  mode: advanced', ''].join('\n'))
+    expect(prepareDesktopProfile(undefined, fresh, 'win32').mode).toBe('advanced')
+    expect(readFileSync(freshPatch, 'utf8')).toContain(
+      ['- id: desktop-shell', `  name: ${DESKTOP_PACKAGE_NAME}`, '  config:', '    mode: advanced', ''].join('\n'))
+
+    // A section the import would reject stays for the import to reject, and the
+    // row keeps its values.
+    const rejected = (platform: NodeJS.Platform, lines: string[]) => {
+      const other = temporaryHome()
+      writeDesktopShellPreferences(other, ['mode: compatibility'])
+      const document = ['desktop-shell:', ...lines.map(line => `  ${line}`), ''].join('\n')
+      writeFileSync(join(other, 'settings.yaml'), document)
+      expect(prepareDesktopProfile(undefined, other, platform).mode).toBe('compatibility')
+      expect(readFileSync(join(other, 'settings.yaml'), 'utf8')).toBe(document)
+    }
+    rejected('win32', ['mode: fullscreen'])
+    // Only volatile fields are importable; one stray key drops the whole section.
+    rejected('win32', ['mode: extended', 'width: 1600'])
+    rejected('win32', ['mode: extended', 'logLevel: verbose'])
+    rejected('win32', ['mode: extended', 'openBrowser: true'])
+    rejected('linux', ['mode: extended'])
+
+    // The config editor's validation pass holds the patch file and writes it next.
+    const editing = temporaryHome()
+    writeDesktopShellPreferences(editing, ['mode: compatibility'])
+    writeFileSync(join(editing, 'settings.yaml'), ['desktop-shell:', '  mode: extended', ''].join('\n'))
+    prepareDesktopProfile(undefined, editing, 'win32', undefined, undefined, undefined, {
+      profilePatches: [{ id: 'desktop-shell', config: { mode: 'compatibility' } }],
+    })
+    expect(readFileSync(join(editing, 'settings.yaml'), 'utf8')).toBe(['desktop-shell:', '  mode: extended', ''].join('\n'))
   })
 
   it('keeps legacy browser intent but clamps LAN exposure when compatibility mode is selected', () => {
@@ -976,10 +1103,11 @@ virtualStoreDirMaxLength: 60
     const prepared = prepareDesktopProfile(undefined, home, 'win32')
     const rows = composeEntries([prepared.patches])
 
+    // A removed Windows Mica preference still boots and renders opaque.
     expect(prepared).toEqual(expect.objectContaining({
       mode: 'extended',
       macosMaterial: 'off',
-      windowsMaterial: 'mica',
+      windowsMaterial: 'off',
     }))
     expect(rows.find(row => row.id === 'ui-layout')?.disabled).toBe(true)
     expect(rows.find(row => row.id === 'ui-sidebar')?.disabled).toBe(false)
@@ -988,6 +1116,7 @@ virtualStoreDirMaxLength: 60
       config: expect.objectContaining({
         mode: 'extended',
         macosMaterial: 'off',
+        // The user's legacy leaf is carried through unchanged, never rewritten.
         windowsMaterial: 'mica',
       }),
     }))

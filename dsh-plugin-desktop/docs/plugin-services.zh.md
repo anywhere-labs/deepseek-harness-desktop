@@ -69,9 +69,8 @@ export function apply(ctx: ClientContext): void {
 interface DesktopWindowService {
   readonly mode: 'compatibility' | 'extended' | 'advanced'
   readonly platform: 'darwin' | 'win32' | 'linux'
-  readonly material: 'off' | 'transparent' | 'mica'
-  readonly micaSupported: boolean
-  readonly availableMaterials: readonly ('off' | 'transparent' | 'mica')[]
+  readonly material: 'off' | 'transparent'
+  readonly availableMaterials: readonly ('off' | 'transparent')[]
   readonly safeAreaInsets: {
     readonly top: number
     readonly right: number
@@ -86,7 +85,7 @@ interface DesktopWindowService {
 }
 ```
 
-所有值都会在一个 renderer generation 内保持不变，几何值使用 CSS 像素。`material` 是经过系统能力门槛解析后的实际材质，而不只是持久化的偏好。macOS 的 `availableMaterials` 为 `off/transparent`；Windows 10 为 `off`；Windows 11 build 22621 及以上为 `off/mica`。已移除的旧 `acrylic` 偏好会按 `off` 读取，并在设置文件可写时自动迁移。
+所有值都会在一个 renderer generation 内保持不变，几何值使用 CSS 像素。`material` 是经过系统能力门槛解析后的实际材质，而不只是持久化的偏好。macOS 的 `availableMaterials` 为 `off/transparent`；Windows 和 Linux 为 `off`，Windows 窗口始终不透明。已移除的旧 `acrylic` 和 `mica` 偏好都会按 `off` 读取，其中 `acrylic` 还会在设置文件可写时自动迁移。
 
 兼容模式与扩展窗口在 macOS 与 Windows 上都报告顶部 36 像素的预留区与拖动带，并在 macOS 左侧为红绿灯排除 80 像素，或在 Windows 右侧为原生标题栏按钮排除 138 像素。兼容模式会把完整官方 frame 下移到该区域下方。扩展窗口则由 Desktop 持有 root layout/sidebar surface，并在同一预留区下方承载官方 sidebar、conversation 与 details occupant，因此普通 occupant 不能再次叠加这一 inset。Linux 兼容模式保留普通原生 frame，因此报告零 inset 和零高度拖动区域。增强模式使用独立的紧凑几何：macOS 报告 20 像素内容 inset、32 像素拖动带与 80 像素左侧排除；Windows 报告 32 像素内容 inset、32 像素拖动带与 138 像素右侧排除。
 

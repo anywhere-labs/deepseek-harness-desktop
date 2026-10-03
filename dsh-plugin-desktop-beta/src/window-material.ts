@@ -1,36 +1,19 @@
-/** Cross-platform window-material preferences and Windows capability gates. */
+/** Cross-platform window-material preferences. */
 
-import { release as osRelease } from 'node:os'
 import type { DesktopPlatform, DesktopShellMode } from './runtime.ts'
 
 export type MacosWindowMaterial = 'off' | 'transparent'
-export type WindowsWindowMaterial = 'off' | 'mica'
+/** Windows no longer offers a selectable material; windows are always opaque. */
+export type WindowsWindowMaterial = 'off'
 /** Electron-native window transparency used by Linux generations. */
 export type LinuxWindowMaterial = 'off' | 'transparent'
-/** Persisted compatibility value accepted only so pre-removal settings still boot. */
-export type PersistedWindowsWindowMaterial = WindowsWindowMaterial | 'acrylic'
+/** Persisted compatibility values accepted only so pre-removal settings still boot. */
+export type PersistedWindowsWindowMaterial = WindowsWindowMaterial | 'acrylic' | 'mica'
 export type DesktopWindowMaterial = MacosWindowMaterial | WindowsWindowMaterial | LinuxWindowMaterial
 
 export const DEFAULT_MACOS_WINDOW_MATERIAL: MacosWindowMaterial = 'transparent'
 export const DEFAULT_WINDOWS_WINDOW_MATERIAL: WindowsWindowMaterial = 'off'
 export const DEFAULT_LINUX_WINDOW_MATERIAL: LinuxWindowMaterial = 'off'
-export const WINDOWS_MICA_MIN_BUILD = 22_621
-
-/** Extract the NT build number from a Windows `os.release()` value. */
-export function windowsBuildNumber(value: string = osRelease()): number | undefined {
-  const match = /^(?:\d+\.){2}(\d+)(?:\.|$)/.exec(value)
-  if (match === null) return undefined
-  const build = Number(match[1])
-  return Number.isSafeInteger(build) ? build : undefined
-}
-
-export function windowsSupportsSystemBackdrop(build: number | undefined): boolean {
-  return build !== undefined && build >= WINDOWS_MICA_MIN_BUILD
-}
-
-export function windowsSupportsMica(build: number | undefined): boolean {
-  return windowsSupportsSystemBackdrop(build)
-}
 
 export function parseMacosWindowMaterial(value: unknown): MacosWindowMaterial {
   if (value === undefined) return DEFAULT_MACOS_WINDOW_MATERIAL
@@ -40,12 +23,12 @@ export function parseMacosWindowMaterial(value: unknown): MacosWindowMaterial {
 
 export function parseWindowsWindowMaterial(value: unknown): WindowsWindowMaterial {
   if (value === undefined) return DEFAULT_WINDOWS_WINDOW_MATERIAL
-  if (value === 'off' || value === 'mica') return value
-  // Acrylic was removed because both Windows implementations can break native
-  // window behavior. Keep the legacy value readable and fail closed to an
-  // ordinary opaque window until the durable settings migration can run.
-  if (value === 'acrylic') return 'off'
-  throw new Error('dsh-desktop.windowsMaterial must be "off" or "mica"')
+  if (value === 'off') return value
+  // Acrylic and Mica were removed because the Windows backdrops can break
+  // native window behavior. Keep the legacy values readable and fail closed
+  // to an ordinary opaque window.
+  if (value === 'acrylic' || value === 'mica') return 'off'
+  throw new Error('dsh-desktop.windowsMaterial must be "off"')
 }
 
 export function parseLinuxWindowMaterial(value: unknown): LinuxWindowMaterial {
@@ -62,8 +45,6 @@ export function effectiveDesktopWindowMaterial(
   mode: DesktopShellMode,
   platform: DesktopPlatform,
   macosMaterial: MacosWindowMaterial,
-  windowsMaterial: PersistedWindowsWindowMaterial,
-  windowsBuild: number | undefined,
   linuxMaterial: LinuxWindowMaterial = DEFAULT_LINUX_WINDOW_MATERIAL,
 ): DesktopWindowMaterial {
   // Material now applies to every presentation. Keep mode in the resolver
@@ -71,7 +52,6 @@ export function effectiveDesktopWindowMaterial(
   void mode
   if (platform === 'linux') return linuxMaterial
   if (platform === 'darwin') return macosMaterial
-  if (windowsMaterial === 'acrylic') return 'off'
-  if (windowsMaterial === 'mica' && !windowsSupportsSystemBackdrop(windowsBuild)) return 'off'
-  return windowsMaterial
+  // Windows has no selectable material; any persisted legacy value is opaque.
+  return 'off'
 }

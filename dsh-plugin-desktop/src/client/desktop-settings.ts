@@ -2,6 +2,7 @@
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { DesktopSettingsSection, type DesktopNotificationSettings, type DesktopShellSettings } from './DesktopSettingsSection.tsx'
 import { DesktopTerminalSettingsAction } from './DesktopTerminalSettingsAction.tsx'
 import { createDesktopSettingsApi } from './desktop-settings-api.ts'
@@ -99,7 +100,6 @@ export function applyDesktopSettings(
       platform: environment.platform,
       version: environment.version,
       initialMode: environment.mode,
-      micaSupported: environment.micaSupported,
       setMode,
       desktopSettings,
       notificationSettings,
@@ -112,6 +112,13 @@ export function applyDesktopSettings(
     locale: DESKTOP_SETTINGS_LOCALE_NAMESPACE,
     inject: () => ({ api }),
   }, DesktopTerminalSettingsAction))
+
+  // The launcher owns Market selection through Desktop settings. Its bundle
+  // remains active, but must not expose a second switch in the plugin list.
+  ctx.slots.inject('plugins.bundle.hidden', () => ctx.slots.register({
+    name: 'plugins.bundle.hidden',
+    key: 'dshmarket',
+  }, () => null))
 
   return Object.freeze({
     api,

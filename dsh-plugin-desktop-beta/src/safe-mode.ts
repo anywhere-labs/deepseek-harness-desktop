@@ -43,6 +43,8 @@ export const DESKTOP_SAFE_MODE_DEFAULTS: Readonly<{
       notifyOnTurnFailure: false,
       notifyOnJobCompletion: false,
       notifyOnJobFailure: false,
+      notifyOnScheduleCompletion: false,
+      notifyOnScheduleFailure: false,
     }),
   }),
 })

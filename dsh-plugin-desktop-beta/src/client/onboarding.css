@@ -1,0 +1,97 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@source "../native-ui/setup-wizard";
+@source "../native-ui/components";
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+}
+
+/* Reuse the native controls with the official onboarding's theme. The client
+   build scopes this sheet to the lifetime of the Desktop onboarding surface. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--ring);
+}
+
+body:has(.dshDesktopOnboardingContent) {
+  --background: var(--dsw-alias-bg-base);
+  --foreground: var(--dsw-alias-label-primary);
+  --card: var(--dsw-alias-bg-layer-1);
+  --popover: var(--dsw-alias-bg-layer-1);
+  --primary: var(--dsw-alias-button-primary-fill);
+  --primary-foreground: var(--dsw-alias-label-primary-foreground);
+  --secondary: var(--dsw-alias-interactive-bg-active);
+  --muted: var(--dsw-alias-bg-layer-2);
+  --muted-foreground: var(--dsw-alias-label-secondary);
+  --destructive: var(--dsw-alias-state-error-primary);
+  --border: var(--dsw-alias-border-l2);
+  --ring: var(--dsw-alias-border-l3);
+  --radius: 0.625rem;
+}
+
+.dshDesktopOnboardingContent { color: var(--foreground); }
+.dshDesktopAccountSetup { height: 100%; overflow: auto; display: flex; align-items: safe center; justify-content: center; padding: 64px 32px; }
+.dshDesktopAccountSetup > div { width: 100%; max-width: 560px; }
+.dshDesktopAccountSetup h1 { font-size: 32px; font-weight: 500; margin-bottom: 24px; }
+.dshDesktopAccountSetup p { color: var(--muted-foreground); line-height: 1.8; margin-bottom: 16px; }
+.dshDesktopAccountActions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 32px; }
+.dshDesktopSetupContent { width: 100%; height: 100%; box-sizing: border-box; }
+/* Keep the original Desktop settings and confirmations inside the same
+   full-page presentation used by Next and the official onboarding surface. */
+.dshSetupWizard { --setup-navigation-inset: clamp(40px, 8.333vw, 120px); height: 100%; display: flex; flex-direction: column; }
+/* Native controls are embedded beneath the official frontend's reset styles. */
+.dshSetupWizard :is(button, [role="radio"], [role="switch"], label[for]) { cursor: pointer; }
+.dshSetupWizard :is(button, [role="radio"], [role="switch"], label[for]):is(:disabled, [aria-disabled="true"], [data-disabled]),
+.dshSetupWizard label:has(:disabled, [aria-disabled="true"], [data-disabled]),
+.dshSetupWizard fieldset:disabled label[for] { cursor: not-allowed; }
+.dshSetupProgress { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 22px var(--setup-navigation-inset); color: var(--muted-foreground); font-size: 11px; -webkit-app-region: drag; }
+.dshSetupProgress ol { display: flex; gap: 7px; }
+.dshSetupProgress li { width: 6px; height: 6px; border-radius: 6px; background: var(--border); }
+.dshSetupProgress li[aria-current="step"] { width: 22px; background: var(--foreground); }
+.dshSetupNavigation { flex-shrink: 0; padding: 24px var(--setup-navigation-inset) clamp(24px, 7.61vh, 70px); }
+.dshSetupMain { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 24px clamp(32px, 6vw, 80px); }
+.dshSetupFieldset { display: flex; flex-direction: column; width: 100%; min-width: 0; border: 0; padding: 0; }
+.dshSetupPages { display: flex; flex-direction: column; flex: 1; justify-content: safe center; }
+.dshSetupWizard :is(.dshSetupPage, .dshSetupWelcome) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "copy options" "actions options"; align-items: center; column-gap: clamp(32px, 5vw, 72px); width: 100%; max-width: 960px; margin: auto; padding: 0; }
+.dshSetupWizard .dshSetupCopy { grid-area: copy; align-self: end; margin: 0; }
+.dshSetupWizard .dshSetupCopy h1 { font-size: clamp(30px, 4.4vw, 52px); font-weight: 500; line-height: 1.22; letter-spacing: -.035em; outline: none; }
+.dshSetupWizard .dshSetupCopy > p { font-size: 15px; line-height: 1.9; margin-top: 24px; }
+.dshSetupWizard .dshSetupOptions { grid-area: options; margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }
+.dshSetupWizard .dshSetupOptions > [data-slot="card-content"] { padding: 0; }
+.dshSetupWizard .dshSetupOptions label:has([role="radio"]) { align-items: center; padding: 18px 20px; border-radius: 16px; }
+.dshSetupWizard .dshSetupOptions [role="radio"] { order: 1; flex-shrink: 0; margin-left: auto; }
+.dshSetupWizard .dshSetupActions { grid-area: actions; align-self: start; justify-content: flex-start; margin-top: 32px; }
+.dshSetupWizard .dshSetupActions button { min-height: 42px; padding-inline: 20px; }
+.dshSetupSuccessArtwork { display: flex; justify-content: center; padding: 32px; }
+.dshSetupSuccessArtwork svg { width: 112px; height: 112px; stroke-width: 1.25; }
+@media (max-width: 760px) {
+  .dshSetupWizard :is(.dshSetupPage, .dshSetupWelcome) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "copy" "options" "actions"; row-gap: 26px; max-width: 500px; }
+  .dshSetupWizard .dshSetupActions { margin-top: 0; }
+}
+/* Embedded content no longer has the native wizard's separate title bar. */
+.dshDesktopSetupContent:is([data-platform="darwin"], [data-platform="win32"]) { padding-top: 36px; }
+/* The official full-page drag band also covers non-button native controls.
+   Subtract the complete choice card and the ARIA controls from its hit region. */
+.dshDesktopOnboardingContent :is(button, a, input, textarea, select, label, summary,
+  [contenteditable="true"], [role="button"], [role="radio"], [role="switch"],
+  [role="checkbox"], [role="tab"], [role="menuitem"], [role="slider"]) { -webkit-app-region: no-drag; }
+
+/* The official onboarding surface is at 900; original wizard confirmations
+   are portalled to body and must remain above it. */
+body:has(.dshDesktopOnboardingContent) [data-slot="dialog-overlay"],
+body:has(.dshDesktopOnboardingContent) [data-slot="dialog-content"] { z-index: 901; -webkit-app-region: no-drag; }

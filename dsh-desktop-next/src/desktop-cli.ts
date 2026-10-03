@@ -87,7 +87,7 @@ export function desktopCliProfileManifestUrl(
  */
 export async function runDesktopDshCli(
   environment: NodeJS.ProcessEnv = process.env,
-  load: (url: string) => Promise<{ runCli(options: { allowDesktopProfile: boolean }): Promise<void> }> = url => import(url),
+  load: (url: string) => Promise<{ runCli(options: { manageDesktopProfile: boolean }): Promise<void> }> = url => import(url),
   argv: string[] = process.argv,
   asarProcess: AsarArchiveProcess = process,
 ): Promise<void> {
@@ -100,7 +100,7 @@ export async function runDesktopDshCli(
     ? argv.slice(2)
     : withDefaultDesktopProfile(argv.slice(2), profileName)
   argv.splice(2, argv.length - 2, ...withoutForwardedDesktopPnpmPolicy(selected))
-  await (await load(DSH_ENTRY_URL)).runCli({ allowDesktopProfile: true })
+  await (await load(DSH_ENTRY_URL)).runCli({ manageDesktopProfile: true })
 }
 
 function isDirectExecution(): boolean {

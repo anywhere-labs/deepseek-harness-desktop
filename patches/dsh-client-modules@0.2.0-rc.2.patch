@@ -1,0 +1,12 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -283,7 +283,7 @@
+ /** Count generated lines while assembling indexed-map section offsets. */
+ function newlineCount(value) {
+ 	let count = 0;
+-	for (const char of value) if (char === "\n") count += 1;
++	for (let offset = value.indexOf("\n"); offset !== -1; offset = value.indexOf("\n", offset + 1)) count += 1;
+ 	return count;
+ }
+ /** Resolve section sources against their original per-plugin map URL before combo relocation. */

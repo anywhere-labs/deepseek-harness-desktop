@@ -1,15 +1,7 @@
 diff --git a/lib/client.js b/lib/client.js
+index 0009669..358f692 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -3146,7 +3146,7 @@
- 		//#endregion
- 		//#region lib/types/client/stores.js
- 		/** Per-session Conversation store shared by the shell body and header. */
--		const CONVERSATION_STORE_KEY = "dsh.conversation";
-+		const CONVERSATION_STORE_KEY = globalThis.__DSH_SESSION_WINDOW_TARGET__ ? "dsh.session-window.conversation" : "dsh.conversation";
- 		/**
- 		* Declare per-session draft persistence and View selection.
- 		* @returns the store handle.
 @@ -16218,11 +16218,15 @@ window.__ModuleLoader__.load({
  			const blank = session === void 0 || conversation === void 0 || session.blank && conversationPhase(session, conversation) === "blank";
  			return (0, react_jsx_runtime.jsxs)("header", {

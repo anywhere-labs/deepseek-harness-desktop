@@ -17,7 +17,7 @@ it.each(['zh', undefined] as const)('synchronizes tray language at boot and on c
   const disposeTray = vi.fn()
   let nativeLocale: DesktopLocale = 'en'
   const native = {
-    platform: 'win32', windowsBuild: 22631, get locale() { return nativeLocale },
+    platform: 'win32', get locale() { return nativeLocale },
     setLocalePreference: (preference: DesktopLocale | undefined) => { nativeLocale = preference ?? 'zh' },
     updates: { isPackaged: true, canDownload: true, currentVersion: '2.0.7-beta.1', statePath: '/tmp/update',
       request: vi.fn(async () => new Response('{"version":"2.0.8-beta.1"}', { headers: { 'x-test': 'yes' } })),
@@ -39,6 +39,7 @@ it.each(['zh', undefined] as const)('synchronizes tray language at boot and on c
     } as unknown as DesktopShellSpec
     spec.readRemoteControl = vi.fn(async () => false)
     spec.enableRemoteControl = vi.fn(async () => {})
+    spec.applySetupSettings = vi.fn(async () => {})
     const stopShell = runtime.schedule(spec)
     runtime.registerTrayItem({ group: 'tools', order: 1, label: () => desktopTrayLabel(runtime.locale, 'openTerminal'), invoke,
       submenu: () => [{ label: () => desktopTrayLabel(runtime.locale, 'checkForUpdates'), invoke }] })
@@ -53,6 +54,12 @@ it.each(['zh', undefined] as const)('synchronizes tray language at boot and on c
     expect(shell.readLocalePreference()).toBe(initialPreference)
     await shell.requestModeChange('extended')
     expect(mode).toHaveBeenCalledWith('extended')
+    const setup = { mode: 'extended', macosMaterial: 'transparent', windowsMaterial: 'off', openBrowser: false,
+      networkExposure: 'loopback', notifications: { enabled: true, notifyOnTurnCompletion: true,
+        notifyOnTurnFailure: true, notifyOnJobCompletion: true, notifyOnJobFailure: true,
+        notifyOnScheduleCompletion: true, notifyOnScheduleFailure: true } } as const
+    await shell.applySetupSettings?.(setup)
+    expect(spec.applySetupSettings).toHaveBeenCalledWith(setup)
     expect(runtime.locale).toBe('zh')
     expect(native.locale).toBe('zh')
     expect(tray.label()).toBe('打开 DSH 终端')

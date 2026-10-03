@@ -8,17 +8,14 @@ import { Button, PluginArtworkDefault, Switch } from '@deepseek-ai/dsh-client-ui
 import { Choice, MARKET_OPTIONS, marketBody, marketTitle } from '../../../dsh-plugin-desktop-beta/src/client/DesktopSettingsSection.tsx'
 import { en as desktopEn, zh as desktopZh, type DesktopSettingsLocaleKey } from '../../../dsh-plugin-desktop-beta/src/client/desktop-settings-locales.ts'
 import { ComputerUseSettings } from './computer-use.tsx'
-import { registerVoicePermissions } from './voice-permissions.tsx'
+import { COMMUNITY_MARKET as COMMUNITY, DSH_MARKET as MARKET, marketToggleTargets, type MarketName } from './market-toggle.ts'
 
-const COMMUNITY = 'dsh-community-market'
-const MARKET = 'dshmarket'
 const REMOTE = '@agents-anywhere/dsh-bridge-next'
 const COMPUTER_ITEM = 'desktop-next-computer-use'
 
 type Translate = (cn: string, en: string) => string
 
 export function registerPluginControls(ctx: Context): void {
-  registerVoicePermissions(ctx)
   ctx.inject(['remote', 'remote.pluginManager'], inner => {
     inner.slots.inject('plugins.overview', () => {
       const dispose = inner.slots.register({ name: 'plugins.overview', id: 'desktop-next', order: 0,
@@ -46,6 +43,7 @@ function PluginControls({ context, t: translate, onOpenBundle, onOpenItem }: Pro
   const [revision, refresh] = useState(0)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [preferredMarket, setPreferredMarket] = useState<MarketName>(COMMUNITY)
   const pending = useRef(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -67,36 +65,51 @@ function PluginControls({ context, t: translate, onOpenBundle, onOpenItem }: Pro
       .finally(() => { if (!disposed) setLoading(false) })
     return () => { disposed = true }
   }, [context, revision])
-  const change = async (name: string, enabled: boolean): Promise<void> => {
+  const community = bundles.find(row => row.name === COMMUNITY)
+  const market = bundles.find(row => row.name === MARKET)
+  useEffect(() => {
+    if (community?.enabled && !market?.enabled) setPreferredMarket(COMMUNITY)
+    if (market?.enabled && !community?.enabled) setPreferredMarket(MARKET)
+  }, [community?.enabled, market?.enabled])
+  const change = async (names: readonly string[], enabled: boolean): Promise<void> => {
     if (pending.current || loading) return
     pending.current = true
     setBusy(true); setError(''); setNotice('')
     try {
-      // The Host applies the exclusive market group in one locked manifest write.
-      const result = await context.remote.pluginManager.setBundleEnabled(name, enabled)
-      if (!result.ok) throw new Error(result.error.message)
-      const change = result.value
-      if (change.application === 'failed' || change.application === 'cancelled') throw new Error(change.error?.diagnostic ?? t('无法更改插件状态。', 'Could not change the plugin state.'))
-      if (change.application === 'restart-required') setNotice(t('已保存，请重启后台服务以应用。', 'Saved. Restart the background service to apply.'))
-      if (change.application === 'overridden') setNotice(t('已保存，但当前配置覆盖了此选择。', 'Saved, but another configuration overrides this choice.'))
+      // Each Host operation writes its selection under the official Profile lock.
+      for (const name of names) {
+        const result = await context.remote.pluginManager.setBundleEnabled(name, enabled)
+        if (!result.ok) throw new Error(result.error.message)
+        const change = result.value
+        if (change.application === 'failed' || change.application === 'cancelled') throw new Error(change.error?.diagnostic ?? t('无法更改插件状态。', 'Could not change the plugin state.'))
+        if (change.application === 'restart-required') setNotice(t('已保存，请重启后台服务以应用。', 'Saved. Restart the background service to apply.'))
+        if (change.application === 'overridden') setNotice(t('已保存，但当前配置覆盖了此选择。', 'Saved, but another configuration overrides this choice.'))
+        if (enabled && (name === COMMUNITY || name === MARKET)) setPreferredMarket(name)
+      }
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)) }
     finally { pending.current = false; setBusy(false); refresh(value => value + 1) }
   }
-  const community = bundles.find(row => row.name === COMMUNITY)
-  const market = bundles.find(row => row.name === MARKET)
   const bothMarkets = community?.enabled === true && market?.enabled === true
   const locked = (row?: BundleInfo): boolean => loading || busy || !row || row.readOnlyReason !== undefined || row.error !== undefined
+  const activeMarkets = [community, market].flatMap(row => row?.enabled === true ? [row] : [])
+  const marketToggleLocked = loading || busy || marketToggleTargets(bundles, preferredMarket, activeMarkets.length === 0).length === 0
   return <div className="dshNextPluginControls" data-next-plugin-controls>
     <section className="dshDesktopSettingsGroup" data-next-markets aria-labelledby="next-market-title">
-      <div><h3 id="next-market-title">{desktopText('marketTitle')}</h3>
-        <p className="dshDesktopSettingsGroupIntro">{desktopText('marketIntro')}</p></div>
+      <div className="dshNextMarketHeader">
+        <div><h3 id="next-market-title">{desktopText('marketTitle')}</h3>
+          <p className="dshDesktopSettingsGroupIntro">{desktopText('marketIntro')}</p></div>
+        <Switch label={t('启用插件市场', 'Enable plugin market')} checked={activeMarkets.length > 0}
+          disabled={marketToggleLocked} onChange={enabled => {
+            void change(marketToggleTargets(bundles, preferredMarket, enabled), enabled)
+          }} />
+      </div>
       <div className="dshNextMarketChoices" role="radiogroup" aria-labelledby="next-market-title">
         {MARKET_OPTIONS.filter(option => option.id !== 'disabled').map(option => {
           const isCommunity = option.id === 'community-market'
           const row = isCommunity ? community : market
           return <Choice key={option.id} title={marketTitle(option, desktopText)} body={marketBody(option, desktopText)}
             badge={isCommunity ? desktopText('beta') : undefined} selected={row?.enabled === true && !bothMarkets}
-            disabled={locked(row)} action={() => { void change(isCommunity ? COMMUNITY : MARKET, true) }} />
+            disabled={locked(row)} action={() => { void change([isCommunity ? COMMUNITY : MARKET], true) }} />
         })}
       </div>
       {bothMarkets && <p role="status" className="dshDesktopSettingsHint">{t('当前两个市场均已开启，请选择保留其中一个。', 'Both markets are currently enabled. Choose which one to keep.')}</p>}

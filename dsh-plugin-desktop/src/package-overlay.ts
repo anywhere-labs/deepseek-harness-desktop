@@ -2,7 +2,8 @@
 
 import { findPackageJSON } from 'node:module'
 import { readFileSync, statSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, isAbsolute, join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { compare, valid } from 'semver'
 
 const BIN_NAME = 'dsh-plugin-desktop'
@@ -68,6 +69,13 @@ function readCandidate(
     throw cause
   }
   if (manifestPath === undefined) return undefined
+  if (source === 'profile') {
+    // Only the active Profile owns overrides. Node's ancestor walk can find
+    // projections left by older Desktop installs in profiles/node_modules.
+    const modules = join(dirname(fileURLToPath(packageUrl)), 'node_modules')
+    const offset = relative(modules, manifestPath)
+    if (offset === '..' || offset.startsWith(`..${sep}`) || isAbsolute(offset)) return undefined
+  }
   let size: number
   try {
     size = statSync(manifestPath).size

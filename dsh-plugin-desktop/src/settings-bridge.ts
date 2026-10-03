@@ -76,7 +76,7 @@ export interface DesktopSettings {
   mode: DesktopShellMode
   /** Native translucency preference used on macOS custom-chrome modes. */
   macosMaterial: MacosWindowMaterial
-  /** Native backdrop preference used on Windows custom-chrome modes. */
+  /** Legacy Windows backdrop preference; every persisted value resolves to 'off'. */
   windowsMaterial: PersistedWindowsWindowMaterial
   /** Electron-native transparency preference used on Linux generations. */
   linuxMaterial: LinuxWindowMaterial
@@ -94,6 +94,8 @@ export interface DesktopSettings {
 export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
   mode: z.union(['compatibility', 'extended', 'advanced'] as const).default('compatibility'),
   macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL),
+  // Windows no longer offers a material. The removed Acrylic and Mica values
+  // stay schema-valid so older settings still boot; they resolve to 'off'.
   windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL),
   linuxMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_LINUX_WINDOW_MATERIAL),
   port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT),
@@ -112,7 +114,7 @@ export interface DesktopShellConfig {
   mode: Volatile<DesktopShellMode>
   /** Native translucency preference used on macOS custom-chrome modes. */
   macosMaterial: Volatile<MacosWindowMaterial>
-  /** Native backdrop preference used on Windows custom-chrome modes. */
+  /** Legacy Windows backdrop preference; every persisted value resolves to 'off'. */
   windowsMaterial: Volatile<PersistedWindowsWindowMaterial>
   /** Electron-native transparency preference used on Linux generations. */
   linuxMaterial: Volatile<LinuxWindowMaterial>
@@ -138,6 +140,7 @@ export interface DesktopShellConfig {
 export const DesktopShellConfig = z.object({
   mode: z.union(['compatibility', 'extended', 'advanced'] as const).default('compatibility').volatile(),
   macosMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_MACOS_WINDOW_MATERIAL).volatile(),
+  // Legacy Acrylic and Mica rows stay readable and resolve to 'off'.
   windowsMaterial: z.union(['off', 'acrylic', 'mica'] as const).default(DEFAULT_WINDOWS_WINDOW_MATERIAL).volatile(),
   linuxMaterial: z.union(['off', 'transparent'] as const).default(DEFAULT_LINUX_WINDOW_MATERIAL).volatile(),
   port: z.number().step(1).min(0).max(65_535).default(DESKTOP_DEFAULT_WEB_PORT).volatile(),
@@ -310,6 +313,10 @@ export interface DesktopNotificationSettings {
   notifyOnJobCompletion: boolean
   /** Raise attention when a background job fails. */
   notifyOnJobFailure: boolean
+  /** Raise attention when a scheduled turn completes. */
+  notifyOnScheduleCompletion: boolean
+  /** Raise attention when a scheduled turn fails. */
+  notifyOnScheduleFailure: boolean
 }
 
 /** Schema of the editable notification preference subset. */
@@ -319,6 +326,8 @@ export const DesktopNotificationSettingsSchema: z<DesktopNotificationSettings> =
   notifyOnTurnFailure: z.boolean().default(true),
   notifyOnJobCompletion: z.boolean().default(true),
   notifyOnJobFailure: z.boolean().default(true),
+  notifyOnScheduleCompletion: z.boolean().default(true),
+  notifyOnScheduleFailure: z.boolean().default(true),
 })
 
 /** Live notification preferences. */
@@ -333,6 +342,10 @@ export interface DesktopNotificationConfig {
   notifyOnJobCompletion: Volatile<boolean>
   /** Raise attention when a background job fails. */
   notifyOnJobFailure: Volatile<boolean>
+  /** Raise attention when a scheduled turn completes. */
+  notifyOnScheduleCompletion: Volatile<boolean>
+  /** Raise attention when a scheduled turn fails. */
+  notifyOnScheduleFailure: Volatile<boolean>
 }
 
 /** Validated live notification preferences. */
@@ -342,6 +355,8 @@ export const DesktopNotificationConfig = z.object({
   notifyOnTurnFailure: z.boolean().default(true).volatile(),
   notifyOnJobCompletion: z.boolean().default(true).volatile(),
   notifyOnJobFailure: z.boolean().default(true).volatile(),
+  notifyOnScheduleCompletion: z.boolean().default(true).volatile(),
+  notifyOnScheduleFailure: z.boolean().default(true).volatile(),
 })
 
 /** Notification preferences standing before the first observed value. */
@@ -366,6 +381,8 @@ export function bindDesktopNotificationSettings(
     notifyOnTurnFailure: config.notifyOnTurnFailure.get(),
     notifyOnJobCompletion: config.notifyOnJobCompletion.get(),
     notifyOnJobFailure: config.notifyOnJobFailure.get(),
+    notifyOnScheduleCompletion: config.notifyOnScheduleCompletion.get(),
+    notifyOnScheduleFailure: config.notifyOnScheduleFailure.get(),
   })
   // Desktop owns a hand-written notifications page inside its settings section.
   ctx.inject(['settings'], (child) => {
