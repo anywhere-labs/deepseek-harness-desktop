@@ -1,24 +1,24 @@
 /** AA-inspired first-run flow, using the existing Desktop theme and controls. */
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { ArrowLeft, ArrowRight, Check, Keyboard, LifeBuoy, LoaderCircle, MousePointer2, Scan } from 'lucide-react'
+import { ArrowRight, Check, Keyboard, LifeBuoy, LoaderCircle, MousePointer2, Scan } from 'lucide-react'
 import { Button } from '../../../dsh-plugin-desktop-beta/src/native-ui/components/ui/button.tsx'
 import { Switch } from '../../../dsh-plugin-desktop-beta/src/native-ui/components/ui/switch.tsx'
 import { RadioGroup, RadioGroupItem } from '../../../dsh-plugin-desktop-beta/src/native-ui/components/ui/radio-group.tsx'
 import { Alert, AlertDescription } from '../../../dsh-plugin-desktop-beta/src/native-ui/components/ui/alert.tsx'
 import { DesktopFrame } from '../../../dsh-plugin-desktop-beta/src/native-ui/shared/DesktopFrame.tsx'
 import type { DesktopBridge, DesktopState } from '../desktop-contract.ts'
+import type { SetupNavigation } from '../../../dsh-plugin-desktop-beta/src/client/onboarding.tsx'
 import { installPluginControlsStyles } from '../client/plugin-controls-styles.ts'
 import './onboarding.css'
-
-const whaleArtwork = new URL('../../build/app-icon.icon/Assets/DeepSeek.svg?no-inline', import.meta.url).href
+import whaleArtwork from '../../build/app-icon.icon/Assets/DeepSeek.svg'
 // Reuse the portable device family artwork and composition from the AA landing page.
-const phoneArtwork = new URL('./assets/agents-anywhere-phone.webp', import.meta.url).href
-const tabletArtwork = new URL('./assets/agents-anywhere-tablet.webp', import.meta.url).href
+import phoneArtwork from './assets/agents-anywhere-phone.webp'
+import tabletArtwork from './assets/agents-anywhere-tablet.webp'
 type Market = 'none' | 'community' | 'dsh'
 // Keep official dialog dependencies out of recovery and the earlier setup pages.
 const DesktopPermissionsButton = lazy(() => import('../client/permissions.tsx').then(module => ({ default: module.DesktopPermissionsButton })))
 
-export function Onboarding({ state, locale, bridge }: { state: DesktopState; locale: 'zh' | 'en'; bridge: DesktopBridge }) {
+export function Onboarding({ state, locale, bridge, renderNavigation, embedded = false }: { state: Pick<DesktopState, 'selected' | 'features' | 'onboardingComputerUse'>; locale: 'zh' | 'en'; bridge: Pick<DesktopBridge, 'command' | 'permissions'>; renderNavigation: SetupNavigation; embedded?: boolean }) {
   const t = (zh: string, en: string) => locale === 'zh' ? zh : en
   const [page, setPage] = useState(0)
   const [direction, setDirection] = useState(1)
@@ -92,11 +92,11 @@ export function Onboarding({ state, locale, bridge }: { state: DesktopState; loc
     { value: 'none', title: t('暂不开启', 'Not now'), detail: t('以后可以在插件页面开启。', 'Enable a market later in Plugins.') },
   ]
 
-  return <><DesktopFrame /><div className="next-onboarding dshNativeContent" lang={locale}>
-    <nav className="next-onboarding-nav" aria-label={t('引导导航', 'Setup navigation')}>
-      <div>{page > 0 && <Button variant="ghost" disabled={disabled} onClick={() => void navigate(page - 1)}><ArrowLeft />{t('上一步', 'Back')}</Button>}</div>
-      <Button variant="ghost" disabled={disabled} onClick={() => void finish(true)}>{t('跳过全部', 'Skip all')}</Button>
-    </nav>
+  return <>{embedded ? null : <DesktopFrame />}<div className="next-onboarding dshNativeContent" lang={locale}>
+    <header className="next-onboarding-progress">
+      <ol aria-label={t('引导进度', 'Setup progress')}>{steps.map((step, index) => <li key={step} aria-current={index === page ? 'step' : undefined}><span className="sr-only">{step}</span></li>)}</ol>
+      <span>{page + 1} / {steps.length}</span>
+    </header>
     <main className="next-onboarding-main" aria-busy={busy}>
       <div key={page} ref={slide} className="next-onboarding-slide" data-page={page} style={{ '--entry-x': `${direction * 22}px` } as CSSProperties}>
         <section className="next-onboarding-copy" aria-labelledby="onboarding-title">
@@ -112,12 +112,12 @@ export function Onboarding({ state, locale, bridge }: { state: DesktopState; loc
               <label htmlFor="onboarding-computer-use">{t('启用 Computer Use', 'Enable Computer Use')}</label>
               <div className="next-onboarding-option-actions">
                 <Suspense fallback={<span className="next-onboarding-permissions-loading" aria-hidden="true"><LoaderCircle className="animate-spin" /></span>}>
-                  <DesktopPermissionsButton service={bridge.permissions} language={locale} iconOnly disabled={disabled} />
+                  <DesktopPermissionsButton service={bridge.permissions} language={locale} label={t('权限设置', 'Permission settings')} disabled={disabled} />
                 </Suspense>
                 <Switch id="onboarding-computer-use" checked={computerUse} disabled={disabled} onCheckedChange={setComputerUse} />
               </div>
             </div>
-            <p>{t('通过齿轮设置系统权限，也可以稍后在插件页面调整。', 'Use the gear to manage system permissions. You can also change these settings later in Plugins.')}</p>
+            <p>{t('通过“权限设置”管理系统权限，也可以稍后在插件页面调整。', 'Manage system permissions in “Permission settings”. You can also change these settings later in Plugins.')}</p>
           </div>}
         </section>
         <aside className="next-onboarding-panel next-onboarding-reveal" aria-label={steps[page]}>
@@ -146,7 +146,7 @@ export function Onboarding({ state, locale, bridge }: { state: DesktopState; loc
             <figcaption><span><Scan />{t('查看', 'See')}</span><span><MousePointer2 />{t('点击', 'Click')}</span><span><Keyboard />{t('输入', 'Type')}</span></figcaption>
           </figure>}
           {page === 4 && <div className="next-onboarding-recovery">
-            <LifeBuoy aria-hidden="true" />
+            <h2 className="next-onboarding-recovery-title"><LifeBuoy aria-hidden="true" />{t('恢复助手', 'Recovery Assistant')}</h2>
             <ol>
               <li><strong>{t('打开恢复助手', 'Open the recovery assistant')}</strong><p>{t('托盘菜单 → 恢复助手。也可以在设置的“重启”菜单中选择进入恢复模式。', 'Choose Recovery Assistant in the tray menu, or restart into recovery from the Restart menu in Settings.')}</p></li>
               <li><strong>{t('选择恢复方式', 'Choose a recovery option')}</strong><p>{t('尝试临时安全模式、修复 Profile，或回滚到最近成功启动的配置。', 'Try temporary safe mode, repair the Profile, or restore its last successful-start configuration.')}</p></li>
@@ -162,9 +162,8 @@ export function Onboarding({ state, locale, bridge }: { state: DesktopState; loc
       </div>
       {failure && <Alert variant="destructive" className="next-onboarding-error"><AlertDescription>{failure}</AlertDescription></Alert>}
     </main>
-    <footer className="next-onboarding-footer">
-      <ol aria-label={t('引导进度', 'Setup progress')}>{steps.map((step, index) => <li key={step} aria-current={index === page ? 'step' : undefined}><span className="sr-only">{step}</span></li>)}</ol>
-      <span>{page + 1} / {steps.length}</span>
-    </footer>
+    <nav className="next-onboarding-nav" aria-label={t('引导导航', 'Setup navigation')}>
+      {renderNavigation({ busy: disabled, onBack: page > 0 ? () => void navigate(page - 1) : undefined, onSkip: () => void finish(true) })}
+    </nav>
   </div></>
 }

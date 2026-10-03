@@ -1,0 +1,49 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1020,6 +1020,10 @@
+ * @returns Detached ordered patches; this function does not update the Loader.
+ */
+ function readProfilePatches(binName, context, initialProfile) {
++	// Embedded launchers own their filtered bundle graph and final platform overlays.
++	// A pending patch document still has to reach them: the config editor composes
++	// its edit before persisting it, and judges the write against that composition.
++	if (context.readPatches !== void 0) return structuredClone(context.readPatches(initialProfile?.patches));
+ 	const profile = initialProfile ?? loadProfileDirectory(binName, context.dir, context.installAnchor, { userLayer: false });
+ 	const patches = structuredClone([
+ 		...profile.layers.flatMap((layer) => layer.patches),
+@@ -2012,10 +2016,15 @@
+ function manifestOf(ctx, name, parentURL) {
+ 	if (name.startsWith("cordis:")) return void 0;
+ 	const specifier = name.startsWith("#") ? resolvePluginResource(name, parentURL) : name;
++	const bare = barePackageName(specifier);
++	const resolveManifest = ctx.get("profileContext")?.resolvePackageManifest;
++	if (bare !== void 0 && resolveManifest !== void 0) {
++		const filename = resolveManifest(bare);
++		return filename === void 0 ? void 0 : readManifest(filename);
++	}
+ 	const packages = ctx.get("pluginPackages");
+ 	const pkg = packages?.packageOf(specifier, parentURL);
+ 	if (pkg !== void 0) return readManifest(pkg.manifestPath);
+-	const bare = barePackageName(specifier);
+ 	if (bare !== void 0 && packages === void 0) for (const path of createRequire(parentURL).resolve.paths(bare)) {
+ 		const filename = join(path, bare, "package.json");
+ 		if (existsSync(filename)) return readManifest(filename);
+diff --git a/lib/types/profile-context.d.ts b/lib/types/profile-context.d.ts
+--- a/lib/types/profile-context.d.ts
++++ b/lib/types/profile-context.d.ts
+@@ -8,6 +8,14 @@
+ }
+ /** Current profile facts; scheduling and mutation belong to their callers. */
+ export interface ProfileContext {
++    /** Embedded launcher's authoritative package selection for compatibility preflight. */
++    readonly resolvePackageManifest?: (packageName: string) => string | undefined;
++    /**
++     * Embedded launcher composition, shared by management operations and HMR.
++     * @param profilePatches Pending profile patch document to compose instead of
++     * the one on disk; omitted by callers that have not staged an edit.
++     */
++    readonly readPatches?: (profilePatches?: readonly PatchOptions[]) => readonly PatchOptions[];
+     readonly name: string;
+     /** Packaged applications supply their bundled runtime instead of a PATH executable. */
+     readonly packageManager?: ProfilePnpmInvocation;

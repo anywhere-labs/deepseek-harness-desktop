@@ -1,0 +1,14 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -954,6 +954,10 @@
+ 			if (settled) return await result.promise;
+ 			if (confined !== void 0) sandbox.enforcement = confined.enforcement;
+ 			const env = Object.fromEntries(Object.keys(process.env).filter((key) => !STARTUP_ENVIRONMENT_NAMES.has(key.toUpperCase()) && key.toUpperCase() !== "ELECTRON_RUN_AS_NODE").map((key) => [key, void 0]));
++			// DSH Desktop Beta runs the Host as an Electron utility process, which cannot carry Electron's
++			// Node-mode selector, so there is nothing to inherit. Set it for this child alone; the bootstrap
++			// removes it before evaluating model code.
++			if (process.versions.electron !== void 0) env.ELECTRON_RUN_AS_NODE = "1";
+ 			if (packaged) {
+ 				env.DSH_PTC_RUNTIME_NODE = "1";
+ 				env.NODE_OPTIONS = heapFlag;

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { readDataDirectory, validateDataDirectory } from '../src/data-directory.ts'
+import { defaultDataDirectory, readDataDirectory, validateDataDirectory } from '../src/data-directory.ts'
 import { NextProfiles } from '../src/profiles.ts'
 
 const homes: string[] = []
@@ -16,6 +16,15 @@ it('retains a chosen data location across launches and reports malformed locatio
   expect(readDataDirectory(original)).toEqual({ home: selected })
   writeFileSync(join(original, 'desktop-next-location.json'), '{broken')
   expect(readDataDirectory(original)).toMatchObject({ home: original, error: expect.any(String) })
+})
+
+it('defaults to the shared user home while retaining the old Next-owned location preference', () => {
+  const user = home(), locationRoot = home(), selected = home()
+  const shared = join(user, '.dsh')
+  expect(defaultDataDirectory(user)).toBe(shared)
+  expect(readDataDirectory(shared, locationRoot)).toEqual({ home: shared })
+  writeFileSync(join(locationRoot, 'desktop-next-location.json'), JSON.stringify({ home: selected }))
+  expect(readDataDirectory(shared, locationRoot)).toEqual({ home: selected })
 })
 
 it('accepts empty or Next directories, rejecting unrelated and nested data directories', () => {

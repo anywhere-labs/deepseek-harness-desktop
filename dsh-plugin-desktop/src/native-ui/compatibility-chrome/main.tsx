@@ -47,7 +47,7 @@ export function Chrome() {
       open: () => invoke('remote-control'),
     } } : {})}
     t={key => copy[key]}
-    environment={{ ...state, material: state.material === 'off' ? 'off' : state.platform === 'darwin' ? 'transparent' : 'mica', micaSupported: state.material === 'mica' }}
+    environment={{ ...state, material: state.material !== 'off' && state.platform === 'darwin' ? 'transparent' : 'off' }}
     setMode={mode => mode === state.mode ? Promise.resolve() : invoke(`mode-${mode}`)}
   />
 }

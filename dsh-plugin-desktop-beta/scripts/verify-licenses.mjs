@@ -29,6 +29,7 @@ const ALLOWED_LICENSES = new Set([
   'Unlicense',
   'MPL-2.0',
   'CC0-1.0',
+  '(MIT OR CC0-1.0)',
   'Zlib',
   'Python-2.0',
 ])

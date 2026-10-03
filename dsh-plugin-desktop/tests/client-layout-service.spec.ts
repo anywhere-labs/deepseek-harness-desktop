@@ -53,6 +53,7 @@ function stubDocument() {
 
 function makeCtx() {
   return {
+    inject: vi.fn(),
     reflect: { provide: vi.fn(), get: vi.fn() },
     // Cordis runs effect factories eagerly during the apply walk — mirror
     // that here so registration assertions observe real calls.
@@ -85,6 +86,7 @@ describe('installDesktopLayout', () => {
     const { hooks: { panelInfo } } = ctx.slots.provideRoot.mock.calls[0]![0] as {
       hooks: { panelInfo: { getSnapshot(): unknown; subscribe(fn: () => void): () => void } }
     }
+    expect(panelInfo).toBe(layout.panelInfo)
     const changed = vi.fn()
     const stop = panelInfo.subscribe(changed)
     layout.selectPanel('files' as MainPanelId)
@@ -108,6 +110,32 @@ describe('installDesktopLayout', () => {
     expect(ctx.slots.subscribe.mock.results[0]!.value).toHaveBeenCalledOnce()
   })
 
+  it('registers the official sidebar command after services arrive and disposes it', () => {
+    const ctx = makeCtx()
+    const layout = new DesktopLayoutState()
+    installDesktopLayout(ctx as never, layout)
+    expect(ctx.inject).toHaveBeenCalledWith(['shortcuts', 'locale'], expect.any(Function))
+    const releaseLabels = vi.fn()
+    const releaseCommand = vi.fn()
+    const scope = {
+      effect: vi.fn((factory: () => unknown) => factory()),
+      locale: { register: vi.fn(() => releaseLabels), bind: vi.fn(() => () => 'Toggle left sidebar') },
+      shortcuts: { register: vi.fn((_command: unknown) => releaseCommand) },
+    }
+    ctx.inject.mock.calls[0]![1](scope)
+    const command = scope.shortcuts.register.mock.calls[0]![0] as {
+      id: string; resolve(): { status: string; run(): void }
+    }
+    expect(command.id).toBe('sidebar.left.toggle')
+    const before = layout.getSnapshot().sidebar
+    expect(command.resolve().status).toBe('handled')
+    command.resolve().run()
+    expect(layout.getSnapshot().sidebar).not.toBe(before)
+    for (const result of scope.effect.mock.results) (result.value as () => void)()
+    expect(releaseLabels).toHaveBeenCalledOnce()
+    expect(releaseCommand).toHaveBeenCalledOnce()
+  })
+
   it('rejects a layout already selected by another entry', () => {
     const ctx = makeCtx()
     ctx.reflect.get.mockReturnValue({ owner: 'third-party-layout' })
@@ -128,7 +156,7 @@ describe('installDesktopLayout', () => {
 })
 
 function environmentFor(mode: 'advanced' | 'extended') {
-  return { mode, platform: 'win32', material: 'off', micaSupported: false, version: '2.0.2' }
+  return { mode, platform: 'win32', material: 'off', version: '2.0.2' }
 }
 
 describe('applyAdvancedShell presentation ownership', () => {

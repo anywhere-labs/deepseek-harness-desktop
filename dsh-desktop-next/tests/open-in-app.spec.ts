@@ -8,7 +8,7 @@ import * as OpenInApp from '@deepseek-ai/dsh-host-open-in-app'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const fixture = vi.hoisted(() => ({
-  platform: 'darwin', spawn: vi.fn(), exitCode: 0,
+  platform: 'darwin', spawn: vi.fn(), execFile: vi.fn(), exitCode: 0,
   directories: new Set<string>(), files: new Set<string>(),
 }))
 const workspace = '/fixture/workspace with spaces 中文'
@@ -19,7 +19,12 @@ const missing = () => Object.assign(new Error('Fixture path is absent'), { code:
 vi.mock('node:os', async importOriginal => ({
   ...await importOriginal<typeof import('node:os')>(), platform: () => fixture.platform,
 }))
-vi.mock('node:child_process', () => ({ spawn: fixture.spawn }))
+vi.mock('node:path', async importOriginal => {
+  const original = await importOriginal<typeof import('node:path')>()
+  return { ...original, isAbsolute: (path: string) => fixture.platform === 'win32'
+    ? original.win32.isAbsolute(path) : original.isAbsolute(path) }
+})
+vi.mock('node:child_process', () => ({ spawn: fixture.spawn, execFile: fixture.execFile }))
 vi.mock('node:fs/promises', async importOriginal => ({
   ...await importOriginal<typeof import('node:fs/promises')>(),
   stat: async (path: string) => {
@@ -35,10 +40,10 @@ vi.mock('node:fs/promises', async importOriginal => ({
 }))
 vi.mock('@deepseek-ai/dsh-native-command', async importOriginal => ({
   canOpenNativePath: () => true,
-  openNativePath: async () => { throw new Error('This test must only use the captured editor launcher') },
-  runNativeCommand: async () => { throw missing() },
+  openNativePath: (await importOriginal<typeof import('@deepseek-ai/dsh-native-command')>()).openNativePath,
+  runNativeCommand: (await importOriginal<typeof import('@deepseek-ai/dsh-native-command')>()).runNativeCommand,
   // dsh 0.1.7 resolves Linux desktop entries through this helper. It is pure path
-  // arithmetic, so the real one is used while every command-running export stays stubbed.
+  // arithmetic, so the real one is used alongside the captured command boundary.
   desktopDataDirectories: (await importOriginal<typeof import('@deepseek-ai/dsh-native-command')>()).desktopDataDirectories,
 }))
 
@@ -46,6 +51,9 @@ beforeEach(() => {
   fixture.directories.clear(); fixture.files.clear()
   fixture.directories.add(workspace)
   fixture.platform = 'darwin'; fixture.exitCode = 0
+  fixture.execFile.mockReset().mockImplementation((_command, _args, _options, callback) => {
+    callback(null, '', '')
+  })
   fixture.spawn.mockReset().mockImplementation(() => {
     const child = Object.assign(new EventEmitter(), { unref: vi.fn() })
     queueMicrotask(() => child.emit('exit', fixture.exitCode, null))
@@ -72,8 +80,8 @@ function routes() {
     } },
   }
   OpenInApp.apply(ctx as unknown as Context, { probeTimeoutMs: 100, iconTimeoutMs: 100, launchWatchMs: 100 })
-  return async (app: string) => {
-    const request = Object.assign(Readable.from([Buffer.from(JSON.stringify({ app, path: workspace }))]), {
+  return async (app: string, path = workspace) => {
+    const request = Object.assign(Readable.from([Buffer.from(JSON.stringify({ app, path }))]), {
       method: 'POST', headers: { 'content-type': 'application/json' }, url: '/open-in-app/open',
     })
     const response = { statusCode: 0, body: '', setHeader() {}, end(body: string) { this.body = body } }
@@ -127,4 +135,16 @@ it('keeps launch failures visible to the official frontend', async () => {
   const result = await routes()('vscode')
   expect(result.statusCode).toBe(502)
   expect(JSON.parse(result.body).code).toBe('launch-failed')
+})
+
+it('opens Explorer through the official route with a visible window', async () => {
+  fixture.platform = 'win32'
+  const path = 'C:\\项目 workspace\\repo'
+  fixture.directories.add(path.replaceAll('\\', '/'))
+  const result = await routes()('explorer', path)
+  expect(result.statusCode).toBe(200)
+  expect(JSON.parse(result.body)).toEqual({ ok: true })
+  expect(fixture.spawn).not.toHaveBeenCalled()
+  expect(fixture.execFile).toHaveBeenCalledWith('explorer.exe', ['file:///C:/项目%20workspace/repo'],
+    expect.objectContaining({ windowsHide: false }), expect.any(Function))
 })

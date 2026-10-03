@@ -1,7 +1,8 @@
 diff --git a/lib/client.js b/lib/client.js
+index 0009669..358f692 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -16207,11 +16207,15 @@
+@@ -16218,11 +16218,15 @@ window.__ModuleLoader__.load({
  			const blank = session === void 0 || conversation === void 0 || session.blank && conversationPhase(session, conversation) === "blank";
  			return (0, react_jsx_runtime.jsxs)("header", {
  				className: clsx(ConversationRoot_module_css_default.header, blank && ConversationRoot_module_css_default.headerBlank, sessionId === void 0 && ConversationRoot_module_css_default.headerSessionless),
@@ -18,7 +19,7 @@ diff --git a/lib/client.js b/lib/client.js
  			});
  		}
  		/**
-@@ -16299,6 +16303,7 @@
+@@ -16310,6 +16314,7 @@ window.__ModuleLoader__.load({
  			const showTabs = !hideChrome && tabs.length > 1;
  			return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsxs)("div", {
  				className: ConversationRoot_module_css_default.titleRow,
@@ -26,42 +27,3 @@ diff --git a/lib/client.js b/lib/client.js
  				children: [!hideChrome && (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsxs)("div", {
  					className: ConversationRoot_module_css_default.titleCluster,
  					children: [(0, react_jsx_runtime.jsxs)("nav", {
-@@ -16572,7 +16577,7 @@
- 					return true;
- 				}
- 				event.preventDefault();
--				handlers.pasteText(text);
-+				handlers.pasteText(text, Array.from(clipboardData.items).some((item) => item.kind === "file"));
- 				return true;
- 			}, 4));
- 		}
-@@ -16679,9 +16684,9 @@
- 				intakeFiles: (files, directories) => {
- 					gate.current.intakeFiles(files, directories);
- 				},
--				pasteText: (text) => {
-+				pasteText: (text, hasClipboardFiles) => {
- 					if (gate.current.machineBusy || gate.current.locked) return;
--					keyboard.paste(text);
-+					if (!hasClipboardFiles && gate.current.canAcceptDrop && gate.current.addFiles && window.__DSH_DESKTOP_PASTED_TEXT_FILE__?.(text, gate.current.addFiles)) return; keyboard.paste(text);
- 				}
- 			});
- 		}
-@@ -17194,7 +17199,7 @@
- 				running,
- 				steeringAvailable,
- 				busyEnter,
--				intakeFiles,
-+				addFiles, intakeFiles,
- 				uploadsPending,
- 				showToast,
- 				t,
-@@ -17207,7 +17212,7 @@
- 				running,
- 				steeringAvailable,
- 				busyEnter,
--				intakeFiles,
-+				addFiles, intakeFiles,
- 				uploadsPending,
- 				showToast,
- 				t,

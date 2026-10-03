@@ -1,0 +1,24 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -19,7 +19,7 @@
+ 	execFile(command, [...args], {
+ 		encoding: "utf8",
+ 		signal,
+-		windowsHide: true
++		windowsHide: !/(?:^|[\\/])explorer\.exe$/i.test(command)
+ 	}, (error, stdout, stderr) => {
+ 		if (error !== null) {
+ 			reject(Object.assign(new Error(error.message, { cause: error }), {
+diff --git a/lib/types/runner.js b/lib/types/runner.js
+--- a/lib/types/runner.js
++++ b/lib/types/runner.js
+@@ -11,7 +11,7 @@
+  * @returns captured stdout/stderr on exit 0.
+  */
+ export const runNativeCommand = (command, args, signal) => new Promise((resolve, reject) => {
+-    execFile(command, [...args], { encoding: 'utf8', signal, windowsHide: true }, (error, stdout, stderr) => {
++    execFile(command, [...args], { encoding: 'utf8', signal, windowsHide: !/(?:^|[\\/])explorer\.exe$/i.test(command) }, (error, stdout, stderr) => {
+         if (error !== null) {
+             const failure = Object.assign(new Error(error.message, { cause: error }), {
+                 code: error.code,

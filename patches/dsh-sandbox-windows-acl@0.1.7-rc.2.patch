@@ -1,0 +1,56 @@
+diff --git a/lib/types-DxezulnA.js b/lib/types-DxezulnA.js
+--- a/lib/types-DxezulnA.js
++++ b/lib/types-DxezulnA.js
+@@ -585,6 +585,52 @@
+ * @param worldSidPtr - the Everyone SID the ambient-delete deny names.
+ */
+ function grantWrite(api, path, sidPtr, lowLabelSidPtr, worldSidPtr) {
++	try {
++		grantWriteOnce(api, path, sidPtr, lowLabelSidPtr, worldSidPtr);
++	} catch (error) {
++		// DSH Desktop: a workspace on a non-system drive such as D: usually
++		// inherits only Modify for Authenticated Users, so even its owner lacks
++		// WRITE_OWNER and the label write fails with ERROR_ACCESS_DENIED. The
++		// owner's implicit WRITE_DAC lets it grant itself WRITE_OWNER (which a
++		// Full-control workspace already has), after which the grant is retried
++		// once. A directory the caller does not own still reports the original
++		// failure.
++		if (!(error instanceof Win32Error) || error.api !== "SetNamedSecurityInfoW" || error.win32Code !== 5) throw error;
++		try {
++			grantOwnerWriteOwner(api, path);
++		} catch {
++			throw error;
++		}
++		grantWriteOnce(api, path, sidPtr, lowLabelSidPtr, worldSidPtr);
++	}
++}
++/**
++* DSH Desktop: add an inheritable WRITE_OWNER grant for the directory's
++* current owner through a DACL-only merge (owner-implicit WRITE_DAC is enough
++* for it), so the label write in {@link grantWriteOnce} is permitted on the
++* directory and on every child that inherits the entry.
++* @param api - the binding table.
++* @param path - the directory whose owner gains WRITE_OWNER.
++*/
++function grantOwnerWriteOwner(api, path) {
++	withPathLock(api, path, () => {
++		const ownerSlot = allocPtrSlot();
++		const groupSlot = allocPtrSlot();
++		const daclSlot = allocPtrSlot();
++		const saclSlot = allocPtrSlot();
++		const descriptorSlot = allocPtrSlot();
++		const readResult = api.getNamedSecurityInfoW(path, 1, 5, ownerSlot, groupSlot, daclSlot, saclSlot, descriptorSlot);
++		if (readResult !== 0) throwWin32(api, "GetNamedSecurityInfoW", readResult, `grantOwnerWriteOwner(${path})`);
++		const owner = decodePtr(ownerSlot);
++		const descriptor = decodePtr(descriptorSlot);
++		if (owner === null) {
++			if (descriptor !== null) api.localFree(descriptor);
++			throw new Win32Error("GetNamedSecurityInfoW", 1336, `grantOwnerWriteOwner(${path}): no owner`);
++		}
++		mergeAndApply(api, path, buildExplicitAccess(owner, 1, 524288), decodePtr(daclSlot), { kind: "keep" }, descriptor, "grantOwnerWriteOwner");
++	});
++}
++function grantWriteOnce(api, path, sidPtr, lowLabelSidPtr, worldSidPtr) {
+ 	withPathLock(api, path, () => {
+ 		const { oldAcl, labelAcl, descriptor } = readCurrentSecurity(api, path);
+ 		if (oldAcl !== null && labelAcl !== null && hasExactGrant(oldAcl, sidPtr) && hasExactDeny(oldAcl, worldSidPtr) && hasExactLabel(labelAcl, lowLabelSidPtr)) {

@@ -3,7 +3,7 @@ import { ipcRenderer } from 'electron'
 import { IPC } from './ipc.ts'
 export function syncWindowMaterial(): void {
   const apply = (value: unknown): void => {
-    if (value === 'off' || value === 'transparent' || value === 'mica') document.documentElement.dataset.nextMaterial = value
+    if (value === 'off' || value === 'transparent') document.documentElement.dataset.nextMaterial = value
   }
   const ready = (): void => {
     ipcRenderer.on(IPC.material, (_event, value: unknown) => apply(value))

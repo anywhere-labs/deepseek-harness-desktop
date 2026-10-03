@@ -206,7 +206,6 @@ function createHarness(
   })
   const runtime: DesktopRuntime = {
     platform,
-    windowsBuild: platform === 'win32' ? 22_631 : undefined,
     locale: 'en',
     updates: {
       isPackaged: false,
@@ -426,15 +425,13 @@ describe('desktop Host plugin', () => {
       'extended',
       'win32',
       '2.0.3',
-      'mica',
-      22_631,
+      'off',
     )).searchParams)).toEqual({
       'dsh-desktop-mode': 'extended',
       'dsh-desktop-platform': 'win32',
       'dsh-desktop-version': '2.0.3',
-      'dsh-desktop-material': 'mica',
+      'dsh-desktop-material': 'off',
       'dsh-desktop-titlebar-inset': '36',
-      'dsh-desktop-mica': '1',
     })
     expect(Object.fromEntries(new URL(desktopRendererUrl(
       43120,
@@ -648,6 +645,116 @@ describe('desktop Host plugin', () => {
     expect(harness.restart).toHaveBeenCalledOnce()
   })
 
+  it('saves first-run Setup through the settings scopes without its own native restart prompt', async () => {
+    vi.useFakeTimers()
+    const harness = createHarness('darwin')
+    apply(harness.ctx, harness.config)
+    harness.restart.mockImplementation(() => new Promise<void>(() => {}))
+    const notifications = {
+      enabled: true,
+      notifyOnTurnCompletion: false,
+      notifyOnTurnFailure: true,
+      notifyOnJobCompletion: false,
+      notifyOnJobFailure: true,
+      notifyOnScheduleCompletion: true,
+      notifyOnScheduleFailure: true,
+    }
+
+    await harness.shell()?.applySetupSettings?.({
+      mode: 'extended',
+      macosMaterial: 'off',
+      windowsMaterial: 'off',
+      openBrowser: false,
+      networkExposure: 'loopback',
+      notifications,
+    })
+
+    expect(harness.update).toHaveBeenCalledWith(DESKTOP_SETTINGS_ENTRY_ID, {
+      mode: 'extended',
+      macosMaterial: 'off',
+      windowsMaterial: 'off',
+      openBrowser: false,
+      networkExposure: 'loopback',
+    })
+    expect(harness.update).toHaveBeenCalledWith('desktop-notifications', notifications)
+
+    // Setup's continuation owns the restart that applies its own choice.
+    await harness.notify({ mode: 'extended', macosMaterial: 'off' })
+    await vi.runAllTimersAsync()
+    expect(harness.restart).not.toHaveBeenCalled()
+
+    // A later, different choice still asks for its own restart.
+    await harness.notify({ mode: 'advanced' })
+    await vi.runAllTimersAsync()
+    expect(harness.restart).toHaveBeenCalledOnce()
+  })
+
+  it('asks again when the user returns to the Setup mode after leaving it', async () => {
+    vi.useFakeTimers()
+    const harness = createHarness()
+    apply(harness.ctx, harness.config)
+    harness.restart.mockImplementation(() => new Promise<void>(() => {}))
+    // Only the notifications half fails; the saved mode keeps its own quiet restart.
+    harness.update.mockImplementation(async (id: unknown) => {
+      if (id === 'desktop-notifications') throw new Error('refused')
+    })
+
+    await expect(harness.shell()?.applySetupSettings?.({
+      mode: 'extended',
+      macosMaterial: 'transparent',
+      windowsMaterial: 'off',
+      openBrowser: false,
+      networkExposure: 'loopback',
+      notifications: {
+        enabled: false,
+        notifyOnTurnCompletion: false,
+        notifyOnTurnFailure: false,
+        notifyOnJobCompletion: false,
+        notifyOnJobFailure: false,
+        notifyOnScheduleCompletion: false,
+        notifyOnScheduleFailure: false,
+      },
+    })).rejects.toThrow('refused')
+    await harness.notify({ mode: 'extended' })
+    await vi.runAllTimersAsync()
+    expect(harness.restart).not.toHaveBeenCalled()
+
+    // Back to the running mode, then Setup's mode again from the mode picker.
+    await harness.notify({ mode: 'compatibility' })
+    await harness.notify({ mode: 'extended' })
+    await vi.runAllTimersAsync()
+    expect(harness.restart).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the restart prompt when first-run Setup could not save its choice', async () => {
+    vi.useFakeTimers()
+    const harness = createHarness()
+    apply(harness.ctx, harness.config)
+    harness.restart.mockImplementation(() => new Promise<void>(() => {}))
+    harness.update.mockRejectedValueOnce(new Error('refused'))
+
+    await expect(harness.shell()?.applySetupSettings?.({
+      mode: 'extended',
+      macosMaterial: 'transparent',
+      windowsMaterial: 'off',
+      openBrowser: false,
+      networkExposure: 'loopback',
+      notifications: {
+        enabled: false,
+        notifyOnTurnCompletion: false,
+        notifyOnTurnFailure: false,
+        notifyOnJobCompletion: false,
+        notifyOnJobFailure: false,
+        notifyOnScheduleCompletion: false,
+        notifyOnScheduleFailure: false,
+      },
+    })).rejects.toThrow('refused')
+
+    await harness.notify({ mode: 'extended' })
+    await vi.runAllTimersAsync()
+    expect(harness.restart).toHaveBeenCalledOnce()
+  })
+
   it('hot-applies browser and LAN access but restarts when a custom mode withdraws them', async () => {
     vi.useFakeTimers()
     const harness = createHarness()
@@ -685,14 +792,25 @@ describe('desktop Host plugin', () => {
 
   it('requests one orderly restart after the native material changes', async () => {
     vi.useFakeTimers()
-    const harness = createHarness('win32')
+    const harness = createHarness('darwin')
     apply(harness.ctx, harness.config)
 
     harness.restart.mockImplementation(() => new Promise<void>(() => {}))
-    await harness.notify({ windowsMaterial: 'mica' })
+    await harness.notify({ macosMaterial: 'off' })
     await vi.runAllTimersAsync()
 
     expect(harness.restart).toHaveBeenCalledOnce()
+  })
+
+  it('does not restart for a legacy Windows Mica value that still renders opaque', async () => {
+    vi.useFakeTimers()
+    const harness = createHarness('win32')
+    apply(harness.ctx, harness.config)
+
+    await harness.notify({ windowsMaterial: 'mica' })
+    await vi.runAllTimersAsync()
+
+    expect(harness.restart).not.toHaveBeenCalled()
   })
 
   it('projects live built-in theme changes into an advanced native material', () => {

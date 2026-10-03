@@ -8,13 +8,15 @@ export const DEFAULT_PROFILE = 'desktop'
 export type DesktopNotification =
   | { outcome: 'turn-completed'; userMessage: string; assistantMessage: string }
   | { outcome: 'turn-failed' }
+  | { outcome: 'schedule-completed' | 'schedule-failed' }
 export type NotificationOutcome = DesktopNotification['outcome']
 export type DesktopSettingsPage = 'general' | 'permissions'
 
 export interface DesktopPreferences {
   closeToTray: boolean
   macosMaterial: 'off' | 'transparent'
-  windowsMaterial: 'off' | 'mica'
+  /** Legacy key kept for the shared settings surface; Windows has no selectable material. */
+  windowsMaterial: 'off'
   /** Accepted for the shared settings surface; Linux still renders an opaque frame. */
   linuxMaterial: 'off' | 'transparent'
   browserAccess: boolean
@@ -28,12 +30,23 @@ export interface DesktopPreferences {
   /** Retained for old preference files and the shared settings adapter; always disabled in Next. */
   jobCompleted: boolean
   jobFailed: boolean
+  scheduleCompleted: boolean
+  scheduleFailed: boolean
 }
 
 export const DEFAULT_PREFERENCES: Readonly<DesktopPreferences> = Object.freeze({
   closeToTray: true, macosMaterial: 'transparent', windowsMaterial: 'off', linuxMaterial: 'off',
   browserAccess: false, networkExposure: 'loopback', port: 0, lanPort: 0, logLevel: 'info',
   notifications: true, turnCompleted: true, turnFailed: true, jobCompleted: false, jobFailed: false,
+  scheduleCompleted: true, scheduleFailed: true,
+})
+
+/** Fixed startup defaults matching Beta's disposable Safe Mode settings. */
+export const SAFE_MODE_PREFERENCES: Readonly<DesktopPreferences> = Object.freeze({
+  ...DEFAULT_PREFERENCES, macosMaterial: 'off', windowsMaterial: 'off', linuxMaterial: 'off',
+  browserAccess: false, networkExposure: 'loopback', port: 0, lanPort: 0, logLevel: 'info',
+  notifications: false, turnCompleted: false, turnFailed: false, jobCompleted: false, jobFailed: false,
+  scheduleCompleted: false, scheduleFailed: false,
 })
 
 export interface DesktopState {
@@ -46,9 +59,9 @@ export interface DesktopState {
   busy: boolean
   failure: string
   safeMode: boolean
-  /** The selected Profile is in setup (first run or reopened); no Host has started. */
+  /** The selected Profile needs Desktop setup in the running official client. */
   onboarding?: boolean
-  /** Initial saved choice for the Host-independent wizard; live state belongs to pluginManager. */
+  /** Initial saved choice for setup; live state belongs to pluginManager. */
   onboardingComputerUse?: boolean
   home: string
   platform: string
@@ -56,7 +69,6 @@ export interface DesktopState {
   updates?: import('./update-state.ts').NextUpdateState
   trayAvailable: boolean
   notificationsAvailable: boolean
-  windowsMicaSupported: boolean
   browserUrl: string | null
   lan: DesktopLanHttpsRuntimeSnapshot | null
   recovery?: {

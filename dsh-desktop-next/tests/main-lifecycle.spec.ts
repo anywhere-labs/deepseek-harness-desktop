@@ -1,9 +1,9 @@
 /** Native lifecycle contracts exercised without starting Electron or a Host. */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { DEFAULT_PREFERENCES } from '../src/desktop-contract.ts'
+import { DEFAULT_PREFERENCES, SAFE_MODE_PREFERENCES } from '../src/desktop-contract.ts'
 import type { NextDesktopRuntime } from '../src/desktop-runtime.ts'
 import { NextProfiles } from '../src/profiles.ts'
 import { NextRecovery } from '../src/recovery.ts'
@@ -16,6 +16,8 @@ const fixture = vi.hoisted(() => ({
   close: vi.fn(async () => {}), start: vi.fn(async () => {}), preferences: { closeToTray: true },
   phase: 'ready' as 'ready' | 'error',
   needsOnboarding: false, corruptProfile: false, restart: vi.fn(),
+  appPaths: new Map<string, string>(), lockPaths: [] as string[], ownsInstance: true,
+  runtimeOptions: undefined as ConstructorParameters<typeof NextDesktopRuntime>[0] | undefined,
   onPermission: undefined as ConstructorParameters<typeof NextDesktopRuntime>[0]['onPermission'],
 }))
 vi.mock('../src/desktop-runtime.ts', async () => { const { NextProfiles } = await import('../src/profiles.ts'); const { NextRecovery } = await import('../src/recovery.ts'); return { NextDesktopRuntime: class {
@@ -29,6 +31,7 @@ vi.mock('../src/desktop-runtime.ts', async () => { const { NextProfiles } = awai
   recovery: import('../src/recovery.ts').NextRecovery
   diagnostics = { append: fixture.diagnosticAppend, flush: vi.fn(), hostChunk: vi.fn() }
   constructor(options: ConstructorParameters<typeof NextDesktopRuntime>[0]) {
+    fixture.runtimeOptions = options
     fixture.preferences = this.preferences; fixture.onPermission = options.onPermission
     this.profiles = new NextProfiles(options.home)
     this.recovery = new NextRecovery(this.profiles)
@@ -36,10 +39,10 @@ vi.mock('../src/desktop-runtime.ts', async () => { const { NextProfiles } = awai
     if (!fixture.needsOnboarding) this.profiles.finishOnboarding('desktop')
     if (fixture.corruptProfile) writeFileSync(join(this.profiles.directory('desktop'), 'package.json'), '{broken')
   }
-  initialize() {}
+  initialize() { if (this.safeMode) Object.assign(this.preferences, SAFE_MODE_PREFERENCES) }
   start = fixture.start
   close = fixture.close
-  async restart(change: () => Promise<void>) { await change(); this.recoveryMode = false; await fixture.restart() }
+  async restart(change: () => Promise<void>) { await fixture.stop(); await change(); this.recoveryMode = false; await fixture.restart() }
   terminalTarget = fixture.terminalTarget
   browserLinks() { return { localUrl: null, lanUrls: [] } }
   state() { return { selected: 'desktop', profiles: ['desktop'], unavailableProfiles: [], features: fixture.corruptProfile ? { remoteControl: false, market: true } : this.profiles.features(this.selected),
@@ -58,15 +61,15 @@ vi.mock('../src/desktop-terminal.ts', async importOriginal => ({ ...await import
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
   const app = Object.assign(new EventEmitter(), {
-    setName() {}, setPath() {}, getLocale: () => 'en-US', getPreferredSystemLanguages: () => ['zh-Hans-CN', 'en-US'], isReady: () => true, whenReady: async () => {},
-    requestSingleInstanceLock: () => true, exit: vi.fn(), relaunch: vi.fn(), quit: vi.fn(() => app.emit('before-quit', { preventDefault() {} })),
+    setName() {}, setPath: (name: string, path: string) => fixture.appPaths.set(name, path), getPath: (name: string) => fixture.appPaths.get(name) ?? process.env.DSH_DESKTOP_NEXT_HOME, getLocale: () => 'en-US', getPreferredSystemLanguages: () => ['zh-Hans-CN', 'en-US'], isReady: () => true, whenReady: async () => {},
+    requestSingleInstanceLock: () => { fixture.lockPaths.push(fixture.appPaths.get('userData')!); return fixture.ownsInstance }, exit: vi.fn(), relaunch: vi.fn(), quit: vi.fn(() => app.emit('before-quit', { preventDefault() {} })),
   })
   class BrowserWindow extends EventEmitter {
     visible = false
     loadedUrls: string[] = []
     webContents = Object.assign(new EventEmitter(), { id: fixture.windows.length + 1,
       mainFrame: { url: '' }, getURL: () => this.webContents.mainFrame.url, setWindowOpenHandler() {}, send: vi.fn(), isDestroyed: () => false,
-      isFocused: () => true, executeJavaScript: vi.fn(async () => true) })
+      setIgnoreMenuShortcuts() {}, isFocused: () => true, executeJavaScript: vi.fn(async () => true) })
     constructor(readonly options: any) { super(); fixture.windows.push(this) }
     destroyed = false
     isDestroyed() { return this.destroyed }
@@ -102,27 +105,109 @@ vi.mock('electron', async () => {
     nativeImage: { createFromPath: () => ({ isEmpty: () => false, setTemplateImage() {} }) },
     Menu: { buildFromTemplate: (items: any) => items, setApplicationMenu() {} },
     protocol: { registerSchemesAsPrivileged() {}, handle() {} },
-    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionCheckHandler() {}, setPermissionRequestHandler() {}, setDisplayMediaRequestHandler() {} } },
+    session: { defaultSession: { webRequest: { onBeforeSendHeaders() {} }, setPermissionCheckHandler() {}, setPermissionRequestHandler() {}, setDisplayMediaRequestHandler() {}, on() {} } },
     systemPreferences: { getMediaAccessStatus: () => 'not-determined', askForMediaAccess: vi.fn(async () => false), isTrustedAccessibilityClient: () => false },
     desktopCapturer: { getSources: vi.fn(async () => []) },
-    ipcMain: { handle: (name: string, action: (...args: any[]) => any) => fixture.handlers.set(name, action), on: (name: string, action: (...args: any[]) => any) => fixture.handlers.set(name, action) },
+    ipcMain: { removeHandler: (name: string) => fixture.handlers.delete(name), handle: (name: string, action: (...args: any[]) => any) => fixture.handlers.set(name, action), on: (name: string, action: (...args: any[]) => any) => fixture.handlers.set(name, action) },
   }
 })
 
 beforeEach(async () => {
   vi.resetModules()
   fixture.windows.length = 0; fixture.trays.length = 0; fixture.handlers.clear()
+  fixture.appPaths.clear(); fixture.lockPaths.length = 0; fixture.ownsInstance = true; fixture.runtimeOptions = undefined
   fixture.phase = 'ready'
   fixture.needsOnboarding = false; fixture.corruptProfile = false; fixture.restart.mockReset()
   fixture.plugin.mockReset(); fixture.pluginDone.mockReset().mockResolvedValue({ exitCode: 0 });
   fixture.load.mockReset(); fixture.report.mockReset(); fixture.diagnosticAppend.mockReset();
   fixture.terminalTarget.mockReset(); fixture.openTerminal.mockClear();
-  fixture.stop.mockClear(); fixture.start.mockClear(); fixture.close.mockReset().mockResolvedValue(undefined)
+  fixture.stop.mockReset().mockResolvedValue(undefined); fixture.start.mockClear(); fixture.close.mockReset().mockResolvedValue(undefined)
   const { app, autoUpdater } = await import('electron')
   autoUpdater.removeAllListeners()
   app.removeAllListeners()
   vi.mocked(app.relaunch).mockClear()
   vi.mocked(app.quit).mockClear()
+  vi.mocked(app.exit).mockClear()
+})
+
+it('starts Safe Mode with fresh desktop and Chromium state while preserving normal state and its instance lock', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-safe-desktop-state-'))
+  const normalState = join(home, 'electron-user-data')
+  const safeState = join(normalState, 'safe-mode')
+  mkdirSync(safeState, { recursive: true })
+  const preferences = join(home, 'desktop-preferences.json')
+  writeFileSync(preferences, '{broken normal settings')
+  writeFileSync(join(normalState, 'normal-session'), 'keep normal session')
+  writeFileSync(join(safeState, 'previous-session'), 'discard previous safe session')
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  process.argv.push('--next-safe-mode')
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    expect(fixture.lockPaths).toEqual([normalState])
+    expect(fixture.appPaths.get('userData')).toBe(safeState)
+    expect(fixture.appPaths.get('sessionData')).toBe(safeState)
+    expect(fixture.runtimeOptions).toMatchObject({ home, stateHome: safeState })
+    expect(existsSync(join(safeState, 'previous-session'))).toBe(false)
+    expect(fixture.preferences).toEqual(SAFE_MODE_PREFERENCES)
+    expect(fixture.windows[0].options.transparent).not.toBe(true)
+    const window = fixture.windows[0]
+    const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    await expect(fixture.handlers.get('dsh-next:command')!(sender, { type: 'preferences', preferences: DEFAULT_PREFERENCES })).rejects.toThrow('固定')
+    expect(fixture.stop).not.toHaveBeenCalled()
+    const { app } = await import('electron')
+    app.quit()
+    await vi.waitFor(() => expect(existsSync(safeState)).toBe(false))
+    expect(readFileSync(preferences, 'utf8')).toBe('{broken normal settings')
+    expect(readFileSync(join(normalState, 'normal-session'), 'utf8')).toBe('keep normal session')
+  } finally {
+    process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
+  }
+})
+
+it.each([false, true])('does not create or reset safe desktop state owned by another instance (existing: %s)', async existing => {
+  const home = mkdtempSync(join(tmpdir(), 'next-safe-second-instance-'))
+  const safeState = join(home, 'electron-user-data', 'safe-mode')
+  if (existing) {
+    mkdirSync(safeState, { recursive: true })
+    writeFileSync(join(safeState, 'running-session'), 'keep running session')
+  }
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  process.argv.push('--next-safe-mode')
+  fixture.ownsInstance = false
+  try {
+    await import('../src/main.ts')
+    expect(fixture.windows).toHaveLength(0)
+    expect(fixture.start).not.toHaveBeenCalled()
+    expect(fixture.appPaths.get('userData')).toBe(join(home, 'electron-user-data'))
+    expect(existsSync(safeState)).toBe(existing)
+    if (existing) expect(readFileSync(join(safeState, 'running-session'), 'utf8')).toBe('keep running session')
+  } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
+
+it('preserves safe desktop state and blocks relaunch when final Host shutdown fails', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-safe-close-failure-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  process.argv.push('--next-safe-mode')
+  const logError = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    const window = fixture.windows[0]
+    const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    fixture.close.mockRejectedValueOnce(new Error('Host cannot close'))
+    await fixture.handlers.get('dsh-next:command')!(sender, { type: 'normal-mode' })
+    const { app } = await import('electron')
+    await vi.waitFor(() => expect(app.exit).toHaveBeenCalledWith(1))
+    expect(app.relaunch).not.toHaveBeenCalled()
+    expect(existsSync(join(home, 'electron-user-data', 'safe-mode'))).toBe(true)
+  } finally {
+    logError.mockRestore()
+    process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
+  }
 })
 
 it('captures scoped client errors with either Electron console-message signature without crashing on missing text', async () => {
@@ -143,16 +228,19 @@ it('captures scoped client errors with either Electron console-message signature
   }
 })
 
-it('stages an explicit update before hiding windows, and hands off only after the Host closes', async () => {
+it.each(['normal', '--next-safe-mode'])('stages an explicit update before hiding windows, and preserves its installer until handoff in %s', async mode => {
   const home = mkdtempSync(join(tmpdir(), 'next-install-update-'))
   vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  if (mode !== 'normal') process.argv.push(mode)
   let stageReady!: () => void
-  const stage = vi.fn(() => new Promise<void>(resolve => { stageReady = resolve }))
-  const launch = vi.fn(async () => {})
+  const stagedPath = () => join(fixture.appPaths.get('userData')!, 'staged-update')
+  const stage = vi.fn(() => new Promise<void>(resolve => { stageReady = () => { writeFileSync(stagedPath(), 'installer'); resolve() } }))
+  const launch = vi.fn(async () => { expect(readFileSync(stagedPath(), 'utf8')).toBe('installer') })
   vi.doMock('../src/update-installer.ts', () => ({ NextUpdateInstaller: class { stage = stage; launch = launch } }))
   vi.doMock('../src/updates.ts', () => ({ NextUpdates: class {
     constructor(private options: { install(): Promise<void> }) {}
-    snapshot() { return { phase: 'ready', version: '2.0.15-next.1', installable: true } }
+    snapshot() { return { phase: 'ready', version: '2.0.17-next.1', installable: true } }
     start() {}
     dispose = async () => {}
     install = () => this.options.install()
@@ -173,6 +261,7 @@ it('stages an explicit update before hiding windows, and hands off only after th
     await vi.waitFor(() => expect(launch).toHaveBeenCalledOnce())
   } finally {
     vi.doUnmock('../src/update-installer.ts'); vi.doUnmock('../src/updates.ts')
+    process.argv.splice(0, process.argv.length, ...argv)
     vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
   }
 })
@@ -297,6 +386,89 @@ it('boots recovery in the preferred OS language even when the app locale is Engl
   } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
 })
 
+it('retries safe-mode entry after background recovery cleanup failed', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-recovery-stop-retry-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    const window = fixture.windows[0]
+    const command = fixture.handlers.get('dsh-next:command')!
+    fixture.stop.mockRejectedValueOnce(new Error('Host did not exit'))
+    await command({ sender: window.webContents, senderFrame: window.webContents.mainFrame }, { type: 'controls', page: 'recovery' })
+    await vi.waitFor(() => expect(fixture.diagnosticAppend).toHaveBeenCalledWith('Error: Host did not exit', 'error'))
+    const controls = fixture.windows[1]
+    const sender = { sender: controls.webContents, senderFrame: controls.webContents.mainFrame }
+    await expect(command(sender, { type: 'safe-mode' })).resolves.toBeUndefined()
+    expect(fixture.stop).toHaveBeenCalledTimes(2)
+    expect(fixture.restart).not.toHaveBeenCalled()
+    const { app } = await import('electron')
+    await vi.waitFor(() => expect(app.relaunch).toHaveBeenCalledOnce())
+    expect(vi.mocked(app.relaunch).mock.calls[0]![0]!.args).toContain('--next-safe-mode')
+  } finally { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
+
+it('shares a failed safe-mode request and retries termination before changing modes', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-safe-mode-retry-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  process.argv.push('--next-recovery')
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    const controls = fixture.windows[0]
+    const sender = { sender: controls.webContents, senderFrame: controls.webContents.mainFrame }
+    const command = fixture.handlers.get('dsh-next:command')!
+    let rejectStop!: (error: Error) => void
+    fixture.stop.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectStop = reject }))
+    const requests = [command(sender, { type: 'safe-mode' }), command(sender, { type: 'safe-mode' })]
+    const results = Promise.allSettled(requests)
+    await vi.waitFor(() => expect(fixture.stop).toHaveBeenCalledOnce())
+    rejectStop(new Error('Host still running'))
+    expect(await results).toEqual([
+      { status: 'rejected', reason: new Error('Host still running') },
+      { status: 'rejected', reason: new Error('Host still running') },
+    ])
+    expect(fixture.handlers.get('dsh-next:state')!(sender).safeMode).toBe(false)
+    expect(fixture.restart).not.toHaveBeenCalled()
+    const { app } = await import('electron')
+    expect(app.relaunch).not.toHaveBeenCalled()
+    await expect(command(sender, { type: 'safe-mode' })).resolves.toBeUndefined()
+    expect(fixture.stop).toHaveBeenCalledTimes(2)
+    expect(fixture.restart).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(app.relaunch).toHaveBeenCalledOnce())
+    expect(vi.mocked(app.relaunch).mock.calls[0]![0]!.args).toContain('--next-safe-mode')
+  } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
+
+it('shares pending mode requests and allows a fresh relaunch request after cancellation', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-safe-mode-request-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  process.argv.push('--next-recovery')
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    const controls = fixture.windows[0]
+    const sender = { sender: controls.webContents, senderFrame: controls.webContents.mainFrame }
+    const command = fixture.handlers.get('dsh-next:command')!
+    const { app, dialog } = await import('electron')
+    vi.mocked(dialog.showMessageBox).mockClear()
+    let finishConfirmation!: (result: Electron.MessageBoxReturnValue) => void
+    vi.mocked(dialog.showMessageBox).mockImplementationOnce(() => new Promise(resolve => { finishConfirmation = resolve }))
+    const requests = [command(sender, { type: 'safe-mode' }), command(sender, { type: 'normal-mode' })]
+    expect(dialog.showMessageBox).toHaveBeenCalledOnce()
+    finishConfirmation({ response: 1, checkboxChecked: false })
+    await Promise.all(requests)
+    expect(fixture.stop).not.toHaveBeenCalled()
+    await command(sender, { type: 'safe-mode' })
+    await vi.waitFor(() => expect(app.relaunch).toHaveBeenCalledOnce())
+    expect(vi.mocked(app.relaunch).mock.calls[0]![0]!.args).toContain('--next-safe-mode')
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(2)
+    expect(fixture.restart).not.toHaveBeenCalled()
+  } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
+
 it('persists a Profile switch and relaunches the app only after hiding windows and closing its Host', async () => {
   const home = mkdtempSync(join(tmpdir(), 'next-profile-switch-'))
   vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
@@ -336,7 +508,7 @@ it('persists a Profile switch and relaunches the app only after hiding windows a
   } finally { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
 })
 
-it.each(['complete', 'skip'] as const)('shows first-run onboarding without a Host and saves before starting it on %s', async outcome => {
+it.each(['complete', 'skip'] as const)('continues first-run setup in the official app and saves before restarting on %s', async outcome => {
   const home = mkdtempSync(join(tmpdir(), 'next-onboarding-'))
   vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
   fixture.needsOnboarding = true
@@ -345,37 +517,29 @@ it.each(['complete', 'skip'] as const)('shows first-run onboarding without a Hos
     await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
     const window = fixture.windows[0]
     const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
-    const command = fixture.handlers.get('dsh-next:command')!
+    const setup = fixture.handlers.get('dsh-desktop:setup-onboarding')!
     const manager = new NextProfiles(home)
-    expect(window.webContents.mainFrame.url).toContain('locale=zh')
-    expect(window.webContents.mainFrame.url).toMatch(/#onboarding$/)
-    expect(fixture.start).not.toHaveBeenCalled()
-    fixture.trays[0].emit('click')
-    await command(sender, { type: 'controls' })
-    expect(window.loadedUrls).toHaveLength(1)
-    expect(fixture.handlers.get('dsh-next:state')!(sender).onboarding).toBe(true)
-    expect(fixture.handlers.get('dsh-next:state')!(sender).onboardingComputerUse).toBe(false)
-    await expect(command(sender, { type: 'onboarding-skip', profile: 'other' })).rejects.toThrow('unavailable')
-    await expect(command(sender, { type: 'onboarding-complete', profile: 'desktop', features: { market: true, dshMarket: true, remoteControl: true } })).rejects.toThrow('only one')
-    await expect(command(sender, { type: 'onboarding-complete', profile: 'desktop', features: { market: false, remoteControl: false }, computerUse: 'yes' })).rejects.toThrow('Computer Use')
+    expect(window.webContents.mainFrame.url).toBe('dsh-app://app/')
+    expect(fixture.start).toHaveBeenCalledOnce()
+    expect(await setup(sender, { action: 'read' })).toMatchObject({ required: true, edition: 'next', computerUse: false })
+    await expect(setup({ ...sender, senderFrame: { url: 'dsh-app://app/' } }, { action: 'read' })).rejects.toThrow()
+    await expect(setup(sender, { action: 'finish', profile: 'other' })).rejects.toThrow('unavailable')
+    await expect(setup(sender, { action: 'finish', profile: 'desktop', selection: { market: 'invalid', aaEnabled: false, computerUse: false } })).rejects.toThrow('Invalid setup choices')
     expect(manager.onboardingRequired('desktop')).toBe(true)
-    expect(fixture.start).not.toHaveBeenCalled()
-    expect(window.loadedUrls).toHaveLength(1)
-    fixture.start.mockImplementationOnce(async () => {
+    fixture.restart.mockImplementationOnce(async () => {
       expect(manager.onboardingRequired('desktop')).toBe(false)
       expect(manager.features('desktop')).toEqual(outcome === 'skip'
-        ? { market: true, remoteControl: false } : { market: false, dshMarket: true, remoteControl: true })
+        ? { market: false, remoteControl: false } : { market: false, dshMarket: true, remoteControl: true })
       expect(manager.computerUseEnabled('desktop')).toBe(outcome === 'complete')
-      expect(window.visible).toBe(false)
     })
-    await command(sender, outcome === 'skip' ? { type: 'onboarding-skip', profile: 'desktop' }
-      : { type: 'onboarding-complete', profile: 'desktop', features: { market: false, dshMarket: true, remoteControl: true }, computerUse: true })
-    expect(fixture.start).toHaveBeenCalledOnce()
-    expect(fixture.windows).toHaveLength(2)
-    expect(fixture.windows[1].webContents.mainFrame.url).toBe('dsh-app://app/')
-    const appSender = { sender: fixture.windows[1].webContents, senderFrame: fixture.windows[1].webContents.mainFrame }
-    await expect(command(appSender, { type: 'onboarding-skip', profile: 'desktop' })).rejects.toThrow('unavailable')
-    expect(fixture.start).toHaveBeenCalledOnce()
+    await setup(sender, { action: 'finish', profile: 'desktop', ...(outcome === 'complete' ? {
+      selection: { market: 'dsh-market', aaEnabled: true, computerUse: true },
+    } : {}) })
+    expect(fixture.restart).toHaveBeenCalledOnce()
+    expect(fixture.windows).toHaveLength(1)
+    expect(window.loadedUrls).toEqual(['dsh-app://app/', 'dsh-app://app/'])
+    expect(await setup(sender, { action: 'read' })).toMatchObject({ required: false })
+    await expect(setup(sender, { action: 'finish', profile: 'desktop' })).rejects.toThrow('unavailable')
   } finally { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
 })
 
@@ -429,26 +593,27 @@ it.each(['complete', 'skip', 'close'] as const)('reopens a completed Profile wit
     const window = fixture.windows[0]
     const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
     const command = fixture.handlers.get('dsh-next:command')!
-    expect(window.webContents.mainFrame.url).toMatch(/#onboarding$/)
-    expect(fixture.start).not.toHaveBeenCalled()
+    expect(window.webContents.mainFrame.url).toBe('dsh-app://app/')
+    expect(fixture.start).toHaveBeenCalledOnce()
     expect(fixture.handlers.get('dsh-next:state')!(sender)).toMatchObject({ onboarding: true, onboardingComputerUse: true, features })
     // Reopening is a launch mode, not a deletion of the completion record.
     expect(manager.onboardingRequired('desktop')).toBe(false)
     if (outcome === 'close') {
       window.close()
-      expect(fixture.start).not.toHaveBeenCalled()
+      expect(fixture.start).toHaveBeenCalledOnce()
     } else {
       await command(sender, outcome === 'skip' ? { type: 'onboarding-skip', profile: 'desktop' }
         : { type: 'onboarding-complete', profile: 'desktop', features: { market: true, remoteControl: false }, computerUse: false })
       expect(fixture.start).toHaveBeenCalledOnce()
-      expect(fixture.windows[1].webContents.mainFrame.url).toBe('dsh-app://app/')
+      expect(fixture.restart).toHaveBeenCalledOnce()
+      expect(window.loadedUrls).toEqual(['dsh-app://app/', 'dsh-app://app/'])
     }
     expect(manager.features('desktop')).toEqual(outcome === 'complete' ? { market: true, remoteControl: false } : features)
     expect(manager.computerUseEnabled('desktop')).toBe(outcome !== 'complete')
     expect(manager.onboardingRequired('desktop')).toBe(false)
     if (outcome !== 'close') {
       const { app } = await import('electron')
-      const main = fixture.windows[1]
+      const main = fixture.windows[0]
       await command({ sender: main.webContents, senderFrame: main.webContents.mainFrame }, { type: 'restart-app' })
       await vi.waitFor(() => expect(app.relaunch).toHaveBeenCalled())
       expect(vi.mocked(app.relaunch).mock.calls[0]![0]!.args).not.toContain('--next-onboarding')
@@ -509,8 +674,8 @@ it('does not mark an unfinished flow complete when its window closes', async () 
     const { app } = await import('electron')
     app.emit('activate')
     expect(fixture.windows).toHaveLength(2)
-    expect(fixture.windows[1].webContents.mainFrame.url).toMatch(/#onboarding$/)
-    expect(fixture.start).not.toHaveBeenCalled()
+    expect(fixture.windows[1].webContents.mainFrame.url).toBe('dsh-app://app/')
+    expect(fixture.start).toHaveBeenCalledOnce()
   } finally { vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
 })
 
@@ -601,29 +766,65 @@ it.each(['cancelled', 'retired', 'failed'] as const)('handles %s main-window nav
 })
 
 
-it('loads once when entering safe mode from recovery and reloads the existing window once when leaving', async () => {
+it.each([
+  ['--next-recovery', 'safe-mode'],
+  ['--next-safe-mode', 'normal-mode'],
+] as const)('relaunches instead of reloading the current process from %s via %s', async (mode, type) => {
   const home = mkdtempSync(join(tmpdir(), 'next-recovery-safe-navigation-'))
   vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
   const argv = [...process.argv]
-  process.argv.push('--next-recovery')
+  process.argv.push(mode)
   try {
     await import('../src/main.ts')
     await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
-    const recovery = fixture.windows[0]
-    const sender = { sender: recovery.webContents, senderFrame: recovery.webContents.mainFrame }
+    const initial = fixture.windows[0]
+    const sender = { sender: initial.webContents, senderFrame: initial.webContents.mainFrame }
     const command = fixture.handlers.get('dsh-next:command')!
-    await command(sender, { type: 'safe-mode' })
-    const main = fixture.windows[1]
-    expect(main.loadedUrls).toEqual(['dsh-app://app/'])
-    expect(recovery.destroyed).toBe(false)
-    await command(sender, { type: 'normal-mode' })
-    expect(fixture.windows).toHaveLength(2)
-    expect(main.loadedUrls).toEqual(['dsh-app://app/', 'dsh-app://app/'])
-    expect(recovery.destroyed).toBe(true)
+    const { app } = await import('electron')
+    const navigation = [...initial.loadedUrls]
+    let finishClose!: () => void
+    initial.visible = true
+    fixture.close.mockImplementationOnce(() => {
+      expect(initial.visible).toBe(false)
+      return new Promise<void>(resolve => { finishClose = resolve })
+    })
+    await command(sender, { type })
+    expect(fixture.windows).toHaveLength(1)
+    expect(initial.loadedUrls).toEqual(navigation)
+    expect(fixture.restart).not.toHaveBeenCalled()
+    expect(app.relaunch).not.toHaveBeenCalled()
+    finishClose()
+    await vi.waitFor(() => expect(app.relaunch).toHaveBeenCalledOnce())
+    const args = vi.mocked(app.relaunch).mock.calls[0]![0]!.args!
+    expect(args.includes('--next-safe-mode')).toBe(type === 'safe-mode')
+    expect(args).not.toContain('--next-recovery')
     expect(fixture.report).not.toHaveBeenCalled()
   } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
 })
 
+
+it.each([
+  ['restart', true],
+  ['recover', false],
+] as const)('relaunches Safe Mode via %s with the correct next startup mode', async (type, remainSafe) => {
+  const home = mkdtempSync(join(tmpdir(), 'next-safe-recovery-relaunch-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const argv = [...process.argv]
+  process.argv.push('--next-safe-mode')
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    const window = fixture.windows[0]
+    const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    await fixture.handlers.get('dsh-next:command')!(sender, { type })
+    const { app } = await import('electron')
+    await vi.waitFor(() => expect(app.relaunch).toHaveBeenCalledOnce())
+    expect(fixture.restart).not.toHaveBeenCalled()
+    expect(vi.mocked(app.relaunch).mock.calls[0]![0]!.args!.includes('--next-safe-mode')).toBe(remainSafe)
+    expect(existsSync(join(home, 'electron-user-data', 'safe-mode'))).toBe(false)
+    expect(new NextProfiles(home).selectable('desktop')).toBe(true)
+  } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
 
 it.each(['--next-safe-mode', '--next-recovery'])('restarts the whole app in normal mode from the recovery footer after %s', async mode => {
   const home = mkdtempSync(join(tmpdir(), 'next-recovery-footer-restart-'))

@@ -1,12 +1,13 @@
 /** Real Chromium -> Electron protocol -> native-only Host, run under Linux Xvfb in CI. */
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, protocol, session } from 'electron'
+import { app, BrowserWindow, dialog, protocol, session } from 'electron'
 import { NextDesktopRuntime } from '../lib/desktop-runtime.js'
 import { appRequestHeaders, forwardWebRequest } from '../lib/web-document.js'
+import { installAppDownloads } from '../lib/app-downloads.js'
 
 if (process.platform !== 'linux' || !process.env.DISPLAY) {
   console.error('Run this native protocol check on Linux under xvfb-run; use check:next for portable headless checks.')
@@ -81,6 +82,43 @@ async function verify() {
     assert.ok(observed.every(request => request.marked))
     console.log('Native protocol request metadata:', JSON.stringify(observed))
 
+    // `<a download>` bypasses webRequest, so Chromium's own item can only carry the gate's 403.
+    // The main process must replace it with an authenticated request and save the Host body.
+    stage = 'application route download'
+    const downloads = join(home, 'downloads')
+    mkdirSync(downloads)
+    const failures = []
+    const warnings = []
+    dialog.showSaveDialog = async (_owner, options) => ({ canceled: false, filePath: options.defaultPath })
+    dialog.showMessageBox = async (_owner, options) => { failures.push(options.detail); return { response: 0 } }
+    installAppDownloads(session.defaultSession, {
+      window: () => window, downloads: () => downloads, language: () => 'en', warn: error => { warnings.push(String(error)) },
+      forward: target => forwardWebRequest(new Request(target, { headers: { 'x-dsh-desktop-renderer': token } }), url, cookie, token),
+    })
+    const click = (path, name) => window.webContents.executeJavaScript(`(() => {
+      const anchor = document.createElement('a'); anchor.href = ${JSON.stringify(path)}; anchor.download = ${JSON.stringify(name)}; anchor.click()
+    })()`)
+    const until = async (ready, label) => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const value = ready()
+        if (value !== undefined) return value
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      throw new Error(`Timed out waiting for ${label}; failures: ${JSON.stringify(failures)}; warnings: ${JSON.stringify(warnings)}`)
+    }
+    await click('api/community-market/state', 'market-state.json')
+    const saved = await until(() => {
+      try { return JSON.parse(readFileSync(join(downloads, 'market-state.json'), 'utf8')) } catch { return undefined }
+    }, 'the downloaded Market state')
+    assert.equal(saved.builtIns[0].key, key)
+    await click('api/session.export?sessionId=verify-protocol-missing', 'dsh-session.zip')
+    const failure = await until(() => failures[0], 'the session export failure prompt')
+    assert.match(failure, /^Host responded with HTTP 404: session not found/u)
+    assert.equal(failures.length, 1)
+    assert.deepEqual(warnings, [`Error: ${failure}`])
+    assert.equal(readdirSync(downloads).length, 1)
+    console.log('Native download metadata:', JSON.stringify(observed.slice(-2)))
+
     // Same protocol, different origin; an opaque response must not cause a mutation.
     stage = 'foreign page rejection'
     await window.loadURL('dsh-app://shell/')
@@ -94,7 +132,7 @@ async function verify() {
     assert.equal(observed.at(-1).status, 403)
     await window.loadURL('dsh-app://app/')
     assert.equal((await call('state')).sources.some(source => source.builtInProviderKey === key), false)
-    console.log('Next native protocol check passed: renderer source mutations, owned-frame markers and foreign-page rejection.')
+    console.log('Next native protocol check passed: renderer source mutations, owned-frame markers, application downloads and foreign-page rejection.')
   } catch (error) {
     console.error(error)
     exitCode = 1

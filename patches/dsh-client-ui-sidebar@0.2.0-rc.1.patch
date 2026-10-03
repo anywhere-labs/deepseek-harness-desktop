@@ -1,0 +1,11 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -40,6 +40,7 @@
+ 			const newShortcut = useShortcuts((rows) => rows.find((row) => row.id === "session.new"));
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+ 				className: HeaderLeadingControls_module_css_default.controls,
++				"data-sidebar-header-controls": "",
+ 				children: [(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Tooltip, {
+ 					label: t("toggle.open"),
+ 					shortcutKeys: shortcut?.keys,

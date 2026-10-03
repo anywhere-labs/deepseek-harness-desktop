@@ -69,9 +69,8 @@ export function apply(ctx: ClientContext): void {
 interface DesktopWindowService {
   readonly mode: 'compatibility' | 'extended' | 'advanced'
   readonly platform: 'darwin' | 'win32' | 'linux'
-  readonly material: 'off' | 'transparent' | 'mica'
-  readonly micaSupported: boolean
-  readonly availableMaterials: readonly ('off' | 'transparent' | 'mica')[]
+  readonly material: 'off' | 'transparent'
+  readonly availableMaterials: readonly ('off' | 'transparent')[]
   readonly safeAreaInsets: {
     readonly top: number
     readonly right: number
@@ -86,7 +85,7 @@ interface DesktopWindowService {
 }
 ```
 
-All values remain fixed for one renderer generation, and geometry uses CSS pixels. `material` is the effective, capability-gated backdrop rather than merely the persisted preference. `availableMaterials` is `off/transparent` on macOS, `off` on Windows 10, and `off/mica` on Windows 11 build 22621 or newer. The removed legacy `acrylic` preference is read as `off` and migrated when the settings document is writable.
+All values remain fixed for one renderer generation, and geometry uses CSS pixels. `material` is the effective, capability-gated backdrop rather than merely the persisted preference. `availableMaterials` is `off/transparent` on macOS and `off` on Windows and Linux; Windows windows are always opaque. The removed legacy `acrylic` and `mica` preferences are read as `off`, and `acrylic` is also migrated when the settings document is writable.
 
 Compatibility and extended modes report the same 36-pixel top reservation and drag band on macOS and Windows; they exclude 80 pixels on the left for macOS traffic lights or 138 pixels on the right for Windows caption controls. Desktop shifts the complete official frame below this reservation in compatibility mode. Extended instead owns the root layout/sidebar surface and hosts the official sidebar, conversation, and details occupants below the same reservation, so ordinary occupants must not add it again. Linux compatibility keeps its ordinary native frame and therefore reports zero insets and a zero-height drag region. Advanced mode has independent compact geometry: macOS reports a 20-pixel content inset and 32-pixel drag band with an 80-pixel left exclusion, while Windows reports a 32-pixel content inset and drag band with a 138-pixel right exclusion.
 

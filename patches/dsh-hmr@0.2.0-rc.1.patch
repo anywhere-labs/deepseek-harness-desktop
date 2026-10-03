@@ -1,0 +1,21 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -314,7 +314,7 @@
+ 			super(ctx, "hmr");
+ 			this.config = config;
+ 			this.ownerContext = ctx;
+-			if (!this.ctx.loader.internal) throw new Error("--expose-internals is required for HMR service");
++			if (!this.ctx.loader.internal && config.root.length > 0) throw new Error("--expose-internals is required for module HMR");
+ 			this.internal = this.ctx.loader.internal;
+ 			this.baseDir = fileURLToPath(new URL(config.base || ".", ctx.baseUrl));
+ 		}
+@@ -375,6 +375,8 @@
+ 				for (const filename of patchFiles) await this.watchConfig(filename, () => refresh(false));
+ 				await this.watchConfig(manifestPath, () => refresh(true));
+ 			}
++			// A public-loader embedding can watch Profile config without module internals.
++			if (!this.internal) return;
+ 			const { loader } = this.ctx;
+ 			const { root, ignored } = this.config;
+ 			if (!this.config.base) this.ctx.logger.info("watching %o", root);

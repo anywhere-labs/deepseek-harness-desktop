@@ -88,7 +88,7 @@ const dshResolution = (name: string): unknown =>
 describe('published package surface', () => {
   it('keeps the private workspace version-neutral and versions the Beta package', () => {
     expect(workspaceManifest.version).toBeUndefined()
-    expect(manifest.version).toBe('2.0.14-beta.1')
+    expect(manifest.version).toBe('2.0.17-beta.1')
   })
 
   it('runs all desktop editions and community market typechecks from the root command', () => {
@@ -150,7 +150,7 @@ describe('published package surface', () => {
     expect(main).toContain('notifyDesktopSafeModeActive(runtime, electronLogger)')
     expect(main).toContain('safeModePaths !== undefined && DESKTOP_SAFE_MODE_DEFAULTS.settings.notifications.enabled')
     expect(main).toContain('const setupWizardState = safeModePaths === undefined')
-    expect(main).toContain('if (safeModePaths === undefined && desktopSetupWizardRequired(')
+    expect(main).toContain('let setupPending = safeModePaths === undefined')
     expect(main).toContain('const safeModeDefaults = DESKTOP_SAFE_MODE_DEFAULTS')
     expect(main).toContain('updateDesktopSetupWizardSettings(prepared.settingsDocument, safeModeDefaults.settings)')
     expect(main).toContain('selectDesktopMarketProvider(marketUserDataDir, safeModeDefaults.market)')
@@ -487,7 +487,7 @@ describe('published package surface', () => {
   })
 
   it('builds the browser client without Node process globals', () => {
-    const config = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
+    const config = readFileSync(new URL('vite.client.config.ts', packageRoot), 'utf8')
     const client = readFileSync(new URL('lib/client.js', packageRoot), 'utf8')
 
     expect(config).toContain("'process.env.NODE_ENV': JSON.stringify('production')")
@@ -666,47 +666,26 @@ describe('published package surface', () => {
     expect(main).toContain('dshVersion: currentDshVersion')
   })
 
-  it('finishes or skips per-Profile native setup before Host boot and the main window', () => {
+  it('contributes per-Profile setup to the live official client with restart-safe completion', () => {
     const main = readFileSync(new URL('src/main.ts', packageRoot), 'utf8')
-    const requestedRecovery = main.indexOf('if (recoveryModeRequested)')
     const prepare = main.indexOf('let prepared = prepareDesktopProfile(')
-    const setupState = main.indexOf('readDesktopSetupWizardState(', prepare)
-    const setupWindow = main.indexOf('new DesktopSetupWizardWindow({', setupState)
-    const usageHistory = main.indexOf('!hasDesktopProfileUsageHistory(releaseUserDataLocations, prepared.profile.dir, activeProfileName)', setupState)
-    expect(usageHistory).toBeGreaterThan(setupState)
-    expect(setupWindow).toBeGreaterThan(usageHistory)
-    const setupRun = main.indexOf('await setupWizardWindow.run()', setupWindow)
-    const skipBranch = main.indexOf("if (setupResult.action === 'skip')", setupRun)
-    const completeBranch = main.indexOf('} else {', skipBranch)
-    const profilePreferences = main.indexOf('profilePreferences = await writeDesktopProfilePreferences(', completeBranch)
-    const updateSettings = main.indexOf('await updateDesktopSetupWizardSettings(', profilePreferences)
-    const selectMarket = main.indexOf('await selectDesktopMarketProvider(', updateSettings)
-    const reprepare = main.indexOf('prepared = prepareDesktopProfile(', selectMarket)
-    const completeMarker = main.indexOf("'completed',", reprepare)
-    const installDsh = main.indexOf("const dshRuntime = process.platform === 'win32'", completeMarker)
-    const boot = main.indexOf('const ctx = await boot', installDsh)
-    const mount = main.indexOf('runtime.mountScheduled(),', boot)
-
-    expect(requestedRecovery).toBeGreaterThanOrEqual(0)
-    expect(prepare).toBeGreaterThan(requestedRecovery)
-    expect(setupState).toBeGreaterThan(prepare)
-    expect(setupWindow).toBeGreaterThan(setupState)
-    expect(setupRun).toBeGreaterThan(setupWindow)
-    expect(skipBranch).toBeGreaterThan(setupRun)
-    expect(main.slice(skipBranch, completeBranch)).toContain('aaEnabled: false')
-    expect(main.slice(skipBranch, completeBranch)).toContain('writeDesktopProfilePreferences(')
-    expect(profilePreferences).toBeGreaterThan(completeBranch)
-    expect(updateSettings).toBeGreaterThan(profilePreferences)
-    expect(selectMarket).toBeGreaterThan(updateSettings)
-    expect(reprepare).toBeGreaterThan(selectMarket)
-    expect(completeMarker).toBeGreaterThan(reprepare)
-    expect(installDsh).toBeGreaterThan(completeMarker)
-    expect(boot).toBeGreaterThan(installDsh)
-    expect(mount).toBeGreaterThan(boot)
-    expect(main).toContain("setupResult.action === 'quit'")
-    expect(main).toContain("setupResult.action === 'skip'")
-    expect(main).toContain("'skipped',")
-    expect(main).toContain('clearDesktopProfileUsageHistory(releaseUserDataLocations, profileDir)')
+    const pending = main.indexOf('await beginDesktopSetupWizard(', prepare)
+    const bridge = main.indexOf('runtime.setupOnboarding =', pending)
+    const persist = main.indexOf('profilePreferences = await writeDesktopProfilePreferences(', bridge)
+    const complete = main.indexOf('await completeOrSkipDesktopSetupWizard(', persist)
+    const boot = main.indexOf('const ctx = await boot', complete)
+    expect(pending).toBeGreaterThan(prepare)
+    expect(bridge).toBeGreaterThan(pending)
+    expect(persist).toBeGreaterThan(bridge)
+    expect(complete).toBeGreaterThan(persist)
+    expect(boot).toBeGreaterThan(complete)
+    expect(main).not.toContain('new DesktopSetupWizardWindow(')
+    expect(main).toContain('desktopSetupWizardPending(marketUserDataDir, prepared.profile.dir)')
+    expect(main).toContain('!hasDesktopProfileUsageHistory(releaseUserDataLocations, prepared.profile.dir, activeProfileName)')
+    expect(main).toContain("selection === undefined ? 'skipped' : 'completed'")
+    expect(main).toContain('profile !== activeProfileName || safeModePaths !== undefined')
+    const client = readFileSync(new URL('src/client/onboarding.tsx', packageRoot), 'utf8')
+    expect(client).toContain("ctx.slots.inject('onboarding.desktop.before'")
   })
 
   it('keeps active Profile preferences as the lazy source and serializes runtime mirrors', () => {
@@ -876,7 +855,7 @@ describe('published package surface', () => {
 
   it('fixes the installed application identity', () => {
     expect(workspaceManifest.version).toBeUndefined()
-    expect(manifest.version).toBe('2.0.14-beta.1')
+    expect(manifest.version).toBe('2.0.17-beta.1')
     expect(manifest.name).toBe('dsh-plugin-desktop-beta')
     expect(manifest.bin).toEqual({
       'dsh-desktop-beta': 'lib/bin.js',
@@ -1021,6 +1000,7 @@ describe('published package surface', () => {
       extendInfo: {
         CFBundleAllowMixedLocalizations: true,
         CFBundleDevelopmentRegion: 'en',
+        NSMicrophoneUsageDescription: 'DSH Desktop Beta uses the microphone for voice input.',
         CFBundleLocalizations: ['en', 'zh_CN'],
       },
       hardenedRuntime: true,
@@ -1398,9 +1378,11 @@ describe('published package surface', () => {
 
     expect(dshResolution('@deepseek-ai/dsh')).toContain(dshPatchPath)
     expect(lockfile).toContain(dshPatchPath)
-    expect(dshPatch).toContain('allowDesktopProfile')
-    expect(dshBin).toContain('allowDesktopProfile')
-    expect(dshBin).toMatch(/if \(!allowDesktopProfile\) rejectElectronProfile/u)
+    // Upstream only lets the installed carrier manage plugins; the patch also
+    // lets it boot the reserved Desktop profile.
+    expect(dshPatch).toContain('if (!manageDesktopProfile) rejectElectronProfile(program, profile)')
+    expect(dshBin).toMatch(/if \(!manageDesktopProfile\) rejectElectronProfile\(program, profile\)/u)
+    expect(dshBin).toMatch(/if \(!manageDesktopProfile\) rejectElectronProfile\(plugin, options\.profile\)/u)
   })
 
   it('hides official plugin-manager and general subprocess consoles on Windows', () => {

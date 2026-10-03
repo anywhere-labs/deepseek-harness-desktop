@@ -14,6 +14,10 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  beginDesktopSetupWizard,
+  desktopSetupWizardPending,
+  desktopSetupAccountPending,
+  dismissDesktopSetupAccount,
   clearDesktopSetupWizardState,
   completeOrSkipDesktopSetupWizard,
   desktopSetupWizardProfileHash,
@@ -26,6 +30,23 @@ import {
 } from '../src/setup-wizard-state.ts'
 
 const temporaryDirectories: string[] = []
+
+it('resumes the account choice after completion, independently for each Profile', async () => {
+  const root = temporaryDirectory('dsh-account-setup-')
+  const first = join(root, 'first'), second = join(root, 'second')
+  expect(desktopSetupAccountPending(root, first)).toBe(false)
+  await recordSetup(root, first, 'completed')
+  expect(desktopSetupAccountPending(root, first)).toBe(true)
+  expect(desktopSetupAccountPending(root, second)).toBe(false)
+  await recordSetup(root, second, 'skipped')
+  expect(desktopSetupAccountPending(root, second)).toBe(false)
+  dismissDesktopSetupAccount(root, first)
+  expect(desktopSetupAccountPending(root, first)).toBe(false)
+  expect(readDesktopSetupWizardState(root, first)?.outcome).toBe('completed')
+  await recordSetup(root, first, 'completed')
+  await clearDesktopSetupWizardState(root, first)
+  expect(desktopSetupAccountPending(root, first)).toBe(false)
+})
 const RECORDED_AT = '2026-08-28T04:05:06.789Z'
 const CURRENT_VERSIONS: DesktopSetupWizardVersions = Object.freeze({
   desktopVersion: '2.0.3',
@@ -65,6 +86,22 @@ function writeState(userData: string, profile: string, value: unknown): string {
 }
 
 describe('Desktop Setup Wizard state', () => {
+  it('resumes an interrupted live-client setup and clears pending on completion or reset', async () => {
+    const userData = temporaryDirectory('dsh-setup-pending-user-')
+    const profile = temporaryDirectory('dsh-setup-pending-profile-')
+    expect(desktopSetupWizardPending(userData, profile)).toBe(false)
+    await beginDesktopSetupWizard(userData, profile)
+    expect(desktopSetupWizardPending(userData, profile)).toBe(true)
+    expect(desktopSetupWizardRequired(readDesktopSetupWizardState(userData, profile), CURRENT_VERSIONS)).toBe(true)
+    await recordSetup(userData, profile, 'completed')
+    expect(desktopSetupWizardPending(userData, profile)).toBe(false)
+    expect(desktopSetupWizardRequired(readDesktopSetupWizardState(userData, profile), CURRENT_VERSIONS)).toBe(false)
+    await clearDesktopSetupWizardState(userData, profile)
+    await beginDesktopSetupWizard(userData, profile)
+    await clearDesktopSetupWizardState(userData, profile)
+    expect(desktopSetupWizardPending(userData, profile)).toBe(false)
+  })
+
   it('isolates explicit completion and skip markers by sha256(Profile directory)', async () => {
     const userData = temporaryDirectory('dsh-setup-state-user-')
     const profiles = temporaryDirectory('dsh-setup-state-profiles-')
@@ -112,7 +149,7 @@ describe('Desktop Setup Wizard state', () => {
       ...CURRENT_VERSIONS,
       recordedAt: RECORDED_AT,
     })
-    expect(readdirSync(directory)).toEqual(['state.json'])
+    expect(readdirSync(directory)).toEqual(['state.json', 'state.json.account'])
     if (process.platform !== 'win32') {
       expect(statSync(join(userData, 'profile-setup')).mode & 0o777).toBe(0o700)
       expect(statSync(directory).mode & 0o777).toBe(0o700)

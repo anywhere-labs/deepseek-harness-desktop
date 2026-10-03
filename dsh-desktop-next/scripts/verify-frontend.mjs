@@ -52,7 +52,7 @@ for (const platform of ['darwin', 'win32', 'linux']) {
             if (args[0] === 'dsh-next:browser-acquire') return Promise.resolve({ lease: 'lease-1', partition: 'partition-1' })
             return Promise.resolve(undefined)
           }, send() {},
-          on: (channel, listener) => listeners.set(channel, listener), removeListener: channel => listeners.delete(channel),
+          on: (channel, listener) => listeners.set(channel, listener), removeListener: channel => listeners.delete(channel), off: channel => listeners.delete(channel),
         } }
       },
       process: { platform }, location: { protocol: 'dsh-app:', hostname },
@@ -62,6 +62,15 @@ for (const platform of ['darwin', 'win32', 'linux']) {
     }, { filename: entry })
     if (hostname === 'app') {
       // dsh 0.1.7 drives the native Sidebar browser itself off this carrier.
+      const { keyboard, shortcuts } = exposed.get('dshDesktop')
+      assert.equal(typeof keyboard.closeWindow, 'function')
+      for (const name of ['get', 'edit', 'recording', 'subscribe']) assert.equal(typeof shortcuts[name], 'function')
+      const input = []
+      const unsubscribe = keyboard.subscribe(value => input.push(value))
+      listeners.get('dsh-next:shortcuts-input')({}, { kind: 'keyboard', code: 'KeyB', revision: 'fixture' })
+      assert.equal(input[0].code, 'KeyB')
+      unsubscribe()
+      assert.equal(listeners.has('dsh-next:shortcuts-input'), false)
       const browser = exposed.get('dshDesktop').browser
       assert.deepEqual(await browser.acquire('/workspace/one'), { lease: 'lease-1', partition: 'partition-1' })
       assert.deepEqual([...invocations.at(-1)], ['dsh-next:browser-acquire', '/workspace/one'])
@@ -113,4 +122,4 @@ for (const platform of ['darwin', 'win32', 'linux']) {
   await permissions.openSettings('screen')
   assert.deepEqual([...invocations.at(-1)], ['dsh-next:permission-settings', 'screen'])
 }
-console.log('Next frontend check passed: official 0.1.7-rc.1 entry and independent sandboxed preloads for macOS, Windows and Linux.')
+console.log('Next frontend check passed: official 0.2.0-rc.2 entry and independent sandboxed preloads for macOS, Windows and Linux.')

@@ -12,6 +12,8 @@ import {
   Tray,
   type WebContents,
 } from 'electron'
+import { isDesktopSetupWizardSelection } from './setup-wizard-contract.ts'
+import { SETUP_ONBOARDING_CHANNEL } from './setup-onboarding-bridge.ts'
 import { CompatibilityShell, type CompatibilityShellActions } from './compatibility-shell.ts'
 import { formatDesktopExitCode } from './desktop-logger.ts'
 import { showDesktopMessageBox } from './desktop-dialog-window.ts'
@@ -22,6 +24,7 @@ import {
   type DesktopOpenWorkspaceDelivery,
 } from './launch-workspace-contract.ts'
 import { DESKTOP_RENDERER_ACTION_CHANNEL } from './renderer-actions-contract.ts'
+import { DESKTOP_NATIVE_DIRECTORY_PICKER_CHANNEL } from './directory-picker-contract.ts'
 import { createDesktopRendererActionDispatcher } from './renderer-actions-dispatch.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
@@ -189,9 +192,11 @@ function isZoomShortcut(input: Electron.Input): 'in' | 'out' | 'reset' | undefin
 }
 
 export interface ElectronShellGenerationOptions {
+  readonly setupOnboarding?: import('./setup-onboarding-bridge.ts').DesktopOnboardingBridge | undefined
   readonly platform: ElectronPlatformStrategy
   readonly spec: DesktopShellSpec
   readonly preloadPath: string
+  readonly pickDirectory: () => Promise<string | null>
   readonly buildApplicationMenuItems: () => readonly Electron.MenuItemConstructorOptions[]
   readonly isQuitting: () => boolean
   readonly buildTrayTemplate: () => Electron.MenuItemConstructorOptions[]
@@ -217,7 +222,6 @@ export class ElectronShellGeneration {
   private released = false
   private attentionCount = 0
   private prepareFullscreenReveal: (() => void) | undefined
-  private refreshNativeMaterial: (() => void) | undefined
   private flushWindowState: (() => void) | undefined
   private cleanupListeners: (() => void) | undefined
   private readonly rendererRecovery: DesktopRendererRecovery
@@ -325,11 +329,6 @@ export class ElectronShellGeneration {
     })
     window.accessibleTitle = spec.windowTitle
     platform.configureWindow(window)
-    const refreshNativeMaterial = (): void => {
-      platform.refreshThemeMaterial(window, spec.material)
-    }
-    this.refreshNativeMaterial = refreshNativeMaterial
-    refreshNativeMaterial()
     this.window = window
     try {
       if (isolated) {
@@ -357,6 +356,36 @@ export class ElectronShellGeneration {
         throw new Error('dsh-plugin-desktop: untrusted Desktop action sender')
       }
       await dispatchRendererAction(action)
+    })
+
+    if (platform.platform === 'darwin') {
+      renderer.ipc.handle(DESKTOP_NATIVE_DIRECTORY_PICKER_CHANNEL, async event => {
+        if (this.released || event.sender !== renderer
+          || event.senderFrame === null || event.senderFrame !== renderer.mainFrame
+          || !sameOriginFrame(event.senderFrame.url, origin)) {
+          throw new Error('dsh-plugin-desktop: untrusted directory picker sender')
+        }
+        return await this.options.pickDirectory()
+      })
+    }
+
+    renderer.ipc.handle(SETUP_ONBOARDING_CHANNEL, async (event, request: unknown) => {
+      if (this.released || event.sender !== renderer || event.senderFrame !== renderer.mainFrame
+        || !sameOriginFrame(event.senderFrame.url, origin)) throw new Error('Untrusted setup sender')
+      if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Invalid setup request')
+      const value = request as { action?: unknown; profile?: unknown; selection?: unknown }
+      if (value.action === 'read') return await this.options.setupOnboarding?.read() ?? null
+      if (value.action === 'apply-pending' && typeof value.profile === 'string' && this.options.setupOnboarding?.applyPending) {
+        return this.options.setupOnboarding.applyPending(value.profile)
+      }
+      if (value.action === 'dismiss-account' && typeof value.profile === 'string' && this.options.setupOnboarding) {
+        return this.options.setupOnboarding.dismissAccount(value.profile)
+      }
+      if (value.action !== 'finish' || typeof value.profile !== 'string' || !this.options.setupOnboarding) throw new Error('Setup is unavailable')
+      if (value.selection !== undefined && !isDesktopSetupWizardSelection(value.selection)) throw new Error('Invalid setup selection')
+      const { spec } = this.options
+      await this.options.setupOnboarding.finish(value.profile, value.selection,
+        spec.applySetupSettings === undefined ? undefined : settings => spec.applySetupSettings!(settings))
     })
 
     let stateWriteTimer: ReturnType<typeof setTimeout> | undefined
@@ -608,7 +637,11 @@ export class ElectronShellGeneration {
       renderer.off('did-fail-load', loadFailed)
       renderer.off('did-start-loading', resetSurface)
       renderer.off('did-finish-load', loaded)
-      if (!renderer.isDestroyed()) renderer.ipc.removeHandler(DESKTOP_RENDERER_ACTION_CHANNEL)
+      if (!renderer.isDestroyed()) {
+        renderer.ipc.removeHandler(DESKTOP_RENDERER_ACTION_CHANNEL)
+        if (platform.platform === 'darwin') renderer.ipc.removeHandler(DESKTOP_NATIVE_DIRECTORY_PICKER_CHANNEL)
+        renderer.ipc.removeHandler(SETUP_ONBOARDING_CHANNEL)
+      }
       if (isolated) {
         chrome.off('before-input-event', handleZoomShortcut)
         chrome.off('render-process-gone', rendererGone)
@@ -854,10 +887,6 @@ export class ElectronShellGeneration {
     this.tray.setContextMenu(Menu.buildFromTemplate(this.options.buildTrayTemplate()))
   }
 
-  refreshThemeMaterial(): void {
-    if (this.window !== undefined && !this.window.isDestroyed()) this.refreshNativeMaterial?.()
-  }
-
   async release(): Promise<void> {
     if (this.released) return
     this.released = true
@@ -874,7 +903,6 @@ export class ElectronShellGeneration {
     this.window = undefined
     this.tray = undefined
     this.prepareFullscreenReveal = undefined
-    this.refreshNativeMaterial = undefined
     this.flushWindowState = undefined
     if (window === undefined) return
 

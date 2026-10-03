@@ -5,14 +5,15 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { AA_PACKAGE, AA_PEERS, AA_REPOSITORY, AA_WORKSPACES, aaConnectorResolution, assertPreparedAaRelease } from './agents-anywhere-release-policy.mjs'
-import { patchManifest } from './prepare-agents-anywhere-release.mjs'
+import { patchManifest, versionForCommit } from './prepare-agents-anywhere-release.mjs'
 import { prepareInstalledAaRuntime } from './prepare-agents-anywhere-runtime.mjs'
 
 const commit = 'a'.repeat(40)
 const version = '0.1.0-dev.0.desktop.caaaaaaaaaaaa.r12345678'
 const artifact = `agents-anywhere-dsh-bridge-next-${version}.tgz`
 
-function fixture(t) {
+function fixture(t, desktopVersion = version) {
+  const artifact = `agents-anywhere-dsh-bridge-next-${desktopVersion}.tgz`
   const root = mkdtempSync(join(tmpdir(), 'dsh-aa-policy-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const write = (path, data) => {
@@ -33,11 +34,11 @@ function fixture(t) {
         ...Object.fromEntries(AA_PEERS.map(name => [name, index === 0 ? '0.1.5-rc.2' : '0.1.6-alpha.2'])),
       },
     })
-    write(`${workspace}/node_modules/${AA_PACKAGE}/package.json`, { version, peerDependencies: runtimePeers })
+    write(`${workspace}/node_modules/${AA_PACKAGE}/package.json`, { version: desktopVersion, peerDependencies: runtimePeers })
   }
   write(`vendor/agents-anywhere/${artifact}`, 'prepared AA bytes')
   write('vendor/agents-anywhere/provenance.json', {
-    repository: AA_REPOSITORY, commit, artifact, desktopVersion: version, runtimePeers,
+    repository: AA_REPOSITORY, commit, artifact, desktopVersion, runtimePeers,
     sha256: createHash('sha256').update(readFileSync(join(root, 'vendor/agents-anywhere', artifact))).digest('hex'),
   })
   return { root, patch }
@@ -46,6 +47,19 @@ function fixture(t) {
 test('accepts the latest AA across Stable, Beta and Next runtime peers', t => {
   const { root } = fixture(t)
   assert.equal(assertPreparedAaRelease(root, commit).commit, commit)
+})
+
+for (const sourceVersion of ['0.1.0-dev.0', '2.0.1', '2.0.1+build.1']) {
+  test(`accepts the generated artifact version for AA ${sourceVersion}`, t => {
+    const generated = versionForCommit(sourceVersion, commit)
+    const { root } = fixture(t, generated)
+    assert.equal(assertPreparedAaRelease(root, commit).desktopVersion, generated)
+  })
+}
+
+test('rejects a version identifying a different commit even when provenance matches', t => {
+  const { root } = fixture(t, versionForCommit('2.0.1', 'b'.repeat(40)))
+  assert.throws(() => assertPreparedAaRelease(root, commit), /artifact version does not identify the selected commit/)
 })
 
 test('rejects a compatibility patch pinned to a previous AA artifact', t => {

@@ -1,0 +1,184 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -3342,6 +3342,7 @@
+ 			}, [exiting]);
+ 			return (0, react_dom.createPortal)((0, react_jsx_runtime.jsxs)("div", {
+ 				className: OnboardingSurface_module_css_default.onboardingOverlay,
++				"data-desktop-onboarding-surface": "",
+ 				"data-exiting": exiting || void 0,
+ 				role: "presentation",
+ 				children: [(0, react_jsx_runtime.jsx)("div", {
+@@ -4039,29 +4040,16 @@
+ 								children: t("onboardingRetry")
+ 							})]
+ 						}),
+-						step !== "welcome" && (0, react_jsx_runtime.jsxs)("footer", {
+-							className: DesktopOnboarding_module_css_default.navigation,
+-							children: [(0, react_jsx_runtime.jsxs)("button", {
+-								type: "button",
+-								disabled: busy,
+-								onClick: () => {
+-									click("back");
+-									go(step === "credit" ? "welcome" : step === "purpose" ? "credit" : "purpose");
+-								},
+-								children: [(0, react_jsx_runtime.jsx)("span", {
+-									className: DesktopOnboarding_module_css_default.backIcon,
+-									style: { maskImage: `url(data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgd2lkdGg9IjIwLjI3OTIiIGhlaWdodD0iMTYuODI1IiB2aWV3Qm94PSIwIDAgMjAuMjc5MiAxNi44MjUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGlkPSJWZWN0b3IgNTAwOCIgZD0iTTEuMDE5ODYgOC41ODk1OEgyMC4yNzkyTTguNTQzMDMgMC40MDc2NTZMMC44MjU1NTQgOC41ODk1OEw4LjU0MzAzIDE2LjQwNzciIHN0cm9rZT0iIzgxODU4QyIgc3Ryb2tlLXdpZHRoPSIxLjE4ODIzIi8+Cjwvc3ZnPgo=)` },
+-									"aria-hidden": "true"
+-								}), t("onboardingBack")]
+-							}), (0, react_jsx_runtime.jsx)("button", {
+-								type: "button",
+-								disabled: busy,
+-								onClick: () => {
+-									click("skip");
+-									setDialog(step === "credit" ? "credit-skip" : "skip");
+-								},
+-								children: t("onboardingSkip")
+-							})]
++						step !== "welcome" && (0, react_jsx_runtime.jsx)(DesktopOnboardingNavigation, {
++							busy, t,
++							onBack: () => {
++								click("back");
++								go(step === "credit" ? "welcome" : step === "purpose" ? "credit" : "purpose");
++							},
++							onSkip: () => {
++								click("skip");
++								setDialog(step === "credit" ? "credit-skip" : "skip");
++							}
+ 						})
+ 					]
+ 				}, step)
+@@ -4103,7 +4091,46 @@
+ 		* @param props - shell overlay bindings and account-owned actions.
+ 		* @returns the unfinished flow, retained briefly after successful completion unless motion is reduced.
+ 		*/
+-		function DesktopOnboardingEntry({ useOnboarding, useAccount, ...props }) {
++		function DesktopOnboardingNavigation({ busy, t, onBack, onSkip, flow = false }) {
++			return (0, react_jsx_runtime.jsxs)("footer", {
++				className: DesktopOnboarding_module_css_default.navigation,
++				style: flow ? { position: "static", transform: "none", width: "auto" } : void 0,
++				children: [onBack ? (0, react_jsx_runtime.jsxs)("button", {
++					type: "button", disabled: busy, onClick: onBack,
++					children: [(0, react_jsx_runtime.jsx)("span", {
++						className: DesktopOnboarding_module_css_default.backIcon,
++						style: { maskImage: `url(data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgd2lkdGg9IjIwLjI3OTIiIGhlaWdodD0iMTYuODI1IiB2aWV3Qm94PSIwIDAgMjAuMjc5MiAxNi44MjUiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGlkPSJWZWN0b3IgNTAwOCIgZD0iTTEuMDE5ODYgOC41ODk1OEgyMC4yNzkyTTguNTQzMDMgMC40MDc2NTZMMC44MjU1NTQgOC41ODk1OEw4LjU0MzAzIDE2LjQwNzciIHN0cm9rZT0iIzgxODU4QyIgc3Ryb2tlLXdpZHRoPSIxLjE4ODIzIi8+Cjwvc3ZnPgo=)` },
++						"aria-hidden": "true"
++					}), t("onboardingBack")]
++				}) : (0, react_jsx_runtime.jsx)("span", {}), (0, react_jsx_runtime.jsx)("button", {
++					type: "button", disabled: busy, onClick: onSkip, children: t("onboardingSkip")
++				})]
++			});
++		}
++		function DesktopOnboardingContinuationPage({ children }) {
++			(0, react.useLayoutEffect)(() => {
++				globalThis.dshOnboarding?.setActive(true);
++				return () => { globalThis.dshOnboarding?.setActive(false); };
++			}, []);
++			return (0, react_jsx_runtime.jsx)(OnboardingSurface, { children: (0, react_jsx_runtime.jsx)("div", {
++				className: "dshDesktopOnboardingContent", "data-desktop-onboarding": "desktop-extension", style: { width: "100%", height: "100%" }, children
++			}) });
++		}
++		function DesktopOnboardingEntry(props) {
++			const account = props.useAccount((value) => value);
++			const renderNext = () => (0, react_jsx_runtime.jsx)(OfficialDesktopOnboardingEntry, props);
++			const renderLoading = () => (0, react_jsx_runtime.jsx)(OnboardingSurface, { children: (0, react_jsx_runtime.jsx)("div", {
++				role: "status", children: props.t("onboardingLoading")
++			}) });
++			return props.renderSlot("onboarding.desktop.before", {
++				accountStatus: account.view?.status ?? (account.failed ? "error" : "loading"),
++				openLogin: props.openDesktopLogin,
++				renderSurface: (children) => (0, react_jsx_runtime.jsx)(DesktopOnboardingContinuationPage, { children }),
++				renderNavigation: (options) => (0, react_jsx_runtime.jsx)(DesktopOnboardingNavigation, { ...options, t: props.t, flow: true }),
++				renderLoading, renderNext
++			}, { fallback: globalThis.dshDesktopSetup ? renderLoading() : renderNext() });
++		}
++		function OfficialDesktopOnboardingEntry({ useOnboarding, useAccount, ...props }) {
+ 			const locale = props.t("onboardingArtworkLocale");
+ 			const state = useOnboarding((value) => value);
+ 			const account = useAccount((value) => value);
+@@ -4160,10 +4187,38 @@
+ 		* Read the same safe credential fact used by native login.
+ 		* @returns configured API-key presence; rejects when the desktop bridge is unavailable.
+ 		*/
+-		async function readOnboardingApiKeyPresence() {
++		async function readOnboardingApiKeyPresence(ctx) {
+ 			const bridge = globalThis.dshOnboarding;
+-			if (bridge === void 0) throw new Error("desktop login bridge unavailable");
+-			return bridge.hasApiKey();
++			if (typeof bridge?.hasApiKey === "function") return bridge.hasApiKey();
++			if (!globalThis.dshDesktopSetup) throw new Error("desktop login bridge unavailable");
++			const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
++			const [settings, providers] = await Promise.all([ctx.remote.settings.describe(), ctx.remote.llm.listConfigurableProviders()]);
++			if (!settings.ok || !record(settings.value) || !Array.isArray(settings.value.namespaces)
++				|| !providers.ok || !Array.isArray(providers.value)) throw new Error("desktop onboarding: credential directory unavailable");
++			const namespaces = settings.value.namespaces;
++			const official = namespaces.find((item) => record(item) && item.ns === "llm-deepseek");
++			if (official !== void 0 && (!record(official.value) || typeof official.value.apiKeyEnv !== "string"))
++				throw new Error("desktop onboarding: invalid official credential reference");
++			const refs = official === void 0 ? [] : [official.value.apiKeyEnv];
++			for (const provider of providers.value) {
++				if (!record(provider) || typeof provider.settingsNs !== "string" || !Array.isArray(provider.settingsPath))
++					throw new Error("desktop onboarding: invalid provider address");
++				let value = namespaces.find((item) => record(item) && item.ns === provider.settingsNs)?.value;
++				for (const key of provider.settingsPath) {
++					if (typeof key !== "string") throw new Error("desktop onboarding: invalid provider path");
++					value = record(value) ? value[key] : void 0;
++				}
++				if (record(value) && typeof value.apiKeyEnv === "string") refs.push(value.apiKeyEnv);
++			}
++			const unique = [...new Set(refs)];
++			const states = {};
++			for (let offset = 0; offset < unique.length; offset += 64) {
++				const result = await ctx.remote.credentials.describe(unique.slice(offset, offset + 64));
++				if (!result.ok || !record(result.value)) throw new Error("desktop onboarding: credential metadata unavailable");
++				Object.assign(states, result.value);
++			}
++			if (official !== void 0 && !record(states[official.value.apiKeyEnv])) throw new Error("desktop onboarding: missing credential metadata");
++			return Object.values(states).some((value) => record(value) && value.configured === true);
+ 		}
+ 		//#endregion
+ 		//#region lib/types/client/account-refresh.js
+@@ -4436,7 +4491,7 @@
+ 				}
+ 			};
+ 			if ("dshDesktop" in globalThis) {
+-				const controller = new DesktopOnboardingController(ctx.configForms.get(DESKTOP_ONBOARDING_NAMESPACE), ctx.configForms.get("ui-chat"), (enabled) => ctx.configForms.developerTools.setEnabled(enabled), operations.hooks.account, readOnboardingApiKeyPresence, ctx.configForms.describe());
++				const controller = new DesktopOnboardingController(ctx.configForms.get(DESKTOP_ONBOARDING_NAMESPACE), ctx.configForms.get("ui-chat"), (enabled) => ctx.configForms.developerTools.setEnabled(enabled), operations.hooks.account, () => readOnboardingApiKeyPresence(ctx), ctx.configForms.describe());
+ 				ctx.effect(() => () => {
+ 					controller.dispose();
+ 				}, "account: desktop onboarding lifetime");
+@@ -4456,8 +4511,10 @@
+ 				ctx.slots.inject("shell.overlay", () => ctx.slots.register({
+ 					name: "shell.overlay",
+ 					id: "desktop-onboarding",
++					children: { "onboarding.desktop.before": { kind: "single", scope: "root" } },
+ 					locale: "settings.account",
+ 					inject: () => ({
++						openDesktopLogin: () => operations.showLogin(true),
+ 						hooks: {
+ 							account: operations.hooks.account,
+ 							onboarding: controller.state
+diff --git a/lib/types/client/index.d.ts b/lib/types/client/index.d.ts
+--- a/lib/types/client/index.d.ts
++++ b/lib/types/client/index.d.ts
+@@ -13,4 +13,17 @@
+ export declare const inject: string[];
+ /** Register account UI only in the Desktop renderer. @param ctx - client plugin context. */
+ export declare function apply(ctx: Context): void;
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++import type { ReactNode as DesktopOnboardingNode } from 'react';
++declare module '@deepseek-ai/dsh-client-ui-slots' {
++    interface SlotMap {
++        'onboarding.desktop.before': { kind: 'single'; scope: 'root'; owner: {
++            accountStatus: 'loading' | 'error' | 'signed-out' | 'credential-stored';
++            openLogin(): void;
++            renderSurface(children: DesktopOnboardingNode): DesktopOnboardingNode;
++            renderNavigation(options: { busy: boolean; onBack?: (() => void) | undefined; onSkip(): void }): DesktopOnboardingNode;
++            renderLoading(): DesktopOnboardingNode;
++            renderNext(): DesktopOnboardingNode;
++        } };
++    }
++}

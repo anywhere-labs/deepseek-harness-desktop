@@ -42,7 +42,7 @@ function values(overrides: Partial<DesktopSetupWizardSettings> = {}): DesktopSet
   return {
     mode: 'compatibility',
     macosMaterial: 'transparent',
-    windowsMaterial: 'mica',
+    windowsMaterial: 'off',
     openBrowser: true,
     networkExposure: 'lan',
     notifications: {
@@ -51,6 +51,8 @@ function values(overrides: Partial<DesktopSetupWizardSettings> = {}): DesktopSet
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: false,
       notifyOnJobFailure: true,
+      notifyOnScheduleCompletion: true,
+      notifyOnScheduleFailure: true,
     },
     ...overrides,
   }
@@ -118,7 +120,7 @@ describe('Desktop Setup Wizard settings document', () => {
     expect(document['dsh-desktop']).toMatchObject({
       mode: 'compatibility',
       macosMaterial: 'transparent',
-      windowsMaterial: 'mica',
+      windowsMaterial: 'off',
       port: 61201,
       logLevel: 'warn',
       futureField: 'preserved',
@@ -131,6 +133,8 @@ describe('Desktop Setup Wizard settings document', () => {
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: false,
       notifyOnJobFailure: true,
+      notifyOnScheduleCompletion: true,
+      notifyOnScheduleFailure: true,
       futureNotification: 'keep',
     })
     expect(readDesktopSetupWizardSettings(path)).toEqual(next)
@@ -228,7 +232,7 @@ describe('Desktop Setup Wizard settings document', () => {
       notifications: { enabled: true } as DesktopSetupWizardSettings['notifications'],
     })
     await expect(updateDesktopSetupWizardSettings(path, incomplete))
-      .rejects.toThrow('all five notification booleans')
+      .rejects.toThrow('all seven notification booleans')
 
     const next = values({ openBrowser: false, networkExposure: 'lan' })
     await expect(updateDesktopSetupWizardSettings(path, next)).resolves.toMatchObject({
@@ -440,6 +444,22 @@ describe('Desktop Setup Wizard settings document', () => {
     })
   })
 
+  it('reads a removed Mica preference as off without rewriting it', async () => {
+    const root = temporaryDirectory()
+    const path = join(root, 'settings.yaml')
+    const contents = [
+      'dsh-desktop:',
+      '  mode: advanced',
+      '  windowsMaterial: mica',
+      '',
+    ].join('\n')
+    writeFileSync(path, contents, { mode: 0o600 })
+
+    expect(readDesktopSetupWizardSettings(path)).toMatchObject({ mode: 'advanced', windowsMaterial: 'off' })
+    await expect(migrateDesktopWindowMaterialSettings(path)).resolves.toBe(false)
+    expect(readFileSync(path, 'utf8')).toBe(contents)
+  })
+
   it('atomically migrates the released code preset default to ptc', async () => {
     const root = temporaryDirectory()
     const yamlPath = join(root, 'legacy-preset.yaml')
@@ -507,7 +527,7 @@ describe('Desktop Setup Wizard settings document', () => {
     const path = join(root, 'settings.yaml')
     writeFileSync(path, 'unrelated:\n  keep: true\n', { mode: 0o600 })
     const first = values({ mode: 'extended', windowsMaterial: 'off', openBrowser: false, networkExposure: 'loopback' })
-    const second = values({ mode: 'compatibility', windowsMaterial: 'mica', networkExposure: 'loopback' })
+    const second = values({ mode: 'compatibility', networkExposure: 'loopback' })
 
     await Promise.all([
       updateDesktopSetupWizardSettings(path, first),
@@ -561,7 +581,7 @@ describe('Desktop Setup Wizard settings under the 0.1.7 section keys', () => {
     expect(text).toContain('# user comment')
     const document = parseDocument(text).toJS() as Record<string, Record<string, unknown>>
     expect(Object.keys(document)).toEqual(['desktop-shell', 'desktop-notifications'])
-    expect(document['desktop-shell']).toMatchObject({ mode: 'advanced', windowsMaterial: 'mica', logLevel: 'debug' })
+    expect(document['desktop-shell']).toMatchObject({ mode: 'advanced', windowsMaterial: 'off', logLevel: 'debug' })
     expect(document['desktop-notifications']).toMatchObject({ notifyOnTurnCompletion: false })
   })
 

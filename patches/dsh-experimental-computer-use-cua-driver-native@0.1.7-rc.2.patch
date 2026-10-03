@@ -1,0 +1,34 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -92,6 +92,21 @@
+ 				async call(args, execution) {
+ 					const combined = AbortSignal.any([execution.signal, lifetime.signal]);
+ 					combined.throwIfAborted();
++					const desktop = inner.get("desktopPermissions");
++					if (tool.name === "check_permissions" && desktop) {
++						const states = await Promise.all(["screen", "accessibility"].map(permission => desktop.query(permission)));
++						combined.throwIfAborted();
++						if (args.prompt === true) {
++							for (const state of states) {
++								if (state.status !== "granted" && (state.canRequest || state.canOpenSettings)) {
++									await desktop.request(state.permission);
++									combined.throwIfAborted();
++								}
++							}
++						}
++						// Desktop owns prompting; the driver still reports its actual process permissions.
++						args = { ...args, prompt: false };
++					}
+ 					const result = await activeDriver.callTool(tool.name, JSON.stringify(args), { signal: combined });
+ 					combined.throwIfAborted();
+ 					return JSON.parse(result.rawJson);
+@@ -115,7 +130,7 @@
+ 		inner.systemPrompt.section({
+ 			name: "computer-use:cua-driver-native",
+ 			order: inner.systemPrompt.getSectionOrder("TOOL_COMPUTER_USE"),
+-			text: GUIDANCE
++			text: GUIDANCE + (inner.get("desktopPermissions") ? "\n\nDesktop manages OS permission requests. check_permissions with prompt: true opens Desktop Settings for missing grants; ask the user to authorize there, then recheck with prompt: false. Desktop permission status never substitutes for the driver\'s own status." : "")
+ 		});
+ 	}
+ }

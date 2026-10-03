@@ -1,0 +1,47 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -234,6 +234,32 @@
+ 		* to the step, so a mounted-but-deciding step paints nothing here.
+ 		*/
+ 		const RECOVERY_CONFIRMATION_MS = 2e3;
++		/** Desktop-owned display glyph kept local until the upstream slot accepts icons. */
++		function IconDesktopSettings({ size = 16, className }) {
++			return (0, react_jsx_runtime.jsxs)("svg", {
++				width: size,
++				height: size,
++				viewBox: "0 0 16 16",
++				fill: "none",
++				xmlns: "http://www.w3.org/2000/svg",
++				className,
++				"aria-hidden": "true",
++				children: [(0, react_jsx_runtime.jsx)("rect", {
++					x: "1.5",
++					y: "2.5",
++					width: "13",
++					height: "9",
++					rx: "1.5",
++					stroke: "currentColor",
++					strokeWidth: "1.25"
++				}), (0, react_jsx_runtime.jsx)("path", {
++					d: "M5 14h6M8 11.5V14",
++					stroke: "currentColor",
++					strokeWidth: "1.25",
++					strokeLinecap: "round"
++				})]
++			});
++		}
+ 		/** Minimum visible time for the connecting pill; shorter attempts read as flicker. */
+ 		const CONNECTING_MIN_VISIBLE_MS = 800;
+ 		/** Nav glyph by section id; unknown ids fall back to the settings gear. */
+@@ -255,6 +281,10 @@
+ 				size: 16
+ 			});
+ 			if (id === "archived-sessions") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconArchiveOutlineMedium, {
++				className: SettingsRoot_module_css_default.navIcon,
++				size: 16
++			});
++			if (id === "desktop") return (0, react_jsx_runtime.jsx)(IconDesktopSettings, {
+ 				className: SettingsRoot_module_css_default.navIcon,
+ 				size: 16
+ 			});

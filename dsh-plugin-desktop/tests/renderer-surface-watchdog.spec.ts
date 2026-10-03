@@ -109,7 +109,7 @@ describe('renderer surface watchdog', () => {
 })
 
 describe('renderer surface probe', () => {
-  function probeSurface(options: { missing?: boolean; text?: string; visible?: boolean; hidden?: boolean; loading?: boolean; offscreen?: boolean } = {}) {
+  function probeSurface(options: { missing?: boolean; text?: string; visible?: boolean; hidden?: boolean; loading?: boolean; offscreen?: boolean; portal?: 'visible' | 'hidden' | 'empty' } = {}) {
     const root = {
       matches: () => false,
       childNodes: options.text === undefined ? [] : [{ nodeType: 3, textContent: options.text }],
@@ -121,7 +121,11 @@ describe('renderer surface probe', () => {
         visibilityState: options.hidden ? 'hidden' : 'visible',
         readyState: options.loading ? 'loading' : 'complete',
         getElementById: (id: string) => id === 'root' && !options.missing ? root : null,
-        createTreeWalker: () => ({ currentNode: root, nextNode: () => null }),
+        querySelectorAll: () => options.portal === undefined ? [] : [{ ...root,
+          childNodes: options.portal === 'empty' ? [] : [{ nodeType: 3, textContent: 'Desktop setup' }],
+          checkVisibility: () => options.portal !== 'hidden',
+        }],
+        createTreeWalker: (element: unknown) => ({ currentNode: element, nextNode: () => null }),
       },
       NodeFilter: { SHOW_ELEMENT: 1 },
       Node: { TEXT_NODE: 3 },
@@ -145,5 +149,11 @@ describe('renderer surface probe', () => {
   it('defers hidden and loading documents', () => {
     expect(probeSurface({ hidden: true })).toBe('hidden')
     expect(probeSurface({ loading: true })).toBeNull()
+  })
+  it('accepts visible official onboarding outside the hidden app root without excusing an empty portal', () => {
+    expect(probeSurface({ text: 'Hidden shell', visible: false, portal: 'visible' })).toBe(true)
+    expect(probeSurface({ text: 'Hidden shell', visible: false, portal: 'hidden' })).toBe(false)
+    expect(probeSurface({ portal: 'empty' })).toBe(false)
+    expect(probeSurface({ missing: true, portal: 'visible' })).toBe(true)
   })
 })

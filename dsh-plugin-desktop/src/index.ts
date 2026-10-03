@@ -61,12 +61,13 @@ import { DESKTOP_FRAME_HEIGHT } from './window-chrome.ts'
 import {
   effectiveDesktopWindowMaterial,
   type DesktopWindowMaterial,
-  windowsSupportsMica,
 } from './window-material.ts'
 import { DESKTOP_PRODUCT_NAME } from './product-identity.ts'
 import { watchPlatformLogin, type PlatformLoginAccount } from './platform-login.ts'
+import type { DesktopSetupWizardSettings } from './setup-wizard-settings.ts'
 import {
   createDesktopSettingsPort,
+  DESKTOP_NOTIFICATIONS_SETTINGS_ENTRY_ID,
   readUiLocalePreference,
   readUiThemeSource,
   resolveDesktopConfig,
@@ -126,7 +127,6 @@ export function desktopRendererUrl(
   platform: Context['desktopRuntime']['platform'],
   appVersion: string,
   material: DesktopWindowMaterial = 'off',
-  windowsBuild?: number,
 ): string {
   const url = new URL(`http://127.0.0.1:${String(port)}/`)
   url.searchParams.set('dsh-desktop-mode', mode)
@@ -137,9 +137,6 @@ export function desktopRendererUrl(
     // Body-level plugin portals do not inherit the framed root's geometry.
     // Publish the exact content boundary so they can yield Desktop chrome.
     url.searchParams.set('dsh-desktop-titlebar-inset', String(DESKTOP_FRAME_HEIGHT))
-  }
-  if (platform === 'win32') {
-    url.searchParams.set('dsh-desktop-mica', windowsSupportsMica(windowsBuild) ? '1' : '0')
   }
   return url.href
 }
@@ -185,6 +182,10 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
     bluePath: fileURLToPath(new URL('../build/tray-icon-blue.png', import.meta.url)),
   }
   const settings = createDesktopSettingsPort(ctx, config, runtime.platform)
+  // Choices first-run Setup saved into this generation's settings. Setup's own
+  // continuation offers the restart that applies them, after its account step.
+  let setupSettings: DesktopSetupWizardSettings | undefined
+  let setupSaved = false
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
   ctx.effect(
     () => ctx.webServer.register({
@@ -347,11 +348,28 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
         next.networkExposure,
       )
       updateLiveWebAccess(nextBrowserAccess, nextNetworkExposure)
+      const matchesSetup = setupSettings !== undefined
+        && next.mode === setupSettings.mode
+        && next.port === resolved.port
+        && next.macosMaterial === setupSettings.macosMaterial
+        && next.linuxMaterial === resolved.linuxMaterial
+      // Once saved, any other value supersedes Setup's choice for this generation;
+      // a later return to it is a new change and asks for its restart.
+      if (!matchesSetup && setupSaved) {
+        setupSettings = undefined
+        setupSaved = false
+      }
       if (next.mode === resolved.mode
         && next.port === resolved.port
         && next.macosMaterial === resolved.macosMaterial
-        && next.windowsMaterial === resolved.windowsMaterial
         && next.linuxMaterial === resolved.linuxMaterial) {
+        if (pending !== undefined) clearImmediate(pending)
+        pending = undefined
+        return
+      }
+      // A native restart prompt here would interrupt the official login that
+      // follows Setup; only a later, different choice asks for its own restart.
+      if (matchesSetup) {
         if (pending !== undefined) clearImmediate(pending)
         pending = undefined
         return
@@ -402,8 +420,6 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
         resolved.mode,
         runtime.platform,
         resolved.macosMaterial,
-        resolved.windowsMaterial,
-        runtime.windowsBuild,
         resolved.linuxMaterial,
       )
       const url = desktopRendererUrl(
@@ -412,12 +428,10 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
         runtime.platform,
         runtime.updates.currentVersion,
         material,
-        runtime.windowsBuild,
       )
       return runtime.schedule({
         ...resolved,
         material,
-        ...(runtime.windowsBuild === undefined ? {} : { windowsBuild: runtime.windowsBuild }),
         url,
         authenticationUrl: ctx.connection.authenticatedUrl(new URL(url).origin),
         rendererAccessHeader: browserAccess.rendererHeader,
@@ -446,6 +460,26 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
           await settings.update(mode !== 'compatibility' && storedBrowserCapability
             ? { mode, openBrowser: false, networkExposure: 'loopback' }
             : { mode })
+        },
+        applySetupSettings: async next => {
+          setupSettings = next
+          setupSaved = false
+          try {
+            await settings.update({
+              mode: next.mode,
+              macosMaterial: next.macosMaterial,
+              windowsMaterial: next.windowsMaterial,
+              openBrowser: next.openBrowser,
+              networkExposure: next.networkExposure,
+            })
+          } catch (cause) {
+            setupSettings = undefined
+            throw cause
+          }
+          // The mode is saved; a failed notifications write must not bring back
+          // the native prompt for it.
+          setupSaved = true
+          await ctx.settings.update(DESKTOP_NOTIFICATIONS_SETTINGS_ENTRY_ID, { ...next.notifications })
         },
       })
     },

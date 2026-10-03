@@ -500,7 +500,7 @@ describe('desktop terminal environment', () => {
 })
 
 
-it.each(['safe', 'recovery'] as const)('launches a macOS %s terminal with matching pwd, DSH_HOME and environment label', mode => {
+it.skipIf(process.platform === 'win32').each(['safe', 'recovery'] as const)('launches a macOS %s terminal with matching pwd, DSH_HOME and environment label', mode => {
   const root = temporaryDirectory()
   const homeDir = join(root, mode === 'safe' ? 'safe-runtime' : 'original')
   const profileDir = join(homeDir, 'profiles', 'desktop')

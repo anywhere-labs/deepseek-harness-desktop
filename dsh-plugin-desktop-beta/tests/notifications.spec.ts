@@ -56,6 +56,7 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
   const enabled = new Set(available)
   const injections = new Map<OptionalService, (ctx: Context) => void>()
   const disposers = new Map<OptionalService, Array<() => void>>()
+  const rootDisposers: Array<() => void> = []
   let activeService: OptionalService | undefined
   let jobListener: ((event: unknown) => void | PromiseLike<void>) | undefined
   let sessionListener: ((session: Session, event: SessionEvent) => void | PromiseLike<void>) | undefined
@@ -80,6 +81,8 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
     notifyOnTurnFailure: field('notifyOnTurnFailure'),
     notifyOnJobCompletion: field('notifyOnJobCompletion'),
     notifyOnJobFailure: field('notifyOnJobFailure'),
+    notifyOnScheduleCompletion: field('notifyOnScheduleCompletion'),
+    notifyOnScheduleFailure: field('notifyOnScheduleFailure'),
   }
 
   const fiber = { id: 'desktop-notifications' }
@@ -132,6 +135,8 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
       const dispose = register()
       if (activeService !== undefined && typeof dispose === 'function') {
         disposers.set(activeService, [...(disposers.get(activeService) ?? []), dispose])
+      } else if (typeof dispose === 'function') {
+        rootDisposers.push(dispose)
       }
       return dispose
     },
@@ -168,6 +173,7 @@ function createHarness(available: readonly OptionalService[] = ['jobs', 'session
       teardown('sessions')
       teardown('jobs')
       teardown('settings')
+      for (const dispose of rootDisposers.splice(0).reverse()) dispose()
     },
   }
 }
@@ -202,14 +208,14 @@ function event<T extends SessionEvent['type']>(
   return { type, data, seq, time: seq } as Extract<SessionEvent, { type: T }>
 }
 
-function userMessage(source: 'user' | 'plugin', seq: number): SessionEvent<'user/message'> {
+function userMessage(source: 'user' | 'plugin' | 'schedule', seq: number): SessionEvent<'user/message'> {
   return event('user/message', {
     id: `message-${String(seq)}` as never,
     role: 'user',
     content: [{ type: 'text', text: 'secret /Users/example session-123' }] as never,
-    source: source === 'user'
-      ? { kind: 'user' }
-      : { kind: 'plugin', plugin: 'test', form: 'notice', summary: 'continuation' },
+    source: source === 'user' ? { kind: 'user' }
+      : source === 'schedule' ? { kind: 'schedule' }
+        : { kind: 'plugin', plugin: 'test', form: 'notice', summary: 'continuation' },
   } as never, seq)
 }
 
@@ -226,6 +232,8 @@ describe('desktop notifications Host plugin', () => {
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: true,
       notifyOnJobFailure: true,
+      notifyOnScheduleCompletion: true,
+      notifyOnScheduleFailure: true,
     })
     // The preferences are published by the plugin's own volatile Config fields;
     // the only call Desktop makes on the service withdraws the automatic form,
@@ -273,6 +281,8 @@ describe('desktop notifications Host plugin', () => {
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: false,
       notifyOnJobFailure: true,
+      notifyOnScheduleCompletion: true,
+      notifyOnScheduleFailure: true,
     })
     await harness.jobSettled(job('bash-3', 'completed'))
     await harness.jobSettled(job('bash-3', 'failed'))
@@ -303,6 +313,8 @@ describe('desktop notifications Host plugin', () => {
       notifyOnTurnFailure: true,
       notifyOnJobCompletion: true,
       notifyOnJobFailure: true,
+      notifyOnScheduleCompletion: true,
+      notifyOnScheduleFailure: true,
     })
     await harness.jobSettled(job('bash-disabled', 'completed'))
 
@@ -338,6 +350,34 @@ describe('desktop notifications Host plugin', () => {
       title: 'User Turn Completed',
       body: 'A user-initiated turn has finished.',
     })
+  })
+
+  it('uses the existing turn observer and live switches for scheduled completions and failures', async () => {
+    const harness = createHarness(['sessions', 'settings'])
+    const active = session('scheduled')
+    await harness.sessionEvent(active, event('turn/start', { turn: 1 }, 1))
+    await harness.sessionEvent(active, userMessage('schedule', 2))
+    await harness.sessionEvent(active, event('turn/end', { turn: 1, reason: { kind: 'completed' } }, 3))
+    expect(harness.notifyAttention).toHaveBeenCalledWith({ title: 'Automation Task Completed', body: 'An automation task has finished.' })
+    expect(JSON.stringify(harness.notifyAttention.mock.calls)).not.toContain('secret')
+    harness.notifyAttention.mockClear()
+
+    await harness.updateSettings({ ...DesktopNotificationSettingsSchema({} as DesktopNotificationSettings), notifyOnScheduleCompletion: false })
+    await harness.sessionEvent(active, event('turn/start', { turn: 2 }, 4))
+    await harness.sessionEvent(active, userMessage('schedule', 5))
+    await harness.sessionEvent(active, event('turn/end', { turn: 2, reason: { kind: 'completed' } }, 6))
+    await harness.sessionEvent(active, event('turn/start', { turn: 3 }, 7))
+    await harness.sessionEvent(active, userMessage('schedule', 8))
+    await harness.sessionEvent(active, event('turn/end', { turn: 3, reason: { kind: 'error', error: { code: 'UNKNOWN', message: 'private error' } } }, 9))
+    expect(harness.notifyAttention.mock.calls).toEqual([[
+      { title: 'Automation Task Failed', body: 'An automation task could not finish. Open DSH Desktop for details.' },
+    ]])
+    harness.notifyAttention.mockClear()
+    await harness.updateSettings({ ...DesktopNotificationSettingsSchema({} as DesktopNotificationSettings), notifyOnScheduleFailure: false })
+    await harness.sessionEvent(active, event('turn/start', { turn: 4 }, 10))
+    await harness.sessionEvent(active, userMessage('schedule', 11))
+    await harness.sessionEvent(active, event('turn/end', { turn: 4, reason: { kind: 'max-tokens' } }, 12))
+    expect(harness.notifyAttention).not.toHaveBeenCalled()
   })
 
   it('treats max-tokens as a failure and keeps non-failure endings silent', async () => {

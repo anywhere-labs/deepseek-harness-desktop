@@ -90,7 +90,6 @@ export const zh = {
   windowMaterialBody: '设置窗口背景效果。更改后需重启应用才能生效。',
   windowMaterialOff: '纯色背景',
   windowMaterialTransparent: '玻璃背景',
-  windowMaterialMica: 'Mica',
   webTitle: '浏览器与局域网',
   webIntro: '允许在浏览器中打开当前 Profile，并选择可访问的设备范围。',
   openBrowser: '允许在浏览器中打开',
@@ -121,6 +120,8 @@ export const zh = {
   turnFailure: '本轮任务失败',
   jobCompletion: '后台任务完成',
   jobFailure: '后台任务失败',
+  scheduleCompletion: '自动化任务完成',
+  scheduleFailure: '自动化任务失败',
 } as const
 
 export type DesktopSettingsLocaleKey = keyof typeof zh
@@ -215,7 +216,6 @@ export const en: Record<DesktopSettingsLocaleKey, string> = {
   windowMaterialBody: 'Set the window background effect. Restart the app to apply changes.',
   windowMaterialOff: 'Solid background',
   windowMaterialTransparent: 'Glass background',
-  windowMaterialMica: 'Mica',
   webTitle: 'Browser and local network',
   webIntro: 'Allow browser access to the current Profile and choose which devices can reach it.',
   openBrowser: 'Allow opening this Profile in a browser',
@@ -246,4 +246,6 @@ export const en: Record<DesktopSettingsLocaleKey, string> = {
   turnFailure: 'Current turn failed',
   jobCompletion: 'Background job completed',
   jobFailure: 'Background job failed',
+  scheduleCompletion: 'Automation task completed',
+  scheduleFailure: 'Automation task failed',
 }

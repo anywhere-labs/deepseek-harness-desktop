@@ -1,0 +1,279 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -28,6 +28,8 @@
+ 			return `${bundle}#${rowId}`;
+ 		}
+ 		const SLOTS = [
++			"plugins.bundle.hidden",
++			"plugins.item.hidden",
+ 			"plugins.item",
+ 			"plugins.bundle.config",
+ 			"plugins.row.config"
+@@ -42,6 +44,8 @@
+ 			let revision = -1;
+ 			let ledger = {
+ 				items: [],
++				hiddenBundles: new Set(),
++				hiddenItems: new Set(),
+ 				bundles: /* @__PURE__ */ new Set(),
+ 				rows: /* @__PURE__ */ new Set()
+ 			};
+@@ -59,6 +63,8 @@
+ 								id: entry.options.id ?? "",
+ 								label: (0, _deepseek_ai_dsh_client_ui_slots.resolveSlotLabel)(entry.options.label) ?? ""
+ 							})),
++							hiddenBundles: keysOf("plugins.bundle.hidden"),
++							hiddenItems: keysOf("plugins.item.hidden"),
+ 							bundles: keysOf("plugins.bundle.config"),
+ 							rows: keysOf("plugins.row.config")
+ 						};
+@@ -2190,9 +2196,15 @@
+ 			});
+ 		}
+ 		/** The top every page shares: the crumb that leads back, then the icon with the page's actions at its right. */
++		/** Sidebar control in native window chrome, independent of the scrolling page header. */
++		function PluginSidebarControl({ renderSlot }) {
++			if (!(0, _deepseek_ai_dsh_client_ui_primitives.isDarwinDesktop)()) return null;
++			return (0, react_jsx_runtime.jsx)("div", { "data-plugin-sidebar-control": "", children: renderSlot("plugins.header.leading", {}) });
++		}
+ 		function DetailTop({ crumbLabel, crumbText, onBack, icon, actions }) {
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+ 				className: PluginManagerPage_module_css_default.detailTop,
++				"data-plugin-page-header": "detail",
+ 				"data-window-drag": true,
+ 				children: [(0, react_jsx_runtime.jsxs)("button", {
+ 					type: "button",
+@@ -2214,7 +2226,7 @@
+ 			});
+ 		}
+ 		/** One package as a card that opens its page: its name, its one-liner, its tags, and its bundle switch. */
+-		function PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnabled }) {
++		function PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnabled, renderSlot }) {
+ 			const { title, description, beta } = packageText(pkg, resolveText);
+ 			const status = packageStatus(pkg);
+ 			return (0, react_jsx_runtime.jsxs)("li", {
+@@ -2237,13 +2249,15 @@
+ 						children: t("statusProblem")
+ 					}) : null] }),
+ 					description,
+-					end: (0, react_jsx_runtime.jsx)(EnableSwitch, {
++					end: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
++						renderSlot("plugins.bundle.actions", { subject: { kind: "bundle", pkg: packageRef(pkg) } }, { entryKey: pkg.name }),
++						(0, react_jsx_runtime.jsx)(EnableSwitch, {
+ 						pkg,
+ 						title,
+ 						t,
+ 						busy,
+ 						onSetEnabled
+-					})
++					})] })
+ 				}), (0, react_jsx_runtime.jsx)(MetadataError, {
+ 					error: pkg.meta?.error,
+ 					t
+@@ -2290,7 +2304,7 @@
+ 		* contributed actions, its title with the contributed badges over its
+ 		* one-liner, the form the entry renders, and the contributed sections.
+ 		*/
+-		function ItemDetail({ item, t, onBack, renderSlot, form }) {
++		function ItemDetail({ item, t, onBack, renderSlot, form, renderComponents }) {
+ 			const subject = {
+ 				kind: "item",
+ 				id: item.id
+@@ -2329,7 +2343,7 @@
+ 							"data-plugin-config": true,
+ 							children: renderSlot("plugins.item", {
+ 								view: "page",
+-								form
++								form, renderComponents
+ 							}, { only: item.id })
+ 						}), renderSlot("plugins.detail.section", { subject })]
+ 					})
+@@ -3339,12 +3353,13 @@
+ 				};
+ 			}, [highlight, clearHighlight]);
+ 			const noticeLine = state.notice === null || state.notice.kind === "refresh-failed" ? null : noticeText(state.notice, t);
+-			const listed = state.packages.filter((pkg) => !BUILTIN_PROFILE_BUNDLES.has(pkg.name) && (pkg.installed || pkg.optional || pkg.error !== void 0));
++			const available = state.packages.filter((pkg) => !BUILTIN_PROFILE_BUNDLES.has(pkg.name) && (pkg.installed || pkg.optional || pkg.error !== void 0));
++			const listed = available.filter((pkg) => !ledger.hiddenBundles?.has(pkg.name));
+ 			const mine = listed.filter((pkg) => pkg.installed || !pkg.optional);
+ 			const official = listed.filter((pkg) => pkg.optional && !pkg.installed);
+ 			const loaded = state.status === "ready" || state.status === "error";
+ 			const refreshing = state.refreshStatus === "refreshing";
+-			const openPkg = view.kind === "package" || view.kind === "row" ? listed.find((pkg) => pkg.name === view.name) : void 0;
++			const openPkg = view.kind === "package" || view.kind === "row" ? available.find((pkg) => pkg.name === view.name) : void 0;
+ 			const openItem = view.kind === "item" ? ledger.items.find((item) => item.id === view.id) : void 0;
+ 			const openRow = view.kind === "row" && openPkg !== void 0 ? openPkg.rows.find((row) => row.rowId === view.rowId) : void 0;
+ 			const showsCards = openPkg === void 0 && openItem === void 0;
+@@ -3363,8 +3378,24 @@
+ 					});
+ 				}
+ 			});
++			// Expose the existing official component list to composite item details.
++			// State, diagnostics and writes stay with this page's native controller.
++			const renderComponents = (moduleNames) => {
++				const selected = new Set(moduleNames), rows = new Map();
++				for (const pkg of state.packages) for (const row of pkg.rows) {
++					if (selected.has(row.moduleName)) rows.set(row.entryId ?? row.rowId, row);
++				}
++				return (0, react_jsx_runtime.jsx)(RowsSection, {
++					rows: [...rows.values()], t, resolveText,
++					toggle: {
++						busy: (row) => row.entryId !== void 0 && state.busy.includes(rowKey(row.entryId)),
++						onSetEnabled: setRowEnabled
++					}
++				});
++			};
+ 			const packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, {
+ 				pkg,
++				renderSlot,
+ 				t,
+ 				resolveText,
+ 				busy: state.busy.includes(pkg.name),
+@@ -3381,7 +3412,7 @@
+ 					props.setEnabled(pkg.name, enabled);
+ 				}
+ 			}, pkg.name);
+-			const officialCards = [...official.map(packageCard), ...ledger.items.map((item) => (0, react_jsx_runtime.jsx)(ItemCard, {
++			const officialCards = [...official.map(packageCard), ...ledger.items.filter((item) => !ledger.hiddenItems?.has(item.id)).map((item) => (0, react_jsx_runtime.jsx)(ItemCard, {
+ 				item,
+ 				t,
+ 				renderSlot,
+@@ -3416,8 +3447,10 @@
+ 				"data-plugin-panel": true,
+ 				"aria-busy": state.status === "loading" || refreshing,
+ 				children: [
++					(0, react_jsx_runtime.jsx)(PluginSidebarControl, { renderSlot }),
+ 					showsCards ? (0, react_jsx_runtime.jsxs)("header", {
+ 						className: PluginManagerPage_module_css_default.pageHead,
++						"data-plugin-page-header": "list",
+ 						"data-window-drag": true,
+ 						children: [(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("h1", {
+ 							className: PluginManagerPage_module_css_default.pageTitle,
+@@ -3478,6 +3511,18 @@
+ 							})]
+ 						})]
+ 					}) : null,
++					showsCards && loaded ? renderSlot("plugins.overview", {
++						onOpenBundle: (name) => {
++							if (!available.some((pkg) => pkg.name === name)) return;
++							setActivation(null);
++							setView({ kind: "package", name });
++						},
++						onOpenItem: (id) => {
++							if (!ledger.items.some((item) => item.id === id)) return;
++							setActivation(null);
++							setView({ kind: "item", id });
++						}
++					}) : null,
+ 					showsCards && state.status === "loading" ? (0, react_jsx_runtime.jsx)(ListSkeleton, { label: t("loading") }) : null,
+ 					showsCards && state.status === "unavailable" ? (0, react_jsx_runtime.jsxs)("p", {
+ 						className: `${PluginManagerPage_module_css_default.status} ${PluginManagerPage_module_css_default.statusWithDot}`,
+@@ -3539,6 +3584,7 @@
+ 					}) : null,
+ 					loaded && openItem !== void 0 ? (0, react_jsx_runtime.jsx)(ItemDetail, {
+ 						form: formFor(openItem.id),
++						renderComponents,
+ 						item: openItem,
+ 						t,
+ 						renderSlot,
+@@ -3722,6 +3768,11 @@
+ 					store,
+ 					inject: () => face,
+ 					children: {
++						"plugins.header.leading": { kind: "single", scope: "root" },
++						"plugins.overview": { kind: "list", scope: "root" },
++						"plugins.bundle.hidden": { kind: "keyed", scope: "root" },
++						"plugins.item.hidden": { kind: "keyed", scope: "root" },
++						"plugins.bundle.actions": { kind: "keyed", scope: "root" },
+ 						"plugins.item": {
+ 							kind: "list",
+ 							scope: "root"
+@@ -3783,4 +3834,4 @@
+ 	}
+ });
+ 
+-//# sourceMappingURL=client.js.map
+\ No newline at end of file
++//# sourceMappingURL=client.js.map
+diff --git a/lib/types/client/PluginManagerPage.d.ts b/lib/types/client/PluginManagerPage.d.ts
+--- a/lib/types/client/PluginManagerPage.d.ts
++++ b/lib/types/client/PluginManagerPage.d.ts
+@@ -13,7 +13,7 @@
+ import type { createNavigationStore } from './navigation-store.ts';
+ import { type PluginManagerFace } from './manager-store.ts';
+ /** Full component props assembled by the main slot renderer. */
+-export type PluginManagerPageProps = PropsRuntime<'main'> & PropsLocale<'pluginManager'> & PropsRenderSlots<'plugins.item' | 'plugins.bundle.config' | 'plugins.row.config' | 'plugins.bundle.activation' | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'> & InjectFace<PluginManagerFace> & PropsStore<ReturnType<typeof createNavigationStore>>;
++export type PluginManagerPageProps = PropsRuntime<'main'> & PropsLocale<'pluginManager'> & PropsRenderSlots<'plugins.header.leading' | 'plugins.overview' | 'plugins.bundle.actions' | 'plugins.item' | 'plugins.bundle.config' | 'plugins.row.config' | 'plugins.bundle.activation' | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'> & InjectFace<PluginManagerFace> & PropsStore<ReturnType<typeof createNavigationStore>>;
+ /** Render the plugin manager: the official plugins and installed bundles, their pages, the install dialog, and the confirmation. */
+ export declare function PluginManagerPage(props: PluginManagerPageProps): ReactNode;
+ //# sourceMappingURL=PluginManagerPage.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/config-ledger.d.ts b/lib/types/client/config-ledger.d.ts
+--- a/lib/types/client/config-ledger.d.ts
++++ b/lib/types/client/config-ledger.d.ts
+@@ -19,6 +19,8 @@
+  */
+ export interface ConfigLedger {
+     readonly items: readonly OfficialItem[];
++    readonly hiddenBundles?: ReadonlySet<string>;
++    readonly hiddenItems?: ReadonlySet<string>;
+     readonly bundles: ReadonlySet<string>;
+     readonly rows: ReadonlySet<string>;
+ }
+@@ -35,4 +37,4 @@
+  * @returns the ledger source; its snapshot changes only when a ledger or the locale does.
+  */
+ export declare function configLedgerSource(ctx: ClientContext): HostObservable<ConfigLedger>;
+-//# sourceMappingURL=config-ledger.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=config-ledger.d.ts.map
+diff --git a/lib/types/client/slot-contract.d.ts b/lib/types/client/slot-contract.d.ts
+--- a/lib/types/client/slot-contract.d.ts
++++ b/lib/types/client/slot-contract.d.ts
+@@ -15,6 +15,7 @@
+  * with the subject of the open page and decides from it whether to render at
+  * all. The page draws the title, icon, and crumb itself.
+  */
++import type { ReactNode } from 'react';
+ import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client';
+ /** The view the page asks a configuration entry for. */
+ export interface PluginConfigViewProps {
+@@ -22,6 +23,8 @@
+     readonly view: 'summary' | 'page';
+     /** Host-owned configuration values and write actions for this page's entry. */
+     readonly form?: ConfigPageForm | undefined;
++    /** Render selected modules with the manager's native component list and row actions. */
++    readonly renderComponents?: (moduleNames: readonly string[]) => ReactNode;
+ }
+ /** One row of a bundle as a detail contribution sees it. */
+ export interface PluginRowRef {
+@@ -72,6 +75,21 @@
+ }
+ declare module '@deepseek-ai/dsh-client-ui-slots' {
+     interface SlotMap {
++        /** Native sidebar control, separate from the scrolling page header. */
++        'plugins.header.leading': { kind: 'single'; scope: 'root'; };
++        /** Controls above the ordinary plugin cards. */
++        'plugins.overview': { kind: 'list'; scope: 'root'; owner: {
++            /** Open the manager's existing bundle detail, including an overview-owned bundle. */
++            onOpenBundle(name: string): void;
++            /** Open a registered item's existing configuration detail. */
++            onOpenItem(id: string): void;
++        }; };
++        /** Bundle names managed by overview controls instead of ordinary cards. */
++        'plugins.bundle.hidden': { kind: 'keyed'; scope: 'root'; };
++        /** Item ids presented by overview controls, omitted only from ordinary cards and counts. */
++        'plugins.item.hidden': { kind: 'keyed'; scope: 'root'; };
++        /** Desktop-owned actions before a bundle card's switch, keyed by package name. */
++        'plugins.bundle.actions': { kind: 'keyed'; scope: 'root'; owner: PluginDetailProps; };
+         /** Optional guidance after the user enables a bundle from the list, keyed by npm package name. */
+         'plugins.bundle.activation': {
+             kind: 'keyed';
+@@ -153,4 +171,4 @@
+     /** Submit all field edits together with the revision the editor read. */
+     readonly mutate: ConfigForm<Record<string, unknown>>['mutate'];
+ }
+-//# sourceMappingURL=slot-contract.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=slot-contract.d.ts.map

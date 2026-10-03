@@ -1,0 +1,49 @@
+diff --git a/lib/markdown/MarkdownText.module.css b/lib/markdown/MarkdownText.module.css
+--- a/lib/markdown/MarkdownText.module.css
++++ b/lib/markdown/MarkdownText.module.css
+@@ -195,25 +195,27 @@
+   overscroll-behavior-x: contain;
+ }
+ 
+-/* Wide tables reveal their horizontal bar on hover (or keyboard focus)
+-   instead of keeping it painted. Chromium never repaints state-conditioned
+-   scrollbar STYLES (neither hover-conditioned `::-webkit-scrollbar*` rules
+-   nor a :hover `scrollbar-color` change reaches the painted bar), so the
+-   toggle is `overflow-x` itself — a layout change repaints reliably. The
+-   resting padding matches the themed bar's height on the WebKit scrollbar
+-   path. There, `scroll` reserves that height even when the table fits.
+-   Other engines and overlay scrollbars may reserve a different height.
+-   Wheel and trackpad scrolling need the pointer over the table, which is
+-   already the hover that re-enables scrolling. */
+ .tableScroll:global(.md-table-wide) {
+-  overflow-x: hidden;
+-  padding-bottom: var(--dsh-scrollbar-width, 5px);
+-}
+-
+-.tableScroll:global(.md-table-wide):hover,
+-.tableScroll:global(.md-table-wide):focus-visible {
+-  overflow-x: scroll;
+-  padding-bottom: 0;
++  overflow-x: auto;
++  scrollbar-width: thin;
++  scrollbar-color: var(--dsw-alias-label-tertiary, #9098a3) transparent;
++}
++
++.tableScroll:global(.md-table-wide)::-webkit-scrollbar {
++  height: 8px;
++}
++
++.tableScroll:global(.md-table-wide)::-webkit-scrollbar-track {
++  background: transparent;
++}
++
++.tableScroll:global(.md-table-wide)::-webkit-scrollbar-thumb {
++  border-radius: 4px;
++  background: var(--dsw-alias-label-tertiary, #9098a3);
++}
++
++.tableScroll:global(.md-table-wide)::-webkit-scrollbar-thumb:hover {
++  background: var(--dsw-alias-label-secondary, #c9ced8);
+ }
+ 
+ /* Chromium keyboard-focuses scrollable containers by default; the ring uses

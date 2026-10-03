@@ -133,9 +133,9 @@ describe('compatibility BrowserWindow options', () => {
     expect(desktopWindowOptions(advanced, {} as NativeImage, 'darwin', preload)).toEqual(options)
   })
 
-  it('uses native Windows controls, Mica, shadow, and rounded corners in enhanced mode', () => {
+  it('uses native Windows controls, shadow, and rounded corners on an opaque enhanced window', () => {
     const options = advancedWindowOptions(
-      { ...spec, mode: 'advanced', material: 'mica', windowsBuild: 22_621 },
+      { ...spec, mode: 'advanced', material: 'off' },
       {} as NativeImage,
       'win32',
       preload,
@@ -148,23 +148,8 @@ describe('compatibility BrowserWindow options', () => {
         symbolColor: '#7f858f',
         height: ADVANCED_WINDOWS_TITLEBAR_HEIGHT,
       },
-      backgroundMaterial: 'mica',
-      hasShadow: true,
-      roundedCorners: true,
-      thickFrame: true,
-    }))
-  })
-
-  it('keeps a Windows window opaque when material is off', () => {
-    const options = advancedWindowOptions(
-      { ...spec, mode: 'advanced', material: 'off', windowsBuild: 22_000 },
-      {} as NativeImage,
-      'win32',
-      preload,
-    )
-
-    expect(options).toEqual(expect.objectContaining({
       backgroundColor: '#202124',
+      hasShadow: true,
       roundedCorners: true,
       thickFrame: true,
     }))
@@ -172,12 +157,11 @@ describe('compatibility BrowserWindow options', () => {
     expect(options).not.toHaveProperty('backgroundMaterial')
   })
 
-  it('uses the taller native caption and capability-gated material in extended mode', () => {
+  it('uses the taller native caption on an opaque extended Windows window', () => {
     const extended = {
       ...spec,
       mode: 'extended' as const,
       material: 'off' as const,
-      windowsBuild: 19_045,
     }
     const options = extendedWindowOptions(extended, {} as NativeImage, 'win32', preload)
 

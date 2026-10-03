@@ -12,10 +12,9 @@ const input: DesktopSetupWizardInput = {
   appVersion: '2.0.6-beta.1',
   profileName: 'work',
   platform: 'win32',
-  micaSupported: true,
   mode: 'compatibility',
   macosMaterial: 'transparent',
-  windowsMaterial: 'mica',
+  windowsMaterial: 'off',
   openBrowser: false,
   networkExposure: 'loopback',
   market: 'disabled',
@@ -25,6 +24,8 @@ const input: DesktopSetupWizardInput = {
     notifyOnTurnFailure: true,
     notifyOnJobCompletion: true,
     notifyOnJobFailure: true,
+    notifyOnScheduleCompletion: true,
+    notifyOnScheduleFailure: true,
   },
 }
 
@@ -127,27 +128,29 @@ describe('Desktop Setup Wizard copy and contract', () => {
     expect(isDesktopSetupWizardInput({ ...input, appVersion: '<script>' })).toBe(false)
     expect(isDesktopSetupWizardInput({ ...input, profileName: '../escape' })).toBe(false)
     expect(isDesktopSetupWizardInput({ ...input, profileName: 'CON' })).toBe(false)
+    // Windows has no selectable material; the removed Mica value is rejected.
+    expect(isDesktopSetupWizardInput({ ...input, windowsMaterial: 'mica' })).toBe(false)
+    expect(isDesktopSetupWizardInput({ ...input, micaSupported: true })).toBe(false)
     expect(desktopSetupWizardSelectionIsAvailable(input, input)).toBe(true)
-    expect(desktopSetupWizardSelectionIsAvailable(input, { platform: 'win32', micaSupported: false })).toBe(false)
     expect(desktopSetupWizardSelectionIsAvailable(
       { ...input, mode: 'extended', windowsMaterial: 'off' },
-      { platform: 'linux', micaSupported: false },
+      { platform: 'linux' },
     )).toBe(false)
     expect(desktopSetupWizardSelectionIsAvailable(
       { ...input, mode: 'advanced', openBrowser: true },
-      { platform: 'win32', micaSupported: true },
+      { platform: 'win32' },
     )).toBe(false)
     expect(desktopSetupWizardSelectionIsAvailable(
       { ...input, openBrowser: false, networkExposure: 'lan' },
-      { platform: 'win32', micaSupported: true },
+      { platform: 'win32' },
     )).toBe(false)
     expect(desktopSetupWizardSelectionIsAvailable(
       { ...input, openBrowser: true, networkExposure: 'lan' },
-      { platform: 'win32', micaSupported: true },
+      { platform: 'win32' },
     )).toBe(true)
     expect(desktopSetupWizardSelectionIsAvailable(
       { ...input, mode: 'advanced', openBrowser: true, networkExposure: 'lan' },
-      { platform: 'win32', micaSupported: true },
+      { platform: 'win32' },
     )).toBe(false)
   })
 })

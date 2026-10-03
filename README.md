@@ -53,7 +53,7 @@ DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
 | --- | --- |
 | <a href="https://dshdesktop.cn/sponsors/wuying"><img src="assets/sponsors/wuying-cloud-computer-logo.png" alt="阿里云无影云电脑" width="96"></a> | [**阿里云 · 无影云电脑**](https://dshdesktop.cn/sponsors/wuying)<br>感谢 **阿里云** 无影云电脑赞助本项目！无影云电脑个人版面向个人用户提供云上电脑服务，将计算、存储和桌面环境放在云端，支持在多类终端上接入使用，并可按需选择不同规格，适合远程办公、学习、开发和轻量创作等场景。<br><br>[**打开微信注册 →**](https://dshdesktop.cn/sponsors/wuying) |
 | <a href="https://www.ucloud.cn/site/active/astraflow?ytag=geo_waituo_dsh"><img src="assets/sponsors/astraflow-logo.png" alt="UCloud 星图 AstraFlow" width="96"></a> | [**UCloud · 星图 AstraFlow**](https://www.ucloud.cn/site/active/astraflow?ytag=geo_waituo_dsh)<br>感谢 **UCloud** 星图 AstraFlow 大模型赞助了本项目！优刻得 **UCloud** 星图 AstraFlow 大模型，支持 200+ 模型一键调用：内置 Kimi K3、DeepSeek V4/V3、Qwen 3、GLM5.2、happyhorse 等全球领先开源大模型，无需自训，开箱即用。<br><br>[**访问官网 →**](https://www.ucloud.cn/site/active/astraflow?ytag=geo_waituo_dsh) |
-| <a href="https://88api.ai/sign-up?aff=VnEb"><img src="assets/sponsors/88api-logo.png" alt="88API" width="120"></a> | [**88API**](https://88api.ai/sign-up?aff=VnEb)<br>88API 是一站式多模型 API 聚合平台，平台由海外企业运营，稳定高效支持开票。平台提供 DeepSeek 官转和开源渠道，价格低至 5 折，完美适配 DSH Desktop 项目。一个 API Key 即可统一接入海内外多种模型，覆盖文本对话、图片、音频、音乐和视频生成接口，适用于 AI 编程、Agent 自动化、内容创作及应用开发。<br><br>[**立即注册 →**](https://88api.ai/sign-up?aff=VnEb) |
+| <a href="https://88api.ai/sign-up?aff=VnEb"><img src="assets/sponsors/88api-logo.png" alt="88API" width="120"></a> | [**88API Token 聚合平台**](https://88api.ai/sign-up?aff=VnEb)<br><br>🧠 聚合 GPT、Claude、Gemini、Grok、DeepSeek、Kimi、GLM 等语言与编程模型；<br>🎨 图片模型：GPT-Image、Gemini、Grok 等；<br>🎬 视频模型：Seedance、Veo、MiniMax H3、Kling、Grok 等；<br>🎙️ 语音能力：Whisper、TTS 等。从文案、出图、改图，到视频生成与配音<br>🎁新用户注册送体验额度，可以检测模型能力。站内有人工客服值守！<br>👉香港正规企业运营 稳定供应 全绿满血 不降智 提供发票<br><br>[**立即注册 →**](https://88api.ai/sign-up?aff=VnEb) |
 | <a href="https://onliqiu.com/r/ds2h"><img src="assets/sponsors/liqiu-api-logo.png" alt="立秋 API" width="96"></a> | [**立秋 API**](https://onliqiu.com/r/ds2h)<br>自古逢秋悲寂寥，我言秋日胜春朝。立秋API 是一家稳定、透明、纯血的AI中转站，提供ChatGPT、Claude、Grok、GLM等AI中转服务，按量付费，支持开票，大家都炸我不炸，凌晨依然在线维护，倍率低至 0.09x 起。<br><br>[**注册使用 →**](https://onliqiu.com/r/ds2h) |
 
 </details>
@@ -94,7 +94,7 @@ DSH Desktop 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harne
       <p>把上游 DeepSeek Harness 的本地 Web UI 带到原生桌面。应用自动启动和管理本地 Harness 服务，集成系统托盘与桌面窗口，无需安装 Node.js 或执行命令。</p>
     </td>
     <td width="50%" valign="top">
-      <h3>手机远程控制 <img src="https://img.shields.io/badge/%E5%8D%B3%E5%B0%86%E6%8E%A8%E5%87%BA-F59E0B?style=flat-square" alt="已内置"></h3>
+      <h3><a href="https://www.agents-anywhere.com">手机远程控制</a> <img src="https://img.shields.io/badge/%E5%B7%B2%E5%86%85%E7%BD%AE-2EA44F?style=flat-square" alt="已内置"></h3>
       <p>通过 iOS 和 Android 远程连接 Desktop，在手机上发起任务、查看 Agent 进度，并在需要时继续跟进。已在2.0.9及以上版本中内置</p>
     </td>
   </tr>
@@ -171,6 +171,13 @@ corepack yarn dev
 ```
 
 headless 检查使用 `corepack yarn check`；完整的构建、测试和发布边界见[架构说明](docs/architecture.md)和包级 [`README`](dsh-plugin-desktop/README.md)。如何参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+### macOS 麦克风权限
+
+Stable、Beta、Next 的主应用和 Electron Helper 签名直接使用固定上游 checkout 中的
+`deepseek-harness/apps/desktop/scripts/macos-entitlements.plist`。更新子模块版本后，打包会自动使用对应的权限文件，无需维护本地副本；打包前须初始化子模块。各版本的 macOS 配置保留产品自己的麦克风用途说明。
+
+语音输入沿用上游录音流程触发系统授权，语音插件旁不再提供额外权限按钮，Stable/Beta 也不再安装麦克风权限请求桥接或拦截器。
 
 ## 社区交流
 

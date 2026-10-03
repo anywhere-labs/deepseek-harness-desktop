@@ -1,4 +1,4 @@
-/** One native owner for OS consent and Chromium's media permission hooks. */
+/** Native controls for Computer Use and trusted renderer media access. */
 import { desktopCapturer, Menu, shell, systemPreferences, type BrowserWindow, type DesktopCapturerSource, type Session } from 'electron'
 import { NativePermissions } from './native-permissions.ts'
 import { APP_URL } from './ipc.ts'
@@ -48,7 +48,7 @@ function replyOnce<T>(callback: (value: T) => void, warn: (error: unknown) => vo
   }
 }
 
-export function installMediaPermissions(session: Session, permissions: NativePermissions, options: {
+export function installMediaPermissions(session: Session, options: {
   window(): BrowserWindow | undefined
   language(): string
   warn(error: unknown): void
@@ -60,7 +60,7 @@ export function installMediaPermissions(session: Session, permissions: NativePer
   }
   session.setPermissionCheckHandler((contents, permission, origin, details) => {
     if (!trusted(contents, origin, details.isMainFrame)) return false
-    if (permission === 'media') return details.mediaType === 'audio' && permissions.query('microphone').status === 'granted'
+    if (permission === 'media') return details.mediaType === 'audio'
     // Keep the existing trusted renderer's non-media behavior; OS media grants remain separate.
     return true
   })
@@ -70,12 +70,9 @@ export function installMediaPermissions(session: Session, permissions: NativePer
     if (!allowed()) return reply(false)
     if (permission !== 'media') return reply(true)
     const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined
-    if (!mediaTypes?.length || mediaTypes.some(type => type !== 'audio') || !options.window()?.isFocused()) return reply(false)
-    void (async () => {
-      if (!await contents.executeJavaScript('navigator.userActivation.isActive') || !allowed()) return false
-      const result = await permissions.request('microphone')
-      return allowed() && (result.status === 'granted' || process.platform === 'linux' && result.status === 'unknown')
-    })().then(reply, error => { options.warn(error); reply(false) })
+    // Chromium and macOS request recording consent as part of getUserMedia.
+    // Voice transcription may await initialization before opening the stream.
+    reply(!!mediaTypes?.length && mediaTypes.every(type => type === 'audio'))
   })
   let picking = false
   session.setDisplayMediaRequestHandler((request, callback) => {
