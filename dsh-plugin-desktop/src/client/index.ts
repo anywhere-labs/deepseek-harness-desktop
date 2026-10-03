@@ -24,6 +24,8 @@ import { applyExtendedShell } from './extended-shell.ts'
 import { installDesktopLaunchWorkspaceBridge } from './launch-workspace.ts'
 import { DESKTOP_SETTINGS_FORMS_SERVICE } from './settings-bridge.ts'
 import { installSidebarFooterStyles } from './sidebar-footer-styles.ts'
+import { bulkArchiveEn, bulkArchiveZh, installSidebarBulkArchive, sidebarArchiveTargets } from './sidebar-bulk-archive.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
 
 export { applyAdvancedShell } from './advanced-shell.ts'
@@ -158,6 +160,29 @@ export function apply(ctx: ClientContext): void {
   // the module-level inject list would deadlock the two against each other.
   // Not gated on win32 either — the launcher's folder argument works on Linux.
   ctx.inject(['workspaces', 'uiWorkspace'], (scope: ClientContext) => {
+    const namespace = 'dsh-desktop-bulk-archive'
+    scope.effect(() => scope.locale.register(namespace, { zh: bulkArchiveZh, en: bulkArchiveEn }), 'desktop: bulk archive copy')
+    scope.effect(() => installSidebarBulkArchive({
+      targets: () => {
+        const sessions = scope.sessions.list.getSnapshot()
+        const workspaces = scope.workspaces.list.getSnapshot()
+        return sidebarArchiveTargets({
+          sessions: sessions.ids.flatMap(id => {
+            const session = sessions.byId[id]
+            return session === undefined ? [] : [{ ...session, title: session.displayTitle }]
+          }),
+          workspaces: workspaces.items,
+          archivedSessionIds: workspaces.archivedSessionIds,
+        })
+      },
+      archive: async id => { await scope.uiWorkspace.archiveSession(id as SessionId) },
+      subscribe: refresh => {
+        const stopSessions = scope.sessions.list.subscribe(refresh)
+        const stopWorkspaces = scope.workspaces.list.subscribe(refresh)
+        return () => { stopSessions(); stopWorkspaces() }
+      },
+      t: scope.locale.bind(namespace),
+    }), 'desktop: sidebar multi-selection and workspace archive')
     scope.effect(
       () => installDesktopLaunchWorkspaceBridge({
         ready: async () => { await whenWorkspaceListsReady(scope) },

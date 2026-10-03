@@ -18,6 +18,7 @@
     "tests/client-launch-workspace.spec.ts",
     "tests/client-layout-service.spec.ts",
     "tests/client-sidebar-dom-anchor.spec.ts",
+    "tests/client-sidebar-bulk-archive.spec.ts",
     "tests/theme-presenter.spec.ts"
   ]
 }
