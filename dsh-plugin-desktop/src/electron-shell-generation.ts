@@ -425,9 +425,8 @@ export class ElectronShellGeneration {
       if (applicationNeedsReveal(window, platform.platform)) this.show()
     }
     const clearAttention = (): void => { this.clearAttention() }
-    // Closing the window must never strand the Host. Where the tray is
-    // guaranteed reachable the window hides; elsewhere it minimizes, which
-    // keeps every session running and leaves one reachable surface behind.
+    // Tray reachability is not guaranteed on Linux, so closing its only window
+    // must request a full graceful quit instead of hiding or minimizing it.
     const dismissWindow = (): void => {
       if (platform.hidesWindowOnClose) window.hide()
       else window.minimize()
@@ -479,6 +478,10 @@ export class ElectronShellGeneration {
       persistWindowState()
       if (this.options.isQuitting()) return
       event.preventDefault()
+      if (platform.platform === 'linux') {
+        this.options.spec.requestQuit(0)
+        return
+      }
       if (platform.platform === 'darwin' && fullscreenExitPending) {
         hideAfterFullscreenExit = true
         restoreAfterFullscreenExit = false

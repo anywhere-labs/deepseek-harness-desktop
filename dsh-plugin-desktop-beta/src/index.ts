@@ -6,6 +6,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-client-connection'
+import type {} from '@deepseek-ai/dsh-authorization'
+import type {} from '@deepseek-ai/dsh-credentials'
 import {
   handleRendererBootRequest,
   RENDERER_BOOT_REPORT_PATH,
@@ -59,6 +61,21 @@ import {
 } from './desktop-network.ts'
 import { DESKTOP_FRAME_HEIGHT } from './window-chrome.ts'
 import {
+  DESKTOP_COPILOT_AUTHORIZATION_ANSWER_PATH,
+  DESKTOP_COPILOT_AUTHORIZATION_BEGIN_PATH,
+  DESKTOP_COPILOT_AUTHORIZATION_CANCEL_PATH,
+  DESKTOP_COPILOT_AUTHORIZATION_MODELS_PATH,
+  DESKTOP_COPILOT_AUTHORIZATION_PATH,
+} from './copilot-authorization-contract.ts'
+import {
+  DesktopCopilotAuthorizationController,
+  handleDesktopCopilotAuthorizationAnswerRequest,
+  handleDesktopCopilotAuthorizationBeginRequest,
+  handleDesktopCopilotAuthorizationCancelRequest,
+  handleDesktopCopilotAuthorizationModelsRequest,
+  handleDesktopCopilotAuthorizationReadRequest,
+} from './copilot-authorization-route.ts'
+import {
   effectiveDesktopWindowMaterial,
   type DesktopWindowMaterial,
 } from './window-material.ts'
@@ -81,7 +98,7 @@ export const name = 'desktop-shell'
 
 /** Services required before the shell can register its renderer generation. */
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
-export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection']
+export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'authorization', 'credentials']
 
 /**
  * Standard settings namespace shared by tray and configuration surfaces, the
@@ -160,6 +177,11 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
   if (appExit === undefined) {
     throw new Error('dsh-plugin-desktop: the launcher did not provide ctx.appExit')
   }
+  const authorization = ctx.get('authorization')
+  const credentials = ctx.get('credentials')
+  if (authorization === undefined || credentials === undefined) {
+    throw new Error('dsh-plugin-desktop: the launcher did not provide authorization and credentials services')
+  }
   const browserAccess = ctx.get('desktopBrowserAccess')
   if (browserAccess === undefined) {
     throw new Error('dsh-plugin-desktop: the launcher did not provide ctx.desktopBrowserAccess')
@@ -187,6 +209,27 @@ export function apply(ctx: Context, config: DesktopShellConfig): void {
   let setupSettings: DesktopSetupWizardSettings | undefined
   let setupSaved = false
   const rendererOrigin = `http://127.0.0.1:${String(ctx.webServer.port)}`
+  const copilotAuthorization = new DesktopCopilotAuthorizationController(authorization, credentials)
+  const copilotAuthorizationRoutes = [
+    [DESKTOP_COPILOT_AUTHORIZATION_PATH, handleDesktopCopilotAuthorizationReadRequest],
+    [DESKTOP_COPILOT_AUTHORIZATION_BEGIN_PATH, handleDesktopCopilotAuthorizationBeginRequest],
+    [DESKTOP_COPILOT_AUTHORIZATION_ANSWER_PATH, handleDesktopCopilotAuthorizationAnswerRequest],
+    [DESKTOP_COPILOT_AUTHORIZATION_CANCEL_PATH, handleDesktopCopilotAuthorizationCancelRequest],
+    [DESKTOP_COPILOT_AUTHORIZATION_MODELS_PATH, handleDesktopCopilotAuthorizationModelsRequest],
+  ] as const
+  for (const [path, handler] of copilotAuthorizationRoutes) {
+    ctx.effect(
+      () => ctx.webServer.register({
+        kind: 'exact',
+        path,
+        handler: (req, res) => {
+          if (rejectDesktopRequest(ctx, req, res)) return
+          return handler(req, res, rendererOrigin, copilotAuthorization)
+        },
+      }),
+      `dsh-plugin-desktop: Copilot authorization route ${path}`,
+    )
+  }
   ctx.effect(
     () => ctx.webServer.register({
       kind: 'exact',

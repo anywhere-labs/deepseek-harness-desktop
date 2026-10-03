@@ -335,6 +335,104 @@ const CSS = `
   font-size: 12px;
   line-height: 1.5;
 }
+.dshDesktopCopilotCard {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.dshDesktopCopilotCopy strong { font-size: 13px; font-weight: 600; }
+.dshDesktopCopilotCopy p,
+.dshDesktopCopilotStatus,
+.dshDesktopCopilotNotice p {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dshDesktopCopilotNotice {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+.dshDesktopCopilotNotice a { color: var(--dsw-alias-brand-primary); font-size: 12px; }
+.dshDesktopCopilotCode {
+  width: fit-content;
+  padding: 5px 9px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.dshDesktopCopilotPrompt,
+.dshDesktopCopilotPrompt label { display: grid; gap: 8px; }
+.dshDesktopCopilotPrompt label { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.dshDesktopCopilotPrompt input,
+.dshDesktopCopilotPrompt select {
+  min-width: 0;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 6px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+.dshDesktopCopilotActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.dshDesktopCopilotButton {
+  min-height: 30px;
+  padding: 4px 11px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.dshDesktopCopilotButton:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dshDesktopCopilotButton:disabled { cursor: default; opacity: .5; }
+.dshDesktopCopilotButtonSecondary { color: var(--dsw-alias-label-secondary); }
+.dshDesktopCopilotModels { display: grid; gap: 8px; font-size: 12px; }
+.dshDesktopCopilotModels > strong { font-size: 12px; font-weight: 600; }
+.dshDesktopCopilotModels > p { margin: 0; color: var(--dsw-alias-label-secondary); }
+.dshDesktopCopilotModels > ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dshDesktopCopilotModels li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-2);
+  overflow-wrap: anywhere;
+}
+.dshDesktopCopilotBadges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.dshDesktopCopilotCategory {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+}
+.dshDesktopCopilotModels > .dshDesktopCopilotButton { justify-self: start; }
+.dshDesktopCopilotError { margin: 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; line-height: 1.5; }
 .dshDesktopSettingsUrls {
   display: grid;
   gap: 5px;
