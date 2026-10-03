@@ -1,0 +1,25 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1467,7 +1467,7 @@
+ 			const bundles = [];
+ 			for (const name of names) {
+ 				const installed = dependencies.includes(name);
+-				const optional = OPTIONAL_BUNDLES.includes(name);
++				const optional = OPTIONAL_BUNDLES.includes(name) || (Array.isArray(installation.dsh?.optionalBundles) && installation.dsh.optionalBundles.includes(name) && Object.hasOwn(installation.dependencies ?? {}, name));
+ 				const removable = installed && !Object.hasOwn(installation.dependencies ?? {}, name);
+ 				const enabled = selected.includes(name);
+ 				const readOnlyReason = this.protectsManager(name) ? "management-required" : void 0;
+@@ -1991,7 +1991,11 @@
+ 			if (!enabled && previous.includes(name)) {
+ 				if (this.protectsManager(name)) throw new ManagementFailure("management-required");
+ 			}
+-			const bundles = enabled ? [...previous, ...previous.includes(name) ? [] : [name]] : previous.filter((item) => item !== name);
++			const installation = JSON.parse(readFileSync(this.profile.installAnchor, "utf8"));
++			const exclusive = enabled && Array.isArray(installation.dsh?.exclusiveBundles) ? installation.dsh.exclusiveBundles.find((group) => Array.isArray(group) && group.includes(name)) ?? [] : [];
++			const displaced = previous.filter((item) => item !== name && exclusive.includes(item));
++			if (displaced.some((item) => this.protectsManager(item))) throw new ManagementFailure("management-required");
++			const bundles = enabled ? [...previous.filter((item) => !displaced.includes(item)), ...previous.includes(name) ? [] : [name]] : previous.filter((item) => item !== name);
+ 			if (JSON.stringify(previous) === JSON.stringify(bundles)) return;
+ 			manifest.dsh = {
+ 				...manifest.dsh,

@@ -33,7 +33,10 @@ export function assertPreparedAaRelease(root, expectedCommit, { installed = true
   if (typeof artifact !== 'string' || basename(artifact) !== artifact || !artifact.endsWith('.tgz')) fail('invalid artifact path')
   if (json(join(root, 'package.json')).resolutions?.[AA_PACKAGE] !== aaConnectorResolution(artifact)) fail('Connector compatibility patch references a different AA artifact')
   if (JSON.stringify(provenance.runtimePeers) !== JSON.stringify(runtimePeerRanges(root))) fail('runtime peers have changed')
-  if (!provenance.desktopVersion?.includes(`.desktop.c${expectedCommit.slice(0, 12)}.`)) fail('artifact version does not identify the selected commit')
+  // Stable source versions start their prerelease with "-desktop"; existing
+  // source prereleases append ".desktop". Both carry the same commit marker.
+  const commitMarker = new RegExp(`(?:-|\\.)desktop\\.c${expectedCommit.slice(0, 12)}\\.`)
+  if (typeof provenance.desktopVersion !== 'string' || !commitMarker.test(provenance.desktopVersion)) fail('artifact version does not identify the selected commit')
   const bytes = readFileSync(join(root, 'vendor/agents-anywhere', artifact))
   if (createHash('sha256').update(bytes).digest('hex') !== provenance.sha256) fail('artifact checksum mismatch')
   for (const workspace of AA_WORKSPACES) {

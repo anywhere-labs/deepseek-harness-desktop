@@ -37,6 +37,8 @@ const PREFERENCES: DesktopProfilePreferences = Object.freeze({
     notifyOnTurnFailure: false,
     notifyOnJobCompletion: false,
     notifyOnJobFailure: true,
+    notifyOnScheduleCompletion: true,
+    notifyOnScheduleFailure: true,
   }),
   market: 'community-market',
 })
@@ -105,6 +107,17 @@ describe('Desktop Profile preferences', () => {
     expect(readDesktopProfilePreferences(userData, other)?.aaEnabled).toBe(false)
     await expect(writeDesktopProfilePreferences(userData, work, { ...PREFERENCES,
       aaEnabled: 'true' as unknown as boolean })).rejects.toThrow('aaEnabled')
+  })
+
+  it('reads saved five-switch notification preferences with schedule switches enabled', () => {
+    const userData = temporaryDirectory('dsh-schedule-preferences-')
+    const profile = temporaryDirectory('dsh-schedule-profile-')
+    const { notifyOnScheduleCompletion: _completion, notifyOnScheduleFailure: _failure, ...notifications } = PREFERENCES.notifications
+    writeRawState(userData, profile, { ...PREFERENCES, notifications, version: 1,
+      profileHash: desktopProfilePreferencesProfileHash(profile), recordedAt: RECORDED_AT })
+    expect(readDesktopProfilePreferences(userData, profile)?.notifications).toEqual({
+      ...notifications, notifyOnScheduleCompletion: true, notifyOnScheduleFailure: true,
+    })
   })
 
   it('isolates strict state by sha256(Profile directory)', async () => {
@@ -193,7 +206,7 @@ describe('Desktop Profile preferences', () => {
         ...PREFERENCES.notifications,
         extra: true,
       } as DesktopProfilePreferences['notifications'],
-    }, RECORDED_AT)).rejects.toThrow('five supported boolean fields')
+    }, RECORDED_AT)).rejects.toThrow('supported boolean fields')
     await expect(writeDesktopProfilePreferences(userData, profile, PREFERENCES, '2026-08-28'))
       .rejects.toThrow('recordedAt')
 

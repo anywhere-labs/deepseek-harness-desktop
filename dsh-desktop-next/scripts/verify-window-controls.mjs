@@ -7,6 +7,7 @@ import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { DesktopHostProcess } from '../lib/host-process.js'
+import { desktopKeybindings } from '../lib/keybindings.js'
 import { NextProfiles } from '../lib/profiles.js'
 import { authenticateWebHost, serveWebDocument } from '../lib/web-document.js'
 import { browserFixture, verifySidebarBrowser, verifyWebBrowserFallback } from './verify-sidebar-browser-ui.mjs'
@@ -39,6 +40,7 @@ if (process.platform === 'linux') {
 const host = new DesktopHostProcess(process.execPath, root, manager.directory('desktop'), undefined,
   { ...process.env, ...chooserEnv, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, undefined, undefined, undefined,
   join(root, 'lib', 'host.js'))
+const shortcutPreferences = desktopKeybindings(home, 'macos', () => {})
 let browser
 let page
 let recoveryPage
@@ -69,7 +71,7 @@ try {
       networkExposure: 'loopback', port: 0, lanPort: 0, logLevel: 'info', notifications: true,
       turnCompleted: true, turnFailed: true, jobCompleted: false, jobFailed: false },
     phase: 'ready', busy: false, failure: '', safeMode: false, home: '[temporary test home]', platform: 'darwin',
-    version: '2.0.14-next', updates: { phase: 'idle', installable: true }, trayAvailable: true, notificationsAvailable: true, windowsMicaSupported: false, browserUrl: null, lan: null,
+    version: '2.0.14-next', updates: { phase: 'idle', installable: true }, trayAvailable: true, notificationsAvailable: true, browserUrl: null, lan: null,
     recovery: { bundles: [{ bundleId: 'fixture-plugin', packageName: 'fixture-plugin', owner: 'profile', status: 'active', action: 'uninstall' }],
       checkpoints: [{ id: 'fixture-checkpoint', created: new Date().toISOString(), fileCount: 3, totalBytes: 128 }],
       profileDirectory: '[temporary profile]', usingDefaultDirectory: true },
@@ -126,11 +128,30 @@ try {
   // dsh 0.1.7 addresses boot bundles by revision and republishes the table whenever a plugin
   // registers, so a reload that replays the startup table requests bundles that no longer exist.
   await context.exposeFunction('__nextTestBootPayload', async () => ({ injections: await host.collectInjections(), streamBaseUrl }))
+  await context.exposeFunction('__nextTestShortcutsGet', async definitions => {
+    shortcutPreferences.setDefinitions(definitions)
+    return shortcutPreferences.readCurrent()
+  })
+  await context.exposeFunction('__nextTestShortcutsEdit', (edit, revision) => shortcutPreferences.edit(edit, revision))
   await context.addInitScript(() => {
     globalThis.__NEXT_TEST_BOOT__ = { calls: 0, failures: [] }
     // dsh 0.1.7 reads the native browser transport off this carrier; the bridge comes from
     // `browserFixture`, whose init script already ran.
-    globalThis.dshDesktop = { protocolVersion: 1, browser: globalThis.__nextBrowserBridge }
+    const inputListeners = new Set()
+    globalThis.__nextTestShortcut = input => { for (const listener of inputListeners) listener({ ...input, revision: globalThis.__nextShortcutRevision }) }
+    globalThis.dshDesktop = {
+      protocolVersion: 1, browser: globalThis.__nextBrowserBridge,
+      keyboard: { subscribe: listener => { inputListeners.add(listener); return () => inputListeners.delete(listener) }, closeWindow: async () => {} },
+      shortcuts: {
+        get: async definitions => {
+          const snapshot = await globalThis.__nextTestShortcutsGet(definitions)
+          globalThis.__nextShortcutRevision = snapshot.revision
+          return snapshot
+        },
+        edit: (edit, revision) => globalThis.__nextTestShortcutsEdit(edit, revision),
+        subscribe: () => () => {}, recording: async () => {},
+      },
+    }
     globalThis.dshDesktopBoot = {
       ready: async () => { globalThis.__NEXT_TEST_BOOT__.calls++; return window.__nextTestBootPayload() },
       failed: async message => { globalThis.__NEXT_TEST_BOOT__.failures.push(message) },
@@ -155,15 +176,22 @@ try {
   assert.deepEqual(await page.evaluate(() => globalThis.__DSH_TRANSPORT__), { ownsHost: true, streamBaseUrl },
     'The official entry must execute its Desktop boot branch')
   assert.equal(await page.evaluate(() => globalThis.__NEXT_TEST_BOOT__.calls), 1)
-  await page.getByRole('button', { name: /^(继续|Continue)$/ }).waitFor({ state: 'visible' })
-  assert.equal(await dragRegion(), 'no-drag', 'Modal surfaces must not expose window drag regions')
-  await page.getByRole('button', { name: /^(继续|Continue)$/ }).click()
-  // 0.1.7 ships a default model, so the welcome notice is the only blocking first-run step.
-  // Earlier cores also forced a model credential dialog; dismiss it when a core still shows one.
+  // rc.2 moves official Desktop onboarding into its native shell. Older Web
+  // notices may still appear when a persisted profile requests them.
+  const welcome = page.getByRole('button', { name: /^(继续|Continue)$/ })
+  if (await welcome.isVisible()) {
+    assert.equal(await dragRegion(), 'no-drag', 'Modal surfaces must not expose window drag regions')
+    await welcome.click()
+  }
+  // Dismiss the optional Web credential dialog when present.
   const later = page.getByRole('button', { name: /^(稍后配置|Configure later|添加 API Key|Add API key)$/ })
   await later.click({ timeout: 2_000 }).catch(() => {})
   await page.locator('[aria-modal=true]').waitFor({ state: 'hidden' })
   await drag.waitFor({ state: 'visible' })
+  await page.evaluate(() => globalThis.__nextTestShortcut({ kind: 'keyboard', frameName: '', code: 'KeyB', control: false, alt: false, shift: false, meta: true, repeat: false }))
+  await reopen.waitFor({ state: 'visible' })
+  await page.evaluate(() => globalThis.__nextTestShortcut({ kind: 'keyboard', frameName: '', code: 'KeyB', control: false, alt: false, shift: false, meta: true, repeat: false }))
+  await collapse.waitFor({ state: 'visible' })
   // Simulate multiple extension entries in the official footer seat and check real geometry.
   const footer = page.locator('[data-slot="sidebar.footer.action"]')
   await footer.evaluate(element => {
@@ -303,7 +331,9 @@ try {
   assert.equal(await remoteDialog.getByRole('tablist', { name: '连接管理' }).count(), 1)
   assert.equal(await context.pages().length, 1)
   await remoteDialog.getByRole('button', { name: /^(关闭远程控制|Close Remote Control|关闭手机连接)$/ }).click()
+  await remoteDialog.waitFor({ state: 'hidden' })
   await dshChoice.focus()
+  await page.waitForFunction(() => document.activeElement === document.querySelector('[data-next-markets] [role="radio"]:last-child'))
   await dshChoice.press('Space')
   await waitSelected('[data-next-markets] [role="radio"]:last-child')
   await assertMarketStyles('after switching to dsh-market')
@@ -454,7 +484,7 @@ try {
     assert.equal(geometry.pointerEvents, 'none', 'The caption must not intercept DOM clicks')
     assert.equal(geometry.background, 'rgba(0, 0, 0, 0)', 'The caption must not paint over page content')
     assert.equal(geometry.headerPosition, 'static', 'Keep the official header in normal document flow')
-    assert.notEqual(geometry.headerRegion, 'drag', 'Dragging belongs to the frame region, not the title component')
+    assert.equal(geometry.headerRegion, 'drag', 'rc.2 keeps the official plugin header as a data-window-drag row')
   }
   await checkPluginCaption()
   const titleBox = await pluginHeader.getByRole('heading', { level: 1 }).boundingBox()
@@ -584,12 +614,12 @@ try {
   const updateSection = settings.locator('[data-next-updates]')
   await updateSection.getByRole('button', { name: /检查更新|Check for updates/ }).click()
   assert.equal(controlCommands.at(-1).type, 'check-updates')
-  controlState.updates = { phase: 'downloading', version: '2.0.15-next.1', installable: true, received: 50, total: 100 }
+  controlState.updates = { phase: 'downloading', version: '2.0.17-next.1', installable: true, received: 50, total: 100 }
   await updateSection.getByText(/正在下载更新 50%|Downloading update 50%/).waitFor()
   assert.equal(await updateSection.locator('progress').getAttribute('value'), '50')
   await updateSection.scrollIntoViewIfNeeded()
   await page.screenshot({ path: join(screenshots, 'desktop-update-progress.png'), animations: 'disabled' })
-  controlState.updates = { phase: 'ready', version: '2.0.15-next.1', installable: true }
+  controlState.updates = { phase: 'ready', version: '2.0.17-next.1', installable: true }
   await updateSection.getByRole('button', { name: /安装并重启|Install and restart/ }).click()
   assert.equal(controlCommands.at(-1).type, 'install-update')
   controlState.updates = { phase: 'idle', installable: true }
@@ -640,7 +670,8 @@ try {
   assert.equal(await closeToTray.isChecked(), false)
   controlState.platform = 'win32'
   await settings.locator('.dshDesktopSettingsMaterialField select').first().locator('option[value="transparent"]').waitFor({ state: 'detached' })
-  assert.equal(await settings.locator('option[value="mica"]').count(), 0)
+  // Windows offers no window material, so the material selector disappears entirely.
+  assert.equal(await settings.locator('option[value="transparent"]').count(), 0)
   controlState.platform = 'linux'
   await actions.getByRole('button', { name: /打开 DSH 终端|Open DSH Terminal/ }).waitFor({ state: 'hidden' })
   controlState.platform = 'darwin'
@@ -757,7 +788,12 @@ try {
   const webPage = await webContext.newPage()
   webPage.setDefaultTimeout(15_000)
   await webPage.goto(streamBaseUrl)
-  await webPage.getByRole('button', { name: /^(稍后配置|Configure later)$/ }).click()
+  const webWelcome = webPage.getByRole('button', { name: /^(继续|Continue)$/ })
+  await webWelcome.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {})
+  if (await webWelcome.isVisible()) await webWelcome.click()
+  // The rc.2 Web entry can open directly when the default model is available.
+  await webPage.getByRole('button', { name: /^(稍后配置|Configure later)$/ }).click({ timeout: 2_000 }).catch(() => {})
+  await webPage.locator('[aria-modal=true]').waitFor({ state: 'hidden' })
   await openSettingsPanel(webPage)
   assert.equal(await webPage.locator('.dshDesktopNativeActions').count(), 0)
   assert.equal(await webPage.getByRole('button', { name: /^(桌面设置|Desktop settings)$/ }).count(), 0)
@@ -775,7 +811,7 @@ try {
   await webContext.close()
   assert.deepEqual(errors, [])
   assert.deepEqual(await page.evaluate(() => globalThis.__NEXT_TEST_BOOT__.failures), [])
-  console.log('Next window controls passed through the official 0.1.7-rc.1 Desktop boot branch: stacked sidebar extension entries, homepage/plugin collapse and reopen, navigation, caption geometry, clickable actions, existing-header and platform isolation, official Settings header shortcuts and keyboard navigation, grouped Desktop Settings and immediate saves, per-address login URL rows with exact open/copy targets, Profile cards and tray creation, the Host-independent recovery artifact, and native Browser toolbar, navigation, pane geometry, overlay isolation, tab lifetime and Web iframe fallback. Chromium simulates the preload contract; native Electron window movement and page loading are not tested here.')
+  console.log('Next window controls passed through the official 0.2.0-rc.2 Desktop boot branch: stacked sidebar extension entries, homepage/plugin collapse and reopen, navigation, caption geometry, clickable actions, existing-header and platform isolation, official Settings header shortcuts and keyboard navigation, grouped Desktop Settings and immediate saves, per-address login URL rows with exact open/copy targets, Profile cards and tray creation, the Host-independent recovery artifact, and native Browser toolbar, navigation, pane geometry, overlay isolation, tab lifetime and Web iframe fallback. Chromium simulates the preload contract; native Electron window movement and page loading are not tested here.')
   console.log(`Screenshots: ${screenshots}`)
 } catch (error) {
   console.error(error)
@@ -801,6 +837,7 @@ try {
   }
   throw error
 } finally {
+  shortcutPreferences.dispose()
   await browser?.close()
   await host.stop()
   rmSync(home, { recursive: true, force: true })

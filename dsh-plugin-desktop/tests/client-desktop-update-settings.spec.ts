@@ -31,7 +31,7 @@ async function mount(
       }),
       checkForUpdates,
     },
-    platform: 'darwin', version: '2.0.3', initialMode: 'compatibility', micaSupported: false, setMode: async () => {},
+    platform: 'darwin', version: '2.0.3', initialMode: 'compatibility', setMode: async () => {},
     desktopSettings: scope({ mode: 'compatibility', openBrowser: false, networkExposure: 'loopback', macosMaterial: 'off', windowsMaterial: 'off' }),
     notificationSettings: scope({ enabled: false }),
     ...(capabilities === undefined ? {} : { capabilities }),

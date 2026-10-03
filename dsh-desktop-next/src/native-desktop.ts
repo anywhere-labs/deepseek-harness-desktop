@@ -11,7 +11,6 @@ import { updateLabel } from './update-state.ts'
 export function applyWindowMaterial(window: BrowserWindow, preferences: DesktopPreferences): void {
   const material = windowMaterial(preferences)
   if (process.platform === 'darwin') window.setVibrancy(material === 'transparent' ? 'sidebar' : null)
-  if (process.platform === 'win32') window.setBackgroundMaterial(material === 'mica' ? 'mica' : 'none')
   window.setBackgroundColor(material === 'off' ? nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#f9fafb' : '#00000000')
   window.webContents.send(IPC.material, material)
 }

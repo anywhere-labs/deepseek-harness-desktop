@@ -1,9 +1,7 @@
 diff --git a/lib/index.js b/lib/index.js
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -1018,6 +1018,14 @@
- };
- //#endregion
+@@ -1086,4 +1086,12 @@
  //#region src/host/connector/process.ts
 +/** httpx requires bare IPv6 in NO_PROXY; keep undici's bracketed bypass in the parent. */
 +function connectorEnvironment(environment) {
@@ -16,7 +14,7 @@ diff --git a/lib/index.js b/lib/index.js
  const runFile = promisify(execFile);
  const MAX_FRAME = 1048576;
  /**
-@@ -1174,7 +1182,7 @@
+@@ -1238,7 +1246,7 @@
  			windowsHide: true,
  			detached: process.platform !== "win32",
  			env: {
@@ -25,7 +23,7 @@ diff --git a/lib/index.js b/lib/index.js
  				AA_CONNECTOR_OWNER_KIND: "dsh-plugin",
  				...this.config.dshHome ? { DSH_HOME: this.config.dshHome } : {},
  				AGENT_CONNECTOR_DATA_DIR: dataDir,
-@@ -1318,6 +1326,12 @@
+@@ -1382,6 +1390,12 @@
  			this.buffer = this.buffer.slice(newline + 1);
  			try {
  				const frame = JSON.parse(line);
@@ -38,7 +36,7 @@ diff --git a/lib/index.js b/lib/index.js
  				if (frame.method === "connector/state" && frame.id === void 0) {
  					this.updateState(frame.params);
  					continue;
-@@ -3053,7 +3067,8 @@
+@@ -3206,7 +3220,8 @@
  		type: item.type,
  		status: item.status,
  		role: item.role,

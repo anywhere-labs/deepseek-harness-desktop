@@ -1,3 +1,4 @@
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout, MainPanelId, PanelInfo } from '@deepseek-ai/dsh-client-ui-layout/client'
 
 /** Advanced-shell panel state shared by the root slot and layout-service adapter. */
@@ -75,13 +76,17 @@ function clamp(value: number, min: number, max: number): number {
 
 /** Small observable panel controller used by the advanced root registration. */
 export class DesktopLayoutState implements ILayout {
-  private panelInfo: PanelInfo = Object.freeze({ activePanelId: null })
+  private panelSnapshot: PanelInfo = Object.freeze({ activePanelId: null })
+  readonly panelInfo: HostObservable<PanelInfo> = {
+    getSnapshot: () => this.getPanelInfo(),
+    subscribe: listener => this.subscribe(listener),
+  }
   private navigation = new AbortController()
 
   constructor(private readonly hasMainPanel: (id: MainPanelId) => boolean = () => false) {}
 
   /** Root selection remains independent of the active Session and column geometry. */
-  getPanelInfo(): PanelInfo { return this.panelInfo }
+  getPanelInfo(): PanelInfo { return this.panelSnapshot }
 
   /** Select a registered global panel, or return to the Conversation. */
   selectPanel(panelId: MainPanelId | null): void {
@@ -89,14 +94,14 @@ export class DesktopLayoutState implements ILayout {
       throw new Error(`layout.selectPanel: main panel "${panelId}" is not registered`)
     }
     this.navigation.abort()
-    if (this.panelInfo.activePanelId === panelId) return
-    this.panelInfo = Object.freeze({ activePanelId: panelId })
+    if (this.panelSnapshot.activePanelId === panelId) return
+    this.panelSnapshot = Object.freeze({ activePanelId: panelId })
     for (const listener of this.listeners) listener()
   }
 
   /** Return to the Conversation when the selected plugin panel is unloaded. */
   retainMainPanels(): void {
-    const id = this.panelInfo.activePanelId
+    const id = this.panelSnapshot.activePanelId
     if (id !== null && !this.hasMainPanel(id)) this.selectPanel(null)
   }
 

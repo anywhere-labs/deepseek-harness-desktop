@@ -27,7 +27,7 @@ export function NextDesktopSettings({ adapter, language, onOpenPlugins }: { adap
   const t = desktopTranslate(language)
   return <div data-next-desktop-settings=""><DesktopSettingsSection
     t={t} api={adapter.api} version={state?.version ?? ''} platform={state?.platform === 'darwin' || state?.platform === 'win32' ? state.platform : 'linux'}
-    initialMode="compatibility" micaSupported={state?.windowsMicaSupported ?? false}
+    initialMode="compatibility"
     setMode={async () => { throw new Error('Window modes are not supported in Next') }}
     desktopSettings={adapter.desktopSettings} notificationSettings={adapter.notificationSettings}
     capabilities={{ windowModes: false, pluginSelectors: false, updates: false, materialRequiresRestart: false, nativeLanConfirmation: true, jobNotifications: false }}
@@ -78,7 +78,7 @@ function NextDesktopOptions({ adapter, state, language }: { adapter: NextSetting
     {failure && <p role="alert" className="dshDesktopSettingsError">{failure}</p>}
     <NextUpdateSettings state={state} language={language} run={command => { void run(() => adapter.command(command)) }} />
     <section className="dshDesktopSettingsGroup"><h3>{t('后台运行', 'Background operation')}</h3>
-      <DesktopSettingsToggleRow label={t('关闭窗口后保持后台运行', 'Keep running after closing the window')} checked={state.preferences.closeToTray} disabled={busy || state.busy} onChange={closeToTray => { void run(() => adapter.savePreferences({ closeToTray })) }} />
+      <DesktopSettingsToggleRow label={t('关闭窗口后保持后台运行', 'Keep running after closing the window')} checked={state.preferences.closeToTray} disabled={busy || state.busy || state.safeMode} onChange={closeToTray => { void run(() => adapter.savePreferences({ closeToTray })) }} />
       <p className="dshDesktopSettingsHint">{state.trayAvailable ? t('可从托盘重新打开窗口。', 'Reopen the window from the tray.') : t('系统托盘不可用，关闭主窗口将退出应用。', 'The tray is unavailable; closing the main window quits the application.')}</p>
     </section>
     <section className="dshDesktopSettingsGroup"><h3>{t('桌面工具', 'Desktop tools')}</h3>
@@ -86,7 +86,7 @@ function NextDesktopOptions({ adapter, state, language }: { adapter: NextSetting
         {action('restart-onboarding', '设置向导', 'Setup wizard', state.safeMode)}
         {action('open-home', '打开数据目录', 'Open data directory')}{action('open-profile', '打开 Profile 目录', 'Open Profile directory')}{action('open-logs', '打开日志目录', 'Open log directory')}{action('devtools', '开发者工具', 'Developer Tools')}
       </div>
-      <label className="dshDesktopSettingsMaterialField">{t('日志级别', 'Log level')}<select className="dshDesktopSettingsSelect" value={state.preferences.logLevel} disabled={busy || state.busy} onChange={event => { const logLevel = event.currentTarget.value as DesktopState['preferences']['logLevel']; void run(() => adapter.savePreferences({ logLevel })) }}>{['debug', 'info', 'warn', 'error'].map(value => <option key={value}>{value}</option>)}</select></label>
+      <label className="dshDesktopSettingsMaterialField">{t('日志级别', 'Log level')}<select className="dshDesktopSettingsSelect" value={state.preferences.logLevel} disabled={busy || state.busy || state.safeMode} onChange={event => { const logLevel = event.currentTarget.value as DesktopState['preferences']['logLevel']; void run(() => adapter.savePreferences({ logLevel })) }}>{['debug', 'info', 'warn', 'error'].map(value => <option key={value}>{value}</option>)}</select></label>
       <button type="button" className="dshDesktopSettingsButton" onClick={() => { void run(() => adapter.command({ type: 'controls', page: 'recovery' })) }}>{t('打开恢复助手', 'Open recovery assistant')}</button>
     </section>
   </>

@@ -8,7 +8,6 @@ import {
   DESKTOP_FRAME_HEIGHT,
   DESKTOP_FRAME_MACOS_TRAFFIC_LIGHT_TOP,
 } from './window-chrome.ts'
-import { windowsSupportsSystemBackdrop } from './window-material.ts'
 
 /** Stable persistent storage isolated from every auxiliary/default session. */
 export const DESKTOP_RENDERER_SESSION_PARTITION = 'persist:dsh-desktop-renderer'
@@ -134,10 +133,6 @@ function customChromeWindowOptions(
       : custom
   }
   if (platform === 'win32') {
-    const systemMaterial = windowsSupportsSystemBackdrop(spec.windowsBuild)
-      && spec.material === 'mica'
-      ? 'mica' as const
-      : undefined
     return {
       ...options,
       autoHideMenuBar: true,
@@ -147,8 +142,6 @@ function customChromeWindowOptions(
         symbolColor: '#7f858f',
         height: geometry.titlebarHeight,
       },
-      ...(systemMaterial === undefined ? {} : { backgroundColor: '#00000000' }),
-      ...(systemMaterial === undefined ? {} : { backgroundMaterial: systemMaterial }),
       hasShadow: true,
       roundedCorners: true,
       thickFrame: true,

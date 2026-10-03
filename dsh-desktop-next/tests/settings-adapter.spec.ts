@@ -7,7 +7,7 @@ function fixture() {
     selected: 'desktop', profiles: ['desktop', 'work', 'broken'], unavailableProfiles: ['broken'],
     features: { market: true, remoteControl: false }, preferences: { ...DEFAULT_PREFERENCES },
     phase: 'ready', busy: false, failure: '', safeMode: false, home: '/fixture', platform: 'darwin', version: '0.1.0',
-    trayAvailable: true, notificationsAvailable: true, windowsMicaSupported: false, browserUrl: null, lan: null, checkpoint: null, logs: '',
+    trayAvailable: true, notificationsAvailable: true, browserUrl: null, lan: null, checkpoint: null, logs: '',
   }
   const commands: DesktopCommand[] = []
   const links: DesktopBrowserLinks = { localUrl: null, lanUrls: [] }
@@ -63,6 +63,9 @@ it('maps only supported features and available Profiles to the shared settings A
   await expect(adapter.api.selectMarket('dsh-market')).rejects.toThrow('Plugins page')
   expect(commands).toEqual([])
   state.safeMode = true
+  await adapter.refresh()
+  expect(adapter.desktopSettings.getSnapshot().writable).toBe(false)
+  expect(adapter.notificationSettings.getSnapshot().writable).toBe(false)
   expect(adapter.api.selectAa).toBeUndefined()
   expect(projectSettings(state).market.effective).toBe('disabled')
   await adapter.api.selectProfile('work')

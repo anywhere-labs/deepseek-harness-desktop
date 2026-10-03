@@ -119,7 +119,7 @@ describe('desktop update installer download', () => {
       version: '2.0.6-beta.1',
       channel: 'beta',
       destinationPath: join(directory, 'DSH-Desktop-Beta-2.0.6-beta.1-mac.dmg'),
-      request: async () => chunkedResponse([dmgArtifact()]),
+      request: async () => chunkedResponse([dmgArtifact()], {}, 'https://cdn-lfs-cn-1.modelscope.cn/installer.dmg'),
     })
     expect(result).toBe(join(directory, 'DSH-Desktop-Beta-2.0.6-beta.1-mac.dmg'))
   })
@@ -166,7 +166,12 @@ describe('desktop update installer download', () => {
     await expectNoPartialFiles(directory)
   })
 
-  it('accepts a redirect that settles on a reviewed mirror origin', async () => {
+  it.each([
+    'https://modelscope.cn/models/t4wefan/deepseek-harness-desktop/resolve/master/installer.dmg',
+    'https://cdn-lfs-cn-1.modelscope.cn/installer.dmg',
+    'https://other.example/installer.dmg',
+    'https://modelscope.cn/models/another-user/another-repo/installer.dmg',
+  ])('accepts a valid installer from an HTTPS redirect to %s', async finalUrl => {
     const directory = await temporaryDirectory()
     const artifact = dmgArtifact()
     const result = await downloadDesktopUpdate({
@@ -176,18 +181,16 @@ describe('desktop update installer download', () => {
       request: async () => chunkedResponse(
         [artifact],
         {},
-        'https://modelscope.cn/models/t4wefan/deepseek-harness-desktop/resolve/master/DSH-Desktop-2.2.1-universal.dmg',
+        finalUrl,
       ),
     })
     expect(await readFile(result)).toEqual(Buffer.from(artifact))
   })
 
   it.each([
-    ['an unreviewed host', 'https://attacker.example/installer.dmg'],
     ['an https downgrade', 'http://www.dshdesktop.cn/api/downloads/mac'],
-    ['a look-alike suffix', 'https://evil-modelscope.cn/installer.dmg'],
-    ['another user uploads path on the mirror host', 'https://modelscope.cn/models/attacker/deepseek-harness-desktop/resolve/master/installer.dmg'],
-    ['an unreviewed mirror subdomain', 'https://cdn.modelscope.cn/installer.dmg'],
+    ['embedded credentials', 'https://user:password@cdn.example/installer.dmg'],
+    ['a non-HTTPS port', 'https://cdn.example:8080/installer.dmg'],
     ['a missing final URL', ''],
   ] as const)('rejects a download that settles on %s', async (_label, finalUrl) => {
     const directory = await temporaryDirectory()
@@ -200,7 +203,7 @@ describe('desktop update installer download', () => {
     await expectNoPartialFiles(directory)
   })
 
-  it('cancels the response body when the origin gate rejects the settled URL', async () => {
+  it('cancels the response body when the HTTPS check rejects the settled URL', async () => {
     const directory = await temporaryDirectory()
     let cancelled = false
     const body = new ReadableStream<Uint8Array>({
@@ -213,7 +216,7 @@ describe('desktop update installer download', () => {
       destinationPath: destinationPath(directory, 'darwin', '2.3.0'),
       request: async () => ({
         response: new Response(body, { status: 200 }),
-        finalUrl: 'https://attacker.example/installer.dmg',
+        finalUrl: 'http://cdn.example/installer.dmg',
       }),
     }), 'redirect-origin')
     expect(cancelled).toBe(true)

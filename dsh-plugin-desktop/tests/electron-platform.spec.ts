@@ -51,14 +51,12 @@ describe('electronPlatformStrategy', () => {
 
     strategy.configureApplication(icon, 'DSH Desktop')
     strategy.configureWindow(window as never)
-    strategy.refreshThemeMaterial(window as never, 'mica')
 
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
     expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()
     expect(window.removeMenu).toHaveBeenCalledTimes(1)
-    expect(window.setBackgroundMaterial.mock.calls).toEqual([
-      ['mica'],
-    ])
+    // Windows windows stay opaque; no system backdrop is ever applied.
+    expect(window.setBackgroundMaterial).not.toHaveBeenCalled()
   })
 
   it('selects the macOS adapter and configures its native application chrome', () => {
@@ -68,13 +66,12 @@ describe('electronPlatformStrategy', () => {
 
     expect(strategy.platform).toBe('darwin')
     expect(strategy.updateDownloadPlatform).toBe('darwin')
-    expect(strategy.canPickDirectory).toBe(false)
+    expect(strategy.canPickDirectory).toBe(true)
     expect(strategy.canToggleShellMode).toBe(true)
     expect(strategy.hidesWindowOnClose).toBe(true)
 
     strategy.configureApplication(icon, 'DSH Desktop')
     strategy.configureWindow(window as never)
-    strategy.refreshThemeMaterial(window as never, 'transparent')
 
     expect(electron.app.dock.setIcon).toHaveBeenCalledWith(icon)
     expect(electron.Menu.buildFromTemplate).toHaveBeenCalledTimes(1)
@@ -105,7 +102,6 @@ describe('electronPlatformStrategy', () => {
 
     strategy.configureApplication({} as never, 'DSH Desktop')
     strategy.configureWindow(window as never)
-    strategy.refreshThemeMaterial(window as never, 'off')
 
     expect(electron.app.dock.setIcon).not.toHaveBeenCalled()
     expect(electron.Menu.setApplicationMenu).not.toHaveBeenCalled()

@@ -31,7 +31,7 @@ Profile 是一组 DSH bundle、依赖和 patch 的组合。托盘中的 **Profil
 - **扩展窗口**：安装 Desktop 自有 layout 与 sidebar surface，并在其中承载官方 sidebar、conversation 和 details occupant。36 像素顶部 frame 与左侧 sidebar surface 组成一个带圆角内拐角的倒 L 材质区域。
 - **增强模式**：保留独立 root registration 与紧凑内部 caption；macOS 使用 20 像素内容 inset 和 32 像素拖动区域，Windows 使用 32 像素 caption row，不复用扩展窗口的独立 frame。
 
-macOS 自定义窗口模式可以打开或关闭透明材质。Windows 可关闭材质；仅 Windows 11 build 22621 及以上在支持时显示 Mica。旧版 Windows 亚克力偏好会安全地按关闭处理，并在设置文件可写时自动迁移。切换模式或材质都会重启应用，不会在正在运行的 renderer 中热替换 root slot 或窗口材质。Linux 只提供兼容模式。
+macOS 自定义窗口模式可以打开或关闭透明材质。Windows 不提供材质选项，始终使用不透明窗口。旧版 Windows 亚克力和 Mica 偏好都会安全地按关闭处理，其中亚克力还会在设置文件可写时自动迁移。切换模式或材质都会重启应用，不会在正在运行的 renderer 中热替换 root slot 或窗口材质。Linux 只提供兼容模式。
 
 ## 本地 Web 端口
 

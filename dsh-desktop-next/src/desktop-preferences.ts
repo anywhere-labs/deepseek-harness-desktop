@@ -8,12 +8,13 @@ export function parsePreferences(value: unknown): DesktopPreferences {
   const source = value as Record<string, unknown>
   if (Object.keys(source).some(key => !(key in DEFAULT_PREFERENCES))) throw new Error('Unknown Desktop preference')
   const result = { ...DEFAULT_PREFERENCES, ...source }
-  // Preserve the original Desktop's compatibility fallback for removed Acrylic.
-  if (source.windowsMaterial === 'acrylic') result.windowsMaterial = 'off'
-  for (const key of ['closeToTray', 'browserAccess', 'notifications', 'turnCompleted', 'turnFailed', 'jobCompleted', 'jobFailed'] as const) {
+  // Acrylic and Mica were removed like in the original Desktop. Old preference
+  // files stay readable and fail closed to the ordinary opaque Windows window.
+  if (source.windowsMaterial === 'acrylic' || source.windowsMaterial === 'mica') result.windowsMaterial = 'off'
+  for (const key of ['closeToTray', 'browserAccess', 'notifications', 'turnCompleted', 'turnFailed', 'jobCompleted', 'jobFailed', 'scheduleCompleted', 'scheduleFailed'] as const) {
     if (typeof result[key] !== 'boolean') throw new Error(`Invalid Desktop preference: ${key}`)
   }
-  for (const [key, choices] of Object.entries({ macosMaterial: ['off', 'transparent'], windowsMaterial: ['off', 'mica'],
+  for (const [key, choices] of Object.entries({ macosMaterial: ['off', 'transparent'], windowsMaterial: ['off'],
     linuxMaterial: ['off', 'transparent'], networkExposure: ['loopback', 'lan'], logLevel: ['debug', 'info', 'warn', 'error'] })) {
     if (!choices.includes(String(result[key as keyof DesktopPreferences]))) throw new Error(`Invalid Desktop preference: ${key}`)
   }

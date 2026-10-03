@@ -179,13 +179,19 @@ function runFlatProfileDshEntry() {
     symlinkSync(dshHomePathsPackage, linkedDshHomePathsPackage, process.platform === 'win32' ? 'junction' : 'dir')
     symlinkSync(dshPackage, linkedDshPackage, process.platform === 'win32' ? 'junction' : 'dir')
     symlinkSync(semverPackage, linkedSemverPackage, process.platform === 'win32' ? 'junction' : 'dir')
+    // dsh 0.2.0-rc.2 only manages the reserved Desktop Profile after Desktop
+    // has initialized it, so give the smoke a private, initialized home.
+    const home = join(root, 'home')
+    const profile = join(home, 'profiles', 'desktop')
+    mkdirSync(profile, { recursive: true })
+    writeFileSync(join(profile, 'package.json'), JSON.stringify({ name: 'dsh-profile-desktop', private: true }) + '\n')
     runElectronEntry(
       'flat profile dsh plugin help',
       ['--expose-internals'],
       join(desktopPackage, 'lib', 'desktop-cli.js'),
       ['plugin', '--help'],
       undefined,
-      { DSH_DESKTOP_DEFAULT_PROFILE: 'desktop' },
+      { DSH_DESKTOP_DEFAULT_PROFILE: 'desktop', DSH_HOME: home },
     )
   } finally {
     rmSync(root, { recursive: true, force: true })

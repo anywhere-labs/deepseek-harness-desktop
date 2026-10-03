@@ -12,6 +12,9 @@ import { installSidebarFooterStyles } from '../../../dsh-plugin-desktop-beta/src
 import { NextSettingsAdapter } from './settings-adapter.ts'
 import { NextDesktopSettings, NextDesktopActions } from './settings.tsx'
 import { installWindowStyles } from './styles.ts'
+import { registerDesktopOnboarding } from '../../../dsh-plugin-desktop-beta/src/client/onboarding.tsx'
+import { Onboarding } from '../native-ui/onboarding.tsx'
+import '../../../dsh-plugin-desktop-beta/src/client/onboarding.css'
 import { registerPluginControls } from './plugin-controls.tsx'
 import { installPluginControlsStyles } from './plugin-controls-styles.ts'
 import { SettingsRequests } from './settings-requests.tsx'
@@ -35,6 +38,34 @@ export function apply(ctx: Context): void {
   ctx.effect(() => installDesktopSettingsStyles('dsh-desktop-next'), 'Shared Desktop settings styles')
   ctx.effect(installPluginControlsStyles, 'Plugin controls and permission dialog styles')
   registerPluginControls(ctx)
+  registerDesktopOnboarding(ctx, (snapshot, locale, finish, renderNavigation) => createElement(Onboarding, {
+    embedded: true,
+    renderNavigation,
+    locale,
+    state: {
+      selected: snapshot.profile,
+      features: {
+        market: snapshot.input.market === 'community-market',
+        dshMarket: snapshot.input.market === 'dsh-market',
+        remoteControl: snapshot.input.aaEnabled ?? false,
+      },
+      onboardingComputerUse: snapshot.computerUse ?? false,
+    },
+    bridge: {
+      permissions: window.desktopNext?.permissions,
+      command: async command => {
+        if (command.type === 'onboarding-skip') return finish(snapshot.profile)
+        if (command.type !== 'onboarding-complete') throw new Error('Unexpected onboarding command')
+        const { appVersion: _version, profileName: _profile, platform: _platform, ...selection } = snapshot.input
+        await finish(snapshot.profile, {
+          ...selection,
+          market: command.features.market ? 'community-market' : command.features.dshMarket ? 'dsh-market' : 'disabled',
+          aaEnabled: command.features.remoteControl,
+          computerUse: command.computerUse,
+        })
+      },
+    },
+  }))
   if (window.desktopNext) {
     const permissions = window.desktopNext.permissions
     if (permissions) ctx.effect(() => {

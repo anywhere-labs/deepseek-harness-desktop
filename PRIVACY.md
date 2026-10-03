@@ -2,8 +2,8 @@
 
 [中文](PRIVACY.zh.md)
 
-- **Version:** 1.0
-- **Effective and last updated:** August 26, 2026
+- **Version:** 1.1
+- **Effective and last updated:** September 28, 2026
 
 DSH Desktop is a local-first, open-source desktop application. This policy explains what information the official DSH Desktop distribution and official online services process, why they process it, who receives it, and what choices you have.
 
@@ -153,7 +153,9 @@ Upload a backup only to a WebDAV service or GitHub account you trust. The select
 
 ### 6.4 Optional upstream telemetry
 
-Upstream DSH session telemetry is `DISABLED` in Desktop's default composition. If you or a deployment operator explicitly sets `DSH_TELEMETRY_MODE` to `FULL` or `FEEDBACK_ONLY`, raw session telemetry may be sent with the upstream anonymous user ID to `https://harness-telemetry.deepseeksvc.com/v1/logs` or the endpoint configured in `DSH_TELEMETRY_OTLP_URL`. That processing is controlled by the upstream configuration and recipient policy and is not the Anywhere Labs official update service.
+Upstream DSH session telemetry keeps the upstream default of `FEEDBACK_ONLY` in Desktop's default composition: ordinary use uploads no session content, and only after you explicitly submit feedback in a session is that session's raw log up to the feedback sent, with the upstream anonymous user ID (stored as `.anonymous-user-id` in the DSH data directory; delete it to reset), to `https://dsh-otel-collector.deepseeksvc.com/v1/logs` or the endpoint configured in `DSH_TELEMETRY_OTLP_URL`. If you or a deployment operator explicitly sets `DSH_TELEMETRY_MODE` to `FULL`, session telemetry is sent continuously during ordinary use; setting `DSH_TELEMETRY_DISABLED` to any non-empty value makes Desktop turn the component off. That processing is controlled by the upstream configuration and recipient policy and is not the Anywhere Labs official update service.
+
+Upstream also provides Desktop product analytics (`product-analytics` and `desktop-product-telemetry`) for any Profile named `desktop`, which would send a device ID, a user ID when signed in to a DeepSeek account, OS and app versions, and interface interaction events to DeepSeek. DSH Desktop turns both off at startup, and the official distribution does not send these analytics.
 
 ### 6.5 External links
 

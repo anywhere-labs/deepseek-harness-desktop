@@ -42,7 +42,6 @@ DSH home `settings.yaml` 文档中的 `dsh-desktop.mode` 字段是单一事实�
 dsh-desktop:
   mode: compatibility # compatibility、extended 或 advanced
   macosMaterial: transparent # off 或 transparent
-  windowsMaterial: acrylic # off、acrylic，系统支持时还可用 mica
 ```
 
 Launcher 会在组合一个 generation 之前，读取当前 `@deepseek-ai/dsh-settings-file` row 解析到的同一份文件。Host 通过标准 settings service 注册 `dsh-desktop` namespace。profile manifest 中没有平行的模式值。
@@ -75,7 +74,7 @@ Cordis row 会在 profile 激活期间登记原生窗口参数。Launcher 只在
 
 DOM 会把操作栏声明为 Desktop frame，并把下移后的上游 root 声明为它的 content viewport。`shell.overlay` 会成为 fixed 插件 surface 的 containing block，直接 portal 到 `body` 的对话框则获得相同的内容偏移；两条路径都会被限制在 36 像素 frame 下方，不会再压暗或拦截顶栏。
 
-自定义窗口材质独立于模式设置。macOS 可选“关闭”或“透明材质”；Windows 可选“关闭”和原生“亚克力”，仅 Windows 11 build 22621 及以上显示 Mica。Windows 10 因此使用真正的原生亚克力，而不是 CSS 模拟。已持久化但系统不支持的 Mica 会按能力门槛回退到亚克力。切换模式或材质都会执行有序重启。
+自定义窗口材质独立于模式设置。macOS 可选“关闭”或“透明材质”。Windows 不提供材质选项，所有 Windows 窗口都是普通的不透明窗口。已移除的 `windowsMaterial` 旧值 `acrylic` 和 `mica` 仍可读取，旧设置照常启动，两者都按关闭处理。切换模式或材质都会执行有序重启。
 
 ## 增强模式
 

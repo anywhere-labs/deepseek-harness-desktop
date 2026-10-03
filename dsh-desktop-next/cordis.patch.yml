@@ -10,3 +10,11 @@
     - id: computer-use-cua-driver-native
       name: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-native'
       disabled: true
+# Upstream mounts its Desktop product analytics for every Profile named
+# `desktop` and reports to DeepSeek's collector by default. DSH Desktop does
+# not take part in that collection. Its exporter also requires the upstream
+# Electron shell's DSH_CLIENT_VERSION, which Next never provides.
+- id: desktop-product-telemetry
+  disabled: true
+- id: product-analytics
+  disabled: true

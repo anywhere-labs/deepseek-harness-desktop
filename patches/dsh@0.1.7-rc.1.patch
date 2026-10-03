@@ -40,3 +40,24 @@ index 912c66e..41f9e01 100755
  	switch (invocation.mode) {
  		case "profile": {
  			const { runProfile } = await import("./profile-boot.js");
+diff --git a/lib/profile-boot-CO0MPY31.js b/lib/profile-boot-CO0MPY31.js
+--- a/lib/profile-boot-CO0MPY31.js
++++ b/lib/profile-boot-CO0MPY31.js
+@@ -258,6 +258,7 @@ async function runProfile(options) {
+ 		const profileContext = {
+ 			name: options.profile,
+ 			...options.packageManager === void 0 ? {} : { packageManager: options.packageManager },
++			...options.resolvedProfile?.readPatches === void 0 ? {} : { readPatches: options.resolvedProfile.readPatches },
+ 			dir: composed.profile.dir,
+ 			patchPath: composed.profile.patchPath,
+ 			installAnchor: options.resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
+diff --git a/lib/types/profile-boot.d.ts b/lib/types/profile-boot.d.ts
+--- a/lib/types/profile-boot.d.ts
++++ b/lib/types/profile-boot.d.ts
+@@ -59,4 +59,6 @@ export interface ResolvedProfileRuntime {
+     profile: Profile;
+     /** Absolute package.json path of the application's dsh installation. */
+     installAnchor: string;
++    /** Application-owned composition for subsequent configuration edits and HMR. */
++    readPatches?: ProfileContext['readPatches'];
+ }

@@ -2,17 +2,16 @@ import { EventEmitter } from 'node:events'
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { BrowserWindow, Session } from 'electron'
 import { installMediaPermissions } from '../src/electron-permissions.ts'
-import type { NativePermissions } from '../src/native-permissions.ts'
 
-const fixture = vi.hoisted(() => ({ sources: vi.fn(), select: 1, menu: [] as any[] }))
+const fixture = vi.hoisted(() => ({ sources: vi.fn(), microphone: vi.fn(), select: 1, menu: [] as any[] }))
 vi.mock('electron', () => ({
-  desktopCapturer: { getSources: fixture.sources }, shell: {}, systemPreferences: {},
+  desktopCapturer: { getSources: fixture.sources }, shell: {}, systemPreferences: { askForMediaAccess: fixture.microphone },
   Menu: { buildFromTemplate: (items: any[]) => {
     fixture.menu = items
     return { popup: ({ callback }: any) => { if (fixture.select >= 0) items[fixture.select].click(); callback() }, closePopup() {} }
   } },
 }))
-beforeEach(() => { fixture.sources.mockReset().mockResolvedValue([{ id: 'screen:1', name: 'Screen 1' }, { id: 'screen:2', name: 'Screen 2' }]); fixture.select = 1 })
+beforeEach(() => { fixture.microphone.mockReset(); fixture.sources.mockReset().mockResolvedValue([{ id: 'screen:1', name: 'Screen 1' }, { id: 'screen:2', name: 'Screen 2' }]); fixture.select = 1 })
 
 function setup() {
   let check!: Parameters<Session['setPermissionCheckHandler']>[0]
@@ -23,39 +22,37 @@ function setup() {
     isDestroyed: () => false, isFocused: () => true,
     webContents: { getURL: () => 'dsh-app://app/', isDestroyed: () => false, mainFrame: {}, executeJavaScript: vi.fn(async () => true) },
   }) as unknown as BrowserWindow
-  const permission = {
-    query: vi.fn(() => ({ status: 'not-determined' })), request: vi.fn(async () => ({ status: 'granted' })),
-  }
   installMediaPermissions({
     setPermissionCheckHandler: handler => { check = handler },
     setPermissionRequestHandler: handler => { request = handler },
     setDisplayMediaRequestHandler: (handler, options) => { display = handler; picker = options },
-  } as Session, permission as unknown as NativePermissions, { window: () => owner, language: () => 'en', warn: vi.fn() })
-  return { check: check!, request: request!, display: display!, owner, permission, picker }
+  } as Session, { window: () => owner, language: () => 'en', warn: vi.fn() })
+  return { check: check!, request: request!, display: display!, owner, picker }
 }
 
 it('keeps passive checks prompt-free and denies foreign frames and camera access', async () => {
-  const { check, request, owner, permission } = setup()
-  expect(check(owner.webContents, 'media', 'dsh-app://app', { isMainFrame: true, mediaType: 'audio' })).toBe(false)
-  expect(permission.request).not.toHaveBeenCalled()
+  const { check, request, owner } = setup()
+  expect(check(owner.webContents, 'media', 'dsh-app://app', { isMainFrame: true, mediaType: 'audio' })).toBe(true)
+  expect(fixture.microphone).not.toHaveBeenCalled()
   const callback = vi.fn()
   request(owner.webContents, 'media', callback, { requestingUrl: 'https://example.com', isMainFrame: true, mediaTypes: ['audio'] })
   request(owner.webContents, 'media', callback, { requestingUrl: 'dsh-app://app/', isMainFrame: false, mediaTypes: ['audio'] })
   request(owner.webContents, 'media', callback, { requestingUrl: 'dsh-app://app/', isMainFrame: true, mediaTypes: ['video'] })
   expect(callback.mock.calls).toEqual([[false], [false], [false]])
-  expect(permission.request).not.toHaveBeenCalled()
+  expect(fixture.microphone).not.toHaveBeenCalled()
   request(owner.webContents, 'media', callback, { requestingUrl: 'dsh-app://app/', isMainFrame: true, mediaTypes: ['audio'] })
   await vi.waitFor(() => expect(callback).toHaveBeenLastCalledWith(true))
-  expect(permission.request).toHaveBeenCalledWith('microphone')
+  expect(fixture.microphone).not.toHaveBeenCalled()
 })
 
-it('requires a gesture for a new microphone request', async () => {
-  const { request, owner, permission } = setup()
+it('lets getUserMedia trigger native consent after asynchronous voice initialization', async () => {
+  const { request, owner } = setup()
   vi.mocked(owner.webContents.executeJavaScript).mockResolvedValue(false)
   const callback = vi.fn()
   request(owner.webContents, 'media', callback, { requestingUrl: 'dsh-app://app/', isMainFrame: true, mediaTypes: ['audio'] })
-  await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(false))
-  expect(permission.request).not.toHaveBeenCalled()
+  await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(true))
+  expect(fixture.microphone).not.toHaveBeenCalled()
+  expect(owner.webContents.executeJavaScript).not.toHaveBeenCalled()
 })
 
 it('settles consent callbacks once when the requesting frame has gone away', async () => {

@@ -28,7 +28,7 @@ export {
   type DesktopNotificationSettings,
 } from './settings-bridge.ts'
 
-type NotificationOutcome = 'turn-completed' | 'turn-failed' | 'job-completed' | 'job-failed'
+type NotificationOutcome = 'turn-completed' | 'turn-failed' | 'job-completed' | 'job-failed' | 'schedule-completed' | 'schedule-failed'
 
 const NOTIFICATION_COPY: Record<DesktopLocale, Record<NotificationOutcome, DesktopNotification>> = {
   en: {
@@ -36,18 +36,22 @@ const NOTIFICATION_COPY: Record<DesktopLocale, Record<NotificationOutcome, Deskt
     'turn-failed': { title: 'User Turn Failed', body: 'A user-initiated turn could not finish. Open DSH Desktop for details.' },
     'job-completed': { title: 'Background Job Completed', body: 'A background job has finished.' },
     'job-failed': { title: 'Background Job Failed', body: 'A background job could not finish. Open DSH Desktop for details.' },
+    'schedule-completed': { title: 'Automation Task Completed', body: 'An automation task has finished.' },
+    'schedule-failed': { title: 'Automation Task Failed', body: 'An automation task could not finish. Open DSH Desktop for details.' },
   },
   zh: {
     'turn-completed': { title: '用户回合已完成', body: '一个由你发起的回合已完成。' },
     'turn-failed': { title: '用户回合失败', body: '一个由你发起的回合未能完成，请打开 DSH Desktop 查看详情。' },
     'job-completed': { title: '后台任务已完成', body: '有一个后台任务已结束。' },
     'job-failed': { title: '后台任务失败', body: '一个后台任务未能完成，请打开 DSH Desktop 查看详情。' },
+    'schedule-completed': { title: '自动化任务完成', body: '一个自动化任务已完成。' },
+    'schedule-failed': { title: '自动化任务失败', body: '一个自动化任务未能完成，请打开 DSH Desktop 查看详情。' },
   },
 }
 
 interface OpenTurn {
   readonly turn: number
-  userInitiated: boolean
+  source: 'user' | 'schedule' | undefined
 }
 
 function notifyJob(
@@ -75,12 +79,15 @@ function trackTurn(
   const sessionId = String(session.header.id)
 
   if (event.type === 'turn/start') {
-    openTurns.set(sessionId, { turn: event.data.turn, userInitiated: false })
+    openTurns.set(sessionId, { turn: event.data.turn, source: undefined })
     return
   }
   if (event.type === 'user/message') {
     const openTurn = openTurns.get(sessionId)
-    if (openTurn !== undefined && event.data.source.kind === 'user') openTurn.userInitiated = true
+    const source = event.data.source.kind as string
+    if (openTurn !== undefined && (source === 'user' || source === 'schedule')) {
+      openTurn.source = source
+    }
     return
   }
   if (event.type !== 'turn/end') return
@@ -88,14 +95,16 @@ function trackTurn(
   const openTurn = openTurns.get(sessionId)
   if (openTurn === undefined || openTurn.turn !== event.data.turn) return
   openTurns.delete(sessionId)
-  if (!openTurn.userInitiated) return
+  if (!openTurn.source) return
 
   const reason = event.data.reason.kind
-  if (reason === 'completed' && settings.notifyOnTurnCompletion) {
-    runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['turn-completed'])
-  } else if ((reason === 'error' || reason === 'max-tokens') && settings.notifyOnTurnFailure) {
-    runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale]['turn-failed'])
-  }
+  const outcome = reason === 'completed' ? 'completed'
+    : reason === 'error' || reason === 'max-tokens' ? 'failed' : undefined
+  if (!outcome) return
+  const enabled = openTurn.source === 'schedule'
+    ? outcome === 'completed' ? settings.notifyOnScheduleCompletion : settings.notifyOnScheduleFailure
+    : outcome === 'completed' ? settings.notifyOnTurnCompletion : settings.notifyOnTurnFailure
+  if (enabled) runtime.notifyAttention(NOTIFICATION_COPY[runtime.locale][`${openTurn.source === 'schedule' ? 'schedule' : 'turn'}-${outcome}`])
 }
 
 /** Register independently optional settings, job, and live-session observers.
@@ -105,12 +114,12 @@ function trackTurn(
 export function apply(ctx: Context, config: DesktopNotificationConfig): void {
   let settings = DEFAULT_NOTIFICATION_SETTINGS
 
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.effect(
-      () => bindDesktopNotificationSettings(settingsCtx, config, (next) => { settings = next }),
-      'dsh-plugin-desktop: native notification settings',
-    )
-  })
+  // Loader sends volatile updates only to this plugin's fiber. An injected
+  // settings child owns a different fiber and cannot receive those updates.
+  ctx.effect(
+    () => bindDesktopNotificationSettings(ctx, config, (next) => { settings = next }),
+    'dsh-plugin-desktop: native notification settings',
+  )
 
   ctx.inject(['jobs'], (jobsCtx) => {
     jobsCtx.effect(

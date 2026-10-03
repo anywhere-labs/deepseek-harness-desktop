@@ -82,7 +82,7 @@ export function apply(ctx) {
     child.on('exit', () => rpc?.close(stderr || 'worker exited'))
     let shell: DesktopShellSpec | undefined
     const runtime = {
-      platform: 'win32', windowsBuild: 22631, locale: 'en',
+      platform: 'win32', locale: 'en',
       updates: { isPackaged: false, canDownload: false, currentVersion: '2.0.7-beta.1', statePath: join(home, 'updates') },
       schedule(spec: DesktopShellSpec) { shell = spec; return async () => {} },
       registerTrayItem() { return { refresh() {}, dispose() {} } },

@@ -2,8 +2,8 @@
 
 [English](PRIVACY.md)
 
-- **版本：** 1.0
-- **生效及最近更新日期：** 2026 年 8 月 26 日
+- **版本：** 1.1
+- **生效及最近更新日期：** 2026 年 9 月 28 日
 
 DSH Desktop 是一个本地优先的开源桌面应用。本政策说明 DSH Desktop 官方版本及官方在线服务会处理哪些信息、为什么处理、信息会发送给谁，以及您可以如何作出选择。
 
@@ -153,7 +153,9 @@ Community Market 默认不需要选中远程来源。选择并使用来源后，
 
 ### 6.4 可选的上游遥测
 
-当前上游 DSH session telemetry 在 Desktop 默认组合中为 `DISABLED`。如果您或部署者显式设置 `DSH_TELEMETRY_MODE` 为 `FULL` 或 `FEEDBACK_ONLY`，原始会话遥测可能与上游匿名用户 ID 一起发送到 `https://harness-telemetry.deepseeksvc.com/v1/logs` 或您配置的 `DSH_TELEMETRY_OTLP_URL`。该处理由上游配置和接收方政策决定，不属于 Anywhere Labs 官方更新服务。
+上游 DSH session telemetry 在 Desktop 默认组合中沿用上游默认的 `FEEDBACK_ONLY`：日常使用不会上传会话内容；只有您在会话中明确提交反馈后，该会话截至反馈时的原始日志才会与上游匿名用户 ID（保存在 DSH 数据目录的 `.anonymous-user-id`，删除即重置）一起发送到 `https://dsh-otel-collector.deepseeksvc.com/v1/logs` 或您配置的 `DSH_TELEMETRY_OTLP_URL`。如果您或部署者显式设置 `DSH_TELEMETRY_MODE` 为 `FULL`，会话遥测会在日常使用中持续发送；设置任意非空的 `DSH_TELEMETRY_DISABLED` 会让 Desktop 关闭该组件。该处理由上游配置和接收方政策决定，不属于 Anywhere Labs 官方更新服务。
+
+上游还为名为 `desktop` 的 Profile 提供 Desktop 产品使用统计（`product-analytics` 和 `desktop-product-telemetry`），会把设备 ID、登录 DeepSeek 账号后的用户 ID、系统和应用版本以及界面操作事件发送给 DeepSeek。DSH Desktop 在启动时关闭这两项，官方版本不会发送这类统计。
 
 ### 6.5 外部链接
 

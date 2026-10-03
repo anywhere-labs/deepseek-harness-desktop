@@ -11,7 +11,7 @@ export function DesktopPermissionsSection({ service, language }: { service: Desk
   </section>
 }
 
-export function DesktopPermissionsButton({ service, language, iconOnly = false, disabled = false, label: customLabel, permission }: { service?: DesktopPermissions; language: string; iconOnly?: boolean; disabled?: boolean; label?: string; permission?: DesktopPermission }) {
+export function DesktopPermissionsButton({ service, language, iconOnly = false, disabled = false, label: customLabel, permission }: { service?: DesktopPermissions | undefined; language: string; iconOnly?: boolean; disabled?: boolean; label?: string; permission?: DesktopPermission | undefined }) {
   const [open, setOpen] = useState(false)
   const zh = language.startsWith('zh')
   const label = customLabel ?? (zh ? '授权设置' : 'Permissions')
@@ -23,7 +23,7 @@ export function DesktopPermissionsButton({ service, language, iconOnly = false, 
   </>
 }
 
-export function DesktopPermissionsDialog({ open, onClose, service, language, permission }: { open: boolean; onClose(): void; service?: DesktopPermissions; language: string; permission?: DesktopPermission }) {
+export function DesktopPermissionsDialog({ open, onClose, service, language, permission }: { open: boolean; onClose(): void; service?: DesktopPermissions | undefined; language: string; permission?: DesktopPermission | undefined }) {
   const zh = language.startsWith('zh')
   const body = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -52,7 +52,7 @@ export function DesktopPermissionsDialog({ open, onClose, service, language, per
     </Modal>
 }
 
-export function PermissionDetails({ service, language, permission: onlyPermission }: { service: DesktopPermissions; language: string; permission?: DesktopPermission }) {
+export function PermissionDetails({ service, language, permission: onlyPermission }: { service: DesktopPermissions; language: string; permission?: DesktopPermission | undefined }) {
   const t = (zh: string, en: string): string => language.startsWith('zh') ? zh : en
   const [snapshots, setSnapshots] = useState<DesktopPermissionSnapshot[]>([])
   const [busy, setBusy] = useState(false)

@@ -27,7 +27,7 @@ async function mount(selectAa: (enabled: boolean) => Promise<{ accepted: true; r
         web: { localUrl: '', lanUrls: [], lanState: 'inactive', lanError: null, lanCaFingerprint: null, lanCaUrls: [] },
       }), selectAa,
     },
-    platform: 'darwin', version: '2.0.3', initialMode: 'compatibility', micaSupported: false, setMode: async () => {},
+    platform: 'darwin', version: '2.0.3', initialMode: 'compatibility', setMode: async () => {},
     desktopSettings: scope({ mode: 'compatibility', openBrowser: false, networkExposure: 'loopback', macosMaterial: 'off', windowsMaterial: 'off' }),
     notificationSettings: scope({ enabled: false }),
   } as unknown as DesktopSettingsSectionProps

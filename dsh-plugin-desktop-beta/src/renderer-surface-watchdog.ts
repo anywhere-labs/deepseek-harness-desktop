@@ -1,23 +1,27 @@
 export const RENDERER_SURFACE_PROBE = String.raw`(() => {
   if (document.visibilityState !== 'visible') return 'hidden';
   if (document.readyState !== 'complete') return null;
-  const root = document.getElementById('root');
-  if (!root) return false;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-  let element = walker.currentNode;
+  // Official onboarding hides #root and renders its visible surface in body.
+  // Inspect the owned portal as content, not merely as a presence exemption.
+  const roots = [...document.querySelectorAll('[data-desktop-onboarding-surface]'), document.getElementById('root')].filter(Boolean);
   let visited = 0;
-  while (element && visited < 2048) {
-    visited += 1;
-    const meaningful = element.matches('button,input,textarea,select,img,svg,canvas,[contenteditable="true"]')
-      || Array.from(element.childNodes).some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
-    if (meaningful && element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
-      const rect = element.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0
-        && rect.top < innerHeight && rect.left < innerWidth) return true;
+  for (const root of roots) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let element = walker.currentNode;
+    while (element && visited < 2048) {
+      visited += 1;
+      const meaningful = element.matches('button,input,textarea,select,img,svg,canvas,[contenteditable="true"]')
+        || Array.from(element.childNodes).some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+      if (meaningful && element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+        const rect = element.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0
+          && rect.top < innerHeight && rect.left < innerWidth) return true;
+      }
+      element = walker.nextNode();
     }
-    element = walker.nextNode();
+    if (element) return null;
   }
-  return element ? null : false;
+  return false;
 })()`
 
 interface RendererSurfaceWatchdogOptions {
