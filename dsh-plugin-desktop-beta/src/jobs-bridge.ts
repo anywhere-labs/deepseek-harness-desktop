@@ -23,7 +23,7 @@ function desktopJobOutcome(status: string): DesktopJobOutcome {
 }
 
 /**
- * Observe the settlements of every job composed under this context's scope.
+ * Observe unattended job settlements under this context's scope.
  * @param ctx - a context with the `jobs` service injected.
  * @param listener - receives each settled job's narrowed outcome.
  * @returns the disposer unregistering the observer.
@@ -34,6 +34,8 @@ export function observeDesktopJobOutcomes(
 ): () => void {
   return ctx.jobs.events.subscribe({ owners: 'scope' }, (event) => {
     if (event.type !== 'settled') return
+    // Waiting callers already collect the result; teardown has no live owner to notify.
+    if (event.awaited || event.cause === 'teardown') return
     listener(desktopJobOutcome(event.job.status))
   })
 }
