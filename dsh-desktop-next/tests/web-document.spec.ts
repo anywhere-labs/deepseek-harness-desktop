@@ -150,7 +150,7 @@ it.each(['dsh-app://shell/api/read', 'dsh-app://app:1234/api/read', 'https://app
   },
 )
 
-it('marks only owned main-frame requests and strips caller markers from every other target', () => {
+it('marks owned application requests and strips caller markers from every other target', () => {
   const frame = { origin: 'dsh-app://app', detached: false } as WebContents['mainFrame']
   const owner = { id: 7, mainFrame: frame }
   const request = { url: 'dsh-app://app/api/community-market/sources', webContentsId: owner.id,
@@ -159,17 +159,32 @@ it('marks only owned main-frame requests and strips caller markers from every ot
   expect(headers).toEqual({ 'content-type': 'application/json', [NATIVE_ACCESS_HEADER]: NATIVE_TOKEN })
   const refused = [
     { ...request, webContentsId: 8 },
+    { ...request, webContents: { id: 8 } as WebContents },
     { ...request, frame: null },
-    { ...request, frame: { ...frame } as WebContents['mainFrame'] },
+    { ...request, frame: undefined },
+    { ...request, frame: { ...frame, detached: true } as WebContents['mainFrame'] },
+    { ...request, frame: { ...frame, origin: 'https://other.example' } as WebContents['mainFrame'] },
+    { ...request, frame: { ...frame, origin: 'null' } as WebContents['mainFrame'] },
     { ...request, resourceType: 'mainFrame' as const },
     { ...request, url: 'dsh-app://shell/api/test' },
     { ...request, url: 'dsh-app://app:1234/api/test' },
+    { ...request, url: 'dsh-app://user:password@app/api/test' },
     { ...request, url: 'https://other.example/redirected' },
     { ...request, url: 'http://127.0.0.1:1234/api/test' },
   ]
   for (const input of refused) expect(new Headers(appRequestHeaders(input, owner, NATIVE_TOKEN)).get(NATIVE_ACCESS_HEADER)).toBeNull()
   expect(new Headers(appRequestHeaders(request, undefined, NATIVE_TOKEN)).get(NATIVE_ACCESS_HEADER)).toBeNull()
   expect(new Headers(appRequestHeaders(request, owner, undefined)).get(NATIVE_ACCESS_HEADER)).toBeNull()
+})
+
+it.each(['subFrame', 'script', 'xhr'] as const)('marks the owned same-origin child frame %s request', resourceType => {
+  const mainFrame = { origin: 'dsh-app://app', detached: false } as WebContents['mainFrame']
+  const childFrame = { origin: 'dsh-app://app', detached: false, parent: mainFrame, top: mainFrame } as WebContents['mainFrame']
+  const owner = { id: 7, mainFrame }
+  const headers = appRequestHeaders({ url: 'dsh-app://app/plugin/studio/', webContentsId: owner.id,
+    webContents: owner as WebContents, frame: childFrame, resourceType,
+    requestHeaders: { [NATIVE_ACCESS_HEADER]: 'caller', accept: 'text/html' } }, owner, NATIVE_TOKEN)
+  expect(headers).toEqual({ accept: 'text/html', [NATIVE_ACCESS_HEADER]: NATIVE_TOKEN })
 })
 
 it.each(['null', 'https://other.example', 'dsh-app://shell', 'dsh-app://app.evil', 'dsh-app://app:1234'])(

@@ -19,6 +19,7 @@
     "verify:window-controls": "node scripts/verify-window-controls.mjs",
     "verify:onboarding": "node scripts/verify-onboarding.mjs",
     "verify:protocol": "electron scripts/verify-protocol.mjs",
+    "verify:plugin-frames": "node scripts/verify-plugin-frames.mjs",
     "verify:sidebar-browser": "electron scripts/verify-sidebar-browser.mjs",
     "check": "yarn build && yarn typecheck && yarn test && yarn verify:frontend && yarn verify:host && yarn verify:desktop-runtime && yarn verify:safe-cleanup",
     "dev": "yarn build && node scripts/start.mjs",

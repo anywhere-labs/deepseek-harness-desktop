@@ -11,7 +11,7 @@ const MIME: Readonly<Record<string, string>> = {
 }
 const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
 
-/** Mark requests from the owned main frame; also strip the marker on every other target or redirect. */
+/** Mark live same-origin frames in the owned window; strip the marker from other targets and redirects. */
 export function appRequestHeaders(
   request: Pick<OnBeforeSendHeadersListenerDetails, 'url' | 'webContentsId' | 'webContents' | 'frame' | 'resourceType' | 'requestHeaders'>,
   owner: Pick<WebContents, 'id' | 'mainFrame'> | undefined,
@@ -20,9 +20,9 @@ export function appRequestHeaders(
   const headers = Object.fromEntries(Object.entries(request.requestHeaders)
     .filter(([name]) => name.toLowerCase() !== NATIVE_ACCESS_HEADER))
   const target = new URL(request.url)
-  if (target.protocol === 'dsh-app:' && target.host === 'app' && owner && nativeToken
+  if (target.protocol === 'dsh-app:' && target.host === 'app' && !target.username && !target.password && owner && nativeToken
     && request.webContentsId === owner.id && (!request.webContents || request.webContents.id === owner.id)
-    && request.resourceType !== 'mainFrame' && request.frame === owner.mainFrame
+    && request.resourceType !== 'mainFrame' && request.frame
     && !request.frame.detached && request.frame.origin === 'dsh-app://app') headers[NATIVE_ACCESS_HEADER] = nativeToken
   return headers
 }
@@ -96,7 +96,7 @@ export async function forwardWebRequest(request: Request, host: string, cookie: 
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
   // Custom-protocol fetches can omit Origin. The native session marks only
-  // requests from our owned main frame; an HTTP header or referrer alone is
+  // requests from live same-origin frames in our owned window; an HTTP header or referrer alone is
   // insufficient. Keep this compatible with the upstream's Electron 44.0 ABI.
   if (source.protocol !== 'dsh-app:' || source.host !== 'app' || source.username || source.password
     || !nativeToken || request.headers.get(NATIVE_ACCESS_HEADER) !== nativeToken) return new Response(null, { status: 403 })
