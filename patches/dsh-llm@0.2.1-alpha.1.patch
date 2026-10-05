@@ -1,0 +1,261 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -2001,7 +2001,8 @@
+ 					...model.name === void 0 ? {} : { name: model.name },
+ 					...model.contextWindow === void 0 ? {} : { contextWindow: model.contextWindow },
+ 					...model.maxTokens === void 0 ? {} : { maxTokens: model.maxTokens },
+-					...model.inputModalities === void 0 ? {} : { inputModalities: [...model.inputModalities] }
++					...model.inputModalities === void 0 ? {} : { inputModalities: [...model.inputModalities] },
++					...model.reasoningCapability === undefined ? {} : { reasoningCapability: structuredClone(model.reasoningCapability) }
+ 				});
+ 			}
+ 			return models;
+@@ -2120,6 +2121,7 @@
+ 				...resolved.systemPromptUpdate === void 0 ? {} : { systemPromptUpdate: resolved.systemPromptUpdate },
+ 				...resolved.toolUpdate === void 0 ? {} : { toolUpdate: resolved.toolUpdate }
+ 			};
++			if (resolved.reasoningConfigurationError !== undefined) info.reasoningConfigurationError = resolved.reasoningConfigurationError;
+ 			const reasoning = resolved.reasoning;
+ 			if (reasoning === void 0) return info;
+ 			if (reasoning.efforts.length === 0) throw new LlmError(`adapter returned invalid reasoning metadata for provider "${provider}" model "${model}"`, "INVALID_MODEL_REASONING");
+@@ -2161,6 +2163,7 @@
+ 		}
+ 		/** Validate request controls against one already-bound exact model result. */
+ 		resolveCallWithInfo(config, info) {
++			if (info.reasoningConfigurationError !== undefined) throw new LlmError(`Provider "${config.provider}" model "${config.model}": ${info.reasoningConfigurationError}. Open model settings to correct it.`, 'UNSUPPORTED_REASONING_EFFORT');
+ 			const defaulted = config.maxTokens === void 0 && info.defaultMaxTokens !== void 0 ? {
+ 				...config,
+ 				maxTokens: info.defaultMaxTokens
+@@ -2382,3 +2385,143 @@
+ }
+ //#endregion
+ export { ACCOUNT_QUOTA_EXCEEDED_CODE, APP_IDENTITY, AssistantStreamAccumulator, BlockAssembler, CONTEXT_SUMMARY_MAX_CHARS, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, HarnessError, IMAGE_OFFLOAD_REQUIRED_CODE, INVALID_CREDENTIAL_CODE, LlmAdapter, LlmAttemptId, LlmError, LlmRuntime, LlmRuntime as default, MessageId, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId, RetryPolicySchema, ToolCallId, assembleAssistantStream, assertUsableApiKey, assistantStreamChunks, assistantStreamFirstTokenTime, assistantStreamHasVisibleContent, assistantStreamHasVisibleText, attributionHeaders, boundContextSummary, callConfigEquals, chunkHasVisibleText, contentHasFile, contentHasImage, createAssistantMessage, createDeveloperMessage, createMessage, createSystemMessage, createToolResultMessage, createUserMessage, errorChain, expandAssistantStream, fileHandleText, freezeMessage, isAgentLoopRequest, isContextWindowExceededError, isHarnessError, isQuotaExceededError, isTokenDelta, isVisibleChunk, joinAssistantStreamText, lastAssistantStreamChunk, markAgentLoopRequest, normalizeApiKey, offloadedImageText, projectFilesToText, projectImagesForTextModel, projectOffloadedImages, projectToolUpdates, requestImageHandleText, requiredImageOffload, resolveImageAttachmentAccess, resolveRetryPolicy, runFirstTokenTime, runFirstVisibleTime, textOnlyImageText, userAgent };
++
++/** Provider/model reasoning policy, shared by the patched Host and Client. */
++function reasoningCandidates(config, fallback = []) {
++  return config?.manualEfforts ?? config?.capability?.efforts ?? fallback;
++}
++
++/** Saved endpoint evidence applies only to the connection that supplied it. */
++function reasoningConfigForConnection(config, endpoint, api) {
++  const capability = config?.capability;
++  if (capability?.endpoint === undefined || endpoint === undefined) return config;
++  if (capability.endpoint.replace(/\/+$/, '') === endpoint.replace(/\/+$/, '')
++    && (capability.api === undefined || api === undefined || capability.api === api)) return config;
++  return { ...config, capability: { status: 'unknown', source: 'endpoint', efforts: [], endpoint, api } };
++}
++
++function reasoningManualConflict(config) {
++  if (!config?.capability?.authoritative || config.manualEfforts === undefined) return false;
++  return config.manualEfforts.some(effort => !config.capability.efforts.some(declared =>
++    declared.id === effort.id && (declared.wireValue === undefined ? declared.id : declared.wireValue)
++      === (effort.wireValue === undefined ? effort.id : effort.wireValue)));
++}
++
++/** A refresh adopts evidence while retaining the user's range and corrections. */
++function refreshReasoningConfig(config, capability) {
++  if (capability === undefined) return config;
++  if (capability.status === 'unknown') return config ?? { capability, selected: [] };
++  if (config?.capability?.source === 'endpoint' && config.capability.authoritative && capability.source !== 'endpoint') return config;
++  if (capability.status === 'unsupported' && !capability.authoritative && config !== undefined) return config;
++  if (config === undefined) return { capability, selected: capability.efforts.map(effort => effort.id) };
++  const changed = JSON.stringify(config.capability) !== JSON.stringify(capability);
++  const old = config.capability?.efforts ?? [];
++  const retained = capability.authoritative
++    ? capability.efforts
++    : [...capability.efforts, ...old.filter(effort => !capability.efforts.some(next => next.id === effort.id))];
++  return {
++    ...config,
++    capability: { ...capability, efforts: retained },
++    ...(changed ? { manualAcknowledged: false } : {}),
++  };
++}
++
++/** Diagnose configuration without making the rest of Provider management fail. */
++function reasoningConfigError(config, allowedIds, inheritedDefault) {
++  if (config === undefined) return undefined;
++  if (config.manualEfforts === undefined && config.capability?.status !== 'known'
++    && !config.capability?.authoritative) return undefined;
++  const efforts = reasoningCandidates(config);
++  if (!Array.isArray(config.selected) || !Array.isArray(efforts)) return 'Invalid reasoning configuration';
++  const supported = new Set(efforts.map(effort => effort.id));
++  if (supported.size !== efforts.length) return 'Reasoning efforts must have distinct IDs';
++  for (const effort of efforts) {
++    if (typeof effort.id !== 'string' || !effort.id || typeof effort.name !== 'string' || !effort.name
++      || (allowedIds !== undefined && !allowedIds.includes(effort.id))) return 'The adapter cannot express this reasoning effort';
++    if (effort.wireValue !== undefined && effort.wireValue !== null
++      && (typeof effort.wireValue !== 'string' || !effort.wireValue)) return 'A reasoning wire value must be nonempty';
++    if (effort.wireValue === null && effort.id !== 'off') return 'Only off may omit its wire value';
++  }
++  const configured = config.manualEfforts !== undefined || config.capability?.status === 'known';
++  if (configured && allowedIds?.includes('minimal') && efforts.length > 0 && efforts.every(effort => effort.id === 'off'))
++    return 'This adapter requires a thinking effort alongside off; leave non-reasoning models unconfigured';
++  if (configured && config.selected.length === 0) return 'Select at least one reasoning effort';
++  if (new Set(config.selected).size !== config.selected.length
++    || config.selected.some(id => !supported.has(id))) return 'An enabled reasoning effort is no longer supported; correct this model';
++  if (reasoningManualConflict(config) && !config.manualAcknowledged)
++    return 'Endpoint capabilities conflict with manual declarations; resolve the conflict';
++  if (config.capability?.status === 'unsupported' && config.manualEfforts === undefined && config.selected.length)
++    return 'The endpoint no longer supports reasoning; correct this model';
++  if (config.capability?.status === 'unsupported' && config.manualEfforts === undefined && config.defaultEffort === undefined) return undefined;
++  const defaultEffort = config.defaultEffort ?? inheritedDefault;
++  if (defaultEffort !== undefined && !config.selected.includes(defaultEffort)) return 'The default reasoning effort is outside the enabled range';
++  return undefined;
++}
++
++/** Preserve adapter-owned metadata and defaults, exposing only the chosen range. */
++function selectedReasoningInfo(config, reasoning) {
++  if (config === undefined) return reasoning;
++  if (config.capability?.status === 'unsupported' && config.manualEfforts === undefined) return undefined;
++  const candidates = reasoningCandidates(config, reasoning?.efforts);
++  if (config.capability?.status !== 'known' && config.manualEfforts === undefined) return reasoning;
++  const valid = candidates.filter(effort => config.selected.includes(effort.id));
++  if (valid.length === 0) return undefined;
++  const defaultEffort = config.defaultEffort ?? reasoning?.defaultEffort;
++  return {
++    efforts: valid.map(({ id, name }) => ({ id, name })),
++    ...(defaultEffort === undefined || !valid.some(effort => effort.id === defaultEffort) ? {} : { defaultEffort }),
++  };
++}
++
++/** Resolve every explicit/default request through the same model policy. */
++function configuredReasoningEffort(config, inheritedDefault, explicit, provider, model, allowedIds) {
++  if (config === undefined || config.manualEfforts === undefined && config.capability?.status !== 'known'
++    && !config.capability?.authoritative) return explicit ?? inheritedDefault;
++  const error = reasoningConfigError(config, allowedIds, config.defaultEffort === undefined ? inheritedDefault : undefined);
++  if (error !== undefined) throw new Error(`Provider "${provider}" model "${model}": ${error}. Open model settings to correct it.`);
++  const effort = explicit ?? config.defaultEffort ?? inheritedDefault;
++  if (effort !== undefined && !config.selected.includes(effort)) {
++    throw new Error(`Provider "${provider}" model "${model}" reasoning effort "${effort}" is outside the enabled range. Choose an enabled effort in model settings.`);
++  }
++  return effort;
++}
++
++/** Read explicit endpoint effort lists/maps, never infer them from model names. */
++function endpointReasoningCapability(entry, allowedIds) {
++  const declared = entry?.reasoningEfforts ?? entry?.reasoning_efforts;
++  if (declared === false) return { status: 'unsupported', source: 'endpoint', authoritative: true, efforts: [] };
++  if (declared === undefined || declared === null) return { status: 'unknown', source: 'endpoint', efforts: [] };
++  let efforts;
++  if (Array.isArray(declared)) {
++    efforts = declared.map(value => typeof value === 'string'
++      ? { id: value, name: value, wireValue: value === 'off' ? null : value }
++      : value !== null && typeof value === 'object' ? { id: value.id, name: value.name ?? value.id, wireValue: Object.hasOwn(value, 'wireValue') ? value.wireValue : value.id } : {});
++  } else if (typeof declared === 'object') {
++    efforts = Object.entries(declared).map(([id, wireValue]) => ({ id, name: id, wireValue }));
++  } else return { status: 'unknown', source: 'endpoint', efforts: [] };
++  if (efforts.length === 0 || reasoningConfigError({ manualEfforts: efforts, selected: efforts.map(effort => effort.id) }, allowedIds)) {
++    return { status: 'unknown', source: 'endpoint', efforts: [] };
++  }
++  return { status: 'known', source: 'endpoint', authoritative: true, efforts };
++}
++
++/** Keep public settings schemas explicit so unknown fields cannot bypass validation. */
++function modelReasoningSchema(z) {
++  const effort = z.object({ id: z.string().required(), name: z.string().required(), wireValue: z.union([z.string(), z.const(null)]) });
++  return z.object({
++    capability: z.object({
++      status: z.union(['known', 'unknown', 'unsupported']).required(),
++      source: z.union(['endpoint', 'catalog', 'adapter']).required(),
++      authoritative: z.boolean(),
++      endpoint: z.string(),
++      api: z.string(),
++      efforts: z.array(effort).required(),
++    }).default(undefined),
++    manualEfforts: z.array(effort).default(undefined),
++    manualAcknowledged: z.boolean(),
++    selected: z.array(z.string()).required(),
++    defaultEffort: z.string(),
++  }).default(undefined);
++}
++
++export { reasoningCandidates, reasoningConfigForConnection, reasoningManualConflict, refreshReasoningConfig, reasoningConfigError, selectedReasoningInfo, configuredReasoningEffort, endpointReasoningCapability, modelReasoningSchema };
+diff --git a/lib/typert.host.js b/lib/typert.host.js
+--- a/lib/typert.host.js
++++ b/lib/typert.host.js
+@@ -17,6 +17,7 @@
+   'contextWindow': z.number().optional(),
+   'maxTokens': z.number().optional(),
+   'inputModalities': z.array(z.union([z.literal("text"), z.literal("image")])).optional(),
++  'reasoningCapability': z.object({status: z.enum(['known','unknown','unsupported']), source: z.enum(['endpoint','catalog','adapter']), authoritative: z.boolean().optional(), endpoint: z.string().optional(), api: z.string().optional(), efforts: z.array(z.object({id: z.string(), name: z.string(), wireValue: z.union([z.string(), z.literal(null)]).optional()}))}).optional(),
+ })))
+ let _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema$value
+ const _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema = () => (_deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema$value ??= z.array(z.object({
+diff --git a/lib/typert.remote-client.js b/lib/typert.remote-client.js
+--- a/lib/typert.remote-client.js
++++ b/lib/typert.remote-client.js
+@@ -17,6 +17,7 @@
+   'contextWindow': z.number().optional(),
+   'maxTokens': z.number().optional(),
+   'inputModalities': z.array(z.union([z.literal("text"), z.literal("image")])).optional(),
++  'reasoningCapability': z.object({status: z.enum(['known','unknown','unsupported']), source: z.enum(['endpoint','catalog','adapter']), authoritative: z.boolean().optional(), endpoint: z.string().optional(), api: z.string().optional(), efforts: z.array(z.object({id: z.string(), name: z.string(), wireValue: z.union([z.string(), z.literal(null)]).optional()}))}).optional(),
+ })))
+ let _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema$value
+ const _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema = () => (_deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema$value ??= z.array(z.object({
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -413,4 +413,5 @@
+     private streamWithRegistration;
+ }
+ export default LlmRuntime;
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++export * from './reasoning-config.js';
+diff --git a/lib/types/reasoning-config.d.ts b/lib/types/reasoning-config.d.ts
+new file mode 100644
+--- /dev/null
++++ b/lib/types/reasoning-config.d.ts
+@@ -0,0 +1,31 @@
++/** An exact Provider/model capability declaration; never a global effort enum. */
++export interface ModelReasoningCapability {
++  status: 'known' | 'unknown' | 'unsupported';
++  source: 'endpoint' | 'catalog' | 'adapter';
++  authoritative?: boolean;
++  endpoint?: string;
++  api?: string;
++  efforts: ModelReasoningCandidate[];
++}
++export interface ModelReasoningCandidate {
++  id: string;
++  name: string;
++  wireValue?: string | null;
++}
++export interface ModelReasoningConfig {
++  capability?: ModelReasoningCapability;
++  manualEfforts?: ModelReasoningCandidate[];
++  manualAcknowledged?: boolean;
++  selected: string[];
++  /** Omission inherits the existing adapter or Provider default. */
++  defaultEffort?: string;
++}
++export declare function reasoningCandidates(config?: ModelReasoningConfig, fallback?: ModelReasoningCandidate[]): ModelReasoningCandidate[];
++export declare function reasoningConfigForConnection(config: ModelReasoningConfig | undefined, endpoint?: string, api?: string): ModelReasoningConfig | undefined;
++export declare function reasoningManualConflict(config?: ModelReasoningConfig): boolean;
++export declare function refreshReasoningConfig(config: ModelReasoningConfig | undefined, capability: ModelReasoningCapability | undefined): ModelReasoningConfig | undefined;
++export declare function reasoningConfigError(config?: ModelReasoningConfig, allowedIds?: readonly string[], inheritedDefault?: string): string | undefined;
++export declare function selectedReasoningInfo<Id extends string>(config: ModelReasoningConfig | undefined, reasoning: { efforts: { id: Id; name: string }[]; defaultEffort?: Id } | undefined): { efforts: { id: Id; name: string }[]; defaultEffort?: Id } | undefined;
++export declare function configuredReasoningEffort(config: ModelReasoningConfig | undefined, inheritedDefault: string | undefined, explicit: string | undefined, provider: string, model: string, allowedIds?: readonly string[]): string | undefined;
++export declare function endpointReasoningCapability(entry: unknown, allowedIds: readonly string[]): ModelReasoningCapability;
++export declare function modelReasoningSchema(z: typeof import('@deepseek-ai/schemastery').default): import('@deepseek-ai/schemastery').default<ModelReasoningConfig>;
+diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -289,6 +289,7 @@
+  * a surface adopting one of these still owes the capacities its adapter needs.
+  */
+ export interface LlmDiscoveredModel {
++    reasoningCapability?: import('./reasoning-config.js').ModelReasoningCapability;
+     /** Model id the endpoint accepts. */
+     id: string;
+     /** Human-readable name when the endpoint supplies one. */
+@@ -302,6 +303,7 @@
+ }
+ /** One adapter-discovered model; catalog membership is advisory, not request validation. */
+ export interface LlmModelInfo {
++    reasoningConfigurationError?: string;
+     /** Provider route that owns this model entry. */
+     provider: string;
+     /** Model id passed to {@link GenerateOptions.model}. */

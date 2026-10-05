@@ -1,0 +1,29 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1195,7 +1195,8 @@
+ 			const currentChoice = choices[state.current === null ? -1 : choices.findIndex((c) => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)];
+ 			const reasoning = currentChoice?.model.reasoning;
+ 			const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort;
+-			const effortLabel = reasoning === void 0 ? state.retainedEffort : effectiveEffort === void 0 ? t("effort.providerDefault") : reasoning.efforts.find((level) => level.id === effectiveEffort)?.name ?? effectiveEffort;
++			const invalidEffort = state.current?.reasoningEffort !== undefined && currentChoice !== undefined && !reasoning?.efforts.some(effort => effort.id === state.current.reasoningEffort);
++			const effortLabel = invalidEffort ? `${state.current.reasoningEffort} — ${t("effort.correctionRequired")}` : reasoning === void 0 ? state.retainedEffort : effectiveEffort === void 0 ? t("effort.providerDefault") : reasoning.efforts.find((level) => level.id === effectiveEffort)?.name ?? effectiveEffort;
+ 			const effortChoices = (0, react.useMemo)(() => reasoning === void 0 ? [] : [...reasoning.defaultEffort === void 0 ? [{
+ 				key: "provider-default",
+ 				effort: void 0,
+@@ -1733,6 +1734,7 @@
+ 			"menu.model": "模型",
+ 			"menu.effort": "推理等级",
+ 			"effort.providerDefault": "Default",
++"effort.correctionRequired": "Unavailable; select a supported effort before sending",
+ 			"status.loading": "正在刷新模型列表…",
+ 			"error.action": "模型操作失败：{message}",
+ 			"error.sessionInUse": "当前会话已被占用，可能是其他正在运行的 DSH 导致的（如其他 dsh web、桌面端），请退出其他正在运行的 DSH 后重试。",
+@@ -1759,6 +1761,7 @@
+ 			"menu.model": "Model",
+ 			"menu.effort": "Effort",
+ 			"effort.providerDefault": "Default",
++"effort.correctionRequired": "已失效；发送前请选择可用推理强度",
+ 			"status.loading": "Refreshing model list…",
+ 			"error.action": "Model operation failed: {message}",
+ 			"error.sessionInUse": "This session is already in use, possibly by another running DSH instance (such as dsh web or the desktop app). Quit other running DSH instances and try again.",

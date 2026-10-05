@@ -1,0 +1,532 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -206,6 +206,203 @@
+ 		* @param props - drafted fields and their owning editor's actions.
+ 		* @returns one expandable model entry.
+ 		*/
++/** Provider/model reasoning policy, shared by the patched Host and Client. */
++function reasoningCandidates(config, fallback = []) {
++  return config?.manualEfforts ?? config?.capability?.efforts ?? fallback;
++}
++
++/** Saved endpoint evidence applies only to the connection that supplied it. */
++function reasoningConfigForConnection(config, endpoint, api) {
++  const capability = config?.capability;
++  if (capability?.endpoint === undefined || endpoint === undefined) return config;
++  if (capability.endpoint.replace(/\/+$/, '') === endpoint.replace(/\/+$/, '')
++    && (capability.api === undefined || api === undefined || capability.api === api)) return config;
++  return { ...config, capability: { status: 'unknown', source: 'endpoint', efforts: [], endpoint, api } };
++}
++
++function reasoningManualConflict(config) {
++  if (!config?.capability?.authoritative || config.manualEfforts === undefined) return false;
++  return config.manualEfforts.some(effort => !config.capability.efforts.some(declared =>
++    declared.id === effort.id && (declared.wireValue === undefined ? declared.id : declared.wireValue)
++      === (effort.wireValue === undefined ? effort.id : effort.wireValue)));
++}
++
++/** A refresh adopts evidence while retaining the user's range and corrections. */
++function refreshReasoningConfig(config, capability) {
++  if (capability === undefined) return config;
++  if (capability.status === 'unknown') return config ?? { capability, selected: [] };
++  if (config?.capability?.source === 'endpoint' && config.capability.authoritative && capability.source !== 'endpoint') return config;
++  if (capability.status === 'unsupported' && !capability.authoritative && config !== undefined) return config;
++  if (config === undefined) return { capability, selected: capability.efforts.map(effort => effort.id) };
++  const changed = JSON.stringify(config.capability) !== JSON.stringify(capability);
++  const old = config.capability?.efforts ?? [];
++  const retained = capability.authoritative
++    ? capability.efforts
++    : [...capability.efforts, ...old.filter(effort => !capability.efforts.some(next => next.id === effort.id))];
++  return {
++    ...config,
++    capability: { ...capability, efforts: retained },
++    ...(changed ? { manualAcknowledged: false } : {}),
++  };
++}
++
++/** Diagnose configuration without making the rest of Provider management fail. */
++function reasoningConfigError(config, allowedIds, inheritedDefault) {
++  if (config === undefined) return undefined;
++  if (config.manualEfforts === undefined && config.capability?.status !== 'known'
++    && !config.capability?.authoritative) return undefined;
++  const efforts = reasoningCandidates(config);
++  if (!Array.isArray(config.selected) || !Array.isArray(efforts)) return 'Invalid reasoning configuration';
++  const supported = new Set(efforts.map(effort => effort.id));
++  if (supported.size !== efforts.length) return 'Reasoning efforts must have distinct IDs';
++  for (const effort of efforts) {
++    if (typeof effort.id !== 'string' || !effort.id || typeof effort.name !== 'string' || !effort.name
++      || (allowedIds !== undefined && !allowedIds.includes(effort.id))) return 'The adapter cannot express this reasoning effort';
++    if (effort.wireValue !== undefined && effort.wireValue !== null
++      && (typeof effort.wireValue !== 'string' || !effort.wireValue)) return 'A reasoning wire value must be nonempty';
++    if (effort.wireValue === null && effort.id !== 'off') return 'Only off may omit its wire value';
++  }
++  const configured = config.manualEfforts !== undefined || config.capability?.status === 'known';
++  if (configured && allowedIds?.includes('minimal') && efforts.length > 0 && efforts.every(effort => effort.id === 'off'))
++    return 'This adapter requires a thinking effort alongside off; leave non-reasoning models unconfigured';
++  if (configured && config.selected.length === 0) return 'Select at least one reasoning effort';
++  if (new Set(config.selected).size !== config.selected.length
++    || config.selected.some(id => !supported.has(id))) return 'An enabled reasoning effort is no longer supported; correct this model';
++  if (reasoningManualConflict(config) && !config.manualAcknowledged)
++    return 'Endpoint capabilities conflict with manual declarations; resolve the conflict';
++  if (config.capability?.status === 'unsupported' && config.manualEfforts === undefined && config.selected.length)
++    return 'The endpoint no longer supports reasoning; correct this model';
++  if (config.capability?.status === 'unsupported' && config.manualEfforts === undefined && config.defaultEffort === undefined) return undefined;
++  const defaultEffort = config.defaultEffort ?? inheritedDefault;
++  if (defaultEffort !== undefined && !config.selected.includes(defaultEffort)) return 'The default reasoning effort is outside the enabled range';
++  return undefined;
++}
++
++/** Preserve adapter-owned metadata and defaults, exposing only the chosen range. */
++function selectedReasoningInfo(config, reasoning) {
++  if (config === undefined) return reasoning;
++  if (config.capability?.status === 'unsupported' && config.manualEfforts === undefined) return undefined;
++  const candidates = reasoningCandidates(config, reasoning?.efforts);
++  if (config.capability?.status !== 'known' && config.manualEfforts === undefined) return reasoning;
++  const valid = candidates.filter(effort => config.selected.includes(effort.id));
++  if (valid.length === 0) return undefined;
++  const defaultEffort = config.defaultEffort ?? reasoning?.defaultEffort;
++  return {
++    efforts: valid.map(({ id, name }) => ({ id, name })),
++    ...(defaultEffort === undefined || !valid.some(effort => effort.id === defaultEffort) ? {} : { defaultEffort }),
++  };
++}
++
++/** Resolve every explicit/default request through the same model policy. */
++function configuredReasoningEffort(config, inheritedDefault, explicit, provider, model, allowedIds) {
++  if (config === undefined || config.manualEfforts === undefined && config.capability?.status !== 'known'
++    && !config.capability?.authoritative) return explicit ?? inheritedDefault;
++  const error = reasoningConfigError(config, allowedIds, config.defaultEffort === undefined ? inheritedDefault : undefined);
++  if (error !== undefined) throw new Error(`Provider "${provider}" model "${model}": ${error}. Open model settings to correct it.`);
++  const effort = explicit ?? config.defaultEffort ?? inheritedDefault;
++  if (effort !== undefined && !config.selected.includes(effort)) {
++    throw new Error(`Provider "${provider}" model "${model}" reasoning effort "${effort}" is outside the enabled range. Choose an enabled effort in model settings.`);
++  }
++  return effort;
++}
++
++/** Read explicit endpoint effort lists/maps, never infer them from model names. */
++function endpointReasoningCapability(entry, allowedIds) {
++  const declared = entry?.reasoningEfforts ?? entry?.reasoning_efforts;
++  if (declared === false) return { status: 'unsupported', source: 'endpoint', authoritative: true, efforts: [] };
++  if (declared === undefined || declared === null) return { status: 'unknown', source: 'endpoint', efforts: [] };
++  let efforts;
++  if (Array.isArray(declared)) {
++    efforts = declared.map(value => typeof value === 'string'
++      ? { id: value, name: value, wireValue: value === 'off' ? null : value }
++      : value !== null && typeof value === 'object' ? { id: value.id, name: value.name ?? value.id, wireValue: Object.hasOwn(value, 'wireValue') ? value.wireValue : value.id } : {});
++  } else if (typeof declared === 'object') {
++    efforts = Object.entries(declared).map(([id, wireValue]) => ({ id, name: id, wireValue }));
++  } else return { status: 'unknown', source: 'endpoint', efforts: [] };
++  if (efforts.length === 0 || reasoningConfigError({ manualEfforts: efforts, selected: efforts.map(effort => effort.id) }, allowedIds)) {
++    return { status: 'unknown', source: 'endpoint', efforts: [] };
++  }
++  return { status: 'known', source: 'endpoint', authoritative: true, efforts };
++}
++
++/** Accessible model settings component using the caller's React runtime. */
++function createModelReasoningControls(react) {
++  return function ModelReasoningControls({ model, position, disabled, native, allowedIds, fallback, inheritedDefault, endpoint, api, t, onChange }) {
++    const h = react.createElement;
++    const [newId, setNewId] = react.useState('high');
++    const [newWire, setNewWire] = react.useState('high');
++    const allowed = native ? allowedIds ?? ['off', 'low', 'high', 'max'] : ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
++    const manualId = allowed.includes(newId) ? newId : allowed[0] ?? 'high';
++    const legacy = model.reasoningEfforts;
++    const legacyEfforts = legacy && typeof legacy === 'object'
++      ? Object.entries(legacy).map(([id, wireValue]) => ({ id, name: id, wireValue })) : undefined;
++    const boundConfig = reasoningConfigForConnection(model.reasoningConfig, endpoint, api);
++    const savedConfig = native && fallback !== undefined && (fallback.source === 'endpoint' || boundConfig?.capability?.source !== 'endpoint')
++      ? refreshReasoningConfig(boundConfig, { ...fallback, authoritative: true }) : boundConfig;
++    const capability = savedConfig?.capability ?? (legacy === false ? { status: 'unsupported', source: 'adapter', efforts: [] } : fallback) ?? { status: 'unknown', source: 'adapter', efforts: [] };
++    const initial = refreshReasoningConfig(undefined, capability) ?? { capability, selected: [] };
++    const config = savedConfig ?? (legacyEfforts === undefined ? initial : {
++      ...initial, manualEfforts: legacyEfforts, manualAcknowledged: true, selected: legacyEfforts.map(effort => effort.id),
++    });
++    const candidates = reasoningCandidates(config);
++    const selected = config.selected;
++    const error = reasoningConfigError(config, allowed, inheritedDefault);
++    const save = next => onChange({ ...model, reasoningConfig: next });
++    const invalid = selected.filter(id => !candidates.some(effort => effort.id === id));
++    const configured = capability.status === 'known' || config.manualEfforts !== undefined;
++    const choice = (effort, retired = false) => h('label', { key: effort.id, style: { display: 'inline-flex', gap: '6px', alignItems: 'center' } },
++      h('input', {
++        type: 'checkbox', 'aria-label': `${t('reasoning')} ${effort.name} ${position}`,
++        disabled: disabled || retired && !selected.includes(effort.id), checked: selected.includes(effort.id),
++        onChange: event => save({ ...config, selected: event.target.checked ? [...selected, effort.id] : selected.filter(id => id !== effort.id) }),
++      }), effort.name, retired ? ` (${t('reasoningUnavailable')})` : null);
++    return h('fieldset', { disabled, style: { gridColumn: '1 / -1', border: 'none', margin: 0, padding: '6px 0', display: 'grid', gap: '8px' }, 'aria-label': `${t('reasoning')} ${position}` },
++      h('legend', null, t('reasoning')),
++      h('p', { style: { margin: 0, fontSize: '12px' } }, config.manualEfforts !== undefined ? t('reasoningManualSource') : t(`reasoningSource${capability.source}`)),
++      capability.status === 'unknown' && config.manualEfforts === undefined ? h('p', { role: 'status' }, t('reasoningUnknown')) : null,
++      capability.status === 'unsupported' && config.manualEfforts === undefined ? h('p', { role: 'status' }, t('reasoningUnsupported')) : null,
++      configured ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' } },
++        ...candidates.map(effort => choice(effort)), ...invalid.map(id => choice({ id, name: id }, true))) : null,
++      configured ? h('button', { type: 'button', disabled, onClick: () => save({ ...config, selected: candidates.map(effort => effort.id) }) }, t('reasoningSelectAll')) : null,
++      configured ? h('label', null, t('reasoningDefault'), ' ', h('select', {
++        'aria-label': `${t('reasoningDefault')} ${position}`, value: config.defaultEffort ?? '', disabled,
++        onChange: event => {
++          const next = { ...config };
++          if (event.target.value) next.defaultEffort = event.target.value;
++          else delete next.defaultEffort;
++          save(next);
++        },
++      }, h('option', { value: '' }, t('reasoningServiceDefault')),
++      ...(config.defaultEffort && !selected.includes(config.defaultEffort) ? [h('option', { value: config.defaultEffort, key: 'invalid', disabled: true }, `${config.defaultEffort} (${t('reasoningUnavailable')})`)] : []),
++      ...candidates.filter(effort => selected.includes(effort.id)).map(effort => h('option', { value: effort.id, key: effort.id }, effort.name)))) : null,
++      h('p', { style: { margin: 0, fontSize: '12px' } }, t('reasoningDefaultHint')),
++      config.manualEfforts === undefined ? h('button', { type: 'button', disabled, onClick: () => save({ ...config, manualEfforts: [...candidates], manualAcknowledged: false }) }, t('reasoningConfigureManual')) : h(react.Fragment, null,
++      ...candidates.map(effort => h('button', { key: effort.id, type: 'button', disabled, onClick: () => save({ ...config,
++        manualEfforts: candidates.filter(candidate => candidate.id !== effort.id),
++        selected: selected.filter(id => id !== effort.id), manualAcknowledged: false,
++      }) }, `${t('reasoningRemoveManual')} ${effort.name}`)),
++        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
++          h('select', { 'aria-label': `${t('reasoningManualId')} ${position}`, value: manualId, onChange: event => { setNewId(event.target.value); setNewWire(event.target.value); } }, ...allowed.map(id => h('option', { value: id, key: id }, id))),
++          native || manualId === 'off' ? null : h('input', { 'aria-label': `${t('reasoningWireValue')} ${position}`, value: newWire, onChange: event => setNewWire(event.target.value) }),
++          h('button', { type: 'button', disabled: disabled || manualId !== 'off' && !newWire.trim(), onClick: () => {
++            const effort = { id: manualId, name: manualId, wireValue: manualId === 'off' && !native ? null : native ? manualId : newWire.trim() };
++            const manualEfforts = [...candidates.filter(item => item.id !== manualId), effort];
++            save({ ...config, manualEfforts, selected: [...new Set([...selected, manualId])], manualAcknowledged: false });
++          } }, t('reasoningAddManual'))),
++        h('button', { type: 'button', disabled, onClick: () => {
++          const next = { ...config, selected: selected.filter(id => capability.efforts.some(effort => effort.id === id)) };
++          delete next.manualEfforts;
++          delete next.manualAcknowledged;
++          save(next);
++        } }, t('reasoningUseAutomatic')),
++        reasoningManualConflict(config) && !config.manualAcknowledged
++          ? h('button', { type: 'button', disabled, onClick: () => save({ ...config, manualAcknowledged: true }) }, t('reasoningKeepManual')) : null),
++      error === undefined ? null : h('p', { role: 'alert' }, t(error.includes('default') ? 'reasoningDefaultInvalid' : 'modelReasoningInvalid')),
++    );
++  };
++}
++
++const ModelReasoningControls = createModelReasoningControls(react);
+ 		function ModelRow(props) {
+ 			const { model, position, t, disabled } = props;
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+@@ -222,7 +419,12 @@
+ 							disabled,
+ 							onChange: (event) => {
+ 								const value = event.target.value;
+-								props.onFieldChange(field, field === "name" && value === "" ? void 0 : value);
++								if (field === 'id' && value !== model.id) {
++									const next = { ...model, id: value };
++									delete next.reasoningConfig;
++									delete next.reasoningEfforts;
++									props.onChange(next);
++								} else props.onFieldChange(field, field === 'name' && value === '' ? undefined : value);
+ 							},
+ 							onBlur: field === "id" ? (event) => props.onIdBlur?.(event.target.value) : void 0
+ 						}, field)),
+@@ -273,6 +475,10 @@
+ 						disabled: disabled || props.inputLoading === true,
+ 						t,
+ 						onChange: props.onChange
++					}), react.createElement(ModelReasoningControls, {
++						model, position, disabled, t, onChange: props.onChange,
++						native: props.inputField === 'inputModalities', allowedIds: props.reasoningAllowedIds, fallback: props.reasoningFallback,
++						inheritedDefault: props.inheritedReasoningDefault, endpoint: props.reasoningEndpoint, api: props.reasoningApi
+ 					})]
+ 				}) : null]
+ 			});
+@@ -337,7 +543,7 @@
+ 		* @param value - user-owned `models` value, or undefined while inherited.
+ 		* @returns the first invalid row, or undefined when the adapter will accept it.
+ 		*/
+-		function validateDeepSeekModels(value) {
++		function validateDeepSeekModels(value, allowedIds, inheritedDefault) {
+ 			if (value === void 0) return void 0;
+ 			const models = modelDrafts(value);
+ 			const seen = /* @__PURE__ */ new Set();
+@@ -353,6 +559,7 @@
+ 					key: "modelIdDuplicate"
+ 				};
+ 				seen.add(trimmed);
++				if (reasoningConfigError(model.reasoningConfig, allowedIds, inheritedDefault)) return { index, key: 'modelReasoningInvalid' };
+ 				const name = model["name"];
+ 				if (name !== void 0 && (typeof name !== "string" || name.length === 0)) return {
+ 					index,
+@@ -483,6 +690,8 @@
+ 							model,
+ 							position: index + 1,
+ 							inputField: "inputModalities",
++							reasoningFallback: props.reasoningFallback,
++							inheritedReasoningDefault: props.inheritedReasoningDefault,
+ 							expanded: expanded.has(index),
+ 							disabled: props.disabled,
+ 							t: props.t,
+@@ -571,13 +780,14 @@
+ 			return value === void 0 ? "" : formatCapacity(value);
+ 		}
+ 		/** Adopt a candidate, preserving disclosed capacities and input types. */
+-		function adopt(candidate) {
++		function adopt(candidate, native = false) {
+ 			return {
+ 				id: candidate.id,
+ 				...candidate.name === void 0 ? {} : { name: candidate.name },
+ 				...candidate.contextWindow === void 0 ? {} : { contextWindow: candidate.contextWindow },
+ 				...candidate.maxTokens === void 0 ? {} : { maxTokens: candidate.maxTokens },
+-				...candidate.inputModalities === void 0 ? {} : { input: [...candidate.inputModalities] }
++				...candidate.inputModalities === void 0 ? {} : { [native ? "inputModalities" : "input"]: [...candidate.inputModalities] },
++				...refreshReasoningConfig(undefined, candidate.reasoningCapability) === undefined ? {} : { reasoningConfig: refreshReasoningConfig(undefined, candidate.reasoningCapability) }
+ 			};
+ 		}
+ 		/**
+@@ -588,6 +798,21 @@
+ 		function ModelListEditor(props) {
+ 			const { models, onChange, probe, operations, t, disabled, onBusyChange } = props;
+ 			const { catalogProvider } = props;
++			const connectionKey = JSON.stringify(probe);
++			const activeConnection = react.useRef(connectionKey);
++			activeConnection.current = connectionKey;
++			const activeModels = react.useRef(models);
++			activeModels.current = models;
++			const refreshRows = (found) => {
++				const next = activeModels.current.map(model => {
++					const capability = found.find(candidate => candidate.id === model.id)?.reasoningCapability;
++					const legacy = model.reasoningEfforts;
++					const previous = model.reasoningConfig ?? (legacy && typeof legacy === 'object' ? { manualEfforts: Object.entries(legacy).map(([id, wireValue]) => ({ id, name: id, wireValue })), selected: Object.keys(legacy), manualAcknowledged: true } : undefined);
++					const config = refreshReasoningConfig(reasoningConfigForConnection(previous, probe.baseURL, probe.api), capability);
++					return config === undefined ? model : { ...model, reasoningConfig: config };
++				});
++				onChange(next);
++			};
+ 			const [busy, setBusy] = (0, react.useState)(false);
+ 			(0, react.useEffect)(() => {
+ 				onBusyChange(busy);
+@@ -597,25 +822,31 @@
+ 			(0, react.useEffect)(() => {
+ 				if (catalogProvider === void 0) return;
+ 				let current = true;
+-				operations.discoverModels(probe.settingsNs, { provider: catalogProvider }).then((answer) => {
+-					if (!current) return;
++				operations.discoverModels(probe.settingsNs, { ...probe, provider: catalogProvider }).then((answer) => {
++					if (!current || activeConnection.current !== connectionKey) return;
++					if (answer.kind === 'found') refreshRows(answer.models);
+ 					setInheritedCatalog({
+-						provider: catalogProvider,
++						provider: catalogProvider, connectionKey,
+ 						models: answer.kind === "found" ? answer.models : []
+ 					});
+ 					setFailure(answer.kind === "refused" ? answer.message : void 0);
+-				});
++				}).catch(error => { if (current && activeConnection.current === connectionKey) setFailure(String(error)); });
+ 				return () => {
+ 					current = false;
+ 				};
+ 			}, [
+ 				catalogProvider,
+ 				operations,
+-				probe.settingsNs
++				probe.settingsNs, connectionKey
+ 			]);
+-			const catalog = inheritedCatalog?.provider === catalogProvider ? inheritedCatalog?.models : void 0;
++			const catalog = inheritedCatalog?.connectionKey === connectionKey ? inheritedCatalog?.models : void 0;
+ 			const inputDefaults = (0, react.useMemo)(() => new Map(catalog?.map((model) => [model.id, model.inputModalities])), [catalog]);
+ 			const [candidates, setCandidates] = (0, react.useState)(void 0);
++			react.useEffect(() => {
++				activeConnection.current = connectionKey;
++				setCandidates(undefined);
++				return () => { activeConnection.current = undefined; };
++			}, [connectionKey]);
+ 			const [picked, setPicked] = (0, react.useState)(/* @__PURE__ */ new Set());
+ 			const [candidateQuery, setCandidateQuery] = (0, react.useState)("");
+ 			const [expanded, setExpanded] = (0, react.useState)(/* @__PURE__ */ new Set());
+@@ -648,6 +879,7 @@
+ 			const patch = (index, next) => {
+ 				onChange(models.map((model, at) => {
+ 					if (at !== index) return model;
++					if (next.id !== undefined && next.id !== model.id) next = { ...next, reasoningConfig: undefined, reasoningEfforts: undefined };
+ 					const cleared = new Set(Object.entries(next).filter(([, value]) => value === void 0 || value === "").map(([key]) => key));
+ 					return Object.fromEntries(Object.entries({
+ 						...model,
+@@ -656,6 +888,7 @@
+ 				}));
+ 			};
+ 			const fetchModels = async () => {
++				const requestedConnection = connectionKey;
+ 				setBusy(true);
+ 				setFailure(void 0);
+ 				try {
+@@ -665,13 +898,15 @@
+ 						...probe.api === void 0 ? {} : { api: probe.api },
+ 						...probe.apiKey === void 0 ? {} : { apiKey: probe.apiKey }
+ 					});
++					if (activeConnection.current !== requestedConnection) return;
+ 					if (answer.kind === "refused") {
+ 						setFailure(answer.message);
+ 						return;
+ 					}
+ 					const found = answer.models;
++					refreshRows(found);
+ 					if (catalogProvider !== void 0) setInheritedCatalog({
+-						provider: catalogProvider,
++						provider: catalogProvider, connectionKey,
+ 						models: found
+ 					});
+ 					if (found.length === 0) {
+@@ -682,6 +917,8 @@
+ 					setCandidateQuery("");
+ 					setCandidates(found);
+ 					setPicked(new Set(found.filter((model) => !known.has(model.id)).map((model) => model.id)));
++				} catch (error) {
++					if (activeConnection.current === requestedConnection) setFailure(String(error));
+ 				} finally {
+ 					setBusy(false);
+ 				}
+@@ -697,7 +934,7 @@
+ 				const byId = new Map(models.map((model) => [textOf(model, "id"), model]));
+ 				for (const candidate of candidates) {
+ 					if (!picked.has(candidate.id)) continue;
+-					byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate));
++					byId.set(candidate.id, byId.get(candidate.id) ?? adopt(candidate, props.native));
+ 				}
+ 				onChange([...byId.values()]);
+ 				closePicker();
+@@ -767,7 +1004,10 @@
+ 						children: models.map((model, index) => (0, react_jsx_runtime.jsx)(ModelRow, {
+ 							model,
+ 							position: index + 1,
+-							inputField: "input",
++							inputField: props.native ? "inputModalities" : "input",
++							reasoningAllowedIds: props.native ? props.reasoningFallback?.efforts.map(effort => effort.id) : undefined, reasoningEndpoint: probe.baseURL, reasoningApi: probe.api,
++							reasoningFallback: catalog?.find(candidate => candidate.id === model.id)?.reasoningCapability ?? props.reasoningFallback,
++							inheritedReasoningDefault: props.inheritedReasoningDefault,
+ 							inputFallback: inputDefaults.get(textOf(model, "id")) ?? props.defaultInput,
+ 							inputLoading: catalogProvider !== void 0 && catalog === void 0,
+ 							expanded: expanded.has(index),
+@@ -775,14 +1015,14 @@
+ 							t,
+ 							contextWindow: {
+ 								value: capacityText(model, index, "contextWindow"),
+-								placeholder: CAPACITY_HINT.contextWindow,
++								placeholder: props.defaultContextWindow === undefined ? CAPACITY_HINT.contextWindow : formatCapacity(props.defaultContextWindow),
+ 								onChange: (text) => {
+ 									editCapacity(index, "contextWindow", text);
+ 								}
+ 							},
+ 							maxTokens: {
+ 								value: capacityText(model, index, "maxTokens"),
+-								placeholder: CAPACITY_HINT.maxTokens,
++								placeholder: props.defaultMaxTokens === undefined ? CAPACITY_HINT.maxTokens : formatCapacity(props.defaultMaxTokens),
+ 								onChange: (text) => {
+ 									editCapacity(index, "maxTokens", text);
+ 								}
+@@ -1239,7 +1479,7 @@
+ 			const routeTaken = taken.includes(route);
+ 			const normalizedBaseURL = baseURL.trim();
+ 			const baseUrlInvalid = baseURL.length > 0 && !isHttpUrl(normalizedBaseURL);
+-			const modelFailure = validateDeepSeekModels(models);
++			const modelFailure = validateDeepSeekModels(models, ['off','minimal','low','medium','high','xhigh','max']);
+ 			const keyFailure = apiKeyFailure(keyDraft);
+ 			const keyValue = keyDraft.trim();
+ 			const ready = route.length > 0 && !routeInvalid && !routeTaken && normalizedBaseURL.length > 0 && !baseUrlInvalid && models.length > 0 && modelFailure === void 0 && keyFailure === void 0;
+@@ -1564,7 +1804,10 @@
+ 				const value = next === void 0 || next.trim().length === 0 ? void 0 : next;
+ 				setDraft((current) => value === void 0 ? schema.deletePath(current, [key]) : schema.setPath(current, [key], value));
+ 			};
+-			const modelFailure = validateDeepSeekModels(schema.getPath(draft, ["models"]));
++			const inheritedReasoningDefault = stringAt(draft, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? stringAt(fallback, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? (layout === 'pi-ai' ? undefined : (stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking')) === 'disabled' ? 'off' : 'high');
++			const nativeDisabled = (stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking')) === 'disabled';
++			const reasoningModels = modelDrafts(schema.getPath(draft, ['models'])).map(model => ({ ...model, reasoningConfig: reasoningConfigForConnection(model.reasoningConfig, stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL'), stringAt(draft, 'api') ?? stringAt(fallback, 'api')) }));
++			const modelFailure = validateDeepSeekModels(reasoningModels, layout === 'pi-ai' ? ['off','minimal','low','medium','high','xhigh','max'] : nativeDisabled ? ['off'] : ['off','low','high','max'], inheritedReasoningDefault);
+ 			const keyFailure = apiKeyFailure(keyDraft);
+ 			const keyValue = keyDraft.trim();
+ 			const shownKeyFailure = (props.credentialRequired === true && keyDraft.length > 0 && keyValue.length === 0 ? "keyRequired" : void 0) ?? keyFailure;
+@@ -1587,7 +1830,7 @@
+ 				const ns = namespace.ns;
+ 				const next = layout === "pi-ai" && stringAt(draft, "apiKeyEnv") === void 0 && stringAt(fallback, "apiKeyEnv") === void 0 && keyValue.length > 0 ? schema.setPath(draft, ["apiKeyEnv"], keyRef) : draft;
+ 				if (props.credentialOnly !== true) {
+-					const failure = validateDeepSeekModels(schema.getPath(next, ["models"]));
++					const failure = modelFailure;
+ 					/* v8 ignore next 3 -- unreachable from the card: the same failure disables submit */
+ 					if (failure !== void 0) return `${t("model")} ${String(failure.index + 1)}: ${t(failure.key)}`;
+ 				}
+@@ -1663,7 +1906,12 @@
+ 				const defaultInput = schema.getPath(fallback, ["defaultInput"]);
+ 				const keyPlaceholder = keyLocked ? t("keyEnvLocked") : keyState?.configured === true && props.credentialRequired !== true ? t("keyStored") : family === "pi-ai" ? t("keyPlaceholderNative") : t("keyPlaceholder");
+ 				/** What both family editors take: the rows, whose layer owns them, and the two writes. */
++				const nativeThinking = schema.getPath(draft, ['thinking']) ?? schema.getPath(fallback, ['thinking']);
++				const inheritedReasoningDefault = schema.getPath(draft, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? schema.getPath(fallback, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? (family === 'pi-ai' ? undefined : nativeThinking === 'disabled' ? 'off' : 'high');
+ 				const catalogProps = {
++ native: family === 'deepseek', operations, probe, catalogProvider: family === 'deepseek' ? props.provider : undefined, onBusyChange: setListBusy,
++					inheritedReasoningDefault,
++					reasoningFallback: family === 'pi-ai' ? undefined : { status: 'known', source: 'adapter', efforts: (nativeThinking === 'disabled' ? ['off'] : ['off','low','high','max']).map(id => ({ id, name: id })) },
+ 					models,
+ 					overridden: modelsOverridden,
+ 					t,
+@@ -1675,7 +1923,7 @@
+ 						setDraft((current) => schema.deletePath(current, ["models"]));
+ 					}
+ 				};
+-				if (accountProvider) return (0, react_jsx_runtime.jsx)(DeepSeekModelsEditor, {
++				if (accountProvider) return (0, react_jsx_runtime.jsx)(ModelListEditor, {
+ 					...catalogProps,
+ 					defaultContextWindow: typeof defaultContextWindow === "number" ? defaultContextWindow : void 0,
+ 					defaultMaxTokens: typeof defaultMaxTokens === "number" ? defaultMaxTokens : void 0
+@@ -1780,7 +2028,7 @@
+ 									}, choice))]
+ 								})]
+ 							}) : null,
+-							family === "deepseek" ? (0, react_jsx_runtime.jsx)(DeepSeekModelsEditor, {
++							family === "deepseek" ? (0, react_jsx_runtime.jsx)(ModelListEditor, {
+ 								...catalogProps,
+ 								defaultContextWindow: typeof defaultContextWindow === "number" ? defaultContextWindow : void 0,
+ 								defaultMaxTokens: typeof defaultMaxTokens === "number" ? defaultMaxTokens : void 0
+@@ -2892,6 +3140,27 @@
+ 			model: "Model",
+ 			modelId: "Model ID",
+ 			modelName: "Display name",
++reasoning: "Reasoning effort",
++reasoningSourceendpoint: "Capabilities declared by this endpoint",
++reasoningSourcecatalog: "Candidates from the matching provider catalog",
++reasoningSourceadapter: "Capabilities known by this adapter",
++reasoningManualSource: "Manually declared capabilities",
++reasoningUnknown: "Reasoning capabilities are unknown. You can keep the existing behavior or declare supported efforts manually.",
++reasoningUnsupported: "This source declares that the model does not support reasoning.",
++reasoningUnavailable: "unavailable",
++reasoningSelectAll: "Select all current efforts",
++reasoningDefault: "Default reasoning effort",
++reasoningServiceDefault: "Service default",
++reasoningDefaultHint: "Service default inherits the adapter and provider behavior; it does not disable thinking. An invisible server default cannot be constrained to this selection.",
++reasoningConfigureManual: "Configure manually",
++reasoningManualId: "Manual effort",
++reasoningWireValue: "Endpoint effort value",
++reasoningAddManual: "Add or update effort",
++reasoningRemoveManual: "Remove manual declaration",
++reasoningUseAutomatic: "Use automatic capabilities",
++reasoningKeepManual: "Confirm manual declaration despite endpoint conflict",
++reasoningDefaultInvalid: "The default is outside the enabled range. Select an enabled effort or a valid service default before saving.",
++modelReasoningInvalid: "Reasoning configuration needs correction. Enable at least one supported effort and resolve unavailable efforts or manual conflicts.",
+ 			modelNamePlaceholder: "Uses the model ID when empty",
+ 			contextWindow: "Context window",
+ 			contextWindowPlaceholder: "Uses the provider default",
+@@ -3008,6 +3277,27 @@
+ 			model: "模型",
+ 			modelId: "模型 ID",
+ 			modelName: "显示名称",
++reasoning: "推理强度",
++reasoningSourceendpoint: "此端点明确声明的能力",
++reasoningSourcecatalog: "来自准确匹配的服务商能力目录",
++reasoningSourceadapter: "适配器已知能力",
++reasoningManualSource: "手动声明的能力",
++reasoningUnknown: "推理能力未知。可以沿用现有行为，或手动声明支持的档位。",
++reasoningUnsupported: "此来源明确声明该模型不支持推理。",
++reasoningUnavailable: "已失效",
++reasoningSelectAll: "全选当前档位",
++reasoningDefault: "默认推理强度",
++reasoningServiceDefault: "服务默认",
++reasoningDefaultHint: "服务默认沿用适配器及服务商行为，不表示关闭思考。服务端不可见的默认行为无法保证处于勾选范围内。",
++reasoningConfigureManual: "手动配置",
++reasoningManualId: "手动档位",
++reasoningWireValue: "端点档位值",
++reasoningAddManual: "添加或更新档位",
++reasoningRemoveManual: "删除手动声明",
++reasoningUseAutomatic: "采用自动识别能力",
++reasoningKeepManual: "确认保留与端点声明冲突的手动配置",
++reasoningDefaultInvalid: "默认档位不在勾选范围内。保存前请选择已勾选档位或有效的服务默认。",
++modelReasoningInvalid: "请修正推理配置：至少启用一个可用档位，并处理失效档位或手动声明冲突。",
+ 			modelNamePlaceholder: "留空时使用模型 ID",
+ 			contextWindow: "上下文窗口",
+ 			contextWindowPlaceholder: "使用提供商默认值",
