@@ -122,4 +122,4 @@ for (const platform of ['darwin', 'win32', 'linux']) {
   await permissions.openSettings('screen')
   assert.deepEqual([...invocations.at(-1)], ['dsh-next:permission-settings', 'screen'])
 }
-console.log('Next frontend check passed: official 0.2.0-rc.2 entry and independent sandboxed preloads for macOS, Windows and Linux.')
+console.log('Next frontend check passed: official 0.2.1-alpha.1 entry and independent sandboxed preloads for macOS, Windows and Linux.')

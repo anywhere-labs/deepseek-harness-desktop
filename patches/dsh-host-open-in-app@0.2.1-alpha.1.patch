@@ -1,0 +1,41 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -346,12 +346,16 @@
+ * @returns after the launch is counted successful; rejects on early failure.
+ */
+ const launchDetachedApp = (command, args, options) => new Promise((resolve, reject) => {
++	// Host RunAsNode is a bootstrap detail, not a GUI application launch option.
++	// Keep explicit adapter overrides (such as GitHub Desktop's CLI) below.
++	const environment = scrubbedParentEnv();
++	for (const key of Object.keys(environment)) if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") delete environment[key];
+ 	const child = spawn(command, [...args], {
+ 		detached: true,
+ 		stdio: "ignore",
+ 		windowsHide: options.windowsHide,
+ 		env: {
+-			...scrubbedParentEnv(),
++			...environment,
+ 			...options.env
+ 		}
+ 	});
+diff --git a/lib/types/resolver.js b/lib/types/resolver.js
+--- a/lib/types/resolver.js
++++ b/lib/types/resolver.js
+@@ -35,11 +35,15 @@
+  * @returns after the launch is counted successful; rejects on early failure.
+  */
+ export const launchDetachedApp = (command, args, options) => new Promise((resolve, reject) => {
++    // Host RunAsNode is a bootstrap detail, not a GUI application launch option.
++    // Keep explicit adapter overrides (such as GitHub Desktop's CLI) below.
++    const environment = scrubbedParentEnv();
++    for (const key of Object.keys(environment)) if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") delete environment[key];
+     const child = spawn(command, [...args], {
+         detached: true,
+         stdio: 'ignore',
+         windowsHide: options.windowsHide,
+-        env: { ...scrubbedParentEnv(), ...options.env },
++        env: { ...environment, ...options.env },
+     });
+     let settled = false;
+     const settle = (outcome) => {

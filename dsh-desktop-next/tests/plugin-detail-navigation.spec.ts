@@ -158,7 +158,7 @@ it('places keyed bundle actions before the native switch without sharing the car
   expect(nodes(openButton).some(node => node.props.name === 'plugins.bundle.actions')).toBe(false)
 })
 
-it('keeps Automation tasks in the official group with its artwork, badge, native switches and component details under Next composition', () => {
+it('keeps an official optional bundle in the official group with its artwork, badge, native switches and component details under Next composition', () => {
   const app = fixture()
   const ctx = {
     inject: (_services: unknown, callback: (context: unknown) => void) => { callback(ctx) },
@@ -171,30 +171,30 @@ it('keeps Automation tasks in the official group with its artwork, badge, native
     },
   }
   registerPluginControls(ctx as unknown as Context)
-  const name = '@deepseek-ai/dsh-experimental-schedule-bundle'
+  const name = '@deepseek-ai/dsh-experimental-inspector-profile'
   const { meta } = JSON.parse(readFileSync(createRequire(import.meta.url).resolve(`${name}/locale/zh.json`), 'utf8'))
-  const schedule = { ...app.remote, name, enabled: false, meta: { ...meta, icon: '/schedule/icon.svg' },
-    rows: [{ rowId: 'schedule', moduleName: '@deepseek-ai/dsh-schedule', entryId: 'include:schedule', enabled: false, phase: 'disabled' }] }
-  app.state.packages.push(schedule)
+  const inspector = { ...app.remote, name, enabled: false, meta: { ...meta, icon: '/inspector/icon.svg' },
+    rows: [{ rowId: 'session-inspector', moduleName: '@deepseek-ai/dsh-experimental-session-inspector', entryId: 'include:session-inspector', enabled: false, phase: 'disabled' }] }
+  app.state.packages.push(inspector)
   const findCard = () => nodes(app.page()).find(node => typeof node.type === 'function' && node.type.name === 'PackageCard' && node.props.pkg.name === name)!
   const card = findCard()
   expect(card).toBeDefined()
   expect(nodes(app.page()).find(node => node.props['data-plugin-count'])?.props['data-plugin-count']).toBe(2)
   const head = component(render(card), 'CardHead')!
-  expect(head.props.title).toBe('自动化任务')
+  expect(head.props.title).toBe('开发者工具')
   expect(head.props.description).toBe(meta.description)
-  expect(head.props.icon.props.src).toBe('/schedule/icon.svg')
+  expect(head.props.icon.props.src).toBe('/inspector/icon.svg')
   expect(nodes(head.props.tags).some(node => node.props.children === 'statusBeta')).toBe(true)
   const toggle = render(component(head.props.end, 'EnableSwitch')!)
   expect(toggle.props.checked).toBe(false)
   toggle.props.onChange(true)
   expect(app.setEnabled).toHaveBeenCalledExactlyOnceWith(name, true)
-  schedule.enabled = true
+  inspector.enabled = true
   const activeHead = component(render(findCard()), 'CardHead')!
   expect(render(component(activeHead.props.end, 'EnableSwitch')!).props.checked).toBe(true)
   card.props.onOpen()
   const detail = render(component(app.page(), 'PackageDetail')!)
-  expect(component(detail, 'RowsSection')?.props.rows).toEqual(schedule.rows)
+  expect(component(detail, 'RowsSection')?.props.rows).toEqual(inspector.rows)
   const top = component(detail, 'DetailTop')!
   render(component(top.props.actions, 'EnableSwitch')!).props.onChange(false)
   expect(app.setEnabled).toHaveBeenLastCalledWith(name, false)
