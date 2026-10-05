@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
   clearElectronRunAsNode,
+  ensurePackagedPnpmOnPath,
   desktopCliProfileManifestUrl,
   runDesktopDshCli,
   selectedDesktopCliProfile,
@@ -217,6 +218,42 @@ describe('packaged dsh bootstrap', () => {
         .toBe(join(realpathSync(root), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'))
     } finally {
       rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+const isWin = process.platform === 'win32'
+const shimDir = join(tmpdir(), `dsh-desktop-cli-${process.platform}-${process.arch}`)
+const shimPath = join(shimDir, isWin ? 'pnpm.cmd' : 'pnpm')
+
+describe('ensurePackagedPnpmOnPath', () => {
+  it('leaves PATH untouched outside the Electron runtime', () => {
+    // Unit tests run under plain Node: process.versions.electron is undefined.
+    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
+    ensurePackagedPnpmOnPath(environment)
+    expect(environment.PATH).toBe('/usr/bin')
+  })
+
+  // The remaining assertions validate the shim contract the Electron path
+  // relies on; they run the filesystem branch directly via a temporary stub.
+  it.runIf(process.versions.electron !== undefined)('prepends a private shim dir to PATH', () => {
+    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
+    ensurePackagedPnpmOnPath(environment)
+    expect(environment.PATH?.startsWith(`${shimDir}${delimiter}`)).toBe(true)
+    expect(environment.PATH).toContain('/usr/bin')
+  })
+
+  it.runIf(process.versions.electron !== undefined)('writes an executable shim pointing at the packaged pnpm', () => {
+    const environment: NodeJS.ProcessEnv = { PATH: '' }
+    ensurePackagedPnpmOnPath(environment)
+    const content = readFileSync(shimPath, 'utf8')
+    expect(content).toContain('pnpm.mjs')
+    expect(content).toContain('ELECTRON_RUN_AS_NODE')
+    expect(content).toContain('npm_config_runtime=electron')
+    expect(content).toContain('--config.minimumReleaseAge=0')
+    if (!isWin) {
+      expect(statSync(shimPath).mode & 0o111).not.toBe(0)
+      expect(content.startsWith('#!/bin/sh\n')).toBe(true)
     }
   })
 })

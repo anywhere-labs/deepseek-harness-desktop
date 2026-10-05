@@ -1,20 +1,74 @@
 /** Private RunAsNode bootstrap for the packaged DeepSeek Harness CLI. */
 
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import { assertDesktopProfileName } from './profile-manager.ts'
-import { withoutForwardedDesktopPnpmPolicy } from './pnpm-policy.ts'
+import { PNPM_IGNORE_MINIMUM_RELEASE_AGE, withoutForwardedDesktopPnpmPolicy } from './pnpm-policy.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
 import { disableAsarArchiveView, type AsarArchiveProcess } from './asar-archive-policy.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const DEFAULT_PROFILE = 'DSH_DESKTOP_DEFAULT_PROFILE'
+const ELECTRON_HEADERS_URL = 'https://electronjs.org/headers'
 const DSH_ENTRY_URL = pathToFileURL(
   packagedDependencyPath(import.meta.url, '@deepseek-ai/dsh/lib/bin.js'),
 ).href
+const PACKAGED_PNPM_ENTRY = packagedDependencyPath(import.meta.url, 'pnpm/bin/pnpm.mjs')
+
+/**
+ * Guarantee that a bare `pnpm` on PATH resolves to the packaged pnpm.
+ *
+ * The upstream `dsh plugin` command forwards to `spawnSync('pnpm', ...)`,
+ * resolving through the ambient PATH. The tray terminal prepends its own shim
+ * directory, but the dsh shim (`--expose-internals desktop-cli.js`) can equally
+ * be invoked outside that terminal — from scripts, automation, or a second
+ * shell — where PATH is arbitrary. There pnpm may be missing entirely (Desktop
+ * targets machines without a Node.js install), or be an incompatible build:
+ * an ambient pnpm 11.1.1 was observed to finish the install and then keep the
+ * Electron-as-node parent waiting forever instead of exiting.
+ *
+ * Mirror the terminal shim in a private tmpdir location and prepend it, so
+ * every desktop-cli invocation runs the same packaged pnpm with the same
+ * Electron native-module settings regardless of caller environment. The shim
+ * is rewritten on each invocation, so an upgraded app repairs stale content.
+ * Outside the Electron runtime (unit tests) PATH is left untouched.
+ */
+export function ensurePackagedPnpmOnPath(environment: NodeJS.ProcessEnv): void {
+  const electronVersion = process.versions.electron
+  if (electronVersion === undefined) return
+  const dir = join(tmpdir(), `dsh-desktop-cli-${process.platform}-${process.arch}`)
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  if (process.platform === 'win32') {
+    writeFileSync(join(dir, 'pnpm.cmd'), [
+      '@echo off',
+      'setlocal DisableDelayedExpansion',
+      `set "${RUN_AS_NODE}=1"`,
+      'set "npm_config_runtime=electron"',
+      `set "npm_config_target=${electronVersion}"`,
+      `set "npm_config_disturl=${ELECTRON_HEADERS_URL}"`,
+      `"${process.execPath}" "${PACKAGED_PNPM_ENTRY}" ${PNPM_IGNORE_MINIMUM_RELEASE_AGE} %*`,
+      'exit /b %errorlevel%',
+      '',
+    ].join('\r\n'))
+  } else {
+    writeFileSync(join(dir, 'pnpm'), [
+      '#!/bin/sh',
+      `${RUN_AS_NODE}=1 npm_config_runtime=electron npm_config_target=${quoteSh(electronVersion)} npm_config_disturl=${quoteSh(ELECTRON_HEADERS_URL)} exec ${quoteSh(process.execPath)} ${quoteSh(PACKAGED_PNPM_ENTRY)} ${PNPM_IGNORE_MINIMUM_RELEASE_AGE} "$@"`,
+      '',
+    ].join('\n'), { mode: 0o700 })
+  }
+  environment.PATH = `${dir}${delimiter}${environment.PATH ?? ''}`
+}
+
+/** Quote one arbitrary value as a POSIX shell word. */
+function quoteSh(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`
+}
 
 export function clearElectronRunAsNode(environment: NodeJS.ProcessEnv): void {
   for (const key of Object.keys(environment)) {
@@ -95,6 +149,7 @@ export async function runDesktopDshCli(
   clearElectronRunAsNode(environment)
   // The CLI's agent lists and reads user workspaces; see asar-archive-policy.ts.
   disableAsarArchiveView(DSH_ENTRY_URL, asarProcess)
+  ensurePackagedPnpmOnPath(environment)
   const selected = profileName === undefined
     ? argv.slice(2)
     : withDefaultDesktopProfile(argv.slice(2), profileName)
