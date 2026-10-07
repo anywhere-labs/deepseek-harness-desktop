@@ -20,6 +20,7 @@ export interface ModelReasoningConfig {
   /** Omission inherits the existing adapter or Provider default. */
   defaultEffort?: string;
 }
+export declare function nativeReasoningPolicy(thinking?: string, effort?: string): { allowedIds: string[]; inheritedDefault: string; capability: ModelReasoningCapability };
 export declare function reasoningCandidates(config?: ModelReasoningConfig, fallback?: ModelReasoningCandidate[]): ModelReasoningCandidate[];
 export declare function reasoningConfigForConnection(config: ModelReasoningConfig | undefined, endpoint?: string, api?: string): ModelReasoningConfig | undefined;
 export declare function reasoningManualConflict(config?: ModelReasoningConfig): boolean;

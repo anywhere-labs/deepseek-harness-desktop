@@ -64,7 +64,7 @@ def inline_source(name):
 
 def patch_llm(files):
     policy = inline_source("policy.mjs") + "\n" + inline_source("schema.mjs")
-    names = ["reasoningCandidates", "reasoningConfigForConnection", "reasoningManualConflict", "refreshReasoningConfig", "reasoningConfigError", "selectedReasoningInfo", "configuredReasoningEffort", "endpointReasoningCapability", "modelReasoningSchema"]
+    names = ["nativeReasoningPolicy", "reasoningCandidates", "reasoningConfigForConnection", "reasoningManualConflict", "refreshReasoningConfig", "reasoningConfigError", "selectedReasoningInfo", "configuredReasoningEffort", "endpointReasoningCapability", "modelReasoningSchema"]
     files["lib/index.js"] += "\n" + policy + "\nexport { " + ", ".join(names) + " };\n"
     files["lib/types/reasoning-config.d.ts"] = (SOURCES / "types.d.ts").read_text(encoding="utf-8")
     files["lib/types/reasoning-config.d.ts"] += "export declare function modelReasoningSchema(z: typeof import('@deepseek-ai/schemastery').default): import('@deepseek-ai/schemastery').default<ModelReasoningConfig>;\n"
@@ -152,14 +152,14 @@ def patch_api_remotes(files):
 
 def patch_deepseek(files):
     path = "lib/index.js"
-    files[path] = 'import { modelReasoningSchema, selectedReasoningInfo, reasoningConfigError, configuredReasoningEffort } from "@deepseek-ai/dsh-llm";\n' + files[path]
+    files[path] = 'import { modelReasoningSchema, selectedReasoningInfo, reasoningConfigError, configuredReasoningEffort, nativeReasoningPolicy } from "@deepseek-ai/dsh-llm";\n' + files[path]
     replace_once(files, path, "const catalogModel = z.object({", "const catalogModel = z.object({\n\treasoningConfig: modelReasoningSchema(z),")
     replace_once(files, path, "\t\t\tinputModalities: [...inputModalities],", "\t\t\tinputModalities: [...inputModalities],\n\t\t\t...model.reasoningConfig === undefined ? {} : { reasoningConfig: structuredClone(model.reasoningConfig) },")
     start = files[path].index("\t\t...connection.defaults.thinking === \"disabled\" ? { reasoning:")
     end = files[path].index("\n\t};\n}", start)
     files[path] = files[path][:start] + '''\t\treasoningConfigurationError: nativeReasoningError(configured?.reasoningConfig, connection),
 \t\t...(() => {
-\t\t\tconst inherited = connection.defaults.thinking === 'disabled' ? 'off' : connection.defaults.reasoningEffort ?? 'high';
+\t\t\tconst inherited = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort).inheritedDefault;
 \t\t\tconst reasoning = selectedReasoningInfo(configured?.reasoningConfig, { efforts: connection.defaults.thinking === 'disabled' ? OFF_ONLY_REASONING_EFFORTS : REASONING_EFFORTS, defaultEffort: inherited });
 \t\t\treturn reasoning === undefined ? {} : { reasoning };
 \t\t})()''' + files[path][end:]
@@ -168,12 +168,13 @@ def patch_deepseek(files):
 \t\tconst config = model?.reasoningConfig;
 \t\tconst error = nativeReasoningError(config, connection);
 \t\tif (error !== undefined) throw new Error(error);
-\t\teffort = configuredReasoningEffort(config, connection.defaults.thinking === 'disabled' ? 'off' : connection.defaults.reasoningEffort ?? 'high', options.purpose === 'session-title' ? 'off' : options.reasoningEffort, options.provider, options.model, ['off', 'low', 'high', 'max']);
+\t\tconst policy = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort);
+\t\teffort = configuredReasoningEffort(config, policy.inheritedDefault, options.purpose === 'session-title' ? 'off' : options.reasoningEffort, options.provider, options.model, policy.allowedIds);
 \t} catch (error) { throw new LlmError(`Provider "${options.provider}" model "${options.model}": ${error.message}. Open model settings to correct it.`, 'UNSUPPORTED_REASONING_EFFORT', { cause: error }); }''')
     files[path] += '''
 function nativeReasoningError(config, connection) {
-  const allowed = connection.defaults.thinking === 'disabled' ? ['off'] : ['off','low','high','max'];
-  const error = reasoningConfigError(config, allowed, connection.defaults.thinking === 'disabled' ? 'off' : connection.defaults.reasoningEffort ?? 'high');
+  const policy = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort);
+  const error = reasoningConfigError(config, policy.allowedIds, policy.inheritedDefault);
   if (error !== undefined) return error;
   if (config?.manualEfforts?.some(effort => effort.wireValue !== undefined && effort.wireValue !== effort.id)) return 'Native DeepSeek requires its own effort wire values';
 }
@@ -255,16 +256,19 @@ def patch_settings(files):
     replace_once(files, path, '\t\t\t\t\t\t\tinputField: "input",', '\t\t\t\t\t\t\tinputField: "input",\n\t\t\t\t\t\t\treasoningEndpoint: probe.baseURL, reasoningApi: probe.api,\n\t\t\t\t\t\t\treasoningFallback: catalog?.find(candidate => candidate.id === model.id)?.reasoningCapability,\n\t\t\t\t\t\t\tinheritedReasoningDefault: props.inheritedReasoningDefault,')
     replace_once(files, path, '\t\t\t\t\t\t\tinputField: "inputModalities",', '\t\t\t\t\t\t\tinputField: "inputModalities",\n\t\t\t\t\t\t\treasoningFallback: props.reasoningFallback,\n\t\t\t\t\t\t\tinheritedReasoningDefault: props.inheritedReasoningDefault,')
     replace_once(files, path, '\t\t\t\tconst catalogProps = {', '''\t\t\t\tconst nativeThinking = schema.getPath(draft, ['thinking']) ?? schema.getPath(fallback, ['thinking']);
-\t\t\t\tconst inheritedReasoningDefault = schema.getPath(draft, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? schema.getPath(fallback, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? (family === 'pi-ai' ? undefined : nativeThinking === 'disabled' ? 'off' : 'high');
+\t\t\t\tconst configuredDefault = schema.getPath(draft, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? schema.getPath(fallback, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']);
+\t\t\t\tconst nativePolicy = nativeReasoningPolicy(nativeThinking, configuredDefault);
+\t\t\t\tconst inheritedReasoningDefault = family === 'pi-ai' ? configuredDefault : nativePolicy.inheritedDefault;
 \t\t\t\tconst catalogProps = {
 \t\t\t\t\tinheritedReasoningDefault,
-\t\t\t\t\treasoningFallback: family === 'pi-ai' ? undefined : { status: 'known', source: 'adapter', efforts: (nativeThinking === 'disabled' ? ['off'] : ['off','low','high','max']).map(id => ({ id, name: id })) },''')
+\t\t\t\t\treasoningFallback: family === 'pi-ai' ? undefined : nativePolicy.capability,''')
     # Validate inherited defaults as well as configured defaults before saving.
     anchor = '\t\t\tconst modelFailure = validateDeepSeekModels(schema.getPath(draft, ["models"]));'
-    replacement = '''\t\t\tconst inheritedReasoningDefault = stringAt(draft, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? stringAt(fallback, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? (layout === 'pi-ai' ? undefined : (stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking')) === 'disabled' ? 'off' : 'high');
-\t\t\tconst nativeDisabled = (stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking')) === 'disabled';
+    replacement = '''\t\t\tconst configuredDefault = stringAt(draft, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? stringAt(fallback, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort');
+\t\t\tconst nativePolicy = nativeReasoningPolicy(stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking'), configuredDefault);
+\t\t\tconst inheritedReasoningDefault = layout === 'pi-ai' ? configuredDefault : nativePolicy.inheritedDefault;
 \t\t\tconst reasoningModels = modelDrafts(schema.getPath(draft, ['models'])).map(model => ({ ...model, reasoningConfig: reasoningConfigForConnection(model.reasoningConfig, stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL'), stringAt(draft, 'api') ?? stringAt(fallback, 'api')) }));
-\t\t\tconst modelFailure = validateDeepSeekModels(reasoningModels, layout === 'pi-ai' ? ['off','minimal','low','medium','high','xhigh','max'] : nativeDisabled ? ['off'] : ['off','low','high','max'], inheritedReasoningDefault);'''
+\t\t\tconst modelFailure = validateDeepSeekModels(reasoningModels, layout === 'pi-ai' ? ['off','minimal','low','medium','high','xhigh','max'] : nativePolicy.allowedIds, inheritedReasoningDefault);'''
     replace_once(files, path, anchor, replacement)
     replace_once(files, path, '\t\t\t\t\tconst failure = validateDeepSeekModels(schema.getPath(next, ["models"]));', '\t\t\t\t\tconst failure = modelFailure;')
     locales = json.loads((SOURCES / 'locales.json').read_text(encoding='utf-8'))

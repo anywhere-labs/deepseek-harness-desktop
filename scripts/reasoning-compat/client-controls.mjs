@@ -25,6 +25,7 @@ export function createModelReasoningControls(react) {
     const save = next => onChange({ ...model, reasoningConfig: next });
     const invalid = selected.filter(id => !candidates.some(effort => effort.id === id));
     const configured = capability.status === 'known' || config.manualEfforts !== undefined;
+    const repairable = configured || selected.length > 0 || config.defaultEffort !== undefined;
     const choice = (effort, retired = false) => h('label', { key: effort.id, style: { display: 'inline-flex', gap: '6px', alignItems: 'center' } },
       h('input', {
         type: 'checkbox', 'aria-label': `${t('reasoning')} ${effort.name} ${position}`,
@@ -36,10 +37,10 @@ export function createModelReasoningControls(react) {
       h('p', { style: { margin: 0, fontSize: '12px' } }, config.manualEfforts !== undefined ? t('reasoningManualSource') : t(`reasoningSource${capability.source}`)),
       capability.status === 'unknown' && config.manualEfforts === undefined ? h('p', { role: 'status' }, t('reasoningUnknown')) : null,
       capability.status === 'unsupported' && config.manualEfforts === undefined ? h('p', { role: 'status' }, t('reasoningUnsupported')) : null,
-      configured ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' } },
+      repairable ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' } },
         ...candidates.map(effort => choice(effort)), ...invalid.map(id => choice({ id, name: id }, true))) : null,
       configured ? h('button', { type: 'button', disabled, onClick: () => save({ ...config, selected: candidates.map(effort => effort.id) }) }, t('reasoningSelectAll')) : null,
-      configured ? h('label', null, t('reasoningDefault'), ' ', h('select', {
+      repairable ? h('label', null, t('reasoningDefault'), ' ', h('select', {
         'aria-label': `${t('reasoningDefault')} ${position}`, value: config.defaultEffort ?? '', disabled,
         onChange: event => {
           const next = { ...config };

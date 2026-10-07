@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { ReasoningEffortId, type ModelReasoningConfig, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { nativeReasoningPolicy, refreshReasoningConfig, ReasoningEffortId, type ModelReasoningConfig, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import * as PiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { DeepSeekAdapter, resolveAdapterOptions, registerDeepSeekProvider } from '@deepseek-ai/dsh-llm-deepseek'
 import { createServer } from 'node:http'
@@ -13,6 +13,17 @@ afterEach(async () => {
 })
 
 describe('provider model reasoning configuration', () => {
+  it('uses off as the native inherited default when thinking is disabled', () => {
+    expect(nativeReasoningPolicy('disabled', 'high')).toMatchObject({ inheritedDefault: 'off', allowedIds: ['off'] })
+  })
+
+  it('selects all efforts on the first known result after an unknown lookup', () => {
+    const unknown = { status: 'unknown' as const, source: 'endpoint' as const, efforts: [] }
+    const known = { status: 'known' as const, source: 'endpoint' as const, authoritative: true, efforts: ['low', 'high'].map(id => ({ id, name: id })) }
+    const pending = refreshReasoningConfig(undefined, unknown)
+    expect(refreshReasoningConfig(pending, known)?.selected).toEqual(['low', 'high'])
+  })
+
   it('discovers native endpoint declarations ahead of the adapter contract', async () => {
     const server = createServer((_request, response) => response.end(JSON.stringify({ data: [
       { id: 'native', reasoning_efforts: ['off', 'low'] }, { id: 'plain', reasoning_efforts: false },

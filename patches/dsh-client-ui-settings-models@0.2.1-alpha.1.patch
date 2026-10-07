@@ -1,11 +1,20 @@
 diff --git a/lib/client.js b/lib/client.js
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -206,6 +206,203 @@
+@@ -206,6 +206,215 @@
  		* @param props - drafted fields and their owning editor's actions.
  		* @returns one expandable model entry.
  		*/
 +/** Provider/model reasoning policy, shared by the patched Host and Client. */
++function nativeReasoningPolicy(thinking, effort) {
++  const allowedIds = thinking === 'disabled' ? ['off'] : ['off', 'low', 'high', 'max'];
++  return {
++    allowedIds,
++    inheritedDefault: thinking === 'disabled' ? 'off' : effort ?? 'high',
++    capability: { status: 'known', source: 'adapter', efforts: allowedIds.map(id => ({ id, name: id, wireValue: id })) },
++  };
++}
++
 +function reasoningCandidates(config, fallback = []) {
 +  return config?.manualEfforts ?? config?.capability?.efforts ?? fallback;
 +}
@@ -33,6 +42,8 @@ diff --git a/lib/client.js b/lib/client.js
 +  if (config?.capability?.source === 'endpoint' && config.capability.authoritative && capability.source !== 'endpoint') return config;
 +  if (capability.status === 'unsupported' && !capability.authoritative && config !== undefined) return config;
 +  if (config === undefined) return { capability, selected: capability.efforts.map(effort => effort.id) };
++  if (config.capability?.status === 'unknown' && config.manualEfforts === undefined && config.selected.length === 0
++    && capability.status === 'known') return { ...config, capability, selected: capability.efforts.map(effort => effort.id), manualAcknowledged: false };
 +  const changed = JSON.stringify(config.capability) !== JSON.stringify(capability);
 +  const old = config.capability?.efforts ?? [];
 +  const retained = capability.authoritative
@@ -149,6 +160,7 @@ diff --git a/lib/client.js b/lib/client.js
 +    const save = next => onChange({ ...model, reasoningConfig: next });
 +    const invalid = selected.filter(id => !candidates.some(effort => effort.id === id));
 +    const configured = capability.status === 'known' || config.manualEfforts !== undefined;
++    const repairable = configured || selected.length > 0 || config.defaultEffort !== undefined;
 +    const choice = (effort, retired = false) => h('label', { key: effort.id, style: { display: 'inline-flex', gap: '6px', alignItems: 'center' } },
 +      h('input', {
 +        type: 'checkbox', 'aria-label': `${t('reasoning')} ${effort.name} ${position}`,
@@ -160,10 +172,10 @@ diff --git a/lib/client.js b/lib/client.js
 +      h('p', { style: { margin: 0, fontSize: '12px' } }, config.manualEfforts !== undefined ? t('reasoningManualSource') : t(`reasoningSource${capability.source}`)),
 +      capability.status === 'unknown' && config.manualEfforts === undefined ? h('p', { role: 'status' }, t('reasoningUnknown')) : null,
 +      capability.status === 'unsupported' && config.manualEfforts === undefined ? h('p', { role: 'status' }, t('reasoningUnsupported')) : null,
-+      configured ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' } },
++      repairable ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px' } },
 +        ...candidates.map(effort => choice(effort)), ...invalid.map(id => choice({ id, name: id }, true))) : null,
 +      configured ? h('button', { type: 'button', disabled, onClick: () => save({ ...config, selected: candidates.map(effort => effort.id) }) }, t('reasoningSelectAll')) : null,
-+      configured ? h('label', null, t('reasoningDefault'), ' ', h('select', {
++      repairable ? h('label', null, t('reasoningDefault'), ' ', h('select', {
 +        'aria-label': `${t('reasoningDefault')} ${position}`, value: config.defaultEffort ?? '', disabled,
 +        onChange: event => {
 +          const next = { ...config };
@@ -205,7 +217,7 @@ diff --git a/lib/client.js b/lib/client.js
  		function ModelRow(props) {
  			const { model, position, t, disabled } = props;
  			return (0, react_jsx_runtime.jsxs)("div", {
-@@ -222,7 +419,12 @@
+@@ -222,7 +431,12 @@
  							disabled,
  							onChange: (event) => {
  								const value = event.target.value;
@@ -219,7 +231,7 @@ diff --git a/lib/client.js b/lib/client.js
  							},
  							onBlur: field === "id" ? (event) => props.onIdBlur?.(event.target.value) : void 0
  						}, field)),
-@@ -273,6 +475,10 @@
+@@ -273,6 +487,10 @@
  						disabled: disabled || props.inputLoading === true,
  						t,
  						onChange: props.onChange
@@ -230,7 +242,7 @@ diff --git a/lib/client.js b/lib/client.js
  					})]
  				}) : null]
  			});
-@@ -337,7 +543,7 @@
+@@ -337,7 +555,7 @@
  		* @param value - user-owned `models` value, or undefined while inherited.
  		* @returns the first invalid row, or undefined when the adapter will accept it.
  		*/
@@ -239,7 +251,7 @@ diff --git a/lib/client.js b/lib/client.js
  			if (value === void 0) return void 0;
  			const models = modelDrafts(value);
  			const seen = /* @__PURE__ */ new Set();
-@@ -353,6 +559,7 @@
+@@ -353,6 +571,7 @@
  					key: "modelIdDuplicate"
  				};
  				seen.add(trimmed);
@@ -247,7 +259,7 @@ diff --git a/lib/client.js b/lib/client.js
  				const name = model["name"];
  				if (name !== void 0 && (typeof name !== "string" || name.length === 0)) return {
  					index,
-@@ -483,6 +690,8 @@
+@@ -483,6 +702,8 @@
  							model,
  							position: index + 1,
  							inputField: "inputModalities",
@@ -256,7 +268,7 @@ diff --git a/lib/client.js b/lib/client.js
  							expanded: expanded.has(index),
  							disabled: props.disabled,
  							t: props.t,
-@@ -571,13 +780,14 @@
+@@ -571,13 +792,14 @@
  			return value === void 0 ? "" : formatCapacity(value);
  		}
  		/** Adopt a candidate, preserving disclosed capacities and input types. */
@@ -273,7 +285,7 @@ diff --git a/lib/client.js b/lib/client.js
  			};
  		}
  		/**
-@@ -588,6 +798,21 @@
+@@ -588,6 +810,21 @@
  		function ModelListEditor(props) {
  			const { models, onChange, probe, operations, t, disabled, onBusyChange } = props;
  			const { catalogProvider } = props;
@@ -295,7 +307,7 @@ diff --git a/lib/client.js b/lib/client.js
  			const [busy, setBusy] = (0, react.useState)(false);
  			(0, react.useEffect)(() => {
  				onBusyChange(busy);
-@@ -597,25 +822,31 @@
+@@ -597,25 +834,31 @@
  			(0, react.useEffect)(() => {
  				if (catalogProvider === void 0) return;
  				let current = true;
@@ -333,7 +345,7 @@ diff --git a/lib/client.js b/lib/client.js
  			const [picked, setPicked] = (0, react.useState)(/* @__PURE__ */ new Set());
  			const [candidateQuery, setCandidateQuery] = (0, react.useState)("");
  			const [expanded, setExpanded] = (0, react.useState)(/* @__PURE__ */ new Set());
-@@ -648,6 +879,7 @@
+@@ -648,6 +891,7 @@
  			const patch = (index, next) => {
  				onChange(models.map((model, at) => {
  					if (at !== index) return model;
@@ -341,7 +353,7 @@ diff --git a/lib/client.js b/lib/client.js
  					const cleared = new Set(Object.entries(next).filter(([, value]) => value === void 0 || value === "").map(([key]) => key));
  					return Object.fromEntries(Object.entries({
  						...model,
-@@ -656,6 +888,7 @@
+@@ -656,6 +900,7 @@
  				}));
  			};
  			const fetchModels = async () => {
@@ -349,7 +361,7 @@ diff --git a/lib/client.js b/lib/client.js
  				setBusy(true);
  				setFailure(void 0);
  				try {
-@@ -665,13 +898,15 @@
+@@ -665,13 +910,15 @@
  						...probe.api === void 0 ? {} : { api: probe.api },
  						...probe.apiKey === void 0 ? {} : { apiKey: probe.apiKey }
  					});
@@ -366,7 +378,7 @@ diff --git a/lib/client.js b/lib/client.js
  						models: found
  					});
  					if (found.length === 0) {
-@@ -682,6 +917,8 @@
+@@ -682,6 +929,8 @@
  					setCandidateQuery("");
  					setCandidates(found);
  					setPicked(new Set(found.filter((model) => !known.has(model.id)).map((model) => model.id)));
@@ -375,7 +387,7 @@ diff --git a/lib/client.js b/lib/client.js
  				} finally {
  					setBusy(false);
  				}
-@@ -697,7 +934,7 @@
+@@ -697,7 +946,7 @@
  				const byId = new Map(models.map((model) => [textOf(model, "id"), model]));
  				for (const candidate of candidates) {
  					if (!picked.has(candidate.id)) continue;
@@ -384,7 +396,7 @@ diff --git a/lib/client.js b/lib/client.js
  				}
  				onChange([...byId.values()]);
  				closePicker();
-@@ -767,7 +1004,10 @@
+@@ -767,7 +1016,10 @@
  						children: models.map((model, index) => (0, react_jsx_runtime.jsx)(ModelRow, {
  							model,
  							position: index + 1,
@@ -396,7 +408,7 @@ diff --git a/lib/client.js b/lib/client.js
  							inputFallback: inputDefaults.get(textOf(model, "id")) ?? props.defaultInput,
  							inputLoading: catalogProvider !== void 0 && catalog === void 0,
  							expanded: expanded.has(index),
-@@ -775,14 +1015,14 @@
+@@ -775,14 +1027,14 @@
  							t,
  							contextWindow: {
  								value: capacityText(model, index, "contextWindow"),
@@ -413,7 +425,7 @@ diff --git a/lib/client.js b/lib/client.js
  								onChange: (text) => {
  									editCapacity(index, "maxTokens", text);
  								}
-@@ -1239,7 +1479,7 @@
+@@ -1239,7 +1491,7 @@
  			const routeTaken = taken.includes(route);
  			const normalizedBaseURL = baseURL.trim();
  			const baseUrlInvalid = baseURL.length > 0 && !isHttpUrl(normalizedBaseURL);
@@ -422,19 +434,20 @@ diff --git a/lib/client.js b/lib/client.js
  			const keyFailure = apiKeyFailure(keyDraft);
  			const keyValue = keyDraft.trim();
  			const ready = route.length > 0 && !routeInvalid && !routeTaken && normalizedBaseURL.length > 0 && !baseUrlInvalid && models.length > 0 && modelFailure === void 0 && keyFailure === void 0;
-@@ -1564,7 +1804,10 @@
+@@ -1564,7 +1816,11 @@
  				const value = next === void 0 || next.trim().length === 0 ? void 0 : next;
  				setDraft((current) => value === void 0 ? schema.deletePath(current, [key]) : schema.setPath(current, [key], value));
  			};
 -			const modelFailure = validateDeepSeekModels(schema.getPath(draft, ["models"]));
-+			const inheritedReasoningDefault = stringAt(draft, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? stringAt(fallback, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? (layout === 'pi-ai' ? undefined : (stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking')) === 'disabled' ? 'off' : 'high');
-+			const nativeDisabled = (stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking')) === 'disabled';
++			const configuredDefault = stringAt(draft, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort') ?? stringAt(fallback, layout === 'pi-ai' ? 'reasoning' : 'reasoningEffort');
++			const nativePolicy = nativeReasoningPolicy(stringAt(draft, 'thinking') ?? stringAt(fallback, 'thinking'), configuredDefault);
++			const inheritedReasoningDefault = layout === 'pi-ai' ? configuredDefault : nativePolicy.inheritedDefault;
 +			const reasoningModels = modelDrafts(schema.getPath(draft, ['models'])).map(model => ({ ...model, reasoningConfig: reasoningConfigForConnection(model.reasoningConfig, stringAt(draft, 'baseURL') ?? stringAt(fallback, 'baseURL'), stringAt(draft, 'api') ?? stringAt(fallback, 'api')) }));
-+			const modelFailure = validateDeepSeekModels(reasoningModels, layout === 'pi-ai' ? ['off','minimal','low','medium','high','xhigh','max'] : nativeDisabled ? ['off'] : ['off','low','high','max'], inheritedReasoningDefault);
++			const modelFailure = validateDeepSeekModels(reasoningModels, layout === 'pi-ai' ? ['off','minimal','low','medium','high','xhigh','max'] : nativePolicy.allowedIds, inheritedReasoningDefault);
  			const keyFailure = apiKeyFailure(keyDraft);
  			const keyValue = keyDraft.trim();
  			const shownKeyFailure = (props.credentialRequired === true && keyDraft.length > 0 && keyValue.length === 0 ? "keyRequired" : void 0) ?? keyFailure;
-@@ -1587,7 +1830,7 @@
+@@ -1587,7 +1843,7 @@
  				const ns = namespace.ns;
  				const next = layout === "pi-ai" && stringAt(draft, "apiKeyEnv") === void 0 && stringAt(fallback, "apiKeyEnv") === void 0 && keyValue.length > 0 ? schema.setPath(draft, ["apiKeyEnv"], keyRef) : draft;
  				if (props.credentialOnly !== true) {
@@ -443,20 +456,22 @@ diff --git a/lib/client.js b/lib/client.js
  					/* v8 ignore next 3 -- unreachable from the card: the same failure disables submit */
  					if (failure !== void 0) return `${t("model")} ${String(failure.index + 1)}: ${t(failure.key)}`;
  				}
-@@ -1663,7 +1906,12 @@
+@@ -1663,7 +1919,14 @@
  				const defaultInput = schema.getPath(fallback, ["defaultInput"]);
  				const keyPlaceholder = keyLocked ? t("keyEnvLocked") : keyState?.configured === true && props.credentialRequired !== true ? t("keyStored") : family === "pi-ai" ? t("keyPlaceholderNative") : t("keyPlaceholder");
  				/** What both family editors take: the rows, whose layer owns them, and the two writes. */
 +				const nativeThinking = schema.getPath(draft, ['thinking']) ?? schema.getPath(fallback, ['thinking']);
-+				const inheritedReasoningDefault = schema.getPath(draft, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? schema.getPath(fallback, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? (family === 'pi-ai' ? undefined : nativeThinking === 'disabled' ? 'off' : 'high');
++				const configuredDefault = schema.getPath(draft, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']) ?? schema.getPath(fallback, [family === 'pi-ai' ? 'reasoning' : 'reasoningEffort']);
++				const nativePolicy = nativeReasoningPolicy(nativeThinking, configuredDefault);
++				const inheritedReasoningDefault = family === 'pi-ai' ? configuredDefault : nativePolicy.inheritedDefault;
  				const catalogProps = {
 + native: family === 'deepseek', operations, probe, catalogProvider: family === 'deepseek' ? props.provider : undefined, onBusyChange: setListBusy,
 +					inheritedReasoningDefault,
-+					reasoningFallback: family === 'pi-ai' ? undefined : { status: 'known', source: 'adapter', efforts: (nativeThinking === 'disabled' ? ['off'] : ['off','low','high','max']).map(id => ({ id, name: id })) },
++					reasoningFallback: family === 'pi-ai' ? undefined : nativePolicy.capability,
  					models,
  					overridden: modelsOverridden,
  					t,
-@@ -1675,7 +1923,7 @@
+@@ -1675,7 +1938,7 @@
  						setDraft((current) => schema.deletePath(current, ["models"]));
  					}
  				};
@@ -465,7 +480,7 @@ diff --git a/lib/client.js b/lib/client.js
  					...catalogProps,
  					defaultContextWindow: typeof defaultContextWindow === "number" ? defaultContextWindow : void 0,
  					defaultMaxTokens: typeof defaultMaxTokens === "number" ? defaultMaxTokens : void 0
-@@ -1780,7 +2028,7 @@
+@@ -1780,7 +2043,7 @@
  									}, choice))]
  								})]
  							}) : null,
@@ -474,7 +489,7 @@ diff --git a/lib/client.js b/lib/client.js
  								...catalogProps,
  								defaultContextWindow: typeof defaultContextWindow === "number" ? defaultContextWindow : void 0,
  								defaultMaxTokens: typeof defaultMaxTokens === "number" ? defaultMaxTokens : void 0
-@@ -2892,6 +3140,27 @@
+@@ -2892,6 +3155,27 @@
  			model: "Model",
  			modelId: "Model ID",
  			modelName: "Display name",
@@ -502,7 +517,7 @@ diff --git a/lib/client.js b/lib/client.js
  			modelNamePlaceholder: "Uses the model ID when empty",
  			contextWindow: "Context window",
  			contextWindowPlaceholder: "Uses the provider default",
-@@ -3008,6 +3277,27 @@
+@@ -3008,6 +3292,27 @@
  			model: "模型",
  			modelId: "模型 ID",
  			modelName: "显示名称",

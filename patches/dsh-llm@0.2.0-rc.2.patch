@@ -27,12 +27,21 @@ diff --git a/lib/index.js b/lib/index.js
  			const defaulted = config.maxTokens === void 0 && info.defaultMaxTokens !== void 0 ? {
  				...config,
  				maxTokens: info.defaultMaxTokens
-@@ -2388,3 +2391,143 @@
+@@ -2388,3 +2391,154 @@
  }
  //#endregion
  export { ACCOUNT_QUOTA_EXCEEDED_CODE, APP_IDENTITY, AssistantStreamAccumulator, BlockAssembler, CONTEXT_SUMMARY_MAX_CHARS, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, HarnessError, IMAGE_OFFLOAD_REQUIRED_CODE, INVALID_CREDENTIAL_CODE, LlmAdapter, LlmAttemptId, LlmError, LlmRuntime, LlmRuntime as default, MessageId, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId, RetryPolicySchema, ToolCallId, assembleAssistantStream, assertUsableApiKey, assistantStreamChunks, assistantStreamFirstTokenTime, assistantStreamHasVisibleContent, assistantStreamHasVisibleText, attributionHeaders, boundContextSummary, callConfigEquals, chunkHasVisibleText, contentHasFile, contentHasImage, createAssistantMessage, createDeveloperMessage, createMessage, createSystemMessage, createToolResultMessage, createUserMessage, errorChain, expandAssistantStream, fileHandleText, freezeMessage, isAgentLoopRequest, isContextWindowExceededError, isHarnessError, isQuotaExceededError, isTokenDelta, isVisibleChunk, joinAssistantStreamText, lastAssistantStreamChunk, markAgentLoopRequest, normalizeApiKey, offloadedImageText, projectFilesToText, projectImagesForTextModel, projectOffloadedImages, projectToolUpdates, requestImageHandleText, requiredImageOffload, resolveImageAttachmentAccess, resolveRetryPolicy, runFirstTokenTime, runFirstVisibleTime, textOnlyImageText, userAgent };
 +
 +/** Provider/model reasoning policy, shared by the patched Host and Client. */
++function nativeReasoningPolicy(thinking, effort) {
++  const allowedIds = thinking === 'disabled' ? ['off'] : ['off', 'low', 'high', 'max'];
++  return {
++    allowedIds,
++    inheritedDefault: thinking === 'disabled' ? 'off' : effort ?? 'high',
++    capability: { status: 'known', source: 'adapter', efforts: allowedIds.map(id => ({ id, name: id, wireValue: id })) },
++  };
++}
++
 +function reasoningCandidates(config, fallback = []) {
 +  return config?.manualEfforts ?? config?.capability?.efforts ?? fallback;
 +}
@@ -60,6 +69,8 @@ diff --git a/lib/index.js b/lib/index.js
 +  if (config?.capability?.source === 'endpoint' && config.capability.authoritative && capability.source !== 'endpoint') return config;
 +  if (capability.status === 'unsupported' && !capability.authoritative && config !== undefined) return config;
 +  if (config === undefined) return { capability, selected: capability.efforts.map(effort => effort.id) };
++  if (config.capability?.status === 'unknown' && config.manualEfforts === undefined && config.selected.length === 0
++    && capability.status === 'known') return { ...config, capability, selected: capability.efforts.map(effort => effort.id), manualAcknowledged: false };
 +  const changed = JSON.stringify(config.capability) !== JSON.stringify(capability);
 +  const old = config.capability?.efforts ?? [];
 +  const retained = capability.authoritative
@@ -170,7 +181,7 @@ diff --git a/lib/index.js b/lib/index.js
 +  }).default(undefined);
 +}
 +
-+export { reasoningCandidates, reasoningConfigForConnection, reasoningManualConflict, refreshReasoningConfig, reasoningConfigError, selectedReasoningInfo, configuredReasoningEffort, endpointReasoningCapability, modelReasoningSchema };
++export { nativeReasoningPolicy, reasoningCandidates, reasoningConfigForConnection, reasoningManualConflict, refreshReasoningConfig, reasoningConfigError, selectedReasoningInfo, configuredReasoningEffort, endpointReasoningCapability, modelReasoningSchema };
 diff --git a/lib/typert.host.js b/lib/typert.host.js
 --- a/lib/typert.host.js
 +++ b/lib/typert.host.js
@@ -208,7 +219,7 @@ diff --git a/lib/types/reasoning-config.d.ts b/lib/types/reasoning-config.d.ts
 new file mode 100644
 --- /dev/null
 +++ b/lib/types/reasoning-config.d.ts
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,32 @@
 +/** An exact Provider/model capability declaration; never a global effort enum. */
 +export interface ModelReasoningCapability {
 +  status: 'known' | 'unknown' | 'unsupported';
@@ -231,6 +242,7 @@ new file mode 100644
 +  /** Omission inherits the existing adapter or Provider default. */
 +  defaultEffort?: string;
 +}
++export declare function nativeReasoningPolicy(thinking?: string, effort?: string): { allowedIds: string[]; inheritedDefault: string; capability: ModelReasoningCapability };
 +export declare function reasoningCandidates(config?: ModelReasoningConfig, fallback?: ModelReasoningCandidate[]): ModelReasoningCandidate[];
 +export declare function reasoningConfigForConnection(config: ModelReasoningConfig | undefined, endpoint?: string, api?: string): ModelReasoningConfig | undefined;
 +export declare function reasoningManualConflict(config?: ModelReasoningConfig): boolean;

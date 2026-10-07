@@ -98,6 +98,35 @@ async function settings(native = false) {
 }
 
 describe('installed provider reasoning settings', () => {
+  it('lets users repair retired selections and defaults after an unsupported refresh', async () => {
+    const editor = await settings()
+    await editor.click('fetchModels')
+    await act(async () => {
+      const select = editor.container.querySelector<HTMLSelectElement>('[aria-label="reasoningDefault 1"]')!
+      select.value = 'high'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    editor.discovery.mockResolvedValue({ kind: 'found', models: [{ id: 'think', reasoningCapability: {
+      status: 'unsupported', source: 'endpoint', authoritative: true, efforts: [],
+    } }] })
+    await editor.click('fetchModels')
+    expect(editor.container.textContent).toContain('reasoningUnsupported')
+    for (const id of ['low', 'high']) {
+      const checkbox = editor.container.querySelector<HTMLInputElement>(`[aria-label="reasoning ${id} 1"]`)
+      expect(checkbox).not.toBeNull()
+      await act(async () => checkbox!.click())
+    }
+    await act(async () => {
+      const select = editor.container.querySelector<HTMLSelectElement>('[aria-label="reasoningDefault 1"]')!
+      select.value = ''
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await editor.click('apply')
+    expect(editor.writes).toHaveBeenCalled()
+    expect(editor.profile).toMatchObject({ models: [{ reasoningConfig: { capability: { status: 'unsupported' }, selected: [] } }] })
+    expect((editor.profile.models as { reasoningConfig: object }[])[0]!.reasoningConfig).not.toHaveProperty('defaultEffort')
+  })
+
   it.each([false, true])('persists subset and independent default and keeps unchecked candidates (%s native)', async native => {
     const editor = await settings(native)
     if (!native) await editor.click('fetchModels')

@@ -1,11 +1,7 @@
 /** Native Messages capability discovery; no generation requests are made. */
 export async function discoverNativeReasoningModels(request, signal, dependencies, parseCapability, apiRoot) {
   const connection = dependencies.options();
-  const allowed = connection.defaults.thinking === 'disabled' ? ['off'] : ['off', 'low', 'high', 'max'];
-  const adapterCapability = {
-    status: 'known', source: 'adapter',
-    efforts: allowed.map(id => ({ id, name: id, wireValue: id })),
-  };
+  const { allowedIds: allowed, capability: adapterCapability } = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort);
   const fallback = () => connection.models.map(model => ({
     id: model.id, name: model.name ?? model.id, reasoningCapability: adapterCapability,
   }));

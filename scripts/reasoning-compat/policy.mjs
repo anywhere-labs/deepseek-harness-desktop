@@ -1,4 +1,13 @@
 /** Provider/model reasoning policy, shared by the patched Host and Client. */
+export function nativeReasoningPolicy(thinking, effort) {
+  const allowedIds = thinking === 'disabled' ? ['off'] : ['off', 'low', 'high', 'max'];
+  return {
+    allowedIds,
+    inheritedDefault: thinking === 'disabled' ? 'off' : effort ?? 'high',
+    capability: { status: 'known', source: 'adapter', efforts: allowedIds.map(id => ({ id, name: id, wireValue: id })) },
+  };
+}
+
 export function reasoningCandidates(config, fallback = []) {
   return config?.manualEfforts ?? config?.capability?.efforts ?? fallback;
 }
@@ -26,6 +35,8 @@ export function refreshReasoningConfig(config, capability) {
   if (config?.capability?.source === 'endpoint' && config.capability.authoritative && capability.source !== 'endpoint') return config;
   if (capability.status === 'unsupported' && !capability.authoritative && config !== undefined) return config;
   if (config === undefined) return { capability, selected: capability.efforts.map(effort => effort.id) };
+  if (config.capability?.status === 'unknown' && config.manualEfforts === undefined && config.selected.length === 0
+    && capability.status === 'known') return { ...config, capability, selected: capability.efforts.map(effort => effort.id), manualAcknowledged: false };
   const changed = JSON.stringify(config.capability) !== JSON.stringify(capability);
   const old = config.capability?.efforts ?? [];
   const retained = capability.authoritative
