@@ -483,6 +483,23 @@ async function start(): Promise<void> {
   // launch rather than a descendant command re-entering the executable.
   let pendingLaunchWorkspacePath = desktopLaunchWorkspaceRequest(process.argv)?.path
   let launchWorkspaceReady = false
+  // A Dock drop can reach the process before the launch pipeline below exists,
+  // so the listener is registered here: before the first await in this function
+  // and long before `ready`, which is what macOS requires for a cold launch.
+  // Until the forwarder is bound the folder waits in the same slot the command
+  // line hand-off uses.
+  let acceptOpenedWorkspacePath: ((path: string) => void) | undefined
+  if (process.platform === 'darwin') {
+    // macOS reports a folder dropped on the app icon as `open-file`, both while
+    // the app is running and when it launched the app for that drop. Claiming
+    // the event also keeps Chromium from opening the folder as a document
+    // window of its own.
+    app.on('open-file', (event, path) => {
+      event.preventDefault()
+      if (acceptOpenedWorkspacePath === undefined) pendingLaunchWorkspacePath = path
+      else acceptOpenedWorkspacePath(path)
+    })
+  }
   let runtime!: ElectronDesktopRuntime
   let logSink: LogFileSink | undefined
   let startupRecoveryController: DesktopStartupRecoveryController | undefined
@@ -727,6 +744,13 @@ async function start(): Promise<void> {
     }
     void openLaunchWorkspace(request.path)
   }
+
+  // The pipeline exists now, so later Dock drops go straight through it. One
+  // that arrived earlier is already parked in `pendingLaunchWorkspacePath` and
+  // is released with the command line hand-off. `explicit` only separates a
+  // launcher hand-off from a background Node re-entry, which a Dock drop never
+  // is.
+  acceptOpenedWorkspacePath = (path: string): void => { acceptLaunchWorkspace({ path, explicit: true }) }
 
   app.on('activate', () => { showPreHostSurface() })
   if (process.platform === 'darwin') app.on('did-become-active', () => { showPreHostSurface() })
