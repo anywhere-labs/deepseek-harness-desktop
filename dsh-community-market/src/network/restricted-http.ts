@@ -13,12 +13,53 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024
 const CONNECT_TIMEOUT_MS = 8_000
 const FIRST_BYTE_TIMEOUT_MS = 12_000
 const TOTAL_TIMEOUT_MS = 30_000
+const RETRY_ATTEMPTS = 3
+const RETRY_BASE_DELAY_MS = 250
+const RETRY_MAX_DELAY_MS = 2_000
 
 export class CatalogNetworkError extends Error {
-  constructor(readonly code: 'invalid-url' | 'blocked-address' | 'redirect' | 'timeout' | 'http' | 'response') {
-    super(`catalog request failed: ${code}`)
+  constructor(
+    readonly code: 'invalid-url' | 'blocked-address' | 'redirect' | 'timeout' | 'http' | 'response',
+    readonly statusCode?: number,
+  ) {
+    super(`catalog request failed: ${code}${statusCode === undefined ? '' : ` ${statusCode}`}`)
     this.name = 'CatalogNetworkError'
   }
+}
+
+/**
+ * Transient failures (per-attempt timeouts, truncated bodies, 5xx) are worth a
+ * bounded retry; deterministic refusals — invalid URLs, blocked addresses,
+ * redirects, 4xx — can never succeed on a second attempt and must fail on the
+ * first so blocked addresses and cross-origin redirects stay fail-closed.
+ */
+function isRetryableCatalogError(cause: unknown): boolean {
+  if (!(cause instanceof CatalogNetworkError)) return false
+  switch (cause.code) {
+    case 'timeout':
+    case 'response':
+      return true
+    case 'http':
+      return cause.statusCode === undefined || cause.statusCode >= 500
+    case 'invalid-url':
+    case 'blocked-address':
+    case 'redirect':
+      return false
+  }
+}
+
+interface RetryPolicy {
+  readonly attempts: number
+  readonly baseDelayMs: number
+  readonly maxDelayMs: number
+  readonly sleep: (ms: number) => Promise<void>
+  readonly random: () => number
+}
+
+/** Exponential backoff with full jitter: a uniform draw from [0, min(cap, base * 2^attempt)). */
+function retryDelayMs(attempt: number, policy: RetryPolicy): number {
+  const exponential = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** attempt)
+  return Math.floor(policy.random() * exponential)
 }
 
 const blockedAddresses = createBlockedAddresses()
@@ -49,6 +90,12 @@ export interface RestrictedHttpClientOptions {
   ) => Promise<RestrictedHttpResponse>
   readonly totalTimeoutMs?: number
   readonly maxBodyBytes?: number
+  /** Total attempts per request (1 disables retry). Retries share the total-timeout budget. */
+  readonly retryAttempts?: number
+  readonly retryBaseDelayMs?: number
+  readonly retryMaxDelayMs?: number
+  readonly sleep?: (ms: number) => Promise<void>
+  readonly random?: () => number
 }
 
 const syntheticProxyAddresses = createSyntheticProxyAddresses()
@@ -209,7 +256,7 @@ async function fetchJson(
       redirectCount + 1,
     )
   }
-  if (status < 200 || status >= 300) throw new CatalogNetworkError('http')
+  if (status < 200 || status >= 300) throw new CatalogNetworkError('http', status)
   const contentType = response.headers['content-type'] ?? ''
   const encoding = response.headers['content-encoding']
   if (!/^(?:application\/json|application\/[^;]+\+json)(?:;|$)/iu.test(contentType)
@@ -225,6 +272,34 @@ async function fetchJson(
   return { value, finalUrl: url.href }
 }
 
+/**
+ * Run fetchJson up to `policy.attempts` times, sleeping a jittered exponential
+ * backoff between attempts. `signal` is the operation-wide controller: once it
+ * aborts (caller abort or total timeout) the loop stops instead of retrying.
+ */
+async function fetchJsonWithRetries(
+  start: string,
+  signal: AbortSignal,
+  resolveAddress: (hostname: string) => Promise<PinnedAddress>,
+  request: (url: URL, signal: AbortSignal, pinned: PinnedAddress) => Promise<RestrictedHttpResponse>,
+  allowedOrigin: string | undefined,
+  policy: RetryPolicy,
+): Promise<CatalogHttpResponse> {
+  let lastCause: unknown
+  for (let attempt = 0; attempt < policy.attempts; attempt += 1) {
+    try {
+      return await fetchJson(start, signal, resolveAddress, request, allowedOrigin)
+    } catch (cause) {
+      lastCause = cause
+      if (signal.aborted || !isRetryableCatalogError(cause)) throw cause
+      if (attempt === policy.attempts - 1) break
+      await policy.sleep(retryDelayMs(attempt, policy))
+      if (signal.aborted) throw cause
+    }
+  }
+  throw lastCause
+}
+
 export function createRestrictedHttpClient(
   options: RestrictedHttpClientOptions = {},
 ): CatalogHttpClient {
@@ -238,6 +313,13 @@ export function createRestrictedHttpClient(
   const request = options.request
     ?? (async (url, signal, pinned) => await requestOnce(url, signal, pinned, maxBodyBytes))
   const totalTimeoutMs = options.totalTimeoutMs ?? TOTAL_TIMEOUT_MS
+  const retryPolicy: RetryPolicy = {
+    attempts: Math.max(1, options.retryAttempts ?? RETRY_ATTEMPTS),
+    baseDelayMs: options.retryBaseDelayMs ?? RETRY_BASE_DELAY_MS,
+    maxDelayMs: options.retryMaxDelayMs ?? RETRY_MAX_DELAY_MS,
+    sleep: options.sleep ?? (async ms => await new Promise<void>(resolve => { setTimeout(resolve, ms) })),
+    random: options.random ?? Math.random,
+  }
 
   return {
     async getJson(start, signal, policy: CatalogHttpRequestPolicy = {}) {
@@ -259,7 +341,14 @@ export function createRestrictedHttpClient(
           reject(cause)
         }, totalTimeoutMs)
       })
-      const operation = fetchJson(start, totalController.signal, resolveAddress, request, policy.allowedOrigin)
+      const operation = fetchJsonWithRetries(
+        start,
+        totalController.signal,
+        resolveAddress,
+        request,
+        policy.allowedOrigin,
+        retryPolicy,
+      )
       try {
         return await Promise.race([operation, aborted, timedOut])
       } finally {

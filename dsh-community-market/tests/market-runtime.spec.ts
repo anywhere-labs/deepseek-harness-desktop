@@ -1873,6 +1873,7 @@ describe('restricted HTTP boundary', () => {
     try {
       const client = createRestrictedHttpClient({
         resolveAddress: async () => ({ address: '93.184.216.34', family: 4 }),
+        retryAttempts: 1,
       })
       const result = expect(client.getJson(
         'https://catalog.example/v1/plugins',
