@@ -10,7 +10,17 @@ import { SIDEBAR_COLLAPSED } from './layout-state.ts'
 
 /** Desktop-owned shell stylesheet kept as a plain string so the client bundle stays self-contained. */
 const DESKTOP_OWNED_STYLES = `
-html, body, #root { width: 100%; height: 100%; }
+/* Height alone does not pin the window: with overflow left at its default the
+   document stays a live scroller, so a wheel gesture that chains out of any
+   panel scroller lands on the root and slides the whole window — sidebar and
+   caption row included — as one page. overflow: hidden locks the document;
+   overscroll-behavior: none keeps the root from rubber-banding past that lock. */
+html, body, #root { width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* Scrolling is panel-owned. contain stops an exhausted panel scroller from
+   handing the wheel gesture up the chain to the document. The composer input's
+   deliberate JS forwarding to the conversation scrollport (view-binding.ts) is
+   unaffected: contain only suppresses default scroll chaining. */
+[data-conversation-scroll], [data-input-scroll] { overscroll-behavior: contain; }
 body:is([data-dsh-desktop-mode="extended"], [data-dsh-desktop-mode="advanced"]) { margin: 0; background: transparent !important; }
 /* The official html[data-platform] marker also activates its native keyboard
    bridge, which this Desktop shell does not provide. Scope only the menu fill
