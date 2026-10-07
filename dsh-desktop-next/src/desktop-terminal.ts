@@ -3,7 +3,6 @@
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import {
   chmodSync,
-  existsSync,
   lstatSync,
   mkdirSync,
   renameSync,
@@ -14,6 +13,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { basename, dirname, join, win32 } from 'node:path'
 import { profileName as assertDesktopProfileName } from './profiles.ts'
 import { PNPM_IGNORE_MINIMUM_RELEASE_AGE } from './pnpm-policy.ts'
+import { windowsExecutableProbe } from './windows-executable.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const DEFAULT_PROFILE = 'DSH_DESKTOP_DEFAULT_PROFILE'
@@ -108,7 +108,7 @@ export interface DesktopTerminalOptions {
   environment?: NodeJS.ProcessEnv
   /** Optional Windows terminal wrapper. Windows Terminal is discovered when omitted. */
   windowsTerminal?: WindowsTerminalLauncher
-  /** Windows executable existence probe; defaults to `existsSync`. */
+  /** Windows executable existence probe; defaults to a reparse-point-safe probe. */
   windowsExecutableExists?: DesktopTerminalExecutableExists
   /** Windows executable resolver; defaults to a trusted PATH/SystemRoot lookup. */
   windowsExecutableResolver?: DesktopTerminalExecutableResolver
@@ -549,15 +549,27 @@ function defaultWindowsExecutableResolver(
   environment: Readonly<NodeJS.ProcessEnv>,
   exists: DesktopTerminalExecutableExists,
 ): string | undefined {
+  const name = command.toLowerCase()
   const candidates: string[] = []
   const systemRoot = windowsEnvironmentValue(environment, 'SystemRoot')
-  if (command.toLowerCase() === 'powershell.exe' && systemRoot !== undefined) {
-    candidates.push(win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'))
-  }
-  if (command.toLowerCase() === 'cmd.exe') {
+  if (name === 'cmd.exe') {
     const comSpec = windowsEnvironmentValue(environment, 'ComSpec')
     if (comSpec !== undefined) candidates.push(comSpec)
     if (systemRoot !== undefined) candidates.push(win32.join(systemRoot, 'System32', 'cmd.exe'))
+  }
+  // PowerShell 7 has no guaranteed System32 location: an MSI install lives under
+  // Program Files, while a Microsoft Store install is reachable only through its
+  // app execution alias. Probe both before falling back to PATH so a Store-only
+  // host still gets PowerShell 7.
+  if (name === 'pwsh.exe') {
+    const programFiles = windowsEnvironmentValue(environment, 'ProgramFiles')
+    const localAppData = windowsEnvironmentValue(environment, 'LocalAppData')
+    if (programFiles !== undefined) {
+      candidates.push(win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'))
+    }
+    if (localAppData !== undefined) {
+      candidates.push(win32.join(localAppData, 'Microsoft', 'WindowsApps', 'pwsh.exe'))
+    }
   }
   const inheritedPath = windowsEnvironmentValue(environment, PATH)
   if (inheritedPath !== undefined) {
@@ -565,6 +577,13 @@ function defaultWindowsExecutableResolver(
       const dir = rawDir.startsWith('"') && rawDir.endsWith('"') ? rawDir.slice(1, -1) : rawDir
       if (dir.length > 0) candidates.push(win32.join(dir, command))
     }
+  }
+  // Windows PowerShell 5.1 ships with every supported Windows release, but a
+  // trimmed or damaged install can leave a file that exists yet cannot create a
+  // process. It is the last resort because a PATH entry is a shell the host can
+  // actually run; preferring it earlier is how a usable shell loses to a broken one.
+  if (name === 'powershell.exe' && systemRoot !== undefined) {
+    candidates.push(win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'))
   }
   return candidates.find(candidate => exists(candidate))
 }
@@ -587,7 +606,7 @@ function resolveWindowsShell(
   options: DesktopTerminalOptions,
   environment: Readonly<NodeJS.ProcessEnv>,
 ): ResolvedWindowsShell {
-  const exists = options.windowsExecutableExists ?? existsSync
+  const exists = options.windowsExecutableExists ?? windowsExecutableProbe
   const resolveExecutable = options.windowsExecutableResolver ?? defaultWindowsExecutableResolver
   for (const command of WINDOWS_SHELL_COMMANDS) {
     const executable = resolveExecutable(command, environment, exists)
@@ -630,7 +649,7 @@ function resolveWindowsCommandProcessor(
   shell: ResolvedWindowsShell,
 ): string {
   if (shell.kind === 'cmd') return shell.executable
-  const exists = options.windowsExecutableExists ?? existsSync
+  const exists = options.windowsExecutableExists ?? windowsExecutableProbe
   const resolveExecutable = options.windowsExecutableResolver ?? defaultWindowsExecutableResolver
   const executable = resolveExecutable('cmd.exe', environment, exists)
   if (executable === undefined) {

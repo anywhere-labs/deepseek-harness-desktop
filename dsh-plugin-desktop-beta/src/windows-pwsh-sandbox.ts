@@ -1,11 +1,11 @@
 /** Electron adapter for the upstream Windows ACL PowerShell executor. */
 
 import { fileURLToPath } from 'node:url'
-import { existsSync } from 'node:fs'
 import { win32 } from 'node:path'
 import type { ShellExecSpec, ShellExecution } from '@deepseek-ai/dsh-shell'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
+import { windowsExecutableProbe } from './windows-executable.ts'
 
 const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 const UPSTREAM_RUNNER = fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner'))
@@ -37,15 +37,19 @@ export interface AdaptedWindowsAclExecution {
 export function desktopWindowsPwshPath(
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-  exists: (path: string) => boolean = existsSync,
+  exists: (path: string) => boolean = windowsExecutableProbe,
 ): string | undefined {
   if (platform !== 'win32') return undefined
   const programFiles = env.ProgramFiles ?? 'C:\\Program Files'
+  const localAppData = env.LOCALAPPDATA ?? env.LocalAppData
   const systemRoot = env.SystemRoot ?? 'C:\\Windows'
-  const candidates = [
-    win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'),
-    win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-  ]
+  const candidates = [win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe')]
+  // A Microsoft Store install publishes no Program Files directory; its shell is
+  // reachable only through the app execution alias, which the probe accepts.
+  if (localAppData !== undefined && localAppData.length > 0) {
+    candidates.push(win32.join(localAppData, 'Microsoft', 'WindowsApps', 'pwsh.exe'))
+  }
+  candidates.push(win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'))
   return candidates.find(candidate => exists(candidate))
 }
 
@@ -68,7 +72,7 @@ export function desktopWindowsPwshConfig(
   config: PwshConfig,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-  exists: (path: string) => boolean = existsSync,
+  exists: (path: string) => boolean = windowsExecutableProbe,
 ): PwshConfig {
   const declared = config.pwshPath
   // The fallback is a property of the host, not of the config, so the

@@ -100,6 +100,20 @@ afterEach(() => {
   for (const dir of temporaryDirectories.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
+/**
+ * Build an existence probe accepting only the named shells plus the command
+ * processor the visible-console broker always needs on Windows.
+ */
+function probeOnly(...accepted: readonly string[]): (filename: string) => boolean {
+  const allowed = new Set(accepted)
+  return filename => allowed.has(filename) || filename === 'C:\\Windows\\System32\\cmd.exe'
+}
+
+/** Read the shell the launch passed to the visible-console broker child. */
+function selectedShell(harness: SpawnHarness): string | undefined {
+  return harness.calls[0]?.options.env?.DSH_DESKTOP_SHELL_EXECUTABLE
+}
+
 describe('desktop terminal environment', () => {
   it('keeps generated shims isolated by active profile', () => {
     const desktop = desktopTerminalStateDirectory('/tmp/dsh-desktop', 'desktop')
@@ -431,6 +445,89 @@ describe('desktop terminal environment', () => {
       'C:\\Windows\\System32\\cmd.exe',
     )
     expect(harness.calls[0]?.options.shell).toBe(false)
+  })
+
+  it('selects a Store PowerShell 7 alias the existsSync probe cannot see', () => {
+    const stateDir = join(temporaryDirectory(), 'terminal-state')
+    const harness = spawnHarness()
+    const storeAlias = 'C:\\Users\\Example\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe'
+    const options = windowsOptions(stateDir, harness.spawn)
+    delete options.windowsExecutableResolver
+    options.environment = {
+      ...options.environment,
+      LocalAppData: 'C:\\Users\\Example\\AppData\\Local',
+    }
+    // The Store alias resolves to an EACCES target, so an existsSync probe
+    // reports false for a shell that spawns; the default probe reports true.
+    options.windowsExecutableExists = probeOnly(storeAlias)
+
+    openDesktopTerminal(options)
+
+    expect(harness.calls[0]?.command).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(selectedShell(harness)).toBe(storeAlias)
+  })
+
+  it('prefers a PowerShell 7 install over the legacy Windows PowerShell copy', () => {
+    const stateDir = join(temporaryDirectory(), 'terminal-state')
+    const harness = spawnHarness()
+    const msiPwsh = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+    const legacy = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    const options = windowsOptions(stateDir, harness.spawn)
+    delete options.windowsExecutableResolver
+    options.environment = { ...options.environment, ProgramFiles: 'C:\\Program Files' }
+    options.windowsExecutableExists = probeOnly(msiPwsh, legacy)
+
+    openDesktopTerminal(options)
+
+    expect(selectedShell(harness)).toBe(msiPwsh)
+  })
+
+  it('does not fall back to a legacy Windows PowerShell copy that cannot run', () => {
+    const stateDir = join(temporaryDirectory(), 'terminal-state')
+    const harness = spawnHarness()
+    const legacy = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    const storeAlias = 'C:\\Users\\Example\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe'
+    const options = windowsOptions(stateDir, harness.spawn)
+    delete options.windowsExecutableResolver
+    options.environment = {
+      ...options.environment,
+      LocalAppData: 'C:\\Users\\Example\\AppData\\Local',
+    }
+    // Regression for the 9059 report: the legacy file exists yet cannot create a
+    // process. Both entries are visible to the probe, and the runnable Store
+    // PowerShell 7 must win instead of the broken legacy copy.
+    options.windowsExecutableExists = probeOnly(storeAlias, legacy)
+
+    openDesktopTerminal(options)
+
+    expect(selectedShell(harness)).toBe(storeAlias)
+  })
+
+  it('prefers a PATH shell over the legacy Windows PowerShell copy', () => {
+    const stateDir = join(temporaryDirectory(), 'terminal-state')
+    const harness = spawnHarness()
+    const legacy = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    const pathShell = 'C:\\Portable\\powershell.exe'
+    const options = windowsOptions(stateDir, harness.spawn)
+    delete options.windowsExecutableResolver
+    options.environment = { ...options.environment, Path: 'C:\\Portable' }
+    options.windowsExecutableExists = probeOnly(pathShell, legacy)
+
+    openDesktopTerminal(options)
+
+    expect(selectedShell(harness)).toBe(pathShell)
+  })
+
+  it('still fails closed when no Windows shell can be resolved', () => {
+    const stateDir = join(temporaryDirectory(), 'terminal-state')
+    const harness = spawnHarness()
+    const options = windowsOptions(stateDir, harness.spawn)
+    delete options.windowsExecutableResolver
+    options.windowsExecutableExists = () => false
+
+    expect(() => openDesktopTerminal(options)).toThrow(
+      'terminal requires pwsh.exe, powershell.exe, or cmd.exe on Windows',
+    )
   })
 
   it('keeps Windows scripts ASCII and passes localized paths through the child environment', () => {

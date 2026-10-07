@@ -88,6 +88,46 @@ describe('Windows Electron PowerShell sandbox adaptation', () => {
     expect(programFilesPwsh).toBe('C:\\Program Files\\PowerShell\\7\\pwsh.exe')
   })
 
+  it('probes the Store alias before the legacy Windows PowerShell copy', () => {
+    const programFiles = 'C:\\Program Files'
+    const localAppData = 'C:\\Users\\Example\\AppData\\Local'
+    const probes: string[] = []
+
+    const resolved = desktopWindowsPwshPath({
+      ProgramFiles: programFiles,
+      LOCALAPPDATA: localAppData,
+      SystemRoot: 'C:\\Windows',
+    }, 'win32', (path) => {
+      probes.push(path)
+      return false
+    })
+
+    expect(resolved).toBeUndefined()
+    expect(probes).toEqual([
+      `${programFiles}\\PowerShell\\7\\pwsh.exe`,
+      `${localAppData}\\Microsoft\\WindowsApps\\pwsh.exe`,
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    ])
+  })
+
+  it('skips the Store alias when the environment does not expose its directory', () => {
+    const probes: string[] = []
+
+    const resolved = desktopWindowsPwshPath({
+      ProgramFiles: 'C:\\Program Files',
+      SystemRoot: 'C:\\Windows',
+    }, 'win32', (path) => {
+      probes.push(path)
+      return false
+    })
+
+    expect(resolved).toBeUndefined()
+    expect(probes).toEqual([
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    ])
+  })
+
   it('keeps explicit pwshPath config and non-Windows config unchanged', () => {
     const explicitPath = live<string | undefined>('D:\\tools\\pwsh\\pwsh.exe')
     const explicit = pwshConfig(explicitPath)
