@@ -61,7 +61,11 @@ describe('Market GitHub install target', () => {
           done: (async () => {
             await writeFile(join(profileDir, 'package.json'), JSON.stringify({
               name: 'fixture-profile',
-              dependencies: { 'dsh-plugin-git': '1.2.3' },
+              dependencies: {
+                // Real pnpm saves the git spec verbatim for a github: target
+                // (--save-exact pins registry semver only), not the repo's semver.
+                'dsh-plugin-git': 'github:example/plugin#0123456789abcdef0123456789abcdef01234567&path:/packages/plugin',
+              },
               dsh: { profile: { bundles: ['dsh-plugin-git'] } },
             }))
             return { exitCode: 0, signal: null }
@@ -93,7 +97,7 @@ describe('Market GitHub install target', () => {
         'github:example/plugin#0123456789abcdef0123456789abcdef01234567&path:/packages/plugin',
       ]])
       expect(verifier.verify).toHaveBeenCalledWith(expect.objectContaining({ source }), expect.any(AbortSignal))
-      expect(JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')).dependencies).toEqual({ 'dsh-plugin-git': '1.2.3' })
+      expect(JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')).dependencies).toEqual({ 'dsh-plugin-git': 'github:example/plugin#0123456789abcdef0123456789abcdef01234567&path:/packages/plugin' })
     } finally {
       service.dispose()
       await rm(profileDir, { recursive: true, force: true })

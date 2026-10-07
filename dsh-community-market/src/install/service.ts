@@ -653,7 +653,15 @@ export class MarketInstallService {
       try {
         await setProfileBundle(profile, packageName, true)
         const installedVersion = await directProfilePluginVersion(profile, packageName)
-        if (installedVersion !== verification.version) throw new Error('installed version mismatch')
+        // Registry installs land an exact semver; GitHub installs land the pinned
+        // git spec pnpm saves verbatim (github:owner/repo#commit[&path:/sub]) —
+        // comparing that against the repo's semver always threw, reporting every
+        // successful GitHub install as operation-failed after the Profile was
+        // already mutated.
+        const expectedVersion = candidate.source === undefined
+          ? verification.version
+          : githubPackageTarget(candidate.source)
+        if (installedVersion !== expectedVersion) throw new Error('installed version mismatch')
         operationSignal.throwIfAborted()
       } catch {
         throw new MarketInstallError(
