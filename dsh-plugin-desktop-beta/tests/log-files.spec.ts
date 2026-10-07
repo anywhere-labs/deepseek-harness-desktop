@@ -143,6 +143,39 @@ describe('LogFileSink', () => {
     expect(existsSync(oldLog)).toBe(false)
   })
 
+  it('resumes rotation from pre-existing segments for both channels in one pass', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-log-resume-'))
+    const day = todaySuffix()
+    writeFileSync(join(dir, `dsh-${day}.log`), 'x'.repeat(8))
+    writeFileSync(join(dir, `dsh-${day}.2.log`), 'y'.repeat(8))
+    writeFileSync(join(dir, `dsh-${day}.error.log`), 'x'.repeat(8))
+    writeFileSync(join(dir, `dsh-${day}.error.2.log`), 'y'.repeat(8))
+    const s = new LogFileSink(dir, { maxFileBytes: 10, maxDirectoryBytes: 200 * 1024 * 1024 })
+
+    s.write('error', 'boom')
+
+    expect(readFileSync(join(dir, `dsh-${day}.3.log`), 'utf8')).toBe('boom\n')
+    expect(readFileSync(join(dir, `dsh-${day}.error.3.log`), 'utf8')).toBe('boom\n')
+  })
+
+  it('keeps rotation resume correct across the startup cap-then-purge sequence', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-log-boot-'))
+    const day = todaySuffix()
+    writeFileSync(join(dir, `dsh-${day}.2.log`), 'y'.repeat(8))
+    const oldLog = join(dir, 'dsh-2020-01-01.log')
+    writeFileSync(oldLog, 'remove')
+    const old = new Date('2020-01-01T00:00:00Z')
+    utimesSync(oldLog, old, old)
+    const s = new LogFileSink(dir, { maxFileBytes: 10, maxDirectoryBytes: 200 * 1024 * 1024 })
+
+    s.enforceDirectoryCap()
+    s.purgeOlderThan(7)
+    s.writeHeader('boot!')
+
+    expect(existsSync(oldLog)).toBe(false)
+    expect(readFileSync(join(dir, `dsh-${day}.3.log`), 'utf8')).toBe('boot!\n')
+  })
+
   it('clear removes all files and reopens fresh streams', () => {
     const { s, dir } = sink()
     s.write('info', 'first')

@@ -24,6 +24,24 @@ function rotationSegment(name: string): number {
   return Number(/\.(\d+)\.log$/u.exec(name)?.[1] ?? 0)
 }
 
+interface SegmentState {
+  readonly bytes: number
+  readonly segment: number
+}
+
+/** Keep the newest rotation state for one log channel from a directory entry. */
+function resumeSegmentState(entry: OwnedLogFile, prefix: string, current: SegmentState): SegmentState {
+  const name = entry.name
+  let segment: number | undefined
+  if (name === `${prefix}.log`) segment = 0
+  else if (name.startsWith(`${prefix}.`) && name.endsWith('.log')) {
+    const value = name.slice(prefix.length + 1, -4)
+    if (/^\d+$/u.test(value)) segment = Number(value)
+  }
+  if (segment === undefined || segment < current.segment) return current
+  return { bytes: entry.bytes, segment }
+}
+
 function truncateUtf8(text: string, maxBytes: number): string {
   if (Buffer.byteLength(text) <= maxBytes) return text
   let bytes = 0
@@ -107,15 +125,20 @@ export class LogFileSink {
   /** Delete log files modified more than `days` days ago. */
   purgeOlderThan(days: number): void {
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+    let survivingBytes = 0
     for (const entry of this.ownedFiles()) {
-      if (entry.modifiedAt >= cutoff) continue
+      if (entry.modifiedAt >= cutoff) {
+        survivingBytes += entry.bytes
+        continue
+      }
       try {
         unlinkSync(entry.path)
       } catch {
-        // Locked logs remain eligible for the next startup cleanup.
+        // Locked logs remain eligible for the next startup cleanup and still count.
+        survivingBytes += entry.bytes
       }
     }
-    this.directoryBytes = this.measureDirectoryBytes()
+    this.directoryBytes = survivingBytes
   }
 
   /** Delete every file in the directory and reset the rotation state. */
@@ -167,29 +190,20 @@ export class LogFileSink {
 
   private rollDate(suffix: string): void {
     this.currentDate = suffix
-    const all = this.loadState(suffix, false)
-    const error = this.loadState(suffix, true)
+    const allPrefix = `dsh-${suffix}`
+    const errorPrefix = `dsh-${suffix}.error`
+    let all = { bytes: 0, segment: 0 }
+    let error = { bytes: 0, segment: 0 }
+    // One directory pass feeds both channels; scanning per channel doubled the
+    // readdir+lstat work on every date rollover and at startup.
+    for (const entry of this.ownedFiles()) {
+      all = resumeSegmentState(entry, allPrefix, all)
+      error = resumeSegmentState(entry, errorPrefix, error)
+    }
     this.allBytes = all.bytes
     this.errorBytes = error.bytes
     this.allSegment = all.segment
     this.errorSegment = error.segment
-  }
-
-  private loadState(suffix: string, error: boolean): { bytes: number, segment: number } {
-    const prefix = `dsh-${suffix}${error ? '.error' : ''}`
-    let current = { bytes: 0, segment: 0 }
-    for (const entry of this.ownedFiles()) {
-      const name = entry.name
-      let segment: number | undefined
-      if (name === `${prefix}.log`) segment = 0
-      else if (name.startsWith(`${prefix}.`) && name.endsWith('.log')) {
-        const value = name.slice(prefix.length + 1, -4)
-        if (/^\d+$/u.test(value)) segment = Number(value)
-      }
-      if (segment === undefined || segment < current.segment) continue
-      current = { bytes: entry.bytes, segment }
-    }
-    return current
   }
 
   private append(kind: 'all' | 'error', line: string): void {
