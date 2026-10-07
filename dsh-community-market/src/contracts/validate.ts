@@ -54,7 +54,10 @@ export function parseCatalogProviderPage(value: unknown, effectiveLimit?: number
   const seen = new Set<string>()
 
   if (effectiveLimit !== undefined) {
-    if (!Number.isInteger(effectiveLimit) || effectiveLimit < 1 || effectiveLimit > 100) {
+    // Matches the schema maximum for defaultLimit/maxLimit (200): a source
+    // legally declaring limits up to that bound must not have its pages
+    // rejected here, which failed every request for such sources with 502.
+    if (!Number.isInteger(effectiveLimit) || effectiveLimit < 1 || effectiveLimit > 200) {
       throw new CatalogContractError('provider-page', [
         semanticIssue('/items', 'cannot be checked against an invalid effective query limit'),
       ])

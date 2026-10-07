@@ -630,6 +630,31 @@ describe('standard catalog adapter media boundary', () => {
     expect(getJson.mock.calls[1]?.[0]).toBe('https://plugins.example.org/v1/plugins')
   })
 
+  it('accepts a schema-legal manifest whose default limit exceeds 100', async () => {
+    const manifest = contractFixture('catalog-source.example') as CatalogSourceManifest
+    manifest.query.defaultLimit = 150
+    manifest.query.maxLimit = 200
+    const page = contractFixture('catalog-provider-page.example') as CatalogProviderPage
+    page.items = Array.from({ length: 51 }, (_, index) => {
+      const item = structuredClone(page.items[0]!)
+      item.id = `standard-plugin-${index}`
+      item.name = `standard-plugin-${index}`
+      item.displayName = `Standard Plugin ${index}`
+      return item
+    })
+    const getJson = vi.fn()
+      .mockResolvedValueOnce({ value: manifest, finalUrl: standardSource().manifestUrl! })
+      .mockResolvedValueOnce({ value: page, finalUrl: 'https://plugins.example.org/v1/plugins' })
+    const snapshot = await standardHttpAdapter.fetch({ limit: 150 }, {
+      source: standardSource(),
+      signal: new AbortController().signal,
+      http: { getJson },
+      media: { register: () => standardAssetRef },
+    })
+    expect(snapshot.items).toHaveLength(51)
+    expect(getJson.mock.calls[1]?.[0]).toContain('limit=150')
+  })
+
   it('allows a standard source to use its declared limit up to the shared safety cap', async () => {
     const manifest = contractFixture('catalog-source.example') as CatalogSourceManifest
     manifest.query.defaultLimit = 100
