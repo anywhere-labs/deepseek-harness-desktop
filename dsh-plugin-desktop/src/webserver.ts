@@ -104,14 +104,25 @@ export class DesktopWebServer extends WebServer {
         await super[Service.init]()
         return
       } catch (cause) {
-        const nextPort = requestedPort + attempt + 1
-        if (!isAddressInUse(cause)
-          || attempt >= DESKTOP_WEB_PORT_RETRY_LIMIT
-          || nextPort > 65_535) {
+        if (!isAddressInUse(cause)) throw cause
+        closeFailedServer(this)
+        if (attempt < DESKTOP_WEB_PORT_RETRY_LIMIT) {
+          const nextPort = requestedPort + attempt + 1
+          if (nextPort <= 65_535) {
+            this.desktopConfig.port = nextPort
+            continue
+          }
+        }
+        // When sequential port attempts are exhausted (e.g. blocked by Windows
+        // excluded port range or consecutive collisions), fall back to an
+        // ephemeral OS-assigned port rather than failing Host boot into recovery.
+        this.desktopConfig.port = 0
+        try {
+          await super[Service.init]()
+          return
+        } catch {
           throw cause
         }
-        closeFailedServer(this)
-        this.desktopConfig.port = nextPort
       }
     }
   }

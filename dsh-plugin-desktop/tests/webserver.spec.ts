@@ -1,7 +1,8 @@
 import { createServer, type Server } from 'node:http'
 import { connect } from 'node:net'
-import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Context, Service } from '@deepseek-ai/cordis'
+import WebServer from '@deepseek-ai/dsh-host-webserver'
 import {
   createDesktopBrowserAccess,
   type DesktopBrowserAccess,
@@ -97,6 +98,33 @@ describe('Desktop WebServer port policy', () => {
     await context.plugin(DesktopWebServer, { host: '127.0.0.1', port: 0 })
 
     expect(context.get('webServer')?.port).toBeGreaterThan(0)
+  })
+
+  it('falls back to an ephemeral port when sequential port retries are exhausted due to EADDRINUSE', async () => {
+    const context = new Context()
+    contexts.push(context)
+
+    let initCalls = 0
+    const originalInit = Object.getOwnPropertyDescriptor(WebServer.prototype, Service.init)?.value
+    expect(originalInit).toBeDefined()
+    const spy = vi.spyOn(WebServer.prototype, Service.init).mockImplementation(async function (this: unknown) {
+      initCalls += 1
+      const self = this as { desktopConfig: { port: number } }
+      if (self.desktopConfig.port !== 0) {
+        throw Object.assign(new Error('listen EADDRINUSE 127.0.0.1:43120'), { code: 'EADDRINUSE' })
+      }
+      return await originalInit.call(this)
+    })
+
+    try {
+      await context.plugin(DesktopWebServer, { host: '127.0.0.1', port: 43_120 })
+
+      const server = context.get('webServer')
+      expect(server?.port).toBeGreaterThan(0)
+      expect(initCalls).toBe(DESKTOP_WEB_PORT_RETRY_LIMIT + 2)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
