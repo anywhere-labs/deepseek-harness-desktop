@@ -10,7 +10,11 @@ import {
   scrubbedParentEnv,
 } from '@deepseek-ai/dsh-subprocess'
 
-const DEFAULT_CAPTURE_TIMEOUT_MS = 2_000
+// VS Code's terminal-environment capture also defaults to 10s: heavy-but-common
+// startup files (oh-my-zsh, prompt engines, version managers) can exceed 2s on
+// a cold cache, which used to fail the capture on every cold launch (#1118).
+const DEFAULT_CAPTURE_TIMEOUT_MS = 10_000
+const SHELL_ENVIRONMENT_TIMEOUT_VARIABLE = 'DSH_DESKTOP_SHELL_ENV_TIMEOUT_MS'
 const MAX_CAPTURE_BYTES = 1024 * 1024
 
 const SUPPORTED_SHELL_ARGUMENTS = new Map<string, readonly string[]>([
@@ -282,6 +286,19 @@ function resolveUserShell(options: ResolveDesktopShellEnvironmentOptions): strin
 }
 
 /**
+ * Read the user's capture-deadline override, if any.
+ * @param environment - Launch environment to inspect.
+ * @returns A positive millisecond value, or undefined to keep the default.
+ */
+function captureTimeoutFromEnvironment(environment: Readonly<NodeJS.ProcessEnv>): number | undefined {
+  const raw = environment[SHELL_ENVIRONMENT_TIMEOUT_VARIABLE]
+  if (raw === undefined || raw === '') return undefined
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined
+  return parsed
+}
+
+/**
  * Resolve selected login-shell exports for a desktop Host launch.
  * @param options - Platform, launch environment and optional capture seams.
  * @returns Updates for packaged Unix desktops, otherwise an empty update set.
@@ -307,9 +324,17 @@ export async function resolveDesktopShellEnvironment(
       ...scrubParent(),
       HOME: options.home,
       SHELL: shell,
+      // Startup-file side channels are pure capture cost or capture breakage:
+      // oh-my-zsh/nvm update checks add cold-start latency, and a tmux
+      // autostart would replace the shell before the markers are emitted.
+      DISABLE_AUTO_UPDATE: 'true',
+      ZSH_TMUX_AUTOSTARTED: 'true',
     }
     const capture = options.capture ?? captureLoginShellEnvironment
-    const captured = await capture(shell, options.home, captureEnvironment, options.timeoutMs ?? DEFAULT_CAPTURE_TIMEOUT_MS)
+    const timeoutMs = options.timeoutMs
+      ?? captureTimeoutFromEnvironment(options.environment)
+      ?? DEFAULT_CAPTURE_TIMEOUT_MS
+    const captured = await capture(shell, options.home, captureEnvironment, timeoutMs)
     const updates = selectDesktopShellEnvironment(captured, options.environment)
     if (updates.PATH === undefined) return inheritedEnvironment('missing-path')
     return { updates, source: 'login-shell' }

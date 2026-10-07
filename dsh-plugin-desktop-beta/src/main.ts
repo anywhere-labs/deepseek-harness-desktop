@@ -758,6 +758,14 @@ async function start(): Promise<void> {
       platform: process.platform,
     })
     for (const [name, value] of Object.entries(shellEnvironmentResolution.updates)) process.env[name] = value
+    // 'not-packaged' (development launches) and 'windows' (the capture is
+    // Unix-only by design) are expected on every such launch; anything else
+    // means the login-shell environment was not recovered and user tools will
+    // be missing from the model's PATH, which deserves a log trail (#1118).
+    const shellEnvironmentFallback = shellEnvironmentResolution.fallbackReason
+    if (shellEnvironmentFallback !== undefined && shellEnvironmentFallback !== 'not-packaged' && shellEnvironmentFallback !== 'windows') {
+      electronLogger.info(`${BIN_NAME}: login-shell environment not recovered (${shellEnvironmentFallback}); keeping the launch environment`)
+    }
     const profileUserDataDir = safeModePaths?.userDataDir ?? desktopUserDataDir
     prepareSafeMode = safeModePaths === undefined
       ? () => {

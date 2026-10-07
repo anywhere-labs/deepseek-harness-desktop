@@ -302,7 +302,9 @@ describe('desktop shell environment resolution', () => {
       SAFE_PARENT: 'available-to-rc',
       HOME: '/Users/tester',
       SHELL: '/bin/zsh',
-    }, 2_000)
+      DISABLE_AUTO_UPDATE: 'true',
+      ZSH_TMUX_AUTOSTARTED: 'true',
+    }, 10_000)
   })
 
   it('uses the requested timeout on packaged Linux', async () => {
@@ -324,7 +326,29 @@ describe('desktop shell environment resolution', () => {
     expect(capture).toHaveBeenCalledWith('/bin/bash', '/home/tester', {
       HOME: '/home/tester',
       SHELL: '/bin/bash',
+      DISABLE_AUTO_UPDATE: 'true',
+      ZSH_TMUX_AUTOSTARTED: 'true',
     }, 75)
+  })
+
+  it.each([
+    { override: '37500', description: 'milliseconds', want: 37_500 },
+    { override: 'nope', description: 'non-numeric', want: 10_000 },
+    { override: '0', description: 'non-positive', want: 10_000 },
+    { override: '', description: 'empty', want: 10_000 },
+  ])('reads DSH_DESKTOP_SHELL_ENV_TIMEOUT_MS as $description', async ({ override, want }) => {
+    const capture = vi.fn(async () => ({ PATH: '/opt/homebrew/bin:/usr/bin:/bin' }))
+
+    await resolveDesktopShellEnvironment({
+      environment: { PATH: '/usr/bin:/bin', DSH_DESKTOP_SHELL_ENV_TIMEOUT_MS: override },
+      home: '/Users/tester',
+      isPackaged: true,
+      platform: 'darwin',
+      shell: '/bin/zsh',
+      capture,
+      scrubParent: () => ({}),
+    })
+    expect(capture).toHaveBeenLastCalledWith('/bin/zsh', '/Users/tester', expect.anything(), want)
   })
 
   it.each([
