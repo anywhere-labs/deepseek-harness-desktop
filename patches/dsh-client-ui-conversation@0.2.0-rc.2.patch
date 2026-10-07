@@ -24,3 +24,43 @@ diff --git a/lib/client.js b/lib/client.js
  				children: [!hideChrome && (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsxs)("div", {
  					className: ConversationRoot_module_css_default.titleCluster,
  					children: [(0, react_jsx_runtime.jsxs)("nav", {
+@@ -16734,7 +16736,7 @@
+ 					return true;
+ 				}
+ 				event.preventDefault();
+-				handlers.pasteText(text);
++				handlers.pasteText(text, Array.from(clipboardData.items).some((item) => item.kind === "file"));
+ 				return true;
+ 			}, 4));
+ 		}
+@@ -16841,9 +16843,10 @@
+ 				intakeFiles: (files, directories) => {
+ 					gate.current.intakeFiles(files, directories);
+ 				},
+-				pasteText: (text) => {
++				pasteText: (text, hasClipboardFiles) => {
+ 					if (gate.current.machineBusy || gate.current.locked) return;
+-					keyboard.paste(text);
++					if (!hasClipboardFiles && gate.current.canAcceptDrop && gate.current.addFiles && window.__DSH_DESKTOP_PASTED_TEXT_FILE__?.(text, gate.current.addFiles)) return;
++					keyboard.paste(text);
+ 				}
+ 			});
+ 		}
+@@ -17357,7 +17360,7 @@
+ 				running,
+ 				steeringAvailable,
+ 				busyEnter,
+-				intakeFiles,
++				addFiles, intakeFiles,
+ 				uploadsPending,
+ 				showToast,
+ 				t,
+@@ -17370,7 +17373,7 @@
+ 				running,
+ 				steeringAvailable,
+ 				busyEnter,
+-				intakeFiles,
++				addFiles, intakeFiles,
+ 				uploadsPending,
+ 				showToast,
+ 				t,
