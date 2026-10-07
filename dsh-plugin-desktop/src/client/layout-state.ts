@@ -31,8 +31,8 @@ export const SIDEBAR_COLLAPSED = 56
 /** Wider compact rail reserved only for the enhanced macOS presentation. */
 export const MACOS_SIDEBAR_COLLAPSED = 90
 export const SIDEBAR_DEFAULT = 280
-export const SIDEBAR_MIN = 264
-export const SIDEBAR_MAX = 420
+export const SIDEBAR_MIN = 80
+export const SIDEBAR_MAX = 400
 export const SIDEBAR_AUTO_COLLAPSE = 1024
 export const RIGHTBAR_DEFAULT_RATIO = 0.45
 export const RIGHTBAR_MIN = 300
