@@ -1515,18 +1515,16 @@ async function start(): Promise<void> {
     }
     startupStage = 'runtime-bootstrap'
     lifecycleRecorder.transitionStartupStage(startupStage)
-    const dshRuntime = process.platform === 'win32'
-      ? installDesktopDshRuntime({
-          platform: process.platform,
-          appExecutable: process.execPath,
-          dshBootstrapPath,
-          profileName: activeProfileName,
-          homeDir,
-          stateDir: join(profileUserDataDir, 'host-commands', activeProfileName),
-          environment: process.env,
-        })
-      : undefined
-    const releaseDshRuntime = generation.own(() => { dshRuntime?.dispose() })
+    const dshRuntime = installDesktopDshRuntime({
+      platform: process.platform,
+      appExecutable: process.execPath,
+      dshBootstrapPath,
+      profileName: activeProfileName,
+      homeDir,
+      stateDir: join(profileUserDataDir, 'host-commands', activeProfileName),
+      environment: process.env,
+    })
+    const releaseDshRuntime = generation.own(() => { dshRuntime.dispose() })
     if (prepared.requiresDependencyMigration) {
       electronLogger.error(`${BIN_NAME}: migrating legacy Profile dependency layout with packaged pnpm`)
       try {
@@ -1689,12 +1687,10 @@ async function start(): Promise<void> {
             () => releasePnpmRuntime,
             'dsh-plugin-desktop: packaged pnpm runtime PATH',
           )
-          if (dshRuntime !== undefined) {
-            hostCtx.effect(
-              () => releaseDshRuntime,
-              'dsh-plugin-desktop: packaged dsh runtime PATH',
-            )
-          }
+          hostCtx.effect(
+            () => releaseDshRuntime,
+            'dsh-plugin-desktop: packaged dsh runtime PATH',
+          )
           hostCtx.effect(
             () => releasePackageResolver,
             'dsh-plugin-desktop: profile package resolution',

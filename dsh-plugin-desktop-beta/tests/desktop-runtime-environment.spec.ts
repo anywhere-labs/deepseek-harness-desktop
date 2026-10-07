@@ -615,6 +615,78 @@ describe('desktop Host pnpm runtime', () => {
 })
 
 describe('desktop Host dsh runtime', () => {
+  it('content-addresses POSIX DSH shims with executable permissions', () => {
+    const root = temporaryDirectory()
+    const stateDir = join(root, 'runtime')
+    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin' }
+    const runtimeOptions = {
+      platform: 'linux' as const,
+      appExecutable: '/opt/DSH Desktop/dsh desktop',
+      dshBootstrapPath: '/opt/DSH Desktop/resources/app.asar/desktop-cli.js',
+      profileName: 'web',
+      homeDir: '/home/tester/Harness home',
+      stateDir,
+      environment,
+    }
+
+    const first = installDesktopDshRuntime(runtimeOptions)
+    first.dispose()
+    const second = installDesktopDshRuntime(runtimeOptions)
+
+    expect(second.pathDir).toBe(first.pathDir)
+    expect(readdirSync(second.pathDir)).toEqual(['dsh'])
+    if (process.platform !== 'win32') {
+      expect(lstatSync(second.dshShimPath).mode & 0o777).toBe(0o700)
+    }
+    const shim = readFileSync(second.dshShimPath, 'utf8')
+    expect(shim).toContain("DSH_DESKTOP_DEFAULT_PROFILE='web'")
+    expect(shim).toContain("DSH_HOME='/home/tester/Harness home'")
+    expect(shim).toContain("exec '/opt/DSH Desktop/dsh desktop' --expose-internals")
+    second.dispose()
+  })
+
+  it.runIf(process.platform !== 'win32')('makes the active profile available to POSIX Host plugin child processes', () => {
+    const root = temporaryDirectory()
+    const captureEntry = join(root, 'capture.mjs')
+    const captureOutput = join(root, 'capture.json')
+    const homeDir = join(root, 'Harness home')
+    writeFileSync(captureEntry, [
+      "import { writeFileSync } from 'node:fs'",
+      'writeFileSync(process.argv[2], JSON.stringify({',
+      '  args: process.argv.slice(3),',
+      '  defaultProfile: process.env.DSH_DESKTOP_DEFAULT_PROFILE,',
+      '  home: process.env.DSH_HOME,',
+      '}))',
+      '',
+    ].join('\n'))
+    const environment: NodeJS.ProcessEnv = { PATH: process.env.PATH }
+    const original = { ...environment }
+    const installation = installDesktopDshRuntime({
+      platform: process.platform,
+      appExecutable: process.execPath,
+      dshBootstrapPath: captureEntry,
+      profileName: 'web',
+      homeDir,
+      stateDir: join(root, 'runtime'),
+      environment,
+    })
+    const result = spawnSync('dsh', [captureOutput, '--probe'], {
+      encoding: 'utf8',
+      env: environment,
+      shell: false,
+    })
+
+    expect(result.error).toBeUndefined()
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(JSON.parse(readFileSync(captureOutput, 'utf8'))).toEqual({
+      args: ['--probe'],
+      defaultProfile: 'web',
+      home: homeDir,
+    })
+    installation.dispose()
+    expect(environment).toEqual(original)
+  })
+
   it('content-addresses Windows DSH shims and reuses an exact generation', () => {
     const root = temporaryDirectory()
     const stateDir = join(root, 'runtime')

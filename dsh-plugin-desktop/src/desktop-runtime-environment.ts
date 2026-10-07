@@ -61,7 +61,7 @@ export interface DesktopPnpmRuntimeInstallation {
   dispose(): void
 }
 
-/** Inputs used to publish the packaged DSH command to Windows Host plugins. */
+/** Inputs used to publish the packaged DSH command to Host plugins. */
 export interface DesktopDshRuntimeOptions {
   platform: NodeJS.Platform
   appExecutable: string
@@ -464,6 +464,19 @@ function windowsDshShim(options: DesktopDshRuntimeOptions): string {
   ].join('\r\n')
 }
 
+/** Build the public POSIX DSH command scoped to one active profile. */
+function posixDshShim(options: DesktopDshRuntimeOptions): string {
+  return [
+    '#!/bin/sh',
+    `${RUN_AS_NODE}=1`,
+    `${DEFAULT_PROFILE}=${quoteSh(options.profileName)}`,
+    `${DSH_HOME}=${quoteSh(options.homeDir)}`,
+    `export ${RUN_AS_NODE} ${DEFAULT_PROFILE} ${DSH_HOME}`,
+    `exec ${quoteSh(options.appExecutable)} --expose-internals ${quoteSh(options.dshBootstrapPath)} "$@"`,
+    '',
+  ].join('\n')
+}
+
 interface PathEntry {
   key: string
   value: string | undefined
@@ -540,9 +553,9 @@ function installPathDirectory(
   }
 }
 
-/** Install the packaged DSH command into the Windows Host process PATH. */
+/** Install the packaged DSH command into the Host process PATH. */
 export function installDesktopDshRuntime(options: DesktopDshRuntimeOptions): DesktopDshRuntimeInstallation {
-  if (options.platform !== 'win32') {
+  if (options.platform !== 'darwin' && options.platform !== 'linux' && options.platform !== 'win32') {
     throw new Error(`dsh-plugin-desktop: dsh runtime is unsupported on ${options.platform}`)
   }
   assertDesktopProfileName(options.profileName)
@@ -553,14 +566,16 @@ export function installDesktopDshRuntime(options: DesktopDshRuntimeOptions): Des
     ['state directory', options.stateDir],
   ] as const) assertScriptValue(label, value)
 
+  const windows = options.platform === 'win32'
+  const dshShimName = windows ? 'dsh.cmd' : 'dsh'
   const plan = runtimeGenerationPlan('dsh', options.platform, ['bin'], [{
-    relativePath: 'bin/dsh.cmd',
-    contents: windowsDshShim(options),
-    mode: PRIVATE_FILE_MODE,
+    relativePath: `bin/${dshShimName}`,
+    contents: windows ? windowsDshShim(options) : posixDshShim(options),
+    mode: windows ? PRIVATE_FILE_MODE : EXECUTABLE_FILE_MODE,
   }])
   const generation = installRuntimeGeneration(options.stateDir, plan)
   const pathDir = join(generation.root, 'bin')
-  const dshShimPath = join(pathDir, 'dsh.cmd')
+  const dshShimPath = join(pathDir, dshShimName)
 
   return {
     pathDir,
