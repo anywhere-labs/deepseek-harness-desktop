@@ -31,21 +31,26 @@ export class DesktopRendererRecovery {
   get detail(): string | undefined { return this.failure }
   get canProbeSurface(): boolean {
     return this.phase === 'idle'
-      || (this.phase === 'loading' && this.documentLoaded && this.clientHealthy)
+      || ((this.phase === 'loading' || this.phase === 'exhausted') && this.documentLoaded && this.clientHealthy)
+  }
+
+  private canAcceptHealth(): boolean {
+    return this.phase === 'loading'
+      || (this.phase === 'exhausted' && this.failure === 'renderer recovery timed out waiting for page load and client health')
   }
 
   confirmSurface(): void {
-    if (this.phase !== 'loading') return
+    if (!this.canAcceptHealth()) return
     this.surfaceHealthy = true
     this.acceptHealth()
   }
 
   visibilityChanged(): void {
-    if (this.phase === 'loading') this.acceptHealth()
+    if (this.canAcceptHealth()) this.acceptHealth()
   }
 
   surfaceBecameHidden(): void {
-    if (this.phase !== 'loading') return
+    if (!this.canAcceptHealth()) return
     this.surfaceHidden = true
     this.acceptHealth()
   }
@@ -70,13 +75,13 @@ export class DesktopRendererRecovery {
   }
 
   loaded(): void {
-    if (this.phase !== 'loading') return
+    if (!this.canAcceptHealth()) return
     this.documentLoaded = true
     this.acceptHealth()
   }
 
   report(report: RendererBootReport): void {
-    if (this.phase !== 'loading') return
+    if (!this.canAcceptHealth()) return
     if (report.status === 'failed') {
       this.fail(`renderer recovery Loader failed: ${report.error ?? report.plugins.join(', ')}`)
       return
@@ -90,6 +95,22 @@ export class DesktopRendererRecovery {
     this.attempts = 0
     this.phase = 'idle'
     this.fail(this.failure ?? 'renderer recovery requested')
+  }
+
+  restore(): void {
+    if (this.phase !== 'exhausted') return
+    this.clearAttemptTimer()
+    this.phase = 'idle'
+    this.failure = undefined
+    this.documentLoaded = true
+    this.clientHealthy = true
+    this.surfaceHealthy = true
+    this.options.log('automatic renderer recovery healthy')
+    this.stableTimer = setTimeout(() => {
+      this.attempts = 0
+      this.stableTimer = undefined
+    }, STABLE_PERIOD_MS)
+    this.stableTimer.unref()
   }
 
   stop(): void {

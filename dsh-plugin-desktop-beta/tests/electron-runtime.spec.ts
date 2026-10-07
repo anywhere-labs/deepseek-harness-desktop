@@ -437,7 +437,7 @@ describe('Electron desktop runtime', () => {
     expect(options).not.toHaveProperty('titleBarOverlay')
     expect(electron.contentViews).toHaveLength(2)
     expect(electron.contentViews[1]?.options).toEqual({ webPreferences: {
-      preload: expect.stringMatching(/\/preload\.cjs$/),
+      preload: expect.stringMatching(/[/\\]preload\.cjs$/),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -1372,6 +1372,30 @@ describe('Electron desktop runtime', () => {
       expect(electron.webContents.reloadIgnoringCache).toHaveBeenCalledTimes(4)
       healthy()
       expect(electron.dialog.showMessageBox).toHaveBeenCalledTimes(2)
+      await release()
+    })
+
+    it('clears an exhausted recovery without re-prompting when late health arrives', async () => {
+      const { runtime, release, loadFailed, healthy, logger } = await mountHealthyRenderer()
+      electron.dialog.showMessageBox.mockResolvedValue({ response: 1, checkboxChecked: false })
+      // Fail initial load and let 3 reload attempts time out waiting for health
+      loadFailed({}, -105, 'NAME_NOT_RESOLVED', 'http://127.0.0.1:41234/', true)
+      await vi.advanceTimersByTimeAsync(0) // attempt 1 reload
+      await vi.advanceTimersByTimeAsync(30_000) // attempt 1 timeout
+      await vi.advanceTimersByTimeAsync(1000) // attempt 2 reload
+      await vi.advanceTimersByTimeAsync(30_000) // attempt 2 timeout
+      await vi.advanceTimersByTimeAsync(3000) // attempt 3 reload
+      await vi.advanceTimersByTimeAsync(30_000) // attempt 3 timeout -> exhausted
+      expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce()
+
+      // Late health arrives after recovery exhausted
+      healthy()
+      expect(logger.error).toHaveBeenCalledWith('dsh-plugin-desktop: automatic renderer recovery healthy')
+
+      // Tray click (show) should not show recovery dialog again
+      runtime.show()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce()
       await release()
     })
 

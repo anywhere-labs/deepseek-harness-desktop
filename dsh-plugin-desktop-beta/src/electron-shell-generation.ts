@@ -277,7 +277,13 @@ export class ElectronShellGeneration {
           && renderer !== undefined && !renderer.isDestroyed() && !renderer.isLoadingMainFrame()
       },
       probe: () => this.renderer!.executeJavaScript(RENDERER_SURFACE_PROBE),
-      healthy: () => { this.rendererRecovery.confirmSurface() },
+      healthy: () => {
+        if (this.rendererRecovery.exhausted) {
+          this.rendererRecovery.restore()
+        } else {
+          this.rendererRecovery.confirmSurface()
+        }
+      },
       hidden: () => { this.rendererRecovery.surfaceBecameHidden() },
       failed: (detail, unresponsive) => {
         this.options.logError(`dsh-plugin-desktop: ${detail}`)
