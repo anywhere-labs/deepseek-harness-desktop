@@ -145,7 +145,7 @@ describe('application shutdown requests', () => {
     ;(appListeners.get('before-quit') as ((event: DesktopQuitEvent) => void) | undefined)?.(quitEvent)
     appListeners.get('window-all-closed')?.()
 
-    expect(requestQuit.mock.calls).toEqual([[130], [0], [0]])
+    expect(requestQuit.mock.calls).toEqual([[130], [143], [0]])
     expect(quitEvent.preventDefault).toHaveBeenCalledOnce()
 
     remove()
