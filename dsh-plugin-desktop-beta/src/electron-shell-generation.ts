@@ -594,11 +594,13 @@ export class ElectronShellGeneration {
     renderer.on('did-fail-load', loadFailed)
     renderer.on('did-start-loading', resetSurface)
     renderer.on('did-finish-load', loaded)
+    renderer.on('context-menu', (_event, params) => popupEditingContextMenu(renderer, params))
     if (isolated) {
       chrome.on('before-input-event', handleZoomShortcut)
       chrome.on('render-process-gone', rendererGone)
       chrome.on('did-fail-load', loadFailed)
       chrome.on('did-finish-load', chromeLoaded)
+      chrome.on('context-menu', (_event, params) => popupEditingContextMenu(chrome, params))
     }
     renderer.setWindowOpenHandler(({ url }) => {
       try {
@@ -925,4 +927,19 @@ export class ElectronShellGeneration {
       app.setBadgeCount(0)
     }
   }
+}
+
+/** Show the native editing menu for the text under the pointer.
+ * Roles keep item labels owned by the operating system.
+ * @param renderer - web contents that reported the context menu.
+ * @param params - Electron context-menu parameters for that request.
+ */
+function popupEditingContextMenu(renderer: WebContents, params: Electron.ContextMenuParams): void {
+  const template: Electron.MenuItemConstructorOptions[] = []
+  if (params.isEditable) template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' })
+  else if (params.selectionText.trim().length > 0) template.push({ role: 'copy' })
+  if (template.length === 0) return
+  template.push({ type: 'separator' }, { role: 'selectAll' })
+  const owner = BrowserWindow.fromWebContents(renderer)
+  Menu.buildFromTemplate(template).popup(owner === null ? undefined : { window: owner })
 }
