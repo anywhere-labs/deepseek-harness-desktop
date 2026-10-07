@@ -25,7 +25,7 @@ describe('Windows NSIS running-app handoff', () => {
   it('waits for graceful disposal before using the scoped builder fallback', () => {
     const script = readFileSync(join(process.cwd(), 'build', 'installer.nsh'), 'utf8')
 
-    expect(script).toContain('$R1 < 60')
+    expect(script).toContain('$R1 < 120')
     expect(script).toContain('Sleep 500')
     expect(script).toContain('!insertmacro KILL_PROCESS "${APP_EXECUTABLE_FILENAME}" 0')
     expect(script).toContain('!insertmacro KILL_PROCESS "${APP_EXECUTABLE_FILENAME}" 1')

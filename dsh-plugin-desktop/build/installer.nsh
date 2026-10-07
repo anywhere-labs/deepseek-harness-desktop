@@ -24,8 +24,8 @@ Var pid
     IntOp $R1 $R1 + 1
     ; Slow disks, antivirus hooks, and a large physical runtime can keep the
     ; process alive after Cordis disposal begins. Give the orderly handoff a
-    ; full 30 seconds before escalating to the scoped forced-close path.
-    ${if} $R1 < 60
+    ; full 60 seconds before escalating to the scoped forced-close path.
+    ${if} $R1 < 120
       Sleep 500
       Goto dsh_installer_wait_for_exit
     ${endIf}
