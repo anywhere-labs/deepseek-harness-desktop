@@ -113,8 +113,31 @@ body[data-dsh-desktop-mode="extended"]:not([data-dsh-desktop-material="off"]) {
   align-items: center;
   gap: 9px;
   min-width: 0;
+  max-width: 100%;
   transform: translateX(-50%);
   pointer-events: none;
+  overflow: hidden;
+}
+/* Cap the centered identity to the visible title-bar band so the version
+   and mode pills can never slide under the native caption controls.
+   The frame is viewport-centered (left: 50%), so the cap reserves the
+   full native-controls strip on both sides: 2 * (safe width + 8). */
+.dshDesktopFrameTitlebar[data-platform="darwin"] .dshDesktopFrameIdentity {
+  max-width: calc(100% - ${(MACOS_TRAFFIC_LIGHT_SAFE_WIDTH + 8) * 2}px);
+}
+.dshDesktopFrameTitlebar[data-platform="win32"] .dshDesktopFrameIdentity {
+  max-width: calc(100% - ${(WINDOWS_CAPTION_CONTROLS_WIDTH + 8) * 2}px);
+}
+.dshDesktopFrameIdentity > * { min-width: 0; }
+.dshDesktopFrameProduct,
+.dshDesktopFrameVersion,
+.dshDesktopFrameMode {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Below this width the decorative product label yields to the interactive pills. */
+@media (max-width: 480px) {
+  .dshDesktopFrameProduct { display: none; }
 }
 .dshDesktopFrameProduct { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .dshDesktopFrameVersion {
