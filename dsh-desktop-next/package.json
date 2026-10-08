@@ -224,6 +224,7 @@
     "electron": "44.0.0",
     "electron-builder": "26.15.7",
     "immer": "^10.1.1",
+    "jsdom": "29.1.1",
     "katex": "^0.16.47",
     "lucide-react": "^1.33.0",
     "mdast-util-math": "^3.0.0",

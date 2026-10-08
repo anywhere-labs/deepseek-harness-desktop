@@ -1,0 +1,141 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1,3 +1,5 @@
++import { endpointReasoningCapability, reasoningConfigForConnection } from "@deepseek-ai/dsh-llm";
++import { modelReasoningSchema, selectedReasoningInfo, reasoningConfigError, configuredReasoningEffort, nativeReasoningPolicy } from "@deepseek-ai/dsh-llm";
+ import z from "@deepseek-ai/schemastery";
+ import { isVolatile } from "@deepseek-ai/cosmokit";
+ import { IMAGE_OFFLOAD_REQUIRED_CODE, LlmAdapter, LlmError, ProviderRequestId, ReasoningEffortId, RetryPolicySchema, ToolCallId, attributionHeaders, contentHasImage, isContextWindowExceededError, isQuotaExceededError, offloadedImageText, projectOffloadedImages, requestImageHandleText, requiredImageOffload, resolveImageAttachmentAccess, resolveRetryPolicy, textOnlyImageText } from "@deepseek-ai/dsh-llm";
+@@ -295,6 +297,7 @@
+ 	return Object.fromEntries(Object.entries(config).map(([key, value]) => [key, isVolatile(value) ? value.get() : value]));
+ }
+ const catalogModel = z.object({
++	reasoningConfig: modelReasoningSchema(z),
+ 	id: z.string().required(),
+ 	name: z.string(),
+ 	description: z.string(),
+@@ -369,6 +372,7 @@
+ 			...model.systemPromptUpdate === void 0 ? {} : { systemPromptUpdate: model.systemPromptUpdate },
+ 			...model.toolUpdate === void 0 ? {} : { toolUpdate: model.toolUpdate },
+ 			inputModalities: [...inputModalities],
++			...model.reasoningConfig === undefined ? {} : { reasoningConfig: structuredClone(model.reasoningConfig) },
+ 			...hasImage ? {
+ 				...model.imagePixelBudget === void 0 ? {} : { imagePixelBudget: model.imagePixelBudget },
+ 				imageMaxBytes: model.imageMaxBytes ?? 2097152
+@@ -502,6 +506,7 @@
+ */
+ function modelInfo(connection, provider, model) {
+ 	const configured = connection.models.find((entry) => entry.id === model);
++	const reasoningConfig = reasoningConfigForConnection(configured?.reasoningConfig, connection.baseURL, "anthropic-messages");
+ 	const contextWindow = configured?.contextWindow ?? connection.defaultContextWindow;
+ 	return {
+ 		...configured === void 0 ? {
+@@ -514,13 +519,12 @@
+ 		defaultMaxTokens: configured?.maxTokens ?? connection.maxTokens,
+ 		...configured?.systemPromptUpdate === void 0 ? {} : { systemPromptUpdate: configured.systemPromptUpdate },
+ 		...configured?.toolUpdate === void 0 ? {} : { toolUpdate: configured.toolUpdate },
+-		...connection.defaults.thinking === "disabled" ? { reasoning: {
+-			efforts: OFF_ONLY_REASONING_EFFORTS,
+-			defaultEffort: OFF_REASONING_EFFORT
+-		} } : { reasoning: {
+-			efforts: REASONING_EFFORTS,
+-			defaultEffort: connection.defaults.reasoningEffort === "off" ? OFF_REASONING_EFFORT : connection.defaults.reasoningEffort === "low" ? LOW_REASONING_EFFORT : connection.defaults.reasoningEffort === "max" ? MAX_REASONING_EFFORT : HIGH_REASONING_EFFORT
+-		} }
++		reasoningConfigurationError: nativeReasoningError(reasoningConfig, connection),
++		...(() => {
++			const inherited = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort).inheritedDefault;
++			const reasoning = selectedReasoningInfo(reasoningConfig, { efforts: connection.defaults.thinking === 'disabled' ? OFF_ONLY_REASONING_EFFORTS : REASONING_EFFORTS, defaultEffort: inherited });
++			return reasoning === undefined ? {} : { reasoning };
++		})()
+ 	};
+ }
+ //#endregion
+@@ -1691,7 +1695,14 @@
+ 		message.content = [...results, ...message.content.filter((block) => block.type !== "tool_result")];
+ 	}
+ 	if (pending.size > 0) throw new LlmError("DeepSeek Messages history ends with unresolved tools", "INVALID_REQUEST");
+-	const effort = options.purpose === "session-title" ? "off" : options.reasoningEffort ?? connection.defaults.reasoningEffort ?? (connection.defaults.thinking === "disabled" ? "off" : "high");
++	let effort;
++	try {
++		const config = reasoningConfigForConnection(model?.reasoningConfig, connection.baseURL, 'anthropic-messages');
++		const error = nativeReasoningError(config, connection);
++		if (error !== undefined) throw new Error(error);
++		const policy = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort);
++		effort = configuredReasoningEffort(config, policy.inheritedDefault, options.purpose === 'session-title' ? 'off' : options.reasoningEffort, options.provider, options.model, policy.allowedIds);
++	} catch (error) { throw new LlmError(`Provider "${options.provider}" model "${options.model}": ${error.message}. Open model settings to correct it.`, 'UNSUPPORTED_REASONING_EFFORT', { cause: error }); }
+ 	if (![
+ 		"off",
+ 		"low",
+@@ -2211,6 +2222,7 @@
+ 					const detail = providerErrorDetail(raw);
+ 					if (await files.retry(detail)) continue;
+ 					const failure = providerError(raw, response.status, response.headers);
++					if ([400,422].includes(response.status) && /reasoning|thinking|effort/i.test(failure.message)) throw new LlmError(`Provider "${options.provider}" model "${options.model}" rejected reasoning effort "${options.reasoningEffort ?? 'service default'}": ${failure.message}. Open model settings to correct it.`, 'UNSUPPORTED_REASONING_EFFORT', { cause: new Error(text) });
+ 					throw new LlmError(files.errorMessage(response.status, failure.message, detail), failure.code, {
+ 						...failure.failure,
+ 						cause: new Error(text)
+@@ -2244,6 +2256,8 @@
+ * @param dependencies - provider-owned discovery, credential, and configuration callbacks.
+ */
+ function registerDeepSeekProvider(ctx, provider, dependencies) {
++	const settingsNs = ctx.fiber.entry?.options.id ?? (provider === 'deepseek-account' ? 'llm-deepseek-account' : 'llm-deepseek');
++	ctx.llm.registerModelDiscovery(settingsNs, (request, signal) => discoverNativeReasoningModels(request, signal, dependencies, endpointReasoningCapability, messagesApiRoot));
+ 	ctx.inject(["settings"], (child) => {
+ 		child.effect(() => child.settings.configure({ auto: false }, ctx.fiber));
+ 	});
+@@ -2281,3 +2295,43 @@
+ }
+ //#endregion
+ export { Config, DEFAULT_CONTEXT_WINDOW, DEFAULT_FILES_API_TIMEOUT_MS, DEFAULT_FILE_EXPIRY_SECONDS, DEFAULT_FILE_QUOTA_CLEANUP_BATCH, DEFAULT_FILE_REFRESH_MARGIN_SECONDS, DEFAULT_IMAGE_OFFLOAD_BYTE_QUANTUM, DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM, DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM, DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET, DEFAULT_MAX_IMAGES_PER_REQUEST, DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES, DEFAULT_MAX_REQUEST_FILES_BYTES, DEFAULT_MAX_TOKENS, DEFAULT_REQUEST_IMAGE_MAX_BYTES, DEFAULT_STREAM_IDLE_TIMEOUT_MS, DeepSeekAdapter, DeepSeekFileId, DeepSeekFileStore, DeepSeekFilesClient, DeepSeekUploadIndex, MAX_FILE_EXPIRY_SECONDS, MAX_FILE_UPLOAD_BYTES, MAX_IMAGE_BYTES, MAX_STORED_FILE_BYTES, MAX_STORED_FILE_COUNT, MIN_FILE_EXPIRY_SECONDS, PUBLIC_BASE_URL, REQUEST_IMAGE_MAX_DIMENSION, catalogModelInfo, deepSeekConfigFields, deepSeekFileScope, deepSeekImageRequestPricing, deepSeekImageTokens, deepSeekRequestImageDimensions, plainOptions, registerDeepSeekProvider, resolveAdapterOptions, resolveRequestImageMaxBytes, resolveRequestImageTarget };
++
++function nativeReasoningError(config, connection) {
++  const policy = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort);
++  const error = reasoningConfigError(config, policy.allowedIds, policy.inheritedDefault);
++  if (error !== undefined) return error;
++  if (config?.manualEfforts?.some(effort => effort.wireValue !== undefined && effort.wireValue !== effort.id)) return 'Native DeepSeek requires its own effort wire values';
++}
++
++/** Native Messages capability discovery; no generation requests are made. */
++async function discoverNativeReasoningModels(request, signal, dependencies, parseCapability, apiRoot) {
++  const connection = dependencies.options();
++  const { allowedIds: allowed, capability: adapterCapability } = nativeReasoningPolicy(connection.defaults.thinking, connection.defaults.reasoningEffort);
++  const fallback = () => connection.models.map(model => ({
++    id: model.id, name: model.name ?? model.id, reasoningCapability: adapterCapability,
++  }));
++  if (!request.baseURL) return fallback();
++  const headers = request.apiKey !== undefined ? { 'x-api-key': request.apiKey }
++    : request.baseURL.replace(/\/+$/, '') === connection.baseURL.replace(/\/+$/, '')
++      ? (await dependencies.resolveAuth(connection)).headers : {};
++  const response = await fetch(`${apiRoot(request.baseURL)}/models`, {
++    headers: { ...headers, 'anthropic-version': '2023-06-01' }, signal, redirect: 'error',
++  });
++  if (response.status === 404 || response.status === 405) return fallback();
++  if (!response.ok) throw new Error(`Model capability lookup failed (${response.status}); retry in model settings.`);
++  const body = await response.json();
++  const listing = Array.isArray(body) ? body : body?.data ?? body?.models;
++  if (!Array.isArray(listing)) throw new Error('The endpoint returned an invalid model listing; retry in model settings.');
++  return listing.filter(model => typeof model?.id === 'string').map(model => {
++    const explicit = model.reasoningEfforts !== undefined || model.reasoning_efforts !== undefined;
++    const declared = model.reasoningEfforts ?? model.reasoning_efforts;
++    const nativeModel = Array.isArray(declared) ? { ...model, reasoningEfforts: declared.map(value =>
++      typeof value === 'string' ? { id: value, name: value, wireValue: value } : value) } : model;
++    let capability = explicit ? parseCapability(nativeModel, allowed) : adapterCapability;
++    if (capability.efforts.some(effort => effort.wireValue !== undefined && effort.wireValue !== effort.id))
++      capability = { status: 'unknown', source: 'endpoint', efforts: [] };
++    return { id: model.id, name: model.name ?? model.id,
++      reasoningCapability: { ...capability, endpoint: request.baseURL, api: 'anthropic-messages' },
++    };
++  });
++}
+diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -6,6 +6,7 @@
+ import type { DeepSeekFileStore, DeepSeekFilePolicy } from './file-store.ts';
+ /** One optional model entry advertised by the direct-fetch adapter. */
+ export interface DeepSeekCatalogModel {
++    reasoningConfig?: import('@deepseek-ai/dsh-llm').ModelReasoningConfig;
+     /** Wire model id accepted by the configured endpoint. */
+     id: string;
+     /** Selector label; defaults to {@link id}. */

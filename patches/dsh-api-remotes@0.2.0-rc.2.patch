@@ -1,0 +1,13 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -7289,7 +7289,8 @@
+ 			"name": string().optional(),
+ 			"contextWindow": number().optional(),
+ 			"maxTokens": number().optional(),
+-			"inputModalities": array(union([literal("text"), literal("image")])).optional()
++			"inputModalities": array(union([literal("text"), literal("image")])).optional(),
++			"reasoningCapability": object({status: _enum(['known','unknown','unsupported']), source: _enum(['endpoint','catalog','adapter']), authoritative: boolean().optional(), endpoint: string().optional(), api: string().optional(), efforts: array(object({id: string(), name: string(), wireValue: union([string(), literal(null)]).optional()}))}).optional()
+ 		}));
+ 		let _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema$value;
+ 		const _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema = () => _deepseek_ai_dsh_llm_llm_listConfigurableProviders_result$schema$value ??= array(object({
