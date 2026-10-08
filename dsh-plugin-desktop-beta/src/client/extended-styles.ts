@@ -50,7 +50,7 @@ body:is([data-dsh-desktop-mode="compatibility"], [data-dsh-desktop-mode="extende
   transform: translateZ(0);
 }
 body[data-dsh-desktop-mode="extended"] .dshDesktopSidebarSurface {
-  --dsw-specific-sidebar-fill: transparent;
+  /* #1006: never redeclare the theme-owned --dsw-specific-sidebar-fill here; background only. */
   border-right-color: transparent;
   background: transparent !important;
 }

@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
@@ -12,6 +15,10 @@ import { DesktopLayoutState } from '../src/client/layout-state.ts'
 // never exists. This is the selector third-party plugins use to find the sidebar;
 // when it resolves to nothing they mount nothing, silently.
 const PLUGIN_SIDEBAR_SELECTOR = '[data-pane="sidebar"], [class*="sidebarCol"]'
+
+const SPEC_DIR = dirname(fileURLToPath(import.meta.url))
+const readClientSource = (file: string): string =>
+  readFileSync(join(SPEC_DIR, '..', 'src', 'client', file), 'utf8')
 
 function renderFrame(Frame: typeof AdvancedFrame): HTMLElement {
   const layout = new DesktopLayoutState()
@@ -58,5 +65,31 @@ describe('desktop sidebar DOM anchor', () => {
     const source = renderFrame(AdvancedFrame).innerHTML
     expect(source).toContain('sidebarCol')
     expect(source).not.toContain('sidebarcol')
+  })
+
+  // #1006: Desktop must not shadow the theme-owned sidebar-fill token, or every
+  // third-party skin loses control of the sidebar fill. The upstream sidebar
+  // root consumes `background: var(--dsw-specific-sidebar-fill)`; nearby
+  // Desktop-owned stylesheets may only paint their own `background` rects.
+  it.each([
+    ['desktop-owned layout', 'styles.ts'],
+    ['extended shell', 'extended-styles.ts'],
+  ])('leaves --dsw-specific-sidebar-fill to the theme in %s', (_label, file) => {
+    expect(readClientSource(file)).not.toMatch(/--dsw-specific-sidebar-fill\s*:/)
+  })
+
+  // #1006: with the token untouched, the visible fill still behaves across the
+  // material × mode matrix: material on keeps a transparent Desktop surface so
+  // the upstream sidebar fill shows through; material off falls back to the
+  // opaque layer-1 background in extended/advanced modes.
+  it.each([
+    ['advanced', AdvancedFrame],
+    ['extended', ExtendedFrame],
+  ] as const)('keeps the Desktop surface background-only in %s mode', (_mode, _Frame) => {
+    const owned = readClientSource('styles.ts')
+    const extended = readClientSource('extended-styles.ts')
+    expect(owned).toMatch(/\.dshDesktopSidebarSurface\s*\{[^}]*background:\s*transparent;/)
+    expect(owned).toMatch(/\[data-dsh-desktop-material="off"\] \.dshDesktopSidebarSurface \{[^}]*background: var\(--dsw-alias-bg-layer-1\);/)
+    expect(extended).toMatch(/body\[data-dsh-desktop-mode="extended"\] \.dshDesktopSidebarSurface \{[^}]*background: transparent !important;/)
   })
 })
