@@ -10,6 +10,20 @@ const MIME: Readonly<Record<string, string>> = {
   '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
 }
 const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
+// Cover both the empty document and the official boot page; normal UI keeps its own palette.
+const LOADING_STYLE = `<style id="dsh-next-loading-style">
+html:has(#root:empty), html:has([data-dsh-boot]) { color-scheme: dark; background: #000 !important; }
+body:has(#root:empty), body:has([data-dsh-boot]) { background: #000 !important; }
+[data-dsh-boot] {
+  background: #000 !important;
+  --dsw-alias-bg-base: #000;
+  --dsw-alias-label-primary: #f9fafb;
+  --dsw-alias-label-secondary: #cfd3d6;
+  --dsw-alias-label-tertiary: #adb2b8;
+  --dsw-alias-border-l2: rgb(255 255 255 / 12%);
+  --dsw-alias-brand-primary: #f9fafb;
+}
+</style>`
 
 /** Mark requests from the owned main frame; also strip the marker on every other target or redirect. */
 export function appRequestHeaders(
@@ -47,7 +61,7 @@ export async function serveWebDocument(request: Request, root: string, waitForHo
     throw error
   }
   const content = waitForHost && (pathname === '/' || pathname === '/index.html')
-    ? body.toString().replace('<head>', '<head>' + BOOT) : new Uint8Array(body)
+    ? body.toString().replace('<head>', '<head>' + LOADING_STYLE + BOOT) : new Uint8Array(body)
   return new Response(request.method === 'HEAD' ? null : content, {
     headers: { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' },
   })

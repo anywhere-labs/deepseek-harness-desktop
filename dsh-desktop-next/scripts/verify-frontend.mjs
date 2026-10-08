@@ -14,7 +14,9 @@ const official = readFileSync(join(webRoot, 'index.html'), 'utf8')
 const local = await serveWebDocument(new Request('dsh-app://app/'), webRoot)
 const html = await local.text()
 assert.equal(local.status, 200)
-assert.equal(html.replace('<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>', ''), official)
+assert.ok(html.includes('<style id="dsh-next-loading-style">'), 'Next must style the document before the official boot page loads')
+assert.equal(html.replace(/<style id="dsh-next-loading-style">[\s\S]*?<\/style>/u, '')
+  .replace('<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>', ''), official)
 assert.ok(html.includes('/assets/'), 'Official production frontend must carry built assets')
 
 // Market client bundles resolve primitives from the official Web at runtime. A
