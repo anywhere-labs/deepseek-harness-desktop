@@ -68,6 +68,26 @@
       "types": "./lib/types/notifications.d.ts",
       "default": "./lib/notifications.js"
     },
+    "./context": {
+      "types": "./lib/types/context.d.ts",
+      "default": "./lib/context.js"
+    },
+    "./loop-guard": {
+      "types": "./lib/types/loop-guard.d.ts",
+      "default": "./lib/loop-guard.js"
+    },
+    "./web-search": {
+      "types": "./lib/types/web-search.d.ts",
+      "default": "./lib/web-search.js"
+    },
+    "./orchestrator": {
+      "types": "./lib/types/orchestrator/index.d.ts",
+      "default": "./lib/orchestrator/index.js"
+    },
+    "./marvis": {
+      "types": "./lib/types/marvis.d.ts",
+      "default": "./lib/marvis.js"
+    },
     "./updates": {
       "types": "./lib/types/updates.d.ts",
       "default": "./lib/updates.js"
@@ -320,7 +340,8 @@
     "selfsigned": "5.5.0",
     "semver": "^7.8.5",
     "sonner": "^2.0.8",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "electron": "44.0.0"

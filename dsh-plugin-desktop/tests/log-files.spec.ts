@@ -124,7 +124,7 @@ describe('LogFileSink', () => {
     expect(readFileSync(join(dir, `dsh-${day}.1.log`), 'utf8')).toBe('abcdefgh\n')
   })
 
-  it('purges only owned regular log files', () => {
+  it('purges only owned regular log files', async () => {
     const { s, dir } = sink()
     const nested = join(dir, 'nested')
     const foreign = join(dir, 'notes.txt')
@@ -137,7 +137,7 @@ describe('LogFileSink', () => {
     utimesSync(foreign, old, old)
     utimesSync(oldLog, old, old)
 
-    expect(() => { s.purgeOlderThan(7) }).not.toThrow()
+    await s.purgeOlderThan(7)
     expect(existsSync(nested)).toBe(true)
     expect(existsSync(foreign)).toBe(true)
     expect(existsSync(oldLog)).toBe(false)

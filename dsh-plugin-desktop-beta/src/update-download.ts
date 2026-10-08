@@ -276,6 +276,7 @@ export async function resolveDesktopUpdateArtifact(
   userDataPath: string,
   artifact: DesktopUpdateArtifact,
   remove: boolean,
+  trashItem?: (path: string) => Promise<void>,
 ): Promise<void> {
   const statePath = artifactStatePath(validatedUserDataPath(userDataPath))
   const current = await readArtifactRecord(statePath)
@@ -285,8 +286,24 @@ export async function resolveDesktopUpdateArtifact(
     || current.path !== expected.path) {
     throw new UpdateDownloadError('invalid-options', 'The update artifact cleanup state changed.')
   }
-  if (remove) await unlinkIfPresent(expected.path)
+  if (remove) await removeInstaller(expected.path, trashItem)
   await unlinkIfPresent(statePath)
+}
+
+/** Remove the retained installer, moving it to the recycle bin when one is available. */
+async function removeInstaller(
+  path: string,
+  trashItem?: (path: string) => Promise<void>,
+): Promise<void> {
+  if (trashItem !== undefined) {
+    try {
+      await trashItem(path)
+      return
+    } catch {
+      // The recycle bin may reject the file; honour the delete intent by hard-deleting.
+    }
+  }
+  await unlinkIfPresent(path)
 }
 
 function validatedPlatform(platform: DesktopDownloadPlatform): DesktopDownloadPlatform {

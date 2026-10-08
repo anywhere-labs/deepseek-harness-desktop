@@ -12,6 +12,24 @@
       name: dsh-plugin-desktop-beta/diagnostics
     - id: desktop-notifications
       name: dsh-plugin-desktop-beta/notifications
+    - id: desktop-context
+      name: dsh-plugin-desktop-beta/context
+    - id: desktop-loop-guard
+      name: dsh-plugin-desktop-beta/loop-guard
+      disabled: true
+    # Keyless DuckDuckGo search backend (default off). Enable by removing the
+    # `disabled` below and pinning `searchProvider: duckduckgo` on the `web` row.
+    - id: desktop-web-search
+      name: dsh-plugin-desktop-beta/web-search
+      disabled: true
+    # Layered plan-and-dispatch (Pro levels L0-L4, router, executors). Default off.
+    - id: desktop-orchestrator
+      name: dsh-plugin-desktop-beta/orchestrator
+      disabled: true
+    # Marvis human-in-the-loop clipboard bridge (send/collect). Default off.
+    - id: desktop-marvis
+      name: dsh-plugin-desktop-beta/marvis
+      disabled: true
     - id: desktop-pnpm
       name: dsh-plugin-desktop-beta/pnpm
     - id: desktop-profiles

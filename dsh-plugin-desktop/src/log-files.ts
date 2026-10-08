@@ -41,6 +41,12 @@ function truncateUtf8(text: string, maxBytes: number): string {
 export interface LogFileSinkOptions {
   readonly maxFileBytes: number
   readonly maxDirectoryBytes: number
+  /**
+   * Move rotated-out log files to the operating-system recycle bin instead of
+   * hard-deleting them. Absent (or throwing) falls back to `unlinkSync`, which
+   * keeps the sink usable outside Electron and on platforms without a trash.
+   */
+  readonly trashItem?: (path: string) => Promise<void>
 }
 
 function localDateSuffix(date: Date): string {
@@ -61,6 +67,7 @@ export class LogFileSink {
   private readonly directory: string
   private readonly maxFileBytes: number
   private readonly maxDirectoryBytes: number
+  private readonly trashItem: ((path: string) => Promise<void>) | undefined
   private currentDate: string | undefined
   private allBytes = 0
   private errorBytes = 0
@@ -72,6 +79,7 @@ export class LogFileSink {
     this.directory = directory
     this.maxFileBytes = options.maxFileBytes
     this.maxDirectoryBytes = options.maxDirectoryBytes
+    this.trashItem = options.trashItem
     if (this.maxFileBytes < 2 || this.maxDirectoryBytes < 1) {
       throw new Error('dsh-plugin-desktop: log size limits must be positive')
     }
@@ -105,15 +113,11 @@ export class LogFileSink {
   }
 
   /** Delete log files modified more than `days` days ago. */
-  purgeOlderThan(days: number): void {
+  async purgeOlderThan(days: number): Promise<void> {
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
     for (const entry of this.ownedFiles()) {
       if (entry.modifiedAt >= cutoff) continue
-      try {
-        unlinkSync(entry.path)
-      } catch {
-        // Locked logs remain eligible for the next startup cleanup.
-      }
+      await this.removeFile(entry.path)
     }
     this.directoryBytes = this.measureDirectoryBytes()
   }
@@ -155,6 +159,25 @@ export class LogFileSink {
     }
     this.directoryBytes = total
     if (deleted && this.currentDate !== undefined) this.rollDate(this.currentDate)
+  }
+
+  /** Remove one owned log file, preferring the recycle bin when one is configured. */
+  private async removeFile(path: string): Promise<boolean> {
+    if (this.trashItem !== undefined) {
+      try {
+        await this.trashItem(path)
+        return true
+      } catch {
+        // The recycle bin may reject locked files or headless platforms; hard-delete instead.
+      }
+    }
+    try {
+      unlinkSync(path)
+      return true
+    } catch {
+      // A viewer may keep one Windows log locked; leave it in place.
+      return false
+    }
   }
 
   private resetState(): void {

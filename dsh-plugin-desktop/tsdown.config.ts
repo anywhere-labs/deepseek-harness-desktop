@@ -18,6 +18,8 @@ export default defineConfig([
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
+      context: 'src/context.ts',
+      'loop-guard': 'src/loop-guard.ts',
       'diagnostic-export-worker': 'src/diagnostic-export-worker.ts',
       'packaged-runtime-smoke': 'src/packaged-runtime-smoke.ts',
       runtime: 'src/runtime.ts',
