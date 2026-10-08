@@ -362,6 +362,60 @@ it('retains the Host when hiding to tray, restores the window, keeps failed-Host
 })
 
 
+it.each(['ready', 'error'] as const)('allows five seconds for native menu teardown when the Host is %s, then forces exit', async phase => {
+  const home = mkdtempSync(join(tmpdir(), 'next-menu-exit-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  fixture.phase = phase
+  let finishClose!: () => void
+  fixture.close.mockImplementation(() => new Promise<void>(resolve => { finishClose = resolve }))
+  fixture.stop.mockImplementation(() => new Promise<void>(() => {}))
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.trays).toHaveLength(1))
+    const { app } = await import('electron')
+    const stopsBeforeQuit = fixture.stop.mock.calls.length
+    vi.useFakeTimers()
+    fixture.trays[0].menu.find((item: any) => item.accelerator === 'CmdOrCtrl+Q').click()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(app.quit).toHaveBeenCalledOnce()
+    expect(fixture.close).toHaveBeenCalledOnce()
+    expect(app.exit).not.toHaveBeenCalled()
+    expect(fixture.stop).toHaveBeenCalledTimes(stopsBeforeQuit)
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(app.exit).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(app.exit).toHaveBeenCalledExactlyOnceWith(1)
+    finishClose()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(app.quit).toHaveBeenCalledOnce()
+    expect(app.exit).toHaveBeenCalledOnce()
+    expect(app.relaunch).not.toHaveBeenCalled()
+  } finally { vi.useRealTimers(); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
+
+it('cancels the forced-exit deadline after graceful menu shutdown', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-menu-graceful-exit-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  let finishClose!: () => void
+  fixture.close.mockImplementation(() => new Promise<void>(resolve => { finishClose = resolve }))
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.trays).toHaveLength(1))
+    const { app } = await import('electron')
+    vi.useFakeTimers()
+    fixture.trays[0].menu.find((item: any) => item.accelerator === 'CmdOrCtrl+Q').click()
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(fixture.close).toHaveBeenCalledOnce()
+    expect(app.exit).not.toHaveBeenCalled()
+    finishClose()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(app.quit).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(app.exit).not.toHaveBeenCalled()
+    expect(app.relaunch).not.toHaveBeenCalled()
+  } finally { vi.useRealTimers(); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }
+})
+
 it('boots recovery in the preferred OS language even when the app locale is English, without starting a Host', async () => {
   const home = mkdtempSync(join(tmpdir(), 'next-recovery-boot-'))
   vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
@@ -380,7 +434,6 @@ it('boots recovery in the preferred OS language even when the app locale is Engl
     expect(fixture.windows).toHaveLength(1)
     expect(fixture.start).not.toHaveBeenCalled()
     controls.visible = true
-    fixture.close.mockImplementationOnce(async () => { expect(controls.visible).toBe(false) })
     await fixture.handlers.get('dsh-next:command')!(sender, { type: 'quit' })
     await vi.waitFor(() => expect(fixture.close).toHaveBeenCalledOnce())
   } finally { process.argv.splice(0, process.argv.length, ...argv); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }) }

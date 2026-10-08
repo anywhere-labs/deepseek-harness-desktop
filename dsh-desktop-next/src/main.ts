@@ -37,6 +37,7 @@ import { PlatformLoginWindow } from './platform-login-window.ts'
 import { NextUpdates } from './updates.ts'
 import { NextUpdateInstaller } from './update-installer.ts'
 import { updateLabel } from './update-state.ts'
+import { DESKTOP_SHUTDOWN_TIMEOUT_MS } from '../../dsh-plugin-desktop-beta/src/shutdown.ts'
 
 // Inherit the package policy across the Host and every runtime child process.
 applyDesktopPackageAgePolicy(process.env)
@@ -938,6 +939,18 @@ app.on('before-quit', event => {
   if (quitting || !ownsInstance) return
   event.preventDefault()
   quitting = true
+  // Bound the whole shutdown, including cleanup before Host termination starts.
+  let finished = false
+  const timeout = setTimeout(() => {
+    if (finish()) app.exit(1)
+  }, DESKTOP_SHUTDOWN_TIMEOUT_MS)
+  timeout.unref()
+  function finish(): boolean {
+    if (finished) return false
+    finished = true
+    clearTimeout(timeout)
+    return true
+  }
   // Keep disconnection/reconnection chrome out of the quit/relaunch transition.
   for (const window of [mainWindow, shellWindow]) {
     if (window && !window.isDestroyed()) window.hide()
@@ -945,6 +958,7 @@ app.on('before-quit', event => {
   native.close()
   platformLogin.close()
   void Promise.all([updates.dispose(installingUpdate), (async () => { await recoveryRunner?.dispose(); await runtime.close() })()]).then(async () => {
+    if (finished) return
     // A staged installer must survive until handoff; the next boot removes it.
     if (safeModeRequested && !installingUpdate) {
       // Windows may still hold Chromium files until process exit; a normal boot
@@ -955,15 +969,18 @@ app.on('before-quit', event => {
     if (installingUpdate) {
       try { await updateInstaller.launch() }
       catch (error) {
+        if (!finish()) return
         runtime.diagnostics.append(String(error), 'error')
         dialog.showErrorBox(t('更新未能安装', 'Update could not be installed'), t('应用将重新打开，请在设置中重试更新。', 'The application will reopen. Retry the update in Settings.'))
         relaunchApp(app, relaunchArguments(process.argv.slice(1), false, false))
         app.quit()
+        return
       }
-      if (process.platform === 'darwin') return
+      if (process.platform === 'darwin') { finish(); return }
     }
+    if (!finish()) return
     if (relaunch) relaunchApp(app, relaunch)
     app.quit()
-  }, error => { console.error(error); app.exit(1) })
+  }).catch(error => { console.error(error); if (finish()) app.exit(1) })
 })
 if (ownsInstance) void main().catch(error => runtime.report(error))
