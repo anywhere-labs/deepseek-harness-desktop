@@ -2,8 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import type { WebContents } from 'electron'
-import { appRequestHeaders, authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
+import { APP_BOOT_SCRIPT, appRequestHeaders, authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
 import { NATIVE_ACCESS_HEADER } from '../src/desktop-contract.ts'
 
 const roots: string[] = []
@@ -33,6 +34,24 @@ it('serves the Web entry and assets without starting or contacting a Host', asyn
   expect(fetch).not.toHaveBeenCalled()
   expect((await serveWebDocument(new Request('dsh-app://app/%2e%2e%2fprivate'), root)).status).toBe(403)
   expect((await serveWebDocument(new Request('dsh-app://app/missing.js'), root)).status).toBe(404)
+})
+
+it('installs the file-upload page carrier before the application entry', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'desktop-web-'))
+  roots.push(root)
+  await writeFile(join(root, 'index.html'), '<html><head></head><body><script src="assets/entry.js"></script></body></html>')
+  const html = await (await serveWebDocument(new Request('dsh-app://app/'), root)).text()
+  expect(html.indexOf(APP_BOOT_SCRIPT)).toBeGreaterThan(0)
+  expect(html.indexOf(APP_BOOT_SCRIPT)).toBeLessThan(html.indexOf('assets/entry.js'))
+  // Electron never shows custom-protocol Worker requests to webRequest; uploads must use the page's fetch.
+  const response = Promise.resolve(new Response('{}'))
+  const page = { fetch: vi.fn(() => response), Promise }
+  runInNewContext(APP_BOOT_SCRIPT.slice('<script>'.length, -'</script>'.length), page)
+  const carrier = (page as unknown as { __DSH_FILE_UPLOAD__: { fetch: typeof fetch } }).__DSH_FILE_UPLOAD__
+  const init = { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: 'bytes' }
+  expect(carrier.fetch('api/session/uploadFileBinary?sessionId=s', init)).toBe(response)
+  expect(page.fetch).toHaveBeenCalledWith('api/session/uploadFileBinary?sessionId=s', init)
+  expect(await serveWebDocument(new Request('dsh-app://app/'), root, false).then(r => r.text())).not.toContain('__DSH_FILE_UPLOAD__')
 })
 
 it('requires the Host authentication exchange and retains only its cookie value', async () => {

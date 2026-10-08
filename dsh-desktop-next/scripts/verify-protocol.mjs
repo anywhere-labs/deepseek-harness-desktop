@@ -1,13 +1,13 @@
 /** Explicit native protocol checks with hidden windows and disposable user data. */
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, protocol, session } from 'electron'
 import { NextDesktopRuntime } from '../lib/desktop-runtime.js'
-import { appRequestHeaders, forwardWebRequest } from '../lib/web-document.js'
+import { appRequestHeaders, forwardWebRequest, serveWebDocument } from '../lib/web-document.js'
 import { installAppDownloads } from '../lib/app-downloads.js'
 
 if (process.argv.includes('--plugin-frames') && (process.platform === 'win32' || (process.platform === 'linux' && process.env.DISPLAY))) {
@@ -175,10 +175,12 @@ async function verify() {
     const browser = await fetch(new URL(url).origin, { headers: { cookie } })
     assert.equal(browser.status, 403, 'The test must keep ordinary browser access disabled')
     await browser.body?.cancel()
+    // The fixture index goes through the real document path so it carries the application boot script.
+    const webRoot = join(home, 'web')
+    mkdirSync(webRoot)
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><html><head><title>Next protocol fixture</title></head><body></body></html>')
     protocol.handle('dsh-app', async request => {
-      if (new URL(request.url).pathname === '/') return new Response('<!doctype html><title>Next protocol fixture</title>', {
-        headers: { 'content-type': 'text/html' },
-      })
+      if (new URL(request.url).pathname === '/') return serveWebDocument(request, webRoot)
       const response = await forwardWebRequest(request, url, cookie, token)
       observed.push({ origin: request.headers.get('origin'), marked: request.headers.get('x-dsh-desktop-renderer') === token, status: response.status })
       return response
@@ -212,6 +214,33 @@ async function verify() {
     assert.equal(removed.sources.some(source => source.sourceRecordId === sourceRecordId), false)
     assert.ok(observed.every(request => request.marked))
     console.log('Native protocol request metadata:', JSON.stringify(observed))
+
+    // The upload plugin's default transport posts from a blob-URL dedicated Worker. Electron never shows
+    // custom-protocol Worker requests to webRequest, so they cannot carry the native marker; the boot
+    // script's page-owned carrier must send them from the owned main frame instead.
+    stage = 'background file upload'
+    const upload = 'api/session/uploadFileBinary?sessionId=verify-protocol-missing&name=probe.txt'
+    const uploadWorker = `self.onmessage = event => {
+      const xhr = new XMLHttpRequest(); xhr.open('POST', event.data); xhr.withCredentials = true
+      xhr.setRequestHeader('content-type', 'application/octet-stream')
+      xhr.onload = () => postMessage(xhr.status); xhr.onerror = () => postMessage(0); xhr.send(new Blob(['probe']))
+    }`
+    const workerStatus = await window.webContents.executeJavaScript(`new Promise(resolve => {
+      const source = URL.createObjectURL(new Blob([${JSON.stringify(uploadWorker)}], { type: 'text/javascript' }))
+      const worker = new Worker(source); URL.revokeObjectURL(source)
+      worker.onmessage = event => { worker.terminate(); resolve(event.data) }
+      worker.postMessage(new URL(${JSON.stringify(upload)}, document.baseURI).href)
+    })`)
+    assert.equal(workerStatus, 403, 'Worker requests now reach webRequest; re-evaluate the __DSH_FILE_UPLOAD__ carrier')
+    assert.equal(observed.at(-1).marked, false)
+    const carried = await window.webContents.executeJavaScript(`globalThis.__DSH_FILE_UPLOAD__.fetch(${JSON.stringify(upload)}, {
+      method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Blob(['probe']),
+    }).then(async response => ({ status: response.status, body: await response.text() }))`)
+    assert.equal(carried.status, 200, carried.body)
+    assert.equal(observed.at(-1).marked, true)
+    // A business error from the upload route itself proves the body crossed the gate and reached the Host.
+    assert.equal(JSON.parse(carried.body).error?.code, 'session/not-found', carried.body)
+    console.log('Native upload metadata:', JSON.stringify({ worker: observed.at(-2), carrier: observed.at(-1), body: carried.body }))
 
     // `<a download>` bypasses webRequest, so Chromium's own item can only carry the gate's 403.
     // The main process must replace it with an authenticated request and save the Host body.
@@ -263,7 +292,7 @@ async function verify() {
     assert.equal(observed.at(-1).status, 403)
     await window.loadURL('dsh-app://app/')
     assert.equal((await call('state')).sources.some(source => source.builtInProviderKey === key), false)
-    console.log('Next native protocol check passed: renderer source mutations, owned-frame markers, application downloads and foreign-page rejection.')
+    console.log('Next native protocol check passed: renderer source mutations, owned-frame markers, page-carried uploads, application downloads and foreign-page rejection.')
   } catch (error) {
     console.error(error)
     exitCode = 1
