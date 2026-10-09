@@ -15,6 +15,7 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 import { preferredDesktopLocale, resolveDesktopLocale } from './menu-locale.ts'
 import { NativeLocaleStore } from './native-locale.ts'
 import { NextDesktopRuntime } from './desktop-runtime.ts'
+import { resolveDesktopShellEnvironment } from './shell-environment.ts'
 import { probeSystemProxy, type DesktopSystemProxyProbe } from './system-proxy.ts'
 import { DEFAULT_PROFILE, NATIVE_ACCESS_HEADER, type DesktopCommand, type DesktopState, type DesktopSettingsPage } from './desktop-contract.ts'
 import { portsChanged, parsePreferences } from './desktop-preferences.ts'
@@ -718,6 +719,24 @@ async function recoveryAction(input: Record<string, unknown>): Promise<void> {
 async function main(): Promise<void> {
   await app.whenReady()
   if (quitting) return
+  // The Host inherits `process.env` (desktop-runtime's Host environment spreads it), so
+  // login-shell exports must be recovered before anything can start a Host: a GUI launch
+  // otherwise leaves the model's bash tools on the launchd PATH (#1236).
+  const shellEnvironmentResolution = await resolveDesktopShellEnvironment({
+    environment: process.env,
+    home: app.getPath('home'),
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+  })
+  for (const [name, value] of Object.entries(shellEnvironmentResolution.updates)) process.env[name] = value
+  // 'not-packaged' (development launches) and 'windows' (the capture is Unix-only by
+  // design) are expected on every such launch; anything else means the login-shell
+  // environment was not recovered and user tools will be missing from the model's PATH,
+  // which deserves a log trail (#1236).
+  const shellEnvironmentFallback = shellEnvironmentResolution.fallbackReason
+  if (shellEnvironmentFallback !== undefined && shellEnvironmentFallback !== 'not-packaged' && shellEnvironmentFallback !== 'windows') {
+    runtime.diagnostics.append(`DSH NEXT: login-shell environment not recovered (${shellEnvironmentFallback}); keeping the launch environment`, 'info')
+  }
   let inputRevision = 0
   let inputBlocked = false
   desktopShortcuts = installDesktopShortcuts(() => mainWindow, app.getPath('userData'),
