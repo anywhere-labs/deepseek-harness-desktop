@@ -19,7 +19,12 @@ body:is([data-dsh-desktop-mode="extended"], [data-dsh-desktop-mode="advanced"]) 
 body:is([data-dsh-desktop-mode="extended"], [data-dsh-desktop-mode="advanced"])[data-dsh-desktop-platform="darwin"][data-dsh-desktop-material="transparent"] {
   --dsw-menu-surface-fill: var(--dsw-alias-bg-layer-2);
 }
-.dshDesktopFrame { position: relative; display: grid; grid-template-rows: 100%; width: 100%; height: 100%; overflow: hidden; background: transparent; transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out); }
+/* A hidden overflow still scrolls in Blink. The rightbar seat keeps its panel at
+   the resolved width even when the grid reserves no track for it, so the frame
+   owns horizontal overflow a page key can scroll: every column then slides out
+   of the window with no scrollbar. Clipping keeps what hidden clipped and takes
+   the scroll container away. */
+.dshDesktopFrame { position: relative; display: grid; grid-template-rows: 100%; width: 100%; height: 100%; overflow: clip; background: transparent; transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out); }
 .dshDesktopSidebarSurface { --dsw-specific-sidebar-fill: transparent; position: relative; grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; background: transparent; border-right: 1px solid var(--dsw-alias-border-l1); }
 body:is([data-dsh-desktop-mode="extended"], [data-dsh-desktop-mode="advanced"])[data-dsh-desktop-material="off"] .dshDesktopSidebarSurface { --dsw-specific-sidebar-fill: var(--dsw-alias-bg-layer-1); background: var(--dsw-alias-bg-layer-1); }
 .dshDesktopUpstreamSidebar { box-sizing: border-box; width: 100%; height: 100%; }

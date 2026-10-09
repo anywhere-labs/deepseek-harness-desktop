@@ -22,6 +22,7 @@ import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { installDesktopLaunchWorkspaceBridge } from './launch-workspace.ts'
+import { installPageKeyScrollGuard } from './page-key-scroll-guard.ts'
 import { DESKTOP_SETTINGS_FORMS_SERVICE } from './settings-bridge.ts'
 import { installSidebarFooterStyles } from './sidebar-footer-styles.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
@@ -140,6 +141,11 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(
     () => installSidebarFooterStyles(),
     'dsh-plugin-desktop: sidebar footer stacking styles',
+  )
+  // Page keys belong to the composer that owns the caret, not to the transcript behind it.
+  ctx.effect(
+    () => installPageKeyScrollGuard(),
+    'dsh-plugin-desktop: page-key scroll guard',
   )
   ctx.effect(
     () => startRendererBootReporter(ctx.loader),
