@@ -386,6 +386,7 @@
       "lib/**",
       "package.json",
       "!node_modules/node-pty/build/**",
+      "!**/*.map"
       "!node_modules/fs-ext/build/**"
     ],
     "mac": {
