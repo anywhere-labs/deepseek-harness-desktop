@@ -22,6 +22,7 @@ const electron = vi.hoisted(() => {
     private bounds: Electron.Rectangle
     readonly getBounds = vi.fn(() => ({ ...this.bounds }))
     readonly setBounds = vi.fn((bounds: Electron.Rectangle) => { this.bounds = { ...bounds } })
+    readonly setPosition = vi.fn((x: number, y: number) => { this.bounds = { ...this.bounds, x, y } })
     readonly setContentSize = vi.fn((width: number, height: number) => {
       // Model native/invisible chrome so the test distinguishes content size
       // from outer bounds instead of accidentally treating them as identical.
@@ -32,8 +33,8 @@ const electron = vi.hoisted(() => {
     readonly on = vi.fn((event: string, listener: Listener) => { this.listeners.set(event, listener) })
     constructor(readonly options: Electron.BrowserWindowConstructorOptions) {
       this.bounds = {
-        x: 0,
-        y: 0,
+        x: options.x ?? 0,
+        y: options.y ?? 0,
         width: options.width ?? 800,
         height: options.height ?? 600,
       }
@@ -44,16 +45,52 @@ const electron = vi.hoisted(() => {
     app: { isHidden: vi.fn(() => false), show: vi.fn() },
     BrowserWindow,
     windows,
+    screen: {
+      getDisplayMatching: vi.fn(() => ({
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+      })),
+    },
   }
 })
 
-vi.mock('electron', () => ({ app: electron.app, BrowserWindow: electron.BrowserWindow }))
+vi.mock('electron', () => ({
+  app: electron.app,
+  BrowserWindow: electron.BrowserWindow,
+  screen: electron.screen,
+}))
 
 import {
   DesktopDialogWindow,
+  desktopDialogPosition,
   desktopDialogPreferredHeight,
   parseDesktopDialogResponse,
 } from '../src/desktop-dialog-window.ts'
+
+describe('desktopDialogPosition', () => {
+  it('centers over the parent window on the parent display', () => {
+    expect(desktopDialogPosition(
+      { x: 2500, y: 300, width: 800, height: 600 },
+      { width: 480, height: 300 },
+      { x: 1920, y: 0, width: 1920, height: 1032 },
+    )).toEqual({ x: 2660, y: 450 })
+  })
+
+  it('clamps into the work area when the parent sits near an edge', () => {
+    expect(desktopDialogPosition(
+      { x: 1700, y: 0, width: 800, height: 600 },
+      { width: 480, height: 300 },
+      { x: 0, y: 0, width: 1920, height: 1032 },
+    )).toEqual({ x: 1440, y: 150 })
+  })
+
+  it('pins to the work-area origin when the dialog exceeds the display', () => {
+    expect(desktopDialogPosition(
+      { x: 0, y: 0, width: 800, height: 600 },
+      { width: 480, height: 300 },
+      { x: 0, y: 0, width: 400, height: 300 },
+    )).toEqual({ x: 0, y: 0 })
+  })
+})
 
 describe('DesktopDialogWindow', () => {
   beforeEach(() => {
@@ -74,7 +111,7 @@ describe('DesktopDialogWindow', () => {
     expect(desktopDialogPreferredHeight(134, 'darwin')).toBe(166)
   })
 
-  it('creates a frameless parented modal shadcn window and returns its explicit response', async () => {
+  it('creates a frameless parented modal shadcn window centered on the parent', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     const parent = new electron.BrowserWindow({})
     const dialog = new DesktopDialogWindow({
@@ -89,12 +126,15 @@ describe('DesktopDialogWindow', () => {
     const result = dialog.run()
     await vi.waitFor(() => { expect(electron.windows).toHaveLength(2) })
     const window = electron.windows[1]
+    // 480x300 dialog centered over the 800x600 parent at the work-area origin.
     expect(window?.options).toEqual(expect.objectContaining({
       parent,
       modal: true,
       frame: false,
       closable: false,
       resizable: false,
+      x: 160,
+      y: 150,
       height: 300,
       useContentSize: true,
       webPreferences: expect.objectContaining({
@@ -121,6 +161,8 @@ describe('DesktopDialogWindow', () => {
     window?.webListeners.get('did-finish-load')?.()
     expect(window?.setContentSize).toHaveBeenCalledWith(480, 134, false)
     expect(window?.setBounds).not.toHaveBeenCalled()
+    // The reveal re-centers with the final preferred bounds before showing.
+    expect(window?.setPosition).toHaveBeenCalledWith(160, 150)
     expect(window?.show).toHaveBeenCalledOnce()
     const event = { preventDefault: vi.fn() }
     navigate?.(event, 'dsh-desktop-dialog://response?id=0')
@@ -198,9 +240,13 @@ describe('DesktopDialogWindow', () => {
       presentation: 'profile-compatibility',
       advisory: 'Warning: DSH version differences may make plugins unavailable.',
     })
+    // A standalone dialog has no parent to center on and must not reposition.
+    expect(window?.options).not.toHaveProperty('x')
+    expect(window?.options).not.toHaveProperty('y')
     window?.webListeners.get('preferred-size-changed')?.({}, { width: 480, height: 320 })
     window?.webListeners.get('did-finish-load')?.()
     expect(window?.setContentSize).toHaveBeenCalledWith(480, 320, false)
+    expect(window?.setPosition).not.toHaveBeenCalled()
     window?.webListeners.get('will-navigate')?.(
       { preventDefault: vi.fn() },
       'dsh-desktop-dialog://response?id=2',

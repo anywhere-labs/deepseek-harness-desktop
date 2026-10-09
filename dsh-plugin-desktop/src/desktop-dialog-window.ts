@@ -1,5 +1,6 @@
 /** Isolated shadcn-backed Desktop dialog rendered as a modal BrowserWindow. */
 
+import { screen } from 'electron'
 import type { BrowserWindow, MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import { fileURLToPath } from 'node:url'
 import {
@@ -29,6 +30,34 @@ export function desktopDialogPreferredHeight(
 ): number {
   return preferredHeight + (platform === 'win32' || presentation === 'profile-compatibility'
     ? 0 : DIALOG_PREFERRED_HEIGHT_OFFSET)
+}
+
+/**
+ * Center a dialog over its parent window, clamped into the work area of the
+ * display that contains the parent.
+ *
+ * Electron centers a new window without an explicit position on the display
+ * nearest the freshly created, still hidden window - which sits at the
+ * virtual-desktop origin, i.e. the primary display. A parented dialog left to
+ * that default therefore opens on the primary monitor whenever the parent
+ * lives on a secondary one, so parented dialogs must carry an explicit
+ * position computed from the parent's own bounds.
+ */
+export function desktopDialogPosition(
+  parentBounds: Electron.Rectangle,
+  size: { readonly width: number; readonly height: number },
+  workArea: Electron.Rectangle,
+): { x: number; y: number } {
+  const centerX = Math.round(parentBounds.x + (parentBounds.width - size.width) / 2)
+  const centerY = Math.round(parentBounds.y + (parentBounds.height - size.height) / 2)
+  return {
+    x: workArea.width >= size.width
+      ? Math.min(Math.max(centerX, workArea.x), workArea.x + workArea.width - size.width)
+      : workArea.x,
+    y: workArea.height >= size.height
+      ? Math.min(Math.max(centerY, workArea.y), workArea.y + workArea.height - size.height)
+      : workArea.y,
+  }
 }
 
 export interface DesktopDialogOptions {
@@ -103,13 +132,26 @@ export class DesktopDialogWindow {
     const customFrame = auxiliaryWindowHasCustomFrame(process.platform, windowControls)
     const diagnostic = this.options.presentation === 'diagnostic'
     const dialogWidth = diagnostic ? DIAGNOSTIC_DIALOG_WIDTH : DIALOG_WIDTH
+    const initialHeight = diagnostic ? DIAGNOSTIC_DIALOG_INITIAL_HEIGHT : DIALOG_INITIAL_HEIGHT
+    // A parented dialog must be positioned explicitly: Electron centers a
+    // window without x/y on the primary display (the display nearest the
+    // hidden window at creation), which strands the dialog on the wrong
+    // monitor whenever the parent sits on a secondary display.
+    const dialogPosition = parent === undefined
+      ? undefined
+      : desktopDialogPosition(
+          parent.getBounds(),
+          { width: dialogWidth, height: initialHeight },
+          screen.getDisplayMatching(parent.getBounds()).workArea,
+        )
     const window = createDesktopLocalWindow({
       partition: 'dsh-desktop-dialog',
       preferredSizeMode: true,
       title: this.options.title,
       ...auxiliaryWindowChromeOptions(process.platform, windowControls),
       width: dialogWidth,
-      height: diagnostic ? DIAGNOSTIC_DIALOG_INITIAL_HEIGHT : DIALOG_INITIAL_HEIGHT,
+      height: initialHeight,
+      ...(dialogPosition === undefined ? {} : dialogPosition),
       useContentSize: true,
       minWidth: diagnostic ? 560 : 420,
       maxWidth: diagnostic ? 860 : 620,
@@ -138,6 +180,18 @@ export class DesktopDialogWindow {
         revealed = true
         if (revealTimer !== undefined) clearTimeout(revealTimer)
         revealTimer = undefined
+        if (parent !== undefined) {
+          // Re-center with the actual bounds: the creation-time position only
+          // knew the initial height, and preferred-size resizing grows the
+          // window downward from its top-left corner.
+          const bounds = window.getBounds()
+          const position = desktopDialogPosition(
+            bounds,
+            { width: bounds.width, height: bounds.height },
+            screen.getDisplayMatching(bounds).workArea,
+          )
+          window.setPosition(position.x, position.y)
+        }
         revealApplication(window)
       }
       const finish = (response: number): void => {
