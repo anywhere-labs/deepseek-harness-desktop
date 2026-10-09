@@ -3,7 +3,7 @@
 import type { MenuItemConstructorOptions } from 'electron'
 
 /** Languages supported by the native shell menu. */
-export type NativeMenuLocale = 'en' | 'zh-CN'
+export type NativeMenuLocale = 'en' | 'zh-CN' | 'zh-TW'
 
 interface NativeMenuLabels {
   readonly about: string
@@ -100,12 +100,50 @@ const LABELS: Readonly<Record<NativeMenuLocale, NativeMenuLabels>> = {
     zoomIn: '放大',
     zoomOut: '缩小',
   },
+  'zh-TW': {
+    about: '關於',
+    closeWindow: '關閉視窗',
+    copy: '拷貝',
+    cut: '剪下',
+    delete: '刪除',
+    edit: '編輯',
+    file: '檔案',
+    forceReload: '強制重新載入',
+    hide: '隱藏',
+    hideOthers: '隱藏其他',
+    minimize: '縮到最小',
+    paste: '貼上',
+    pasteAndMatchStyle: '貼上並符合樣式',
+    quit: '結束',
+    redo: '重做',
+    reload: '重新載入',
+    resetZoom: '實際大小',
+    selectAll: '全選',
+    services: '服務',
+    showAll: '顯示全部',
+    toggleDevTools: '開發者工具',
+    toggleFullScreen: '進入全螢幕',
+    undo: '還原',
+    view: '顯示方式',
+    window: '視窗',
+    windowFront: '將所有視窗移到最前',
+    windowZoom: '縮放',
+    zoomIn: '放大',
+    zoomOut: '縮小',
+  },
 }
 
 /** Pick the first supported language from the macOS preference order. */
 export function nativeMenuLocale(preferredLanguages: readonly string[]): NativeMenuLocale {
   for (const language of preferredLanguages) {
     const normalized = language.toLowerCase().replaceAll('_', '-')
+    // Traditional-script regions resolve to zh-TW before the Simplified branches below.
+    if (normalized === 'zh-tw'
+      || normalized === 'zh-hk'
+      || normalized === 'zh-mo'
+      || normalized.startsWith('zh-hant')) {
+      return 'zh-TW'
+    }
     if (normalized === 'zh'
       || normalized === 'zh-cn'
       || normalized === 'zh-sg'

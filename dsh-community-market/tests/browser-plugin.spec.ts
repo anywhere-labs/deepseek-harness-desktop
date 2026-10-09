@@ -60,7 +60,13 @@ function bench() {
     },
   }
   const localeService = {
-    register(namespace: string, next: { zh: Record<string, string>; en: Record<string, string> }): () => void {
+    register(
+      namespace: string,
+      next: string | { zh: Record<string, string>; en: Record<string, string> },
+      _dict?: Record<string, string>,
+    ): () => void {
+      // Per-locale language-pack registration is not consulted by this bench.
+      if (typeof next === 'string') return () => {}
       dictionaries.set(namespace, next)
       return () => { dictionaries.delete(namespace) }
     },

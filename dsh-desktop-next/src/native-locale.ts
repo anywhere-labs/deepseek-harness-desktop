@@ -2,12 +2,12 @@
 import { join } from 'node:path'
 import { parseDocument } from 'yaml'
 import { atomicJson, readPrivateFile } from './private-files.ts'
-import { preferredDesktopLocale } from './menu-locale.ts'
+import { desktopLocaleFromLanguageTag, preferredDesktopLocale, type DesktopLocale } from './menu-locale.ts'
 
-type Locale = 'zh' | 'en'
+type Locale = DesktopLocale
 function supported(value: unknown): Locale | undefined {
   if (typeof value !== 'string' || !/^(zh|en)(?:[-_][a-zA-Z0-9]+)*$/iu.test(value)) return undefined
-  return preferredDesktopLocale([value])
+  return desktopLocaleFromLanguageTag(value)
 }
 
 export class NativeLocaleStore {

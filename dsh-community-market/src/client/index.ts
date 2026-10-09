@@ -12,7 +12,7 @@ import { MarketLauncher } from './MarketLauncher.js'
 import { MarketOverlay } from './MarketOverlay.js'
 import { MarketSettingsTab } from './MarketSettingsTab.js'
 import { createMarketViewStore } from './market-view-store.js'
-import { en, zh } from './locales.js'
+import { en, zh, zhTw } from './locales.js'
 import { installMarketStyles } from './styles.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -28,6 +28,7 @@ export function apply(ctx: ClientContext): void {
   const marketView = createMarketViewStore()
   const readLocale = () => ctx.locale.getLocale().active
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'community-market: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, 'zh-TW', zhTw), 'community-market: Traditional Chinese dictionary')
   ctx.effect(() => installMarketStyles(), 'community-market: styles')
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
