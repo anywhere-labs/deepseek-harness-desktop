@@ -89,6 +89,7 @@ vi.mock('electron', async () => {
     setVibrancy() {}
     setBackgroundColor() {}
     setBackgroundMaterial() {}
+    setTitleBarOverlay = vi.fn()
     async loadURL(url: string) { this.webContents.mainFrame.url = url; this.loadedUrls.push(url); await fixture.load(this, url) }
   }
   class Tray extends EventEmitter {
@@ -229,6 +230,30 @@ it('captures scoped client errors with either Electron console-message signature
     expect(fixture.diagnosticAppend).toHaveBeenCalledWith(expect.objectContaining({ source: 'renderer', event: 'console', message: '[next-ui-diagnostic] aa=false', level: 'warn', developer: true }))
     expect(fixture.diagnosticAppend).toHaveBeenCalledWith(expect.objectContaining({ source: 'renderer', level: 'error', developer: false }))
   } finally {
+    vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
+  }
+})
+
+it('keeps the Windows caption buttons transparent so full-window official surfaces show beneath them', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'next-windows-caption-'))
+  vi.stubEnv('DSH_DESKTOP_NEXT_HOME', home)
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { ...platform, value: 'win32' })
+  try {
+    await import('../src/main.ts')
+    await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
+    const window = fixture.windows[0]
+    expect(window.options.titleBarOverlay).toEqual({ height: 40, color: '#00000000', symbolColor: '#f9fafb' })
+    const sender = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    const appearance = fixture.handlers.get('dsh-next:windows-appearance')!
+    // The recorded preload reports the language, the sidebar fill and the primary label color.
+    appearance(sender, 'zh-CN', 'rgba(27, 27, 28, 1)', 'rgba(249, 250, 251, 1)')
+    expect(window.setTitleBarOverlay).toHaveBeenCalledWith({ color: '#00000000', symbolColor: 'rgba(249, 250, 251, 1)' })
+    appearance(sender, 'zh-CN', 'rgba(27, 27, 28, 1)', 'red')
+    appearance({ ...sender, senderFrame: { url: 'dsh-app://app/' } }, 'zh-CN', 'rgba(27, 27, 28, 1)', 'rgba(15, 17, 21, 1)')
+    expect(window.setTitleBarOverlay).toHaveBeenCalledOnce()
+  } finally {
+    Object.defineProperty(process, 'platform', platform)
     vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
   }
 })
