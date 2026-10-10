@@ -8,6 +8,7 @@ import { DESKTOP_FRAME_HEIGHT } from '../src/window-chrome.ts'
 
 const terminal = vi.hoisted(() => ({ open: vi.fn() }))
 const diagnostics = vi.hoisted(() => ({ export: vi.fn() }))
+const unicodePicker = vi.hoisted(() => ({ pick: vi.fn() }))
 const updater = vi.hoisted(() => ({
   download: vi.fn(),
   filename: vi.fn(),
@@ -63,6 +64,9 @@ vi.mock('../src/diagnostic-export.ts', () => ({
   exportDesktopDiagnostics: diagnostics.export,
 }))
 
+vi.mock('../src/windows-unicode-directory-picker.ts', () => ({
+  pickWindowsUnicodeDirectory: unicodePicker.pick,
+}))
 
 vi.mock('../src/update-download.ts', () => ({
   desktopUpdateFilename: updater.filename,
@@ -387,6 +391,7 @@ describe('Electron desktop runtime', () => {
     updater.resolve.mockReset()
     updater.resolve.mockResolvedValue(undefined)
     diagnostics.export.mockReset()
+    unicodePicker.pick.mockReset()
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
     electron.sessionFetch.mockReset()
@@ -875,6 +880,26 @@ describe('Electron desktop runtime', () => {
     )
 
     await release()
+  })
+
+  it('repairs an inaccessible Unicode Windows selection through the runtime adapter', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    electron.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['D:\\Ѹ������'] })
+    unicodePicker.pick.mockResolvedValue('D:\\迅雷下载')
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    const release = runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    try {
+      await expect(runtime.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+      await expect(runtime.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+      expect(unicodePicker.pick).toHaveBeenCalledWith('Select Workspace Directory')
+      expect(unicodePicker.pick).toHaveBeenCalledTimes(2)
+      expect(electron.dialog.showOpenDialog).toHaveBeenCalledOnce()
+    } finally {
+      await release()
+    }
   })
 
   it('routes the macOS native flow through a trusted renderer and a parented Electron dialog', async () => {

@@ -49,6 +49,91 @@ describe('Electron workspace admission', () => {
     expect(showOpenDialog).not.toHaveBeenCalled()
   })
 
+  it('retries an inaccessible non-ASCII Windows result and keeps using the Unicode picker', async () => {
+    const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ['D:\\Ѹ������'] }))
+    const pickWindowsUnicodeDirectory = vi.fn(async () => 'D:\\迅雷下载')
+    const { admission: subject, options } = admission({
+      locale: () => 'zh',
+      showOpenDialog,
+      pickWindowsUnicodeDirectory,
+      inspectPath: () => undefined,
+    })
+
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    expect(showOpenDialog).toHaveBeenCalledOnce()
+    expect(pickWindowsUnicodeDirectory).toHaveBeenCalledTimes(2)
+    expect(pickWindowsUnicodeDirectory).toHaveBeenCalledWith('选择工作区目录')
+    expect(options.logError).toHaveBeenCalledWith(expect.stringContaining('inaccessible non-ASCII path'))
+  })
+
+  it('keeps an existing Unicode path returned by Electron', async () => {
+    const pickWindowsUnicodeDirectory = vi.fn(async () => 'D:\\其他目录')
+    const { admission: subject } = admission({
+      showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['D:\\迅雷下载'] })),
+      pickWindowsUnicodeDirectory,
+      inspectPath: () => ({ directory: true }),
+    })
+
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    expect(pickWindowsUnicodeDirectory).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['win32', false, ['C:\\missing'], 'C:\\missing'],
+    ['darwin', false, ['/测试/项目'], '/测试/项目'],
+    ['win32', true, ['D:\\测试'], null],
+    ['win32', false, [], null],
+  ] as const)('keeps ordinary Electron results on %s (cancelled=%s, paths=%s)', async (platform, canceled, filePaths, expected) => {
+    const pickWindowsUnicodeDirectory = vi.fn(async () => 'D:\\其他目录')
+    const inspectPath = vi.fn(() => undefined)
+    const { admission: subject } = admission({
+      platform,
+      showOpenDialog: vi.fn(async () => ({ canceled, filePaths: [...filePaths] })),
+      pickWindowsUnicodeDirectory,
+      inspectPath,
+    })
+
+    await expect(subject.pickDirectory()).resolves.toBe(expected)
+    expect(pickWindowsUnicodeDirectory).not.toHaveBeenCalled()
+    expect(inspectPath).not.toHaveBeenCalled()
+  })
+
+  it('returns cancellation from the fallback and coalesces later Unicode selections', async () => {
+    let finish: ((path: string | null) => void) | undefined
+    const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ['D:\\Ѹ������'] }))
+    const pickWindowsUnicodeDirectory = vi.fn(async (): Promise<string | null> => null)
+    const { admission: subject } = admission({
+      showOpenDialog,
+      pickWindowsUnicodeDirectory,
+      inspectPath: () => undefined,
+    })
+
+    await expect(subject.pickDirectory()).resolves.toBeNull()
+    pickWindowsUnicodeDirectory.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const first = subject.pickDirectory()
+    const second = subject.pickDirectory()
+    finish?.('D:\\迅雷下载')
+    await expect(Promise.all([first, second])).resolves.toEqual(['D:\\迅雷下载', 'D:\\迅雷下载'])
+    expect(showOpenDialog).toHaveBeenCalledOnce()
+    expect(pickWindowsUnicodeDirectory).toHaveBeenCalledTimes(2)
+  })
+
+  it('releases a failed fallback so a later selection can retry', async () => {
+    const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ['D:\\Ѹ������'] }))
+    const pickWindowsUnicodeDirectory = vi.fn(async () => 'D:\\迅雷下载')
+    pickWindowsUnicodeDirectory.mockRejectedValueOnce(new Error('PowerShell failed'))
+    const { admission: subject } = admission({
+      showOpenDialog,
+      pickWindowsUnicodeDirectory,
+      inspectPath: () => undefined,
+    })
+
+    await expect(subject.pickDirectory()).rejects.toThrow('PowerShell failed')
+    await expect(subject.pickDirectory()).resolves.toBe('D:\\迅雷下载')
+    expect(showOpenDialog).toHaveBeenCalledTimes(2)
+  })
+
   it('allows a fixed NTFS workspace without prompting or logging', async () => {
     const { admission: subject, options } = admission()
 
