@@ -97,7 +97,7 @@ export function desktopPreloadPath(moduleUrl: string = import.meta.url): string 
 const PRODUCT_VERSION = desktopProductVersion()
 
 /** Main-process deadline for one Renderer generation to settle its client Loader. */
-export const RENDERER_BOOT_TIMEOUT_MS = 30_000
+export const RENDERER_BOOT_TIMEOUT_MS = 120_000
 
 /** HTTP statuses whose Response must be constructed without a body stream. */
 const NULL_BODY_STATUSES = new Set([204, 205, 304])

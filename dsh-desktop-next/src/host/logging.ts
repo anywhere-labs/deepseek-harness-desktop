@@ -1,4 +1,5 @@
 /** Observe official logging and event seams without changing their results or stream lifetime. */
+import { recordOfficialInspector, recordOfficialPluginInventory } from './official-diagnostics.ts'
 import { randomUUID } from 'node:crypto'
 import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
@@ -10,9 +11,14 @@ import { HOST_LOG_PREFIX, LOG_LEVELS, sanitize, type LogInput } from '../log-rec
 import type { DesktopPreferences } from '../desktop-contract.ts'
 
 let preferences: Pick<DesktopPreferences, 'developerLogging' | 'logLevel'> = { developerLogging: false, logLevel: 'info' }
+let loggingContext: Context | undefined
 let blocked = false
 let dropped = 0
-export function configureHostLogging(value: Pick<DesktopPreferences, 'developerLogging' | 'logLevel'>): void { preferences = value }
+export function configureHostLogging(value: Pick<DesktopPreferences, 'developerLogging' | 'logLevel'>): void {
+  const enabled = value.developerLogging && !preferences.developerLogging
+  preferences = value
+  if (enabled && loggingContext) auditHostPlugins(loggingContext)
+}
 export function hostLog(input: LogInput): void {
   if (input.developer && !preferences.developerLogging) return
   if (input.developer && LOG_LEVELS.indexOf(input.level ?? 'info') < LOG_LEVELS.indexOf(preferences.logLevel)) return
@@ -60,21 +66,24 @@ class KernelExporter implements Exporter {
 }
 
 export function auditHostPlugins(ctx: Context): void {
-  for (const entry of ctx.loader.entries()) hostLog({ source: 'host.plugins', event: 'plugin.snapshot',
-    fields: { pluginId: entry.id, module: entry.options.name, disabled: entry.disabled, state: entry.fiber?.state ?? null } })
+  if (!preferences.developerLogging) return
+  void recordOfficialPluginInventory(ctx, hostLog)
+  void recordOfficialInspector(ctx, hostLog)
 }
 
 /** Resources follow the capabilities fiber across reload and shutdown. */
 export function installHostLogging(ctx: Context): void {
+  loggingContext = ctx
+  ctx.effect(() => () => { if (loggingContext === ctx) loggingContext = undefined }, 'Next logging context')
+  ctx.inject(['inspector'], child => {
+    if (preferences.developerLogging) void recordOfficialInspector(child, hostLog)
+  })
   const exporter = new KernelExporter()
   ctx.logger.exporter(exporter)
   // The runner has no pre-mount hook. Replay its bounded buffer and audit the settled graph.
   for (const message of ctx.logger.buffer) exporter.export(message)
-  ctx.on('internal/status', (fiber, previous) => {
-    const entry = fiber.entry
-    if (!entry) return
-    hostLog({ source: 'host.plugins', event: 'plugin.state', fields: {
-      pluginId: entry.id, module: entry.options.name, previous, state: fiber.state }, developer: true })
+  ctx.on('internal/status', fiber => {
+    if (preferences.developerLogging && fiber.entry) void recordOfficialPluginInventory(ctx, hostLog, fiber.entry.id)
   })
   ctx.on('agent/error', ({ agent, turn, step, error }) => hostLog({ source: 'host.agent', event: 'agent.failed',
     level: 'error', fields: { sessionId: String(agent.id), turn, step }, error }))
@@ -111,15 +120,25 @@ export function installHostLogging(ctx: Context): void {
   })
   ctx.inject(['sessions'], child => {
     child.on('session/event', (session, event) => {
+      const coordinates = { sessionId: String(session.header.id), sessionEventType: event.type,
+        sessionSequence: event.seq, sessionTime: event.time }
       if (event.type === 'turn/start' || event.type === 'turn/end' || event.type === 'step/start' || event.type === 'step/end') {
-        hostLog({ source: 'host.agent', event: event.type.replace('/', '.'), fields: {
-          sessionId: String(session.header.id), turn: event.data.turn,
+        hostLog({ source: 'host.session', event: event.type, fields: { ...coordinates, turn: event.data.turn,
           ...('step' in event.data ? { step: event.data.step } : {}),
           ...('reason' in event.data ? { outcome: event.data.reason.kind } : {}) }, developer: true })
       }
-      if (event.type === 'tool/result' && event.data.message.isError) hostLog({ source: 'host.tools', event: 'result.failed', level: 'error',
-        fields: { sessionId: String(session.header.id), turn: event.data.turn, step: event.data.step,
-          callId: String(event.data.message.toolCallId), failureCode: event.data.error?.code ?? null } })
+      if (event.type === 'assistant/attempt' || event.type === 'assistant/message') {
+        hostLog({ source: 'host.session', event: event.type, fields: { ...coordinates,
+          turn: event.data.turn, step: event.data.step, streamRecords: event.data.stream.length }, developer: true })
+      }
+      if (event.type === 'tool/call') hostLog({ source: 'host.session', event: event.type,
+        fields: { ...coordinates, turn: event.data.turn, step: event.data.step,
+          callId: String(event.data.callId), tool: event.data.name }, developer: true })
+      if (event.type === 'tool/result') hostLog({ source: 'host.session', event: event.type,
+        level: event.data.message.isError ? 'error' : 'info', developer: !event.data.message.isError,
+        fields: { ...coordinates, turn: event.data.turn, step: event.data.step,
+          callId: String(event.data.message.toolCallId), isError: event.data.message.isError ?? false,
+          failureCode: event.data.error?.code ?? null } })
     })
   })
 }

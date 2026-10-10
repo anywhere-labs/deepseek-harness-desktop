@@ -88,7 +88,7 @@ function NextDesktopOptions({ adapter, state, language }: { adapter: NextSetting
       </div>
       <label className="dshDesktopSettingsMaterialField">{t('日志级别', 'Log level')}<select className="dshDesktopSettingsSelect" value={state.preferences.logLevel} disabled={busy || state.busy || state.safeMode} onChange={event => { const logLevel = event.currentTarget.value as DesktopState['preferences']['logLevel']; void run(() => adapter.savePreferences({ logLevel })) }}>{['debug', 'info', 'warn', 'error'].map(value => <option key={value}>{value}</option>)}</select></label>
       <DesktopSettingsToggleRow label={t('开发者日志', 'Developer logging')} checked={state.preferences.developerLogging} disabled={busy || state.busy || state.safeMode} onChange={developerLogging => { void run(() => adapter.savePreferences({ developerLogging })) }} />
-      <p className="dshDesktopSettingsHint">{t('记录模型请求、工具执行和通信的耗时与结果，不记录聊天正文或工具输入输出。日志保留七天，最多占用 200 MiB。', 'Record model requests, tool execution and communication timing and outcomes, without chat bodies or tool inputs and outputs. History is retained for seven days, up to 200 MiB.')}</p>
+      <p className="dshDesktopSettingsHint">{t('记录模型请求、工具执行和通信的耗时与结果，不记录聊天正文或工具输入输出。日志保留七天，最多占用 200 MiB。会话事件可按序号与官方 Session Log 对照。', 'Record model requests, tool execution and communication timing and outcomes, without chat bodies or tool inputs and outputs. History is retained for seven days, up to 200 MiB. Match session events to the official Session Log by sequence number.')}</p>
       <button type="button" className="dshDesktopSettingsButton" onClick={() => { void run(() => adapter.command({ type: 'controls', page: 'recovery' })) }}>{t('打开恢复助手', 'Open recovery assistant')}</button>
     </section>
   </>

@@ -1,4 +1,4 @@
-import { observeDesktopRenderer } from './renderer-logging.ts'
+import { observeDesktopRenderer, traceRendererBootStage } from './renderer-logging.ts'
 import {
   app,
   BrowserWindow,
@@ -77,19 +77,19 @@ async function authenticateRendererSession(
   const headers = {
     [spec.rendererAccessHeader.name]: spec.rendererAccessHeader.value,
   }
-  const authenticated = await session.fetch(spec.authenticationUrl, {
+  const authenticated = await traceRendererBootStage('authentication-request', () => session.fetch(spec.authenticationUrl, {
     method: 'GET',
     credentials: 'include',
     redirect: 'follow',
     cache: 'no-store',
     headers,
-  })
+  }))
   if (authenticated.status !== 200) {
     throw new Error(
       `dsh-plugin-desktop: browser authentication failed with HTTP ${String(authenticated.status)}`,
     )
   }
-  await authenticated.body?.cancel()
+  await traceRendererBootStage('authentication-body-release', async () => { await authenticated.body?.cancel() })
 }
 
 function sameRendererCarrierOrigin(requestUrl: string, httpOrigin: string, webSocketOrigin: string): boolean {
@@ -662,16 +662,18 @@ export class ElectronShellGeneration {
     }
 
     try {
-      await this.compatibilityShell?.load()
-      await authenticateRendererSession(renderer, spec)
+      await traceRendererBootStage('shell-load', async () => { await this.compatibilityShell?.load() })
+      await traceRendererBootStage('authenticate', () => authenticateRendererSession(renderer, spec))
       removeRendererAccessHeader = installRendererAccessHeader(
         renderer,
         origin,
         spec.rendererAccessHeader,
       )
       revealStartupSurface()
-      if (isolated) await renderer.loadURL(spec.url)
-      else await window.loadURL(spec.url)
+      await traceRendererBootStage('page-load', async () => {
+        if (isolated) await renderer.loadURL(spec.url)
+        else await window.loadURL(spec.url)
+      })
       if (isolated) renderer.focus()
       tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
       this.tray = tray

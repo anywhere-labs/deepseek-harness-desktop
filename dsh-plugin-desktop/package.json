@@ -214,6 +214,7 @@
     "@deepseek-ai/dsh-experimental-agent-team-profile": "0.2.0-rc.2",
     "@deepseek-ai/dsh-experimental-api-speech-to-text": "0.2.0-rc.2",
     "@deepseek-ai/dsh-experimental-auto-review": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-experimental-inspector": "0.2.0-rc.2",
     "@deepseek-ai/dsh-experimental-schedule-bundle": "0.2.0-rc.2",
     "@deepseek-ai/dsh-experimental-speech-to-text": "0.2.0-rc.2",
     "@deepseek-ai/dsh-experimental-voice-input-bundle": "0.2.0-rc.2",

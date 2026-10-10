@@ -4569,6 +4569,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@deepseek-ai/dsh-experimental-inspector@file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-experimental-inspector-0.2.0-rc.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.2.0-rc.2
+  resolution: "@deepseek-ai/dsh-experimental-inspector@file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-experimental-inspector-0.2.0-rc.2.tgz#vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-experimental-inspector-0.2.0-rc.2.tgz::hash=188e4d&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-app-boot": "npm:0.2.0-rc.2"
+    "@deepseek-ai/dsh-brand": "npm:0.2.0-rc.2"
+    "@deepseek-ai/dsh-util-crypto": "npm:0.2.0-rc.2"
+    "@deepseek-ai/schemastery": "npm:~3.18.4"
+    ws: "npm:^8.21.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.4
+    "@deepseek-ai/cordis-plugin-loader": ~1.0.5
+    "@deepseek-ai/dsh-client-modules": 0.2.0-rc.2
+    "@deepseek-ai/dsh-host-webserver": 0.2.0-rc.2
+  checksum: 10c0/f54f7cf7887bee57800a04e9bcbf5a50c5e1c60c4162017d6393b16ce79a55800c19cc93b137f206d1a6ee5694d4b3ad399c291f37640656605b4666d41225c2
+  languageName: node
+  linkType: hard
+
 "@deepseek-ai/dsh-experimental-inspector@file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.2.1-alpha.2
   resolution: "@deepseek-ai/dsh-experimental-inspector@file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz#vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz::hash=ef67e3&locator=deepseek-harness-desktop%40workspace%3A."
@@ -15984,6 +16002,7 @@ __metadata:
     "@deepseek-ai/dsh-experimental-badge-skill-bundle": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-computer-use-cua-driver-native": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-cot-translation-bundle": "npm:0.2.1-alpha.2"
+    "@deepseek-ai/dsh-experimental-inspector": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-inspector-profile": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-ralph-bundle": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-session-search": "npm:0.2.1-alpha.2"
@@ -16210,6 +16229,7 @@ __metadata:
     "@deepseek-ai/dsh-experimental-auto-review": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-badge-skill-bundle": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-cot-translation-bundle": "npm:0.2.1-alpha.2"
+    "@deepseek-ai/dsh-experimental-inspector": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-inspector-profile": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-ralph-bundle": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-experimental-session-search": "npm:0.2.1-alpha.2"
@@ -16433,6 +16453,7 @@ __metadata:
     "@deepseek-ai/dsh-experimental-agent-team-profile": "npm:0.2.0-rc.2"
     "@deepseek-ai/dsh-experimental-api-speech-to-text": "npm:0.2.0-rc.2"
     "@deepseek-ai/dsh-experimental-auto-review": "npm:0.2.0-rc.2"
+    "@deepseek-ai/dsh-experimental-inspector": "npm:0.2.0-rc.2"
     "@deepseek-ai/dsh-experimental-schedule-bundle": "npm:0.2.0-rc.2"
     "@deepseek-ai/dsh-experimental-speech-to-text": "npm:0.2.0-rc.2"
     "@deepseek-ai/dsh-experimental-voice-input-bundle": "npm:0.2.0-rc.2"

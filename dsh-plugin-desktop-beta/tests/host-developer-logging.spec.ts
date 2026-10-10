@@ -81,3 +81,21 @@ it('records the retry decision while delegating the official request-error water
   expect(action).toEqual({ kind: 'retry' }); expect(next).toHaveBeenCalledOnce()
   expect(records().at(-1)).toMatchObject({ event: 'request.retry-decision', fields: { sessionId: 'session-a', turn: 1, step: 2, retry: true } })
 })
+
+it('correlates metadata with canonical Session Log sequence and time without recording its payloads', async () => {
+  const { ctx, records } = await environment()
+  ctx.provide('sessions', {} as never)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  const session = { header: { id: 'session-a' } } as never
+  ctx.emit('session/event', session, { type: 'assistant/message', seq: 17, time: 12345,
+    data: { turn: 2, step: 3, message: { content: 'private model output' }, stream: [{ text: 'private delta' }] } } as never)
+  ctx.emit('session/event', session, { type: 'tool/call', seq: 18, time: 12346,
+    data: { turn: 2, step: 3, callId: 'call-a', name: 'bash', arguments: 'private arguments' } } as never)
+  const events = records().filter(record => record.source === 'host.session')
+  expect(events).toHaveLength(2)
+  expect(events[0]).toMatchObject({ event: 'assistant/message', fields: {
+    sessionId: 'session-a', sessionEventType: 'assistant/message', sessionSequence: 17, sessionTime: 12345, streamRecords: 1,
+  } })
+  expect(events[1]).toMatchObject({ event: 'tool/call', fields: { sessionSequence: 18, callId: 'call-a', tool: 'bash' } })
+  expect(JSON.stringify(events)).not.toContain('private')
+})

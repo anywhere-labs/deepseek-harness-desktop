@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import type { WebContents } from 'electron'
 import { afterEach, expect, it, vi } from 'vitest'
 import { configureDeveloperLogging, diagnosticLog, diagnosticOperation, initializeDeveloperLogging } from '../src/developer-logging.ts'
-import { observeDesktopRenderer } from '../src/renderer-logging.ts'
+import { observeDesktopRenderer, traceRendererBootStage } from '../src/renderer-logging.ts'
 import { createProcessOutputLogging } from '../src/process-output-logging.ts'
 import { sanitize } from '../src/diagnostic-record.ts'
 
@@ -88,4 +88,28 @@ it('retains Host stderr while stdout tracing is disabled', () => {
   stderr.write(Buffer.from('bootstrap failure')); stderr.end()
   expect(records).toHaveLength(1)
   expect(records[0]).toMatchObject({ source: 'host.stderr', message: 'bootstrap failure' })
+})
+
+it('keeps pending boot milestones with tracing disabled and preserves results and errors', async () => {
+  capture(false, 'error')
+  const pending = Promise.withResolvers<object>()
+  const operation = traceRendererBootStage('authenticate', () => pending.promise)
+  expect(records.map(record => record.event)).toEqual(['authenticate.start'])
+  const result = {}
+  pending.resolve(result)
+  await expect(operation).resolves.toBe(result)
+  expect(records.at(-1)).toMatchObject({ event: 'authenticate.complete', operationId: records[0].operationId })
+  const failure = new Error('load failed')
+  await expect(traceRendererBootStage('page-load', async () => { throw failure })).rejects.toBe(failure)
+  expect(records.at(-1)).toMatchObject({ event: 'page-load.failed', error: { message: 'load failed' } })
+})
+it('records document readiness and preload failures before client plugins start', () => {
+  capture(false)
+  const contents = Object.assign(new EventEmitter(), { id: 7 })
+  observeDesktopRenderer(contents as unknown as WebContents, 'application')
+  contents.emit('dom-ready')
+  contents.emit('preload-error', {}, '/not/exported', new Error('preload failed'))
+  expect(records.map(record => record.event)).toEqual(['document.ready', 'preload.failed'])
+  expect(records[1]).toMatchObject({ level: 'error', error: { message: 'preload failed' } })
+  expect(JSON.stringify(records)).not.toContain('/not/exported')
 })
