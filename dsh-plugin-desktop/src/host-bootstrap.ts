@@ -7,6 +7,7 @@ import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@dee
 import { DESKTOP_PACKAGE_NAME as BIN_NAME } from './product-identity.ts'
 import { observeDesktopPreferenceSettings } from './settings-bridge.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
+import { DesktopPluginPackages } from './plugin-packages.ts'
 import { createDesktopWebProfile, listDesktopProfiles, canDeleteDesktopProfile, deleteDesktopProfile, selectDesktopProfile } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
 import { DesktopActionsService } from './desktop-actions.ts'
@@ -132,6 +133,8 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
           () => releasePackageResolver,
           'dsh-plugin-desktop: profile package resolution',
         )
+        // Official plugin metadata and package lookups read the packages this resolver loads.
+        await hostCtx.plugin(DesktopPluginPackages)
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, desktopLaunchEnvironment)
         hostCtx.provide('desktopBrowserAccess', browserAccess)
         hostCtx.provide('desktopLanHttps', lanHttps)
