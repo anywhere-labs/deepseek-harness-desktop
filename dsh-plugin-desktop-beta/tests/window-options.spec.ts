@@ -82,6 +82,7 @@ describe('compatibility BrowserWindow options', () => {
     expect(options.autoHideMenuBar).toBe(true)
     expect(options.titleBarStyle).toBe('hidden')
     expect(options.titleBarOverlay).toEqual(expect.objectContaining({ height: DESKTOP_FRAME_HEIGHT }))
+    expect(options.backgroundMaterial).toBe('none')
   })
 
   it('keeps the ordinary native frame as the Linux compatibility fallback', () => {
@@ -148,12 +149,12 @@ describe('compatibility BrowserWindow options', () => {
         height: ADVANCED_WINDOWS_TITLEBAR_HEIGHT,
       },
       backgroundColor: '#202124',
+      backgroundMaterial: 'none',
       hasShadow: true,
       roundedCorners: true,
       thickFrame: true,
     }))
     expect(options).not.toHaveProperty('transparent')
-    expect(options).not.toHaveProperty('backgroundMaterial')
   })
 
   it('uses the taller native caption on an opaque extended Windows window', () => {
@@ -168,9 +169,9 @@ describe('compatibility BrowserWindow options', () => {
       titleBarStyle: 'hidden',
       titleBarOverlay: expect.objectContaining({ height: DESKTOP_FRAME_HEIGHT }),
       backgroundColor: '#202124',
+      backgroundMaterial: 'none',
     }))
     expect(options).not.toHaveProperty('transparent')
-    expect(options).not.toHaveProperty('backgroundMaterial')
     expect(DESKTOP_FRAME_HEIGHT).toBe(36)
     expect(desktopWindowOptions(extended, {} as NativeImage, 'win32', preload)).toEqual(options)
   })

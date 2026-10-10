@@ -142,6 +142,7 @@ function customChromeWindowOptions(
         symbolColor: '#7f858f',
         height: geometry.titlebarHeight,
       },
+      backgroundMaterial: 'none',
       hasShadow: true,
       roundedCorners: true,
       thickFrame: true,

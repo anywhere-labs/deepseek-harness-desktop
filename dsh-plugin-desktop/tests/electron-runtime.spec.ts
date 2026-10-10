@@ -2899,11 +2899,11 @@ describe('Electron desktop runtime', () => {
 
     expect(electron.browserWindowOptions[0]).toEqual(expect.objectContaining({
       backgroundColor: '#202124',
+      backgroundMaterial: 'none',
       titleBarOverlay: expect.objectContaining({ height: DESKTOP_FRAME_HEIGHT }),
     }))
     expect(electron.contentViews).toHaveLength(2)
     expect(electron.browserWindowOptions[0]).not.toHaveProperty('transparent')
-    expect(electron.browserWindowOptions[0]).not.toHaveProperty('backgroundMaterial')
     expect(electron.menuTemplates[0]).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Mode: Extended Window', enabled: true }),
     ]))
@@ -2911,7 +2911,7 @@ describe('Electron desktop runtime', () => {
     await release()
   })
 
-  it('never installs a native backdrop on Windows, even after a live theme change', async () => {
+  it('disables the native Windows backdrop and does not reapply it after a live theme change', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     electron.nativeTheme.themeSource = 'light'
     const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
@@ -2927,6 +2927,7 @@ describe('Electron desktop runtime', () => {
 
     expect(electron.browserWindowOptions[0]).toEqual(expect.objectContaining({
       backgroundColor: '#202124',
+      backgroundMaterial: 'none',
       roundedCorners: true,
       thickFrame: true,
     }))
