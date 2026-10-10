@@ -31,7 +31,7 @@ for (const version of ['0.2.1-alpha.2', '0.2.0-rc.2']) {
   mkdirSync(base, { recursive: true })
   execFileSync('tar', ['-xzf', join(root, `vendor/dsh-runtime/${version}/deepseek-ai-dsh-api-session-controller-${version}.tgz`), '-C', base], { env: { ...process.env, LC_ALL: 'C' } })
   let pkg = join(base, 'package')
-  if (process.env.DSH_ISSUE369_UNPATCHED !== '1') execFileSync('git', ['apply', join(process.env.DSH_ISSUE369_PATCH_DIR ?? join(root, 'patches'), `dsh-api-session-controller@${version}-desktop-trash.patch`)], { cwd: pkg })
+  if (process.env.DSH_ISSUE369_UNPATCHED !== '1') execFileSync('git', ['apply', join(process.env.DSH_ISSUE369_PATCH_DIR ?? join(root, 'patches'), `dsh-api-session-controller@${version}.patch`)], { cwd: pkg })
   if (process.env.DSH_ISSUE369_INSTALLED === '1') pkg = join(root, version === '0.2.0-rc.2' ? 'dsh-plugin-desktop' : 'dsh-plugin-desktop-beta', 'node_modules/@deepseek-ai/dsh-api-session-controller')
   const load = name => readFileSync(join(pkg, 'lib/types', name), 'utf8')
   const bundle = readFileSync(join(pkg, 'lib/index.js'), 'utf8')

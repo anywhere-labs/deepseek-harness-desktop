@@ -1720,9 +1720,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-api-session-controller-0.2.0-rc.2.tgz#./patches/dsh-api-session-controller@0.2.0-rc.2-desktop-trash.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+"@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-api-session-controller-0.2.0-rc.2.tgz#./patches/dsh-api-session-controller@0.2.0-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.2.0-rc.2
-  resolution: "@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-api-session-controller-0.2.0-rc.2.tgz%23vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-api-session-controller-0.2.0-rc.2.tgz%3A%3Ahash=eb6dad&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-api-session-controller@0.2.0-rc.2-desktop-trash.patch::version=0.2.0-rc.2&hash=9a4d36&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-api-session-controller-0.2.0-rc.2.tgz%23vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-api-session-controller-0.2.0-rc.2.tgz%3A%3Ahash=eb6dad&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-api-session-controller@0.2.0-rc.2.patch::version=0.2.0-rc.2&hash=9a4d36&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@deepseek-ai/dsh-brand": "npm:0.2.0-rc.2"
     "@deepseek-ai/dsh-deque": "npm:0.2.0-rc.2"
@@ -1771,9 +1771,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-api-session-controller-0.2.1-alpha.2.tgz#./patches/dsh-api-session-controller@0.2.1-alpha.2-desktop-trash.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+"@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-api-session-controller-0.2.1-alpha.2.tgz#./patches/dsh-api-session-controller@0.2.1-alpha.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.2.1-alpha.2
-  resolution: "@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-api-session-controller-0.2.1-alpha.2.tgz%23vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-api-session-controller-0.2.1-alpha.2.tgz%3A%3Ahash=a4babb&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-api-session-controller@0.2.1-alpha.2-desktop-trash.patch::version=0.2.1-alpha.2&hash=997ac5&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-api-session-controller@patch:@deepseek-ai/dsh-api-session-controller@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-api-session-controller-0.2.1-alpha.2.tgz%23vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-api-session-controller-0.2.1-alpha.2.tgz%3A%3Ahash=a4babb&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-api-session-controller@0.2.1-alpha.2.patch::version=0.2.1-alpha.2&hash=997ac5&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@deepseek-ai/dsh-brand": "npm:0.2.1-alpha.2"
     "@deepseek-ai/dsh-deque": "npm:0.2.1-alpha.2"
