@@ -106,6 +106,10 @@ function installUiDiagnostics(): () => void {
       plugins: document.querySelector('[data-next-plugin-controls]') !== null,
     }
   }
+  const onError = (event: ErrorEvent): void => { console.error(`[next-ui-error] ${String(event.error?.stack ?? event.message).slice(0, 8192)}`) }
+  const onRejection = (event: PromiseRejectionEvent): void => { console.error(`[next-ui-error] ${String(event.reason?.stack ?? event.reason).slice(0, 8192)}`) }
+  window.addEventListener('error', onError)
+  window.addEventListener('unhandledrejection', onRejection)
   let previous = read()
   let lastInput = 'none'
   const trace = (message: string): void => { console.warn(`[next-ui-diagnostic] ${message}`) }
@@ -137,6 +141,8 @@ function installUiDiagnostics(): () => void {
   document.addEventListener('pointerdown', onPointerDown, true)
   document.addEventListener('keydown', onKeyDown, true)
   return () => {
+    window.removeEventListener('error', onError)
+    window.removeEventListener('unhandledrejection', onRejection)
     observer.disconnect()
     document.removeEventListener('pointerdown', onPointerDown, true)
     document.removeEventListener('keydown', onKeyDown, true)

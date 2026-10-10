@@ -112,6 +112,27 @@ describe('desktop host process', () => {
     expect(failure).not.toHaveBeenCalled()
   })
 
+  it('applies logging settings through correlated acknowledgements and records IPC metadata only', async () => {
+    const runtime = projectWithHost(HTTP_HOST.replace("  if (message.type === 'browser-access') {", `
+      if (message.type === 'logging-config') {
+        process.send({ type: 'logging-config', requestId: message.requestId }); return;
+      }
+      if (message.type === 'browser-access') {`))
+    const diagnostic = vi.fn()
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, diagnostic)
+    hosts.push(host)
+    await host.start()
+    await Promise.all([host.setLogging({ developerLogging: true, logLevel: 'debug' }), host.setLogging({ developerLogging: false, logLevel: 'info' })])
+    const complete = diagnostic.mock.calls.map(([record]) => record).filter(record => record.event === 'control.complete')
+    expect(complete).toHaveLength(2)
+    expect(complete[0].operationId).not.toBe(complete[1].operationId)
+    expect(complete[0]).toMatchObject({ source: 'host.ipc', fields: { type: 'logging-config' } })
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain('token=fixture')
+    await host.stop()
+    await expect(host.setLogging({ developerLogging: true, logLevel: 'info' })).rejects.toThrow('unavailable')
+  })
+
   it('correlates browser-policy acknowledgements and refuses stale or failed changes', async () => {
     const host = hostProcess(projectWithHost())
     await expect(host.setBrowserAccess(true)).rejects.toThrow('unavailable')

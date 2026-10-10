@@ -2,11 +2,14 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DEFAULT_PREFERENCES, SAFE_MODE_PREFERENCES } from '../src/desktop-contract.ts'
 import type { NextDesktopRuntime } from '../src/desktop-runtime.ts'
 import { NextProfiles } from '../src/profiles.ts'
 import { NextRecovery } from '../src/recovery.ts'
+
+const originalMonitors = new Set(process.listeners('uncaughtExceptionMonitor'))
+afterEach(() => { for (const listener of process.listeners('uncaughtExceptionMonitor')) if (!originalMonitors.has(listener)) process.off('uncaughtExceptionMonitor', listener) })
 
 const fixture = vi.hoisted(() => ({
   windows: [] as any[], trays: [] as any[], handlers: new Map<string, (...args: any[]) => any>(),
@@ -29,7 +32,7 @@ vi.mock('../src/desktop-runtime.ts', async () => { const { NextProfiles } = awai
   backend = { stop: fixture.stop, host: undefined, get state() { return { phase: fixture.phase } } }
   profiles: NextProfiles
   recovery: import('../src/recovery.ts').NextRecovery
-  diagnostics = { append: fixture.diagnosticAppend, flush: vi.fn(), hostChunk: vi.fn() }
+  diagnostics = { append: fixture.diagnosticAppend, flush: vi.fn(), hostChunk: vi.fn(), record: fixture.diagnosticAppend, operation: vi.fn(() => vi.fn()), begin: vi.fn(), end: vi.fn(), pendingOperations: vi.fn(() => []) }
   constructor(options: ConstructorParameters<typeof NextDesktopRuntime>[0]) {
     fixture.runtimeOptions = options
     fixture.preferences = this.preferences; fixture.onPermission = options.onPermission
@@ -217,12 +220,14 @@ it('captures scoped client errors with either Electron console-message signature
     await import('../src/main.ts')
     await vi.waitFor(() => expect(fixture.windows).toHaveLength(1))
     const consoleMessage = fixture.windows[0].webContents
+    Object.assign(fixture.preferences, { developerLogging: true })
     consoleMessage.emit('console-message', {}, 2, '[next-ui-diagnostic] aa=false')
     consoleMessage.emit('console-message', { message: "slot entry crashed in 'sidebar.footer.action': error" })
     consoleMessage.emit('console-message', {}, 2)
     consoleMessage.emit('console-message', {}, 2, 'unrelated output')
-    expect(fixture.diagnosticAppend).toHaveBeenCalledTimes(2)
-    expect(fixture.diagnosticAppend).toHaveBeenCalledWith('[next-ui-diagnostic] aa=false', 'warn')
+    expect(fixture.diagnosticAppend).toHaveBeenCalledTimes(3)
+    expect(fixture.diagnosticAppend).toHaveBeenCalledWith(expect.objectContaining({ source: 'renderer', event: 'console', message: '[next-ui-diagnostic] aa=false', level: 'warn', developer: true }))
+    expect(fixture.diagnosticAppend).toHaveBeenCalledWith(expect.objectContaining({ source: 'renderer', level: 'error', developer: false }))
   } finally {
     vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true })
   }
@@ -385,6 +390,7 @@ it.each(['ready', 'error'] as const)('allows five seconds for native menu teardo
     expect(app.exit).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(app.exit).toHaveBeenCalledExactlyOnceWith(1)
+    expect(fixture.diagnosticAppend).toHaveBeenCalledWith(expect.objectContaining({ source: 'electron', event: 'shutdown.timeout', level: 'error' }))
     finishClose()
     await vi.advanceTimersByTimeAsync(10_000)
     expect(app.quit).toHaveBeenCalledOnce()

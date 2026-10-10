@@ -17,6 +17,8 @@ it('keeps desktop preferences separate from the Host and validates all IPC-contr
   const { home } = environment()
   const store = new DesktopPreferenceStore(home)
   expect(store.read()).toEqual(DEFAULT_PREFERENCES)
+  expect(parsePreferences({ developerLogging: true }).developerLogging).toBe(true)
+  expect(() => parsePreferences({ developerLogging: 'true' })).toThrow()
   expect(parsePreferences({ notifications: true, turnCompleted: true, turnFailed: true })).toMatchObject({ scheduleCompleted: true, scheduleFailed: true })
   expect(parsePreferences({ jobCompleted: true, jobFailed: true })).toMatchObject({ jobCompleted: false, jobFailed: false })
   store.write({ ...DEFAULT_PREFERENCES, browserAccess: true, port: 3123, closeToTray: false })

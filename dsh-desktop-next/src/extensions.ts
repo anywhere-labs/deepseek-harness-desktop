@@ -1,4 +1,5 @@
 /** Narrow Host capabilities consumed by the existing plugin markets. */
+import { installHostLogging } from './host/logging.ts'
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -14,6 +15,7 @@ export const name = 'desktop-next-capabilities'
 export const inject = ['profileContext']
 
 export function apply(ctx: Context): void {
+  installHostLogging(ctx)
   if (process.send) {
     const permissions = new HostPermissions(process)
     ctx.provide('desktopPermissions', permissions)

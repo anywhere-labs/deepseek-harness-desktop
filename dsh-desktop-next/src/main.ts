@@ -231,6 +231,28 @@ function createWindow(preload: string, primary = false): BrowserWindow {
     // `DesktopBrowserGuests` issued the lease, and the guest itself never gets the tag.
     webPreferences: { preload: join(root, 'lib', preload), contextIsolation: true, sandbox: true, nodeIntegration: false, webviewTag: primary },
   })
+  let intervalStart = Date.now()
+  let count = 0
+  let failureCount = 0
+  // The Host log otherwise misses client slot failures: the renderer can retire
+  // an entry (and its portalled dialog) without crashing the Electron process.
+  window.webContents.on('console-message', (event, _level, legacyMessage) => {
+    // Electron versions differ: older runtimes pass the message as the third
+    // argument, newer ones put it on the event. Never assume either exists.
+    const message = typeof legacyMessage === 'string' ? legacyMessage : event?.message
+    if (typeof message !== 'string') return
+    const level = typeof event?.level === 'string' ? event.level : _level
+    const failure = level === 'error' || level === 3 || message.includes('[next-ui-error]') || message.includes('slot entry crashed') || message.includes('slot factory occurrence crashed')
+    if (!failure && !runtime.preferences.developerLogging) return
+    if (Date.now() - intervalStart >= 1000) { intervalStart = Date.now(); count = 0; failureCount = 0 }
+    const currentCount = failure ? ++failureCount : ++count
+    if (currentCount > 100) {
+      if (currentCount === 101) runtime.diagnostics.record({ source: 'renderer', event: 'console.rate-limited', level: 'warn' })
+      return
+    }
+    runtime.diagnostics.record({ source: 'renderer', event: 'console', level: failure ? 'error' : level === 'warning' || level === 2 ? 'warn' : 'info',
+      message: message.slice(0, 8192), developer: !failure, fields: { webContentsId: window.webContents.id } })
+  })
   window.once('ready-to-show', () => show(window))
   if (primary) {
     applyWindowMaterial(window, runtime.preferences)
@@ -310,17 +332,6 @@ function openMain(): void {
   mainWindow.on('closed', () => { mainWindow = undefined; onboardingSurfaceActive = false })
   mainWindow.webContents.on('render-process-gone', (_event, details) => { if (!quitting) runtime.report(new Error(`Renderer: ${details.reason}`)) })
   mainWindow.webContents.on('preload-error', (_event, _path, error) => runtime.report(error))
-  // The Host log otherwise misses client slot failures: the renderer can retire
-  // an entry (and its portalled dialog) without crashing the Electron process.
-  mainWindow.webContents.on('console-message', (event, _level, legacyMessage) => {
-    // Electron versions differ: older runtimes pass the message as the third
-    // argument, newer ones put it on the event. Never assume either exists.
-    const message = typeof legacyMessage === 'string' ? legacyMessage : event?.message
-    if (typeof message !== 'string') return
-    if (!message.includes('[next-ui-diagnostic]') && !message.includes('slot entry crashed')
-      && !message.includes('client-modules:') && !message.includes('slot factory occurrence crashed')) return
-    runtime.diagnostics.append(maskSecrets(message.slice(0, 2048)), 'warn')
-  })
   mainWindow.webContents.on('did-fail-load', (_event, code, message, _url, isMain) => {
     if (isMain && code !== -3 && !quitting && mainWindow === owner && !owner.isDestroyed()) runtime.report(new Error(message))
   })
@@ -391,13 +402,18 @@ async function command(value: unknown, source: 'app' | 'shell' | 'native' = 'app
   // release it after success, cancellation or failure so recovery can retry.
   if (['safe-mode', 'normal-mode', 'recover', 'restart', 'rollback', 'repair-global', 'restart-app', 'restart-recovery'].includes(type)) {
     if (recoveryRequest !== undefined) return recoveryRequest
-    const request = performCommand(input, type, source).finally(() => {
+    const request = loggedCommand(input, type, source).finally(() => {
       if (recoveryRequest === request) recoveryRequest = undefined
     })
     recoveryRequest = request
     return request
   }
-  return performCommand(input, type, source)
+  return loggedCommand(input, type, source)
+}
+
+async function loggedCommand(input: Record<string, unknown>, type: string, source: 'app' | 'shell' | 'native'): Promise<void> {
+  const end = runtime.diagnostics.operation('electron.commands', type, { caller: source }, true)
+  try { await performCommand(input, type, source); end() } catch (error) { end(error); throw error }
 }
 
 async function performCommand(input: Record<string, unknown>, type: string, source: 'app' | 'shell' | 'native'): Promise<void> {
@@ -504,7 +520,8 @@ async function performCommand(input: Record<string, unknown>, type: string, sour
         filters: [{ name: type === 'export-ca' ? 'CA certificate' : 'Diagnostics', extensions: [type === 'export-ca' ? 'crt' : 'json'] }] }
       const result = await (owner === undefined ? dialog.showSaveDialog(options) : dialog.showSaveDialog(owner, options))
       if (!result.canceled && result.filePath && !quitting) {
-        await writeFile(result.filePath, type === 'export-ca' ? certificate! : runtime.diagnostics.export(state()), { mode: 0o600 })
+        if (type === 'export-ca') await writeFile(result.filePath, certificate!, { mode: 0o600 })
+        else await runtime.diagnostics.exportTo(result.filePath, state())
         if (type === 'diagnostics') diagnosticsFile = result.filePath
       }
       return
@@ -939,10 +956,16 @@ app.on('before-quit', event => {
   if (quitting || !ownsInstance) return
   event.preventDefault()
   quitting = true
+  runtime.diagnostics.record({ source: 'electron', event: 'shutdown.start' })
+  runtime.diagnostics.flush()
   // Bound the whole shutdown, including cleanup before Host termination starts.
   let finished = false
   const timeout = setTimeout(() => {
-    if (finish()) app.exit(1)
+    if (finish()) {
+      runtime.diagnostics.record({ source: 'electron', event: 'shutdown.timeout', level: 'error', message: 'Shutdown exceeded five seconds', fields: { pending: JSON.stringify(runtime.diagnostics.pendingOperations()) } })
+      runtime.diagnostics.end(false)
+      app.exit(1)
+    }
   }, DESKTOP_SHUTDOWN_TIMEOUT_MS)
   timeout.unref()
   function finish(): boolean {
@@ -957,7 +980,9 @@ app.on('before-quit', event => {
   }
   native.close()
   platformLogin.close()
-  void Promise.all([updates.dispose(installingUpdate), (async () => { await recoveryRunner?.dispose(); await runtime.close() })()]).then(async () => {
+  const updatesDone = runtime.diagnostics.operation('electron', 'updates.dispose')
+  const recoveryDone = runtime.diagnostics.operation('electron', 'recovery.dispose')
+  void Promise.all([updates.dispose(installingUpdate).then(() => updatesDone(), error => { updatesDone(error); throw error }), (async () => { try { await recoveryRunner?.dispose(); recoveryDone() } catch (error) { recoveryDone(error); throw error }; await runtime.close() })()]).then(async () => {
     if (finished) return
     // A staged installer must survive until handoff; the next boot removes it.
     if (safeModeRequested && !installingUpdate) {
@@ -967,20 +992,34 @@ app.on('before-quit', event => {
       catch (error) { runtime.diagnostics.append(`Safe Mode desktop state cleanup failed: ${String(error)}`, 'warn'); runtime.diagnostics.flush() }
     }
     if (installingUpdate) {
-      try { await updateInstaller.launch() }
+      const installerDone = runtime.diagnostics.operation('electron', 'installer.launch')
+      try { await updateInstaller.launch(); installerDone() }
       catch (error) {
+        installerDone(error)
         if (!finish()) return
-        runtime.diagnostics.append(String(error), 'error')
+        runtime.diagnostics.record({ source: 'electron', event: 'installer.failed', level: 'error', error })
+        runtime.diagnostics.end(true)
         dialog.showErrorBox(t('更新未能安装', 'Update could not be installed'), t('应用将重新打开，请在设置中重试更新。', 'The application will reopen. Retry the update in Settings.'))
         relaunchApp(app, relaunchArguments(process.argv.slice(1), false, false))
         app.quit()
         return
       }
-      if (process.platform === 'darwin') { finish(); return }
+      if (process.platform === 'darwin') { if (finish()) runtime.diagnostics.end(true); return }
     }
     if (!finish()) return
+    runtime.diagnostics.end(true)
     if (relaunch) relaunchApp(app, relaunch)
     app.quit()
-  }).catch(error => { console.error(error); if (finish()) app.exit(1) })
+  }).catch(error => { if (finish()) { runtime.diagnostics.record({ source: 'electron', event: 'shutdown.failed', level: 'error', error }); runtime.diagnostics.end(false); app.exit(1) } })
 })
-if (ownsInstance) void main().catch(error => runtime.report(error))
+if (ownsInstance) {
+  process.on('uncaughtExceptionMonitor', (error, origin) => {
+    runtime.diagnostics.record({ source: 'electron', event: 'uncaught-exception', level: 'error', error, fields: { origin } })
+    runtime.diagnostics.end(false)
+  })
+  app.on('child-process-gone', (_event, details) => runtime.diagnostics.record({ source: 'electron', event: 'child-process-gone', level: 'error',
+    fields: { type: details.type, reason: details.reason, exitCode: details.exitCode, service: details.serviceName ?? null } }))
+  app.once('will-quit', () => runtime.diagnostics.flush())
+  runtime.diagnostics.begin({ version, platform: process.platform, electron: process.versions.electron ?? '', node: process.version, safeMode: safeModeRequested })
+  void main().catch(error => runtime.report(error))
+}
