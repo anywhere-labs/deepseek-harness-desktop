@@ -2,8 +2,12 @@
 
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
+import { isUtf8 } from 'node:buffer'
+import { createRequire } from 'node:module'
 import { win32 } from 'node:path'
 import type { ShellExecSpec, ShellExecution } from '@deepseek-ai/dsh-shell'
+import type { SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
+import type { OutputCollector } from '@deepseek-ai/dsh-subprocess-local/output'
 import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { Config as PwshConfig } from '@deepseek-ai/dsh-pwsh-local'
 
@@ -91,6 +95,110 @@ export function desktopWindowsPwshConfig(
   }
 }
 
+/** Strict conversion of Windows console bytes; undefined means invalid input. */
+export type WindowsConsoleDecoder = (bytes: Buffer) => string | undefined
+
+let windowsConsoleDecoder: WindowsConsoleDecoder | undefined
+
+function decodeWindowsConsole(bytes: Buffer): string | undefined {
+  if (windowsConsoleDecoder === undefined) {
+    const koffi = createRequire(import.meta.url)('koffi') as typeof import('koffi').default
+    const kernel32 = koffi.load('kernel32.dll')
+    const oemCodePage = kernel32.func('uint32 __stdcall GetOEMCP()')
+    const convert = kernel32.func('int __stdcall MultiByteToWideChar(uint32, uint32, const void *, int, void *, int)')
+    // Hidden local PowerShell and the ACL trampoline's newly allocated console
+    // use the system OEM default, not the Host's potentially different console.
+    // Never change the Host's global code page.
+    const codePage = oemCodePage()
+    windowsConsoleDecoder = raw => {
+      const chars = convert(codePage, 8 /* MB_ERR_INVALID_CHARS */, raw, raw.length, null, 0)
+      if (chars === 0) return undefined
+      const wide = Buffer.alloc(chars * 2)
+      return convert(codePage, 8, raw, raw.length, wide, chars) === chars
+        ? wide.toString('utf16le') : undefined
+    }
+  }
+  return windowsConsoleDecoder(bytes)
+}
+
+/** Distinguish incomplete UTF-8 at a live byte boundary from legacy bytes. */
+function incompleteUtf8Suffix(bytes: Buffer): boolean {
+  for (let count = 1; count <= Math.min(3, bytes.length); count++) {
+    const suffix = bytes.subarray(bytes.length - count)
+    const lead = suffix[0]!
+    const width = lead >= 0xc2 && lead <= 0xdf ? 2
+      : lead >= 0xe0 && lead <= 0xef ? 3 : lead >= 0xf0 && lead <= 0xf4 ? 4 : 0
+    if (width <= count || !isUtf8(bytes.subarray(0, bytes.length - count))) continue
+    if (!suffix.subarray(1).every(byte => byte >= 0x80 && byte <= 0xbf)) continue
+    const second = suffix[1]
+    if (second !== undefined && ((lead === 0xe0 && second < 0xa0) || (lead === 0xed && second > 0x9f)
+      || (lead === 0xf0 && second < 0x90) || (lead === 0xf4 && second > 0x8f))) continue
+    return true
+  }
+  return false
+}
+
+/**
+ * Repair only non-UTF-8 PowerShell ParserError bytes from a local collector's
+ * public snapshot. The preamble cannot run when the original command does not
+ * parse. Do not reinterpret already-decoded text, change the command, or run a
+ * second PowerShell (which changes stdin, return/exit, and restricted language).
+ * Keep byte cursors, truncation and spill facts in the original coordinate
+ * system. An undecidable live fragment is not consumed: the parser marker or
+ * settlement releases it without losing an earlier background read.
+ * @param reader - the original collect-mode stderr reader.
+ * @param settled - whether its unchanged subprocess has settled.
+ * @param decode - strict Windows console-code-page decoder.
+ * @param report - report an unavailable optional decoder without changing execution.
+ * @returns the same reader with only its per-instance read function adapted.
+ */
+export function desktopWindowsPwshStderr(
+  reader: SubprocessOutputReader,
+  settled: () => boolean,
+  decode: WindowsConsoleDecoder = decodeWindowsConsole,
+  report: (error: unknown) => void = () => {},
+): SubprocessOutputReader {
+  const collector = reader as SubprocessOutputReader & Partial<Pick<OutputCollector, 'snapshot'>>
+  if (typeof collector.snapshot !== 'function') return reader
+  const snapshot = collector.snapshot.bind(collector)
+  const read = reader.readFrom.bind(reader)
+  let reported = false
+  const adapted: SubprocessOutputReader['readFrom'] = fromByte => {
+    const original = read(fromByte)
+    const { bytes, totalBytes } = snapshot()
+    const start = totalBytes - bytes.length
+    let utf8Start = 0
+    // A bounded tail can start halfway through an otherwise valid UTF-8 code
+    // point. Such deliberate truncation is not evidence of a legacy encoding.
+    if (start > 0) {
+      while (utf8Start < Math.min(3, bytes.length) && (bytes[utf8Start]! & 0xc0) === 0x80) utf8Start++
+    }
+    const utf8 = bytes.subarray(utf8Start)
+    if (isUtf8(utf8)) return original
+    if (!settled() && incompleteUtf8Suffix(utf8)) return { ...original, text: '', nextOffset: fromByte }
+    const retained = original.lossy ? bytes : bytes.subarray(Math.max(0, fromByte - start))
+    if (/^\s*\+\s+CategoryInfo\s*:\s*ParserError\b/m.test(bytes.toString('latin1'))) {
+      try {
+        const text = decode(retained)
+        if (text !== undefined) return { ...original, text }
+      } catch (error) {
+        if (!reported) {
+          reported = true
+          try { report(error) } catch { /* optional diagnostics cannot break subprocess settlement */ }
+        }
+        return original
+      }
+    }
+    return settled() ? original : { ...original, text: '', nextOffset: fromByte }
+  }
+  try { reader.readFrom = adapted } catch (error) {
+    // An optional custom provider may expose a frozen reader. It has already
+    // started its process, so an unavailable text repair must not lose its handle.
+    try { report(error) } catch { /* keep the original provider's execution contract */ }
+  }
+  return reader
+}
+
 /**
  * Insert the desktop Node-mode trampoline for the exact upstream ACL runner.
  * @param spec - resolved PowerShell execution spec.
@@ -158,12 +266,32 @@ export class DesktopWindowsPwshSandbox extends SandboxPwshExecutor {
     argvOrPrepare: readonly string[] | ((signal: AbortSignal) => Promise<readonly string[]>),
     onStarted?: (process: ShellExecution) => void,
   ): Promise<ShellExecution> {
+    // Shadow spawn for this execution only. A fresh receiver with an own ctx
+    // descriptor survives Cordis's traced readonly ctx without mutating either
+    // the registered subprocess service or this executor (concurrent calls).
+    let receiver: this = this
+    if (process.platform === 'win32') {
+      const runtime = this.ctx.subprocess
+      const subprocess = Object.create(runtime) as typeof runtime
+      subprocess.spawn = (spawnSpec: SubprocessSpawnSpec) => {
+        const handle = runtime.spawn(spawnSpec)
+        let settled = false
+        void handle.done.then(() => { settled = true }, () => { settled = true })
+        if (handle.collected.stderr !== undefined) {
+          desktopWindowsPwshStderr(handle.collected.stderr, () => settled, decodeWindowsConsole,
+            error => this.ctx.logger.warn('Desktop could not decode a legacy PowerShell parser diagnostic; keeping its original output.', error))
+        }
+        return handle
+      }
+      receiver = Object.create(this) as this
+      Object.defineProperty(receiver, 'ctx', { value: this.ctx.extend({ subprocess }) })
+    }
     if (typeof argvOrPrepare !== 'function') {
       const adapted = this.adapt(spec, argvOrPrepare)
-      return super.executeArgv(adapted.spec, adapted.argv, onStarted)
+      return super.executeArgv.call(receiver, adapted.spec, adapted.argv, onStarted)
     }
     const pending: ShellExecSpec = { ...spec }
-    return super.executeArgv(pending, async signal => {
+    return super.executeArgv.call(receiver, pending, async signal => {
       const adapted = this.adapt(spec, await argvOrPrepare(signal))
       pending.env = adapted.spec.env
       return adapted.argv
