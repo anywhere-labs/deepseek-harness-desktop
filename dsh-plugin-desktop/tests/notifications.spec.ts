@@ -261,6 +261,32 @@ describe('desktop notifications Host plugin', () => {
     expect(JSON.stringify(harness.notifyAttention.mock.calls)).not.toMatch(/Users|private|secret|session-123/u)
   })
 
+  it.each(['completed', 'failed'])('keeps awaited %s job settlements silent', async (status) => {
+    const harness = createHarness(['jobs', 'settings'])
+
+    await harness.jobEvent({
+      type: 'settled',
+      job: job(`foreground-${status}`, status),
+      cause: 'natural',
+      awaited: true,
+    })
+
+    expect(harness.notifyAttention).not.toHaveBeenCalled()
+  })
+
+  it.each(['completed', 'failed'])('keeps %s teardown job settlements silent', async (status) => {
+    const harness = createHarness(['jobs', 'settings'])
+
+    await harness.jobEvent({
+      type: 'settled',
+      job: job(`disposed-${status}`, status),
+      cause: 'teardown',
+      awaited: false,
+    })
+
+    expect(harness.notifyAttention).not.toHaveBeenCalled()
+  })
+
   it('ignores the non-terminal events sharing the job stream', async () => {
     const harness = createHarness(['jobs', 'settings'])
 
