@@ -9,7 +9,20 @@ const MIME: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json',
   '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
 }
-const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
+/**
+ * Pre-Cordis globals injected into the application index.
+ *
+ * `__DSH_FILE_UPLOAD__` is the file-upload plugin's documented page-owned carrier. Without it the
+ * plugin posts Blob and stream bodies from a blob-URL dedicated Worker, and Electron never shows
+ * Worker requests on a custom protocol to `webRequest` (verified on Electron 44.0.0): they cannot
+ * carry the native renderer marker, and the protocol handler cannot tell an owned Worker from one
+ * started by another window or a foreign frame. Every non-image attachment therefore received the
+ * gate's 403. The page's own `fetch` runs in the owned main frame, which the gate already marks.
+ * The carrier reports no byte progress; uploads go to the loopback Host, so the card only skips
+ * its intermediate progress.
+ */
+export const APP_BOOT_SCRIPT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers();'
+  + 'globalThis.__DSH_FILE_UPLOAD__ = { fetch: (input, init) => fetch(input, init) }</script>'
 // Cover both the empty document and the official boot page; normal UI keeps its own palette.
 const LOADING_STYLE = `<style id="dsh-next-loading-style">
 html:has(#root:empty), html:has([data-dsh-boot]) { color-scheme: dark; background: #000 !important; }
@@ -25,7 +38,7 @@ body:has(#root:empty), body:has([data-dsh-boot]) { background: #000 !important; 
 }
 </style>`
 
-/** Mark requests from the owned main frame; also strip the marker on every other target or redirect. */
+/** Mark live same-origin frames in the owned window; strip the marker from other targets and redirects. */
 export function appRequestHeaders(
   request: Pick<OnBeforeSendHeadersListenerDetails, 'url' | 'webContentsId' | 'webContents' | 'frame' | 'resourceType' | 'requestHeaders'>,
   owner: Pick<WebContents, 'id' | 'mainFrame'> | undefined,
@@ -34,9 +47,9 @@ export function appRequestHeaders(
   const headers = Object.fromEntries(Object.entries(request.requestHeaders)
     .filter(([name]) => name.toLowerCase() !== NATIVE_ACCESS_HEADER))
   const target = new URL(request.url)
-  if (target.protocol === 'dsh-app:' && target.host === 'app' && owner && nativeToken
+  if (target.protocol === 'dsh-app:' && target.host === 'app' && !target.username && !target.password && owner && nativeToken
     && request.webContentsId === owner.id && (!request.webContents || request.webContents.id === owner.id)
-    && request.resourceType !== 'mainFrame' && request.frame === owner.mainFrame
+    && request.resourceType !== 'mainFrame' && request.frame
     && !request.frame.detached && request.frame.origin === 'dsh-app://app') headers[NATIVE_ACCESS_HEADER] = nativeToken
   return headers
 }
@@ -61,7 +74,7 @@ export async function serveWebDocument(request: Request, root: string, waitForHo
     throw error
   }
   const content = waitForHost && (pathname === '/' || pathname === '/index.html')
-    ? body.toString().replace('<head>', '<head>' + LOADING_STYLE + BOOT) : new Uint8Array(body)
+    ? body.toString().replace('<head>', '<head>' + LOADING_STYLE + APP_BOOT_SCRIPT) : new Uint8Array(body)
   return new Response(request.method === 'HEAD' ? null : content, {
     headers: { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' },
   })
@@ -110,7 +123,7 @@ export async function forwardWebRequest(request: Request, host: string, cookie: 
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
   // Custom-protocol fetches can omit Origin. The native session marks only
-  // requests from our owned main frame; an HTTP header or referrer alone is
+  // requests from live same-origin frames in our owned window; an HTTP header or referrer alone is
   // insufficient. Keep this compatible with the upstream's Electron 44.0 ABI.
   if (source.protocol !== 'dsh-app:' || source.host !== 'app' || source.username || source.password
     || !nativeToken || request.headers.get(NATIVE_ACCESS_HEADER) !== nativeToken) return new Response(null, { status: 403 })

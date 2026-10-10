@@ -147,7 +147,7 @@
     "icons:export": "node ../scripts/export-app-icons.mjs --channel stable"
   },
   "dependencies": {
-    "@agents-anywhere/dsh-bridge-next": "file:../vendor/agents-anywhere/agents-anywhere-dsh-bridge-next-2.0.3-desktop.c7df5b31f3fe2.r7190cf39.tgz",
+    "@agents-anywhere/dsh-bridge-next": "file:../vendor/agents-anywhere/agents-anywhere-dsh-bridge-next-2.0.3-desktop.c7fe1fce32650.r49b34c10.tgz",
     "@deepseek-ai/cordis": "4.0.4",
     "@deepseek-ai/cordis-plugin-group": "1.0.4",
     "@deepseek-ai/cordis-plugin-include": "1.0.9",
@@ -310,7 +310,7 @@
     "@deepseek-ai/schemastery": "^3.18.4",
     "adm-zip": "^0.6.0",
     "dsh-community-market": "0.1.0-dev.0",
-    "dshmarket": "1.66.11",
+    "dshmarket": "1.66.14",
     "fs-ext": "2.1.1",
     "koffi": "3.1.5",
     "node-addon-require-builtin": "^0.1.6",
@@ -348,7 +348,7 @@
     "node-gyp": "13.0.1",
     "react-dom": "18.3.1",
     "shadcn": "^4.18.0",
-    "sharp": "0.35.3",
+    "sharp": "0.35.5",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4",
     "tsdown": "0.22.2",

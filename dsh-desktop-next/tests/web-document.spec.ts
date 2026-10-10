@@ -2,8 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import type { WebContents } from 'electron'
-import { appRequestHeaders, authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
+import { APP_BOOT_SCRIPT, appRequestHeaders, authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
 import { NATIVE_ACCESS_HEADER } from '../src/desktop-contract.ts'
 
 const roots: string[] = []
@@ -33,6 +34,24 @@ it('serves the Web entry and assets without starting or contacting a Host', asyn
   expect(fetch).not.toHaveBeenCalled()
   expect((await serveWebDocument(new Request('dsh-app://app/%2e%2e%2fprivate'), root)).status).toBe(403)
   expect((await serveWebDocument(new Request('dsh-app://app/missing.js'), root)).status).toBe(404)
+})
+
+it('installs the file-upload page carrier before the application entry', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'desktop-web-'))
+  roots.push(root)
+  await writeFile(join(root, 'index.html'), '<html><head></head><body><script src="assets/entry.js"></script></body></html>')
+  const html = await (await serveWebDocument(new Request('dsh-app://app/'), root)).text()
+  expect(html.indexOf(APP_BOOT_SCRIPT)).toBeGreaterThan(0)
+  expect(html.indexOf(APP_BOOT_SCRIPT)).toBeLessThan(html.indexOf('assets/entry.js'))
+  // Electron never shows custom-protocol Worker requests to webRequest; uploads must use the page's fetch.
+  const response = Promise.resolve(new Response('{}'))
+  const page = { fetch: vi.fn(() => response), Promise }
+  runInNewContext(APP_BOOT_SCRIPT.slice('<script>'.length, -'</script>'.length), page)
+  const carrier = (page as unknown as { __DSH_FILE_UPLOAD__: { fetch: typeof fetch } }).__DSH_FILE_UPLOAD__
+  const init = { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: 'bytes' }
+  expect(carrier.fetch('api/session/uploadFileBinary?sessionId=s', init)).toBe(response)
+  expect(page.fetch).toHaveBeenCalledWith('api/session/uploadFileBinary?sessionId=s', init)
+  expect(await serveWebDocument(new Request('dsh-app://app/'), root, false).then(r => r.text())).not.toContain('__DSH_FILE_UPLOAD__')
 })
 
 it('requires the Host authentication exchange and retains only its cookie value', async () => {
@@ -150,7 +169,7 @@ it.each(['dsh-app://shell/api/read', 'dsh-app://app:1234/api/read', 'https://app
   },
 )
 
-it('marks only owned main-frame requests and strips caller markers from every other target', () => {
+it('marks owned application requests and strips caller markers from every other target', () => {
   const frame = { origin: 'dsh-app://app', detached: false } as WebContents['mainFrame']
   const owner = { id: 7, mainFrame: frame }
   const request = { url: 'dsh-app://app/api/community-market/sources', webContentsId: owner.id,
@@ -159,17 +178,32 @@ it('marks only owned main-frame requests and strips caller markers from every ot
   expect(headers).toEqual({ 'content-type': 'application/json', [NATIVE_ACCESS_HEADER]: NATIVE_TOKEN })
   const refused = [
     { ...request, webContentsId: 8 },
+    { ...request, webContents: { id: 8 } as WebContents },
     { ...request, frame: null },
-    { ...request, frame: { ...frame } as WebContents['mainFrame'] },
+    { ...request, frame: undefined },
+    { ...request, frame: { ...frame, detached: true } as WebContents['mainFrame'] },
+    { ...request, frame: { ...frame, origin: 'https://other.example' } as WebContents['mainFrame'] },
+    { ...request, frame: { ...frame, origin: 'null' } as WebContents['mainFrame'] },
     { ...request, resourceType: 'mainFrame' as const },
     { ...request, url: 'dsh-app://shell/api/test' },
     { ...request, url: 'dsh-app://app:1234/api/test' },
+    { ...request, url: 'dsh-app://user:password@app/api/test' },
     { ...request, url: 'https://other.example/redirected' },
     { ...request, url: 'http://127.0.0.1:1234/api/test' },
   ]
   for (const input of refused) expect(new Headers(appRequestHeaders(input, owner, NATIVE_TOKEN)).get(NATIVE_ACCESS_HEADER)).toBeNull()
   expect(new Headers(appRequestHeaders(request, undefined, NATIVE_TOKEN)).get(NATIVE_ACCESS_HEADER)).toBeNull()
   expect(new Headers(appRequestHeaders(request, owner, undefined)).get(NATIVE_ACCESS_HEADER)).toBeNull()
+})
+
+it.each(['subFrame', 'script', 'xhr'] as const)('marks the owned same-origin child frame %s request', resourceType => {
+  const mainFrame = { origin: 'dsh-app://app', detached: false } as WebContents['mainFrame']
+  const childFrame = { origin: 'dsh-app://app', detached: false, parent: mainFrame, top: mainFrame } as WebContents['mainFrame']
+  const owner = { id: 7, mainFrame }
+  const headers = appRequestHeaders({ url: 'dsh-app://app/plugin/studio/', webContentsId: owner.id,
+    webContents: owner as WebContents, frame: childFrame, resourceType,
+    requestHeaders: { [NATIVE_ACCESS_HEADER]: 'caller', accept: 'text/html' } }, owner, NATIVE_TOKEN)
+  expect(headers).toEqual({ accept: 'text/html', [NATIVE_ACCESS_HEADER]: NATIVE_TOKEN })
 })
 
 it.each(['null', 'https://other.example', 'dsh-app://shell', 'dsh-app://app.evil', 'dsh-app://app:1234'])(

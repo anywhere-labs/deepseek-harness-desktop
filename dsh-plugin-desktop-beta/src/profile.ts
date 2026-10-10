@@ -999,6 +999,43 @@ function webRuntimeTrustedHosts(
   return [...new Set([...configured, ...lanAddresses])]
 }
 
+/**
+ * Carry Desktop's Web trust into Connection when the core no longer routes it
+ * through the web-runtime row.
+ *
+ * Through dsh 0.2.1-alpha.1, web-runtime provided the `webRuntime` service and
+ * Connection read `ctx.webRuntime.trustedHosts`, so the web-runtime patch was
+ * enough. 0.2.1-alpha.2 removed that service: Connection now reads only
+ * `--trusted-host` authorities from `webStartup` and separately accepts its
+ * bind address. Desktop binds loopback behind the LAN HTTPS edge, which
+ * forwards the external LAN Host header, so the launcher's snapshot (plus the
+ * profile's own web-runtime entries) must be appended to Connection itself.
+ */
+function connectionTrustPatch(
+  connection: EntryOptions | undefined,
+  trustedHosts: readonly string[],
+): PatchOptions | undefined {
+  if (connection === undefined) return undefined
+  const inject = connection.inject
+  const injected = Array.isArray(inject) ? inject : Object.keys(inject ?? {})
+  if (injected.includes('webRuntime')) return undefined
+  const config = rowConfig(connection)
+  const configured: unknown = config.trustedHosts
+  let merged: unknown
+  if (isJsExpr(configured)) {
+    merged = trustedHosts.length === 0
+      ? configured
+      : { __jsExpr: `[...new Set([...(${configured.__jsExpr}), ...${JSON.stringify(trustedHosts)}])]` }
+  } else if (configured === undefined) {
+    merged = [...trustedHosts]
+  } else if (Array.isArray(configured) && configured.every(entry => typeof entry === 'string')) {
+    merged = [...new Set([...configured as string[], ...trustedHosts])]
+  } else {
+    throw new Error(`${BIN_NAME}: connection trustedHosts must be an array of strings`)
+  }
+  return { id: 'connection', config: { ...config, trustedHosts: merged } }
+}
+
 /** Resolve a Loader row's platform gate without mutating the host process. */
 function rowDisabledOnPlatform(row: EntryOptions, platform: NodeJS.Platform): boolean {
   if (!isJsExpr(row.disabled)) return row.disabled === true
@@ -1436,6 +1473,7 @@ export function prepareDesktopProfile(
     throw new Error(`${BIN_NAME}: desktop profile has no web-runtime row`)
   }
   const webRuntimeConfig = rowConfig(webRuntime)
+  const desktopTrustedHosts = webRuntimeTrustedHosts(webRuntimeConfig.trustedHosts, lanAddresses)
   patches.push({
     id: 'web-runtime',
     config: {
@@ -1443,9 +1481,11 @@ export function prepareDesktopProfile(
       // Browser access is an advertised Desktop capability, never an
       // instruction to launch the operating system's default browser.
       openBrowser: false,
-      trustedHosts: webRuntimeTrustedHosts(webRuntimeConfig.trustedHosts, lanAddresses),
+      trustedHosts: desktopTrustedHosts,
     },
   })
+  const connectionPatch = connectionTrustPatch(rows.get('connection'), desktopTrustedHosts)
+  if (connectionPatch !== undefined) patches.push(connectionPatch)
   // The saved mode is what the next generation boots, so the config editor's
   // validation pass must still reject a layout it could not start.
   if (mode === 'advanced' || mode === 'extended') {

@@ -75,8 +75,10 @@ describe('Desktop WebServer port policy', () => {
     const context = new Context()
     contexts.push(context)
 
+    // dsh 0.2.1-alpha.2's webserver schema rejects wildcard binds before the
+    // Desktop policy runs; either refusal keeps the bind closed.
     await expect(context.plugin(DesktopWebServer, { host: '0.0.0.0', port: 0 }))
-      .rejects.toThrow('requires loopback until LAN HTTPS is available')
+      .rejects.toThrow(/requires loopback until LAN HTTPS is available|unspecified \(wildcard\) address, which is not supported/u)
   })
 
   it('increments only after the requested loopback bind reports EADDRINUSE', async () => {

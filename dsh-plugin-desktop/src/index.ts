@@ -81,7 +81,7 @@ export const name = 'desktop-shell'
 
 /** Services required before the shell can register its renderer generation. */
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
-export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection']
+export const inject = ['webServer', 'appExit', 'settings', 'connection']
 
 /**
  * Standard settings namespace shared by tray and configuration surfaces, the

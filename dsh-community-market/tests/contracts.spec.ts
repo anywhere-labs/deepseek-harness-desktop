@@ -42,13 +42,13 @@ describe('package integration contract', () => {
       '@deepseek-ai/dsh-client-ui-settings',
       '@deepseek-ai/dsh-client-ui-sidebar',
     ])
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-file-upload', '0.2.0-rc.2 || 0.2.1-alpha.1')
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-layout', '0.2.0-rc.2 || 0.2.1-alpha.1')
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-renderer', '0.2.0-rc.2 || 0.2.1-alpha.1')
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-session', '0.2.0-rc.2 || 0.2.1-alpha.1')
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-settings', '0.2.0-rc.2 || 0.2.1-alpha.1')
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-sidebar', '0.2.0-rc.2 || 0.2.1-alpha.1')
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-workspace', '0.2.0-rc.2 || 0.2.1-alpha.1')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-file-upload', '0.2.0-rc.2 || 0.2.1-alpha.2')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-layout', '0.2.0-rc.2 || 0.2.1-alpha.2')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-renderer', '0.2.0-rc.2 || 0.2.1-alpha.2')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-session', '0.2.0-rc.2 || 0.2.1-alpha.2')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-settings', '0.2.0-rc.2 || 0.2.1-alpha.2')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-sidebar', '0.2.0-rc.2 || 0.2.1-alpha.2')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-client-ui-workspace', '0.2.0-rc.2 || 0.2.1-alpha.2')
   })
 
   it('keeps durable storage an optional peer so market still starts without it', () => {
@@ -57,7 +57,7 @@ describe('package integration contract', () => {
       peerDependenciesMeta?: Record<string, { optional?: boolean }>
     }
 
-    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-storage-domain', '0.2.0-rc.2 || 0.2.1-alpha.1')
+    expect(manifest.peerDependencies).toHaveProperty('@deepseek-ai/dsh-storage-domain', '0.2.0-rc.2 || 0.2.1-alpha.2')
     expect(manifest.peerDependenciesMeta?.['@deepseek-ai/dsh-storage-domain']).toEqual({ optional: true })
     expect(manifest.peerDependenciesMeta?.['@deepseek-ai/dsh-storage']).toEqual({ optional: true })
   })

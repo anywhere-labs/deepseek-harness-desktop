@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
-import { serveWebDocument } from '../lib/web-document.js'
+import { APP_BOOT_SCRIPT, serveWebDocument } from '../lib/web-document.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(import.meta.url)
@@ -16,8 +16,15 @@ const html = await local.text()
 assert.equal(local.status, 200)
 assert.ok(html.includes('<style id="dsh-next-loading-style">'), 'Next must style the document before the official boot page loads')
 assert.equal(html.replace(/<style id="dsh-next-loading-style">[\s\S]*?<\/style>/u, '')
-  .replace('<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>', ''), official)
+  .replace(APP_BOOT_SCRIPT, ''), official)
 assert.ok(html.includes('/assets/'), 'Official production frontend must carry built assets')
+
+// Electron hides custom-protocol Worker requests from webRequest, so the upload
+// plugin's default Worker transport can never authenticate. The boot script
+// installs its page-owned carrier; fail if the official client stops reading it.
+const uploadClient = readFileSync(require.resolve('@deepseek-ai/dsh-client-file-upload/client'), 'utf8')
+assert.ok(uploadClient.includes('globalThis.__DSH_FILE_UPLOAD__') && uploadClient.includes('hook.fetch'),
+  'The file-upload client no longer reads the page-owned __DSH_FILE_UPLOAD__ fetch carrier')
 
 // Market client bundles resolve primitives from the official Web at runtime. A
 // removed export can blank the entire settings section without breaking build.
@@ -124,4 +131,4 @@ for (const platform of ['darwin', 'win32', 'linux']) {
   await permissions.openSettings('screen')
   assert.deepEqual([...invocations.at(-1)], ['dsh-next:permission-settings', 'screen'])
 }
-console.log('Next frontend check passed: official 0.2.1-alpha.1 entry and independent sandboxed preloads for macOS, Windows and Linux.')
+console.log('Next frontend check passed: official 0.2.1-alpha.2 entry and independent sandboxed preloads for macOS, Windows and Linux.')

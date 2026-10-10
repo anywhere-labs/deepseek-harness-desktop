@@ -3,7 +3,7 @@
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -431,8 +431,17 @@ try {
     throw new Error('AA Host services did not activate in the actual Desktop profile')
   }
   if (aaEnabled) {
-    const endpoint = join(home, 'agents-anywhere', 'bridge', 'endpoint.json')
-    if (!existsSync(endpoint)) throw new Error('AA did not publish its native DSH home endpoint')
+    // AA 2.0.3 publishes one fixed per-user rendezvous that DSH_HOME does not
+    // move, so the isolated Profile home is not where the Connector looks.
+    const endpoint = join(userInfo().homedir, '.agents-anywhere', 'dsh-bridge', 'endpoint.json')
+    const runtimeStatus = ctx.get('agentsAnywhereRuntime').status()
+    if (runtimeStatus.state !== 'ready') {
+      throw new Error(`AA local runtime is ${String(runtimeStatus.state)}: ${String(runtimeStatus.message)}`)
+    }
+    if (!existsSync(endpoint)) throw new Error('AA did not publish its per-user bridge endpoint')
+    if (JSON.parse(readFileSync(endpoint, 'utf8')).pid !== process.pid) {
+      throw new Error('AA bridge endpoint belongs to another process; quit any running Desktop with AA enabled')
+    }
     const snapshot = await ctx.get('agentsAnywhereOnboarding').inspect()
     if (snapshot.account) throw new Error('A fresh Profile inherited an AA account')
     for (const [key, value] of Object.entries(aaSettings)) {

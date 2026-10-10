@@ -57,11 +57,11 @@ export const MACOS_UNIVERSAL_NATIVE_ENTRIES = [
   },
   {
     arch: 'arm64',
-    path: 'node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.3.node',
+    path: 'node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.5.node',
   },
   {
     arch: 'arm64',
-    path: 'node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.3.dylib',
+    path: 'node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.7.dylib',
   },
   {
     arch: 'arm64',
@@ -89,11 +89,11 @@ export const MACOS_UNIVERSAL_NATIVE_ENTRIES = [
   },
   {
     arch: 'x86_64',
-    path: 'node_modules/@img/sharp-darwin-x64/lib/sharp-darwin-x64-0.35.3.node',
+    path: 'node_modules/@img/sharp-darwin-x64/lib/sharp-darwin-x64-0.35.5.node',
   },
   {
     arch: 'x86_64',
-    path: 'node_modules/@img/sharp-libvips-darwin-x64/lib/libvips-cpp.8.18.3.dylib',
+    path: 'node_modules/@img/sharp-libvips-darwin-x64/lib/libvips-cpp.8.18.7.dylib',
   },
   {
     arch: 'x86_64',

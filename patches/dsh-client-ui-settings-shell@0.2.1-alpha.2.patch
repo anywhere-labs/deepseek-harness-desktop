@@ -1,0 +1,34 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -115,6 +115,8 @@ window.__ModuleLoader__.load({
+ 		const BASH_NS = "bash-sandbox";
+ 		/** Profile entry id of the PowerShell executor; the base bundle composes it on Windows. */
+ 		const PWSH_NS = "pwsh-sandbox";
++		// Desktop replaces the Windows executor to adapt Electron ACL launches.
++		const DESKTOP_PWSH_NS = "desktop-windows-pwsh-sandbox";
+ 		/** Bridges one shell executor entry's form onto the page's staged form. */
+ 		var ShellCardController = class {
+ 			form;
+@@ -175,17 +177,19 @@ window.__ModuleLoader__.load({
+ 			}), "ui-settings-shell: dictionaries");
+ 			const bash = new ShellCardController(ctx.configForms.get(BASH_NS));
+ 			const pwsh = new ShellCardController(ctx.configForms.get(PWSH_NS));
++			const desktopPwsh = new ShellCardController(ctx.configForms.get(DESKTOP_PWSH_NS));
+ 			ctx.effect(() => () => {
+ 				bash.dispose();
+ 				pwsh.dispose();
++				desktopPwsh.dispose();
+ 			}, "ui-settings-shell: form subscriptions");
+-			ctx.effect(() => ctx.configForms.whileServed([BASH_NS, PWSH_NS], (served) => ctx.slots.inject("plugins.item", () => ctx.slots.register({
++			ctx.effect(() => ctx.configForms.whileServed([BASH_NS, PWSH_NS, DESKTOP_PWSH_NS], (served) => ctx.slots.inject("plugins.item", () => ctx.slots.register({
+ 				name: "plugins.item",
+ 				id: "shell",
+ 				order: 40,
+ 				label: () => t("title"),
+ 				locale: NS,
+-				inject: () => (served.has("pwsh-sandbox") ? pwsh : bash).inject()
++				inject: () => (served.has(DESKTOP_PWSH_NS) ? desktopPwsh : served.has(PWSH_NS) ? pwsh : bash).inject()
+ 			}, ShellCard))), "ui-settings-shell: page");
+ 		}
+ 		//#endregion
