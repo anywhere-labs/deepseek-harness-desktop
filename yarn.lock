@@ -3402,6 +3402,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@deepseek-ai/dsh-client-ui-settings-web-search@patch:@deepseek-ai/dsh-client-ui-settings-web-search@file%3Avendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-client-ui-settings-web-search-0.2.0-rc.2.tgz#./patches/dsh-client-ui-settings-web-search@0.2.0-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.2.0-rc.2
+  resolution: "@deepseek-ai/dsh-client-ui-settings-web-search@patch:@deepseek-ai/dsh-client-ui-settings-web-search@file%3Avendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-client-ui-settings-web-search-0.2.0-rc.2.tgz%23vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-client-ui-settings-web-search-0.2.0-rc.2.tgz%3A%3Ahash=20788f&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-client-ui-settings-web-search@0.2.0-rc.2.patch::version=0.2.0-rc.2&hash=76b165&locator=deepseek-harness-desktop%40workspace%3A."
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.4
+  checksum: 10c0/ce2a5be75828194106d5f23b72c40a524766065bf663ae540e00a2041060a2f8391ab7efbf1c08cec6a472ac555ed32fe09c2fc555c48cfd2af444d324f07a7b
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-client-ui-settings-web-search@patch:@deepseek-ai/dsh-client-ui-settings-web-search@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-client-ui-settings-web-search-0.2.1-alpha.2.tgz#./patches/dsh-client-ui-settings-web-search@0.2.1-alpha.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.2.1-alpha.2
+  resolution: "@deepseek-ai/dsh-client-ui-settings-web-search@patch:@deepseek-ai/dsh-client-ui-settings-web-search@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-client-ui-settings-web-search-0.2.1-alpha.2.tgz%23vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-client-ui-settings-web-search-0.2.1-alpha.2.tgz%3A%3Ahash=e4f799&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-client-ui-settings-web-search@0.2.1-alpha.2.patch::version=0.2.1-alpha.2&hash=76b165&locator=deepseek-harness-desktop%40workspace%3A."
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.5-alpha.1
+  checksum: 10c0/f5389a23ad548334647419fd44bb8be42d15c7d3c3b61c17d3249eab00e6ca38a92c6ade3c66e9e24e1ba7e0c421b2cbb064985107e044dea3ad24484604ca20
+  languageName: node
+  linkType: hard
+
 "@deepseek-ai/dsh-client-ui-settings@file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-client-ui-settings-0.2.0-rc.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.2.0-rc.2
   resolution: "@deepseek-ai/dsh-client-ui-settings@file:vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-client-ui-settings-0.2.0-rc.2.tgz#vendor/dsh-runtime/0.2.0-rc.2/deepseek-ai-dsh-client-ui-settings-0.2.0-rc.2.tgz::hash=97e19c&locator=deepseek-harness-desktop%40workspace%3A."
