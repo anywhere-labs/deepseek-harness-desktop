@@ -4608,6 +4608,27 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@deepseek-ai/dsh-experimental-inspector@patch:@deepseek-ai/dsh-experimental-inspector@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz#./patches/dsh-experimental-inspector@0.2.1-alpha.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.2.1-alpha.2
+  resolution: "@deepseek-ai/dsh-experimental-inspector@patch:@deepseek-ai/dsh-experimental-inspector@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz%23vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz%3A%3Ahash=ef67e3&locator=deepseek-harness-desktop%2540workspace%253A.#./patches/dsh-experimental-inspector@0.2.1-alpha.2.patch::version=0.2.1-alpha.2&hash=5d2d79&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/dsh-app-boot": "npm:0.2.1-alpha.2"
+    "@deepseek-ai/dsh-brand": "npm:0.2.1-alpha.2"
+    "@deepseek-ai/dsh-util-crypto": "npm:0.2.1-alpha.2"
+    "@deepseek-ai/schemastery": "npm:~3.18.5-alpha.1"
+    open: "npm:^11.0.2"
+    serve-static: "npm:^2.2.1"
+    ws: "npm:^8.21.3"
+  peerDependencies:
+    "@deepseek-ai/cordis": ~4.0.5-alpha.1
+    "@deepseek-ai/cordis-plugin-loader": ~1.0.6-alpha.1
+    "@deepseek-ai/dsh-client-connection": 0.2.1-alpha.2
+    "@deepseek-ai/dsh-client-modules": 0.2.1-alpha.2
+    "@deepseek-ai/dsh-host-webserver": 0.2.1-alpha.2
+  checksum: 10c0/1c202fbb59ea0e838b4483177701c65dae8139bc720b796c0d13aa0c9139b94512bc5c392e120fbd32208bf81f558c62cd50d09d407c89cea7c893fc8ee4b2d8
+  languageName: node
+  linkType: hard
+
 "@deepseek-ai/dsh-experimental-ralph-bundle@file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-ralph-bundle-0.2.1-alpha.2.tgz::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.2.1-alpha.2
   resolution: "@deepseek-ai/dsh-experimental-ralph-bundle@file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-ralph-bundle-0.2.1-alpha.2.tgz#vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-ralph-bundle-0.2.1-alpha.2.tgz::hash=cc7874&locator=deepseek-harness-desktop%40workspace%3A."

@@ -1,0 +1,31 @@
+diff --git a/lib/devtools/chunks/legacy-BNB7PpN-.js b/lib/devtools/chunks/legacy-BNB7PpN-.js
+--- a/lib/devtools/chunks/legacy-BNB7PpN-.js
++++ b/lib/devtools/chunks/legacy-BNB7PpN-.js
+@@ -867,7 +867,9 @@
+ 	setWhitelistedShortcuts(e) {}
+ 	setEyeDropperActive(e) {}
+ 	showCertificateViewer(e) {}
+-	reattach(e) {}
++	// Standalone Inspector has no native DevTools embedder to reattach.
++	// Complete the public callback so Reload DevTools can reload its iframe.
++	reattach(e) { e(); }
+ 	readyForTest() {}
+ 	connectionReady() {}
+ 	setOpenNewWindowForPopups(e) {}
+diff --git a/lib/devtools/chunks/network-CC8age2-.js b/lib/devtools/chunks/network-CC8age2-.js
+--- a/lib/devtools/chunks/network-CC8age2-.js
++++ b/lib/devtools/chunks/network-CC8age2-.js
+@@ -7971,11 +7971,11 @@
+ 	}
+ 	showRecordingHint() {
+ 		this.hideRecordingHint();
+-		let e = Yt.instance(), t = this.recording ? "inspector-main.reload" : "network.toggle-recording", n = e.hasAction(t) ? e.getAction(t) : null, r = be.instance().shortcutTitleForAction(t) ?? "", i = this.recording ? Z(X.recordingNetworkActivity) : Z(X.noNetworkActivityRecorded), a = this.recording ? X.performARequestOrHitSToRecordThe : X.recordToDisplayNetworkActivity, o = this.recording ? Z(X.reloadPage) : Z(X.startRecording), s = Z(a, {
++		let e = Yt.instance(), t = this.recording ? "" : "network.toggle-recording", n = t && e.hasAction(t) ? e.getAction(t) : null, r = be.instance().shortcutTitleForAction(t) ?? "", i = this.recording ? Z(X.recordingNetworkActivity) : Z(X.noNetworkActivityRecorded), a = this.recording ? X.performARequestOrHitSToRecordThe : X.recordToDisplayNetworkActivity, o = this.recording ? Z(X.reloadPage) : Z(X.startRecording), s = this.recording ? "Perform an operation that makes a fetch request. This Inspector target does not support page reload." : Z(a, {
+ 			PH1: o,
+ 			PH2: r
+ 		});
+-		if (this.recordingHint = new Ee(i, r ? s : ""), this.recordingHint.element.classList.add("network-status-pane"), this.recordingHint.link = "https://developer.chrome.com/docs/devtools/network/", r && n) {
++		if (this.recordingHint = new Ee(i, this.recording || r ? s : ""), this.recordingHint.element.classList.add("network-status-pane"), this.recordingHint.link = "https://developer.chrome.com/docs/devtools/network/", r && n) {
+ 			let e = pt(o, () => n.execute(), {
+ 				jslogContext: t,
+ 				variant: se.TONAL
