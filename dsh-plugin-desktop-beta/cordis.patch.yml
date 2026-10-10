@@ -10,6 +10,8 @@
       disabled: !!js process.platform === 'linux'
     - id: desktop-diagnostics
       name: dsh-plugin-desktop-beta/diagnostics
+    - id: desktop-session-trash
+      name: dsh-plugin-desktop-beta/session-trash
     - id: desktop-notifications
       name: dsh-plugin-desktop-beta/notifications
     - id: desktop-pnpm

@@ -72,7 +72,11 @@
       "types": "./lib/types/updates.d.ts",
       "default": "./lib/updates.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./session-trash": {
+      "types": "./lib/types/session-trash.d.ts",
+      "default": "./lib/session-trash.js"
+    }
   },
   "files": [
     "build/app-icon.png",
