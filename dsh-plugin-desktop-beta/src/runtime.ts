@@ -183,6 +183,9 @@ export interface DesktopShellSpec extends DesktopWindowConfig {
 
 /** Electron bootstrap capability supplied before the profile tree mounts. */
 export interface DesktopRuntime {
+  /** Apply live metadata tracing preferences in the Electron supervisor. */
+  configureDeveloperLogging?(preferences: { developerLogging?: boolean; logLevel: 'debug' | 'info' | 'warn' | 'error' }): void
+
   /** Current Electron platform. */
   readonly platform: DesktopPlatform
 

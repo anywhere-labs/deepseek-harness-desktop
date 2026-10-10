@@ -14,6 +14,8 @@
  * the stable edition while the two implementations stay free to diverge.
  */
 
+import { auditHostDeveloperPlugins } from './host-developer-logging.ts'
+import { configureDeveloperLogging } from './developer-logging.ts'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
@@ -88,6 +90,8 @@ export interface DesktopSettings {
   networkExposure: DesktopNetworkExposure
   /** Log verbosity threshold applied to the file logger. */
   logLevel: 'debug' | 'info' | 'warn' | 'error'
+  /** Opt-in metadata tracing; absent in older saved configurations. */
+  developerLogging?: boolean
 }
 
 /** Schema of the editable Desktop preference subset. */
@@ -102,10 +106,11 @@ export const DesktopSettingsSchema: z<DesktopSettings> = z.object({
   openBrowser: z.boolean().default(false),
   networkExposure: z.union(['loopback', 'lan'] as const).default('loopback'),
   logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info'),
+  developerLogging: z.boolean().default(false),
 })
 
 /**
- * Native window configuration. The eight fields the configuration form edits
+ * Native window configuration. The fields the configuration form edits
  * are `.volatile()`, which is what publishes them to `SettingsForms`; the four
  * geometry fields are consumed once at window construction and stay plain.
  */
@@ -126,6 +131,8 @@ export interface DesktopShellConfig {
   networkExposure: Volatile<DesktopNetworkExposure>
   /** Log verbosity threshold applied to the file logger. */
   logLevel: Volatile<'debug' | 'info' | 'warn' | 'error'>
+  /** Opt-in live diagnostic metadata capture. */
+  developerLogging?: Volatile<boolean>
   /** Initial window width in CSS pixels. */
   width: number
   /** Initial window height in CSS pixels. */
@@ -147,6 +154,7 @@ export const DesktopShellConfig = z.object({
   openBrowser: z.boolean().default(false).volatile(),
   networkExposure: z.union(['loopback', 'lan'] as const).default('loopback').volatile(),
   logLevel: z.union(['debug', 'info', 'warn', 'error'] as const).default('info').volatile(),
+  developerLogging: z.boolean().default(false).volatile(),
   width: z.number().step(1).min(800).default(1280),
   height: z.number().step(1).min(600).default(840),
   minWidth: z.number().step(1).min(640).default(900),
@@ -250,6 +258,7 @@ export function createDesktopSettingsPort(
     openBrowser: config.openBrowser.get(),
     networkExposure: config.networkExposure.get(),
     logLevel: config.logLevel.get(),
+    developerLogging: config.developerLogging?.get() ?? false,
   })
   assertDesktopSettings(read(), platform)
   ctx.on('internal/config', function (_raw, next) {
@@ -288,6 +297,7 @@ function readCandidate(raw: unknown): DesktopSettings {
     openBrowser: candidate.openBrowser.get(),
     networkExposure: candidate.networkExposure.get(),
     logLevel: candidate.logLevel.get(),
+    developerLogging: candidate.developerLogging.get(),
   }
 }
 
@@ -494,15 +504,24 @@ export function observeDesktopPreferenceSettings(
     readEntryValue<DesktopSettings>(ctx, DESKTOP_SETTINGS_ENTRY_ID)
   const readNotifications = (): DesktopNotificationSettings | undefined =>
     readEntryValue<DesktopNotificationSettings>(ctx, DESKTOP_NOTIFICATIONS_SETTINGS_ENTRY_ID)
-  fileExporter?.setThreshold(readDesktop()?.logLevel ?? 'info')
+  let tracing = false
+  const applyLogging = (desktop: DesktopSettings | undefined) => {
+    const preferences = { developerLogging: desktop?.developerLogging === true, logLevel: desktop?.logLevel ?? 'info' }
+    fileExporter?.setThreshold(preferences.logLevel)
+    configureDeveloperLogging(preferences)
+    ctx.get('desktopRuntime')?.configureDeveloperLogging?.(preferences)
+    if (preferences.developerLogging && !tracing) auditHostDeveloperPlugins(ctx)
+    tracing = preferences.developerLogging
+  }
+  applyLogging(readDesktop())
   ctx.on('settings/document-updated', (ns) => {
     const namespace = String(ns)
     if (namespace !== DESKTOP_SETTINGS_ENTRY_ID
       && namespace !== DESKTOP_NOTIFICATIONS_SETTINGS_ENTRY_ID) return
     const desktop = readDesktop()
     const notifications = readNotifications()
+    if (namespace === DESKTOP_SETTINGS_ENTRY_ID) applyLogging(desktop)
     if (desktop === undefined || notifications === undefined) return
-    if (namespace === DESKTOP_SETTINGS_ENTRY_ID) fileExporter?.setThreshold(desktop.logLevel)
     const write = enqueueProfilePreferencesWrite(current => desktopProfilePreferencesFromSettings(
       desktop,
       notifications,

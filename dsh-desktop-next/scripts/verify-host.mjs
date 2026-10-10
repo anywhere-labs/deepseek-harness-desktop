@@ -1,4 +1,4 @@
-/** Exercise the actual 0.2.0-rc.2 Host, credentials, Market routes and AA manifest without Electron UI. */
+/** Exercise the actual 0.2.1-alpha.2 Host, credentials, Market routes and AA manifest without Electron UI. */
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -83,47 +83,30 @@ try {
   const officialRows = await rpc('listPlugins')
   for (const name of ['@deepseek-ai/dsh-llm-deepseek-api-key', '@deepseek-ai/dsh-llm-deepseek-account',
     '@deepseek-ai/dsh-client-shortcuts', '@deepseek-ai/dsh-client-ui-shortcuts']) {
-    assert.ok(officialRows.some(row => row.moduleName === name && row.enabled), `rc.2 composition is missing ${name}`)
+    assert.ok(officialRows.some(row => row.moduleName === name && row.enabled), `Web composition is missing ${name}`)
   }
-  // Upstream moved Schedule out of the Web composition into an optional bundle
-  // that inserts its context, Host and client rows together.
-  const scheduleBundle = '@deepseek-ai/dsh-experimental-schedule-bundle'
-  const scheduleModules = ['@deepseek-ai/dsh-time-context', '@deepseek-ai/dsh-schedule', '@deepseek-ai/dsh-client-ui-schedule']
+  // Upstream retired the Scheduled Tasks bundle: the Web composition mounts
+  // Schedule itself and the clock reading belongs to the agent presets.
+  const scheduleModules = ['@deepseek-ai/dsh-schedule', '@deepseek-ai/dsh-client-ui-schedule']
   for (const name of scheduleModules) {
-    assert.equal(officialRows.some(row => row.moduleName === name && row.enabled), false, `${name} must remain opt-in`)
+    const row = officialRows.find(row => row.moduleName === name)
+    assert.equal(row?.enabled, true, `Web composition must mount ${name}: ${JSON.stringify(row)}`)
+    assert.equal(row?.fiberPhase, 'active', JSON.stringify(row))
   }
-  const offeredSchedule = (await rpc('listBundles')).find(bundle => bundle.name === scheduleBundle)
-  assert.ok(offeredSchedule, `Official Plugins overview must offer ${scheduleBundle}`)
-  assert.equal(offeredSchedule.optional, true)
-  assert.equal(offeredSchedule.enabled, false, 'Scheduled Tasks must remain opt-in')
-  assert.equal(offeredSchedule.removable, false)
-  assert.equal(offeredSchedule.error, undefined, JSON.stringify(offeredSchedule))
-  for (const enabled of [true, false]) {
-    const result = await rpc('setBundleEnabled', { name: scheduleBundle, enabled })
+  const retiredSchedule = '@deepseek-ai/dsh-experimental-schedule-bundle'
+  assert.equal((await rpc('listBundles')).some(bundle => bundle.name === retiredSchedule), false,
+    `Official Plugins overview must not offer the retired ${retiredSchedule}`)
+  for (const enabled of [false, true]) {
+    const row = (await rpc('listPlugins')).find(row => row.moduleName === scheduleModules[0])
+    const result = await rpc('setPluginEnabled', { id: row.entryId, enabled })
     assert.equal(result.application, 'applied', JSON.stringify(result))
-    for (const name of scheduleModules) {
-      const row = (await rpc('listPlugins')).find(row => row.moduleName === name)
-      assert.equal(row?.enabled ?? false, enabled, JSON.stringify(row))
-      if (enabled) assert.equal(row?.fiberPhase, 'active', JSON.stringify(row))
-    }
-    if (enabled) {
-      const bundle = (await rpc('listBundles')).find(bundle => bundle.name === scheduleBundle)
-      for (const name of scheduleModules) {
-        assert.ok(bundle?.rows.some(row => row.moduleName === name && row.entryId),
-          `Native plugin details must expose the live Schedule component: ${name}`)
-      }
-    }
     await stop()
     ;({ origin, cookie } = await boot('desktop'))
-    assert.equal((await rpc('listBundles')).find(bundle => bundle.name === scheduleBundle)?.enabled, enabled,
-      'Schedule selection must survive restart')
-    for (const name of scheduleModules) {
-      const row = (await rpc('listPlugins')).find(row => row.moduleName === name)
-      assert.equal(row?.enabled ?? false, enabled, `Schedule selection must survive restart: ${name}`)
-      if (enabled) assert.equal(row?.fiberPhase, 'active', JSON.stringify(row))
-    }
+    const restarted = (await rpc('listPlugins')).find(row => row.moduleName === scheduleModules[0])
+    assert.equal(restarted?.enabled, enabled, `Schedule switch must survive restart: ${JSON.stringify(restarted)}`)
+    if (enabled) assert.equal(restarted?.fiberPhase, 'active', JSON.stringify(restarted))
   }
-  console.log('verify-host: Scheduled Tasks bundle enable/disable and restart persistence passed')
+  console.log('verify-host: Web-composed Schedule switch and restart persistence passed')
   const availableBundles = await rpc('listBundles')
   // dsh 0.1.7 deleted `-web-profile` and merged its `ui-agent-team` row into `-profile`.
   for (const [name, rowIds] of [
@@ -345,7 +328,7 @@ try {
     await stop()
     console.log('Onboarding Cua native provider activation and teardown passed without capturing screens, sending input or prompting for OS permissions.')
   }
-  console.log(`Next Host smoke passed (${process.argv.includes('--electron') ? 'Electron Node mode' : 'Node'}): authenticated 0.2.0-rc.2 Web, exclusive market selection and independent AA persisted, official row toggles, dshmarket offline install and cross-market removal, official install/remove with a freshly published locked dependency, native dshmarket update origin gate, graceful shutdown, recovery boot and profile switch.`)
+  console.log(`Next Host smoke passed (${process.argv.includes('--electron') ? 'Electron Node mode' : 'Node'}): authenticated 0.2.1-alpha.2 Web, exclusive market selection and independent AA persisted, official row toggles, dshmarket offline install and cross-market removal, official install/remove with a freshly published locked dependency, native dshmarket update origin gate, graceful shutdown, recovery boot and profile switch.`)
 } finally {
   await runner?.dispose()
   await host?.stop()

@@ -4,6 +4,7 @@ import type { ShellExecSpec } from '@deepseek-ai/dsh-shell'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ensureWindowsConsoleHost,
+  type WindowsConsoleDonorLauncher,
   type WindowsConsoleHostApi,
 } from '../src/windows-console-host.ts'
 import {
@@ -16,12 +17,19 @@ const RUN_AS_NODE = 'ELECTRON_RUN_AS_NODE'
 
 function consoleApi(overrides: Partial<WindowsConsoleHostApi> = {}): WindowsConsoleHostApi {
   return {
+    hasConsole: vi.fn(() => true),
+    attachConsole: vi.fn(() => 1),
     getConsoleWindow: vi.fn(() => ({})),
     allocConsole: vi.fn(() => 1),
     getLastError: vi.fn(() => 0),
     showWindow: vi.fn(() => 1),
     ...overrides,
   }
+}
+
+function consoleDonor(pid = 4242): { launch: WindowsConsoleDonorLauncher, release: () => void } {
+  const release = vi.fn()
+  return { launch: vi.fn(async () => ({ pid, release })), release }
 }
 
 function shellSpec(env?: Record<string, string>): ShellExecSpec {
@@ -298,7 +306,7 @@ describe('Windows ACL runner trampoline', () => {
     )
     const argv = [process.execPath, 'windows-acl-runner.js', upstreamRunner, 'shell-argument']
     vi.doMock('../src/windows-console-host.ts', () => ({
-      ensureWindowsConsoleHost: () => {
+      ensureWindowsConsoleHost: async () => {
         throw new Error('could not allocate a console for the Windows ACL runner (Win32 5)')
       },
     }))
@@ -342,34 +350,76 @@ describe('Windows ACL runner trampoline', () => {
 })
 
 describe('Windows ACL runner console host', () => {
-  it('does not load native APIs outside Windows', () => {
+  it('does not load native APIs outside Windows', async () => {
     const loadApi = vi.fn(() => consoleApi())
+    const donor = consoleDonor()
 
-    ensureWindowsConsoleHost('darwin', loadApi)
+    await ensureWindowsConsoleHost('darwin', loadApi, donor.launch)
 
     expect(loadApi).not.toHaveBeenCalled()
+    expect(donor.launch).not.toHaveBeenCalled()
   })
 
-  it('keeps an existing console unchanged', () => {
-    const api = consoleApi()
+  it('keeps an existing console unchanged, including one without a window', async () => {
+    const api = consoleApi({
+      getConsoleWindow: vi.fn(() => null),
+      allocWindowlessConsole: vi.fn(() => true),
+    })
+    const donor = consoleDonor()
 
-    ensureWindowsConsoleHost('win32', () => api)
+    await ensureWindowsConsoleHost('win32', () => api, donor.launch)
 
+    expect(api.allocWindowlessConsole).not.toHaveBeenCalled()
+    expect(donor.launch).not.toHaveBeenCalled()
     expect(api.allocConsole).not.toHaveBeenCalled()
     expect(api.showWindow).not.toHaveBeenCalled()
   })
 
-  it('allocates and hides a console for a consoleless Windows runner', () => {
+  it('allocates a windowless console where Windows supports it', async () => {
+    const api = consoleApi({
+      hasConsole: vi.fn(() => false),
+      allocWindowlessConsole: vi.fn(() => true),
+    })
+    const donor = consoleDonor()
+
+    await ensureWindowsConsoleHost('win32', () => api, donor.launch)
+
+    expect(api.allocWindowlessConsole).toHaveBeenCalledOnce()
+    expect(donor.launch).not.toHaveBeenCalled()
+    expect(api.allocConsole).not.toHaveBeenCalled()
+    expect(api.showWindow).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['is unavailable', undefined],
+    ['fails', () => false],
+  ])('attaches to a windowless donor console when windowless allocation %s', async (_, allocWindowlessConsole) => {
+    const api = consoleApi({
+      hasConsole: vi.fn(() => false),
+      allocWindowlessConsole,
+    })
+    const donor = consoleDonor(4242)
+
+    await ensureWindowsConsoleHost('win32', () => api, donor.launch)
+
+    expect(api.attachConsole).toHaveBeenCalledWith(4242)
+    expect(donor.release).toHaveBeenCalledOnce()
+    expect(api.allocConsole).not.toHaveBeenCalled()
+    expect(api.showWindow).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a hidden console when the donor cannot start', async () => {
     const allocatedWindow = {}
     const calls: string[] = []
     const api = consoleApi({
-      getConsoleWindow: vi.fn(() => {
-        calls.push('get-console')
-        return calls.length === 1 ? null : allocatedWindow
-      }),
+      hasConsole: vi.fn(() => false),
       allocConsole: vi.fn(() => {
         calls.push('allocate')
         return 1
+      }),
+      getConsoleWindow: vi.fn(() => {
+        calls.push('get-console')
+        return allocatedWindow
       }),
       showWindow: vi.fn((window, command) => {
         expect(window).toBe(allocatedWindow)
@@ -377,31 +427,55 @@ describe('Windows ACL runner console host', () => {
         return 1
       }),
     })
+    const launch = vi.fn(async () => {
+      throw new Error('console donor did not start')
+    })
 
-    ensureWindowsConsoleHost('win32', () => api)
+    await ensureWindowsConsoleHost('win32', () => api, launch)
 
-    expect(calls).toEqual(['get-console', 'allocate', 'get-console', 'hide-0'])
+    expect(api.attachConsole).not.toHaveBeenCalled()
+    expect(calls).toEqual(['allocate', 'get-console', 'hide-0'])
   })
 
-  it('fails closed with the native error when console allocation fails', () => {
+  it('releases the donor and falls back to a hidden console when attaching fails', async () => {
     const api = consoleApi({
-      getConsoleWindow: vi.fn(() => null),
+      hasConsole: vi.fn(() => false),
+      attachConsole: vi.fn(() => 0),
+    })
+    const donor = consoleDonor()
+
+    await ensureWindowsConsoleHost('win32', () => api, donor.launch)
+
+    expect(donor.release).toHaveBeenCalledOnce()
+    expect(api.allocConsole).toHaveBeenCalledOnce()
+    expect(api.showWindow).toHaveBeenCalledWith(expect.anything(), 0)
+  })
+
+  it('fails closed with the native error when every console strategy fails', async () => {
+    const api = consoleApi({
+      hasConsole: vi.fn(() => false),
+      allocWindowlessConsole: vi.fn(() => false),
+      attachConsole: vi.fn(() => 0),
       allocConsole: vi.fn(() => 0),
       getLastError: vi.fn(() => 5),
     })
+    const donor = consoleDonor()
 
-    expect(() => ensureWindowsConsoleHost('win32', () => api)).toThrow(
+    await expect(ensureWindowsConsoleHost('win32', () => api, donor.launch)).rejects.toThrow(
       'could not allocate a console for the Windows ACL runner (Win32 5)',
     )
     expect(api.showWindow).not.toHaveBeenCalled()
   })
 
-  it('accepts a successful allocation without a visible console window', () => {
+  it('accepts a fallback allocation without a visible console window', async () => {
     const api = consoleApi({
+      hasConsole: vi.fn(() => false),
+      attachConsole: vi.fn(() => 0),
       getConsoleWindow: vi.fn(() => null),
     })
+    const donor = consoleDonor()
 
-    ensureWindowsConsoleHost('win32', () => api)
+    await ensureWindowsConsoleHost('win32', () => api, donor.launch)
 
     expect(api.allocConsole).toHaveBeenCalledOnce()
     expect(api.showWindow).not.toHaveBeenCalled()

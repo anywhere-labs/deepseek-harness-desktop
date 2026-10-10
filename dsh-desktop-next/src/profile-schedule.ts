@@ -1,50 +1,36 @@
-/** Carry 0.1.7-rc.2 Scheduled Tasks choices onto the upstream optional bundle. */
-import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
-
-/** Upstream bundle that now inserts the three rows the Web bundle used to carry disabled. */
-export const SCHEDULE_BUNDLE = '@deepseek-ai/dsh-experimental-schedule-bundle'
-const ROWS: Readonly<Record<string, string>> = {
-  'time-context': '@deepseek-ai/dsh-time-context',
-  schedule: '@deepseek-ai/dsh-schedule',
-  'ui-schedule': '@deepseek-ai/dsh-client-ui-schedule',
-}
+/** Retire Scheduled Tasks choices written for the upstream optional bundle. */
+import { isMap, isSeq, parseDocument } from 'yaml'
 
 /**
- * Rewrite a Profile patch written against the rc.2 Web rows. Returns undefined
- * when it carries no such row. `select` is true when any row was effectively
- * enabled; the rows the user had left off are kept off explicitly because the
- * bundle inserts them enabled.
+ * Optional bundle 0.2.0-rc.2 offered for Scheduled Tasks. Upstream removed it and
+ * the Web composition now mounts `schedule` and `ui-schedule` itself.
  */
-export function legacySchedulePatch(text: string): { select: boolean; text: string } | undefined {
+export const RETIRED_SCHEDULE_BUNDLE = '@deepseek-ai/dsh-experimental-schedule-bundle'
+const CLOCK_ROW = 'time-context'
+const CLOCK_MODULE = '@deepseek-ai/dsh-time-context'
+
+/**
+ * Drop top-level overrides on the `time-context` row: the clock now belongs to
+ * the agent presets, so such an entry matches no row. Overrides on `schedule`
+ * and `ui-schedule` stay because the Web composition carries both rows.
+ * Returns undefined when the patch has no such override.
+ */
+export function retiredSchedulePatch(text: string): string | undefined {
   // Same comment-preserving dialect as the official manager; !!js is never evaluated here.
   const document = parseDocument(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }] })
   if (document.errors[0]) throw document.errors[0]
   if (!isSeq(document.contents)) throw new Error('Profile patch must be a YAML sequence')
   const items = document.contents.items
-  const legacy: number[] = []
-  const enabled = new Set<string>()
+  const stale: number[] = []
   items.forEach((item, index) => {
+    // A user insert of the module is a new row, not an override; leave it alone.
     if (!isMap(item) || item.has('insert')) return
-    const id = document.getIn([index, 'id'])
-    if (typeof id !== 'string' || !Object.hasOwn(ROWS, id)) return
+    if (document.getIn([index, 'id']) !== CLOCK_ROW) return
     const name = document.getIn([index, 'name'])
-    if (name && name !== ROWS[id]) return
-    legacy.push(index)
-    // Later entries override earlier ones; anything but a literal `false` leaves the row off.
-    if (item.has('disabled')) {
-      if (document.getIn([index, 'disabled']) === false) enabled.add(id)
-      else enabled.delete(id)
-    }
+    if (name && name !== CLOCK_MODULE) return
+    stale.push(index)
   })
-  if (!legacy.length) return undefined
-  for (const index of legacy.reverse()) {
-    const item = items[index]
-    if (!isMap(item)) continue
-    item.delete('disabled')
-    // Keep user configuration for the same row; drop entries that only toggled it.
-    if (item.items.every(pair => ['id', 'name'].includes(String(isScalar(pair.key) ? pair.key.value : pair.key)))) items.splice(index, 1)
-  }
-  const select = enabled.size > 0
-  if (select) for (const id of Object.keys(ROWS)) if (!enabled.has(id)) document.add({ id, disabled: true })
-  return { select, text: String(document) }
+  if (!stale.length) return undefined
+  for (const index of stale.reverse()) items.splice(index, 1)
+  return String(document)
 }

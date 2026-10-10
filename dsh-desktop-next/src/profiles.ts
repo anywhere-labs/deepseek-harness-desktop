@@ -8,7 +8,7 @@ import { atomicJson, atomicText, readPrivateFile } from './private-files.ts'
 import { NextRecovery } from './recovery.ts'
 import { DEFAULT_PROFILE } from './desktop-contract.ts'
 import { computerUsePatch } from './profile-computer-use.ts'
-import { legacySchedulePatch, SCHEDULE_BUNDLE } from './profile-schedule.ts'
+import { RETIRED_SCHEDULE_BUNDLE, retiredSchedulePatch } from './profile-schedule.ts'
 import { removeLinkProjectionsSafely } from '../../dsh-plugin-desktop-beta/src/link-projections.ts'
 
 export const NEXT_PACKAGE = fileURLToPath(new URL('../package.json', import.meta.url))
@@ -25,7 +25,10 @@ export const DEFAULT_FEATURES: Readonly<Features> = { remoteControl: false, mark
 interface ProfileManifest {
   dsh: {
     desktopNextPlugins?: number
-    /** Set once the rc.2 Web-row Scheduled Tasks choices were carried onto the optional bundle. */
+    /**
+     * Scheduled Tasks migration step: 1 carried 0.1.7 Web-row choices onto the
+     * rc.2 optional bundle, 2 retired that bundle once upstream removed it.
+     */
     desktopNextScheduleBundle?: number
     desktopNextOnboarding?: { version: number; outcome: 'completed' | 'skipped'; accountPending?: boolean }
     /** Names recovery removed from `profile.bundles`; a UI ledger, never a policy. */
@@ -203,30 +206,27 @@ export class NextProfiles {
     this.setFeatures(name, { ...this.features(name), dshMarket: manifest.dsh.profile.bundles.includes(DSH_MARKET_PACKAGE) })
   }
   /**
-   * Once per Profile: rc.2 enabled Scheduled Tasks by patching three Web rows
-   * that upstream has since moved into an optional bundle. Those patches now
-   * match nothing, so select the bundle for users who had it on and drop the
-   * stale toggles. The marker stops a later deselection from being undone by
-   * the same row ids the bundle's own switches write.
+   * Once per Profile: upstream retired the Scheduled Tasks bundle and the Web
+   * composition now mounts Schedule. Drop the bundle (app-boot would on load,
+   * but Next reads the list first) and the `time-context` overrides that no
+   * longer match a row; overrides on `schedule` and `ui-schedule` keep applying.
    */
   private migrateSchedule(name: string): void {
     const manifest = this.manifest(name)
-    if (manifest.dsh.desktopNextScheduleBundle === 1) return
+    if (manifest.dsh.desktopNextScheduleBundle === 2) return
     const patchPath = join(this.directory(name), 'cordis.patch.yml')
-    let legacy: ReturnType<typeof legacySchedulePatch>
-    if (!manifest.dsh.profile.bundles.includes(SCHEDULE_BUNDLE)) {
-      // A malformed patch is left for recovery to handle; retry on the next start.
-      try { legacy = legacySchedulePatch(readPrivateFile(patchPath) ?? '[]\n') } catch { return }
+    let patch: string | undefined
+    // A malformed patch is left for recovery to handle; retry on the next start.
+    try { patch = retiredSchedulePatch(readPrivateFile(patchPath) ?? '[]\n') } catch { return }
+    const bundles = manifest.dsh.profile.bundles.filter(bundle => bundle !== RETIRED_SCHEDULE_BUNDLE)
+    if (patch !== undefined || bundles.length !== manifest.dsh.profile.bundles.length) {
+      new NextRecovery(this).backup(name, 'before-schedule-bundle-retirement')
     }
-    if (legacy) {
-      new NextRecovery(this).backup(name, 'before-schedule-bundle-migration')
-      if (legacy.select) manifest.dsh.profile.bundles = [...manifest.dsh.profile.bundles, SCHEDULE_BUNDLE]
-    }
-    manifest.dsh.desktopNextScheduleBundle = 1
-    // Selection first: if the patch write is interrupted, the leftover toggles still
-    // address the selected bundle's rows with the same meaning.
+    // Patch first: both steps are idempotent, so an interrupted run simply repeats.
+    if (patch !== undefined) atomicText(patchPath, patch)
+    manifest.dsh.profile.bundles = bundles
+    manifest.dsh.desktopNextScheduleBundle = 2
     atomicJson(join(this.directory(name), 'package.json'), manifest)
-    if (legacy) atomicText(patchPath, legacy.text)
   }
   private manifest(name: string): ProfileManifest {
     const value = JSON.parse(readPrivateFile(join(this.directory(name), 'package.json')) ?? 'null')

@@ -1,5 +1,6 @@
 import { MessageChannel } from 'node:worker_threads'
 import { afterEach, describe, expect, it } from 'vitest'
+import { configureDeveloperLogging, initializeDeveloperLogging } from '../src/developer-logging.ts'
 import { HostRpc } from '../src/host-rpc.ts'
 
 const cleanup: (() => void)[] = []
@@ -49,4 +50,21 @@ describe('private Host control transport', () => {
     await expect(request).rejects.toThrow('worker exited')
     await expect(parent.call('later')).rejects.toThrow('closed')
   })
+})
+
+it('traces bidirectional IPC metadata without arguments or return values', async () => {
+  const records: any[] = []
+  initializeDeveloperLogging((_level, line) => records.push(JSON.parse(line)), 'ipc-test')
+  configureDeveloperLogging({ developerLogging: true, logLevel: 'info' })
+  try {
+    const [parent, child] = pair()
+    child.handle('echo', ([value]) => value)
+    expect(await parent.call('echo', ['private payload'])).toBe('private payload')
+    expect(records.map(record => record.event).sort()).toEqual(['call.complete', 'call.start', 'handle.complete', 'handle.start'])
+    expect(records.every(record => record.fields.method === 'echo' && record.fields.requestId === 1)).toBe(true)
+    expect(JSON.stringify(records)).not.toContain('private payload')
+  } finally {
+    configureDeveloperLogging({ developerLogging: false, logLevel: 'info' })
+    initializeDeveloperLogging(() => {})
+  }
 })

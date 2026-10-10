@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   if (requestedRunner !== expectedRunner) {
     throw new Error('desktop trampoline received an unexpected ACL runner')
   }
-  ensureWindowsConsoleHost()
+  await ensureWindowsConsoleHost()
   process.argv = [process.argv[0] as string, expectedRunner, ...process.argv.slice(3)]
   await import(pathToFileURL(expectedRunner).href)
 }

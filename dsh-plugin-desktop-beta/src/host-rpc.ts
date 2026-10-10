@@ -1,4 +1,6 @@
 /** Private, asynchronous control channel. Web traffic never passes through this channel. */
+import { diagnosticOperation } from './developer-logging.ts'
+
 export interface HostPort {
   send(message: unknown): void
   listen(receive: (message: unknown) => void): () => void
@@ -25,7 +27,10 @@ export class HostRpc {
     if (this.closed) return Promise.reject(new Error('DSH Host channel closed'))
     if (signal?.aborted) return Promise.reject(new Error('DSH Host call cancelled'))
     const id = ++this.sequence
-    return new Promise<T>((resolve, reject) => {
+    const end = diagnosticOperation('process.ipc', 'call', { method, requestId: id })
+    return new Promise<T>((settle, fail) => {
+      const resolve = (value: T) => { end(); settle(value) }
+      const reject = (error: Error) => { end(error); fail(error) }
       const abort = () => {
         this.pending.delete(id)
         cleanup()
@@ -67,14 +72,17 @@ export class HostRpc {
     } else if (message.kind === 'cancel') {
       this.active.get(id)?.abort()
     } else if (message.kind === 'call' && typeof message.method === 'string' && Array.isArray(message.args)) {
+      const end = diagnosticOperation('process.ipc', 'handle', { method: message.method, requestId: id })
       const controller = new AbortController()
       this.active.set(id, controller)
       try {
         const handler = this.handlers.get(message.method)
         if (!handler) throw new Error(`Unknown Host operation: ${message.method}`)
         const result = await handler(message.args, controller.signal)
+        end(undefined, { cancelled: controller.signal.aborted })
         if (!this.closed) this.port.send({ kind: 'result', id, value: result })
       } catch (cause) {
+        end(cause, { cancelled: controller.signal.aborted })
         if (!this.closed) {
           try { this.port.send({ kind: 'result', id, error: cause instanceof Error ? cause.message : String(cause) }) }
           catch { /* transport owner handles exit */ }

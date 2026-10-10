@@ -105,6 +105,7 @@ export function createHostRuntime(rpc: HostRpc, snapshot: RuntimeSnapshot): Desk
       publish()
       return { refresh: publish, dispose() { trayPublishers.delete(id); releases.forEach(release => release()); void send('tray:dispose', [id]) } }
     },
+    configureDeveloperLogging(preferences) { void send('native:configureDeveloperLogging', [preferences]) },
     show() { void send('native:show') },
     notifyAttention(value) { void send('native:notifyAttention', [value]) },
     openTerminal() { void send('native:openTerminal') },
@@ -147,6 +148,10 @@ export function bindNativeRuntime(rpc: HostRpc, runtime: DesktopRuntime): () => 
     'setThemeSource', 'prepareToQuit'] as const) {
     handle(`native:${method}`, args => (runtime[method] as (...args: any[]) => unknown).apply(runtime, args))
   }
+  handle('native:configureDeveloperLogging', ([preferences]) => {
+    if (!preferences || typeof preferences.developerLogging !== 'boolean' || !['debug', 'info', 'warn', 'error'].includes(preferences.logLevel)) throw new TypeError('Invalid logging preferences')
+    runtime.configureDeveloperLogging?.(preferences)
+  })
   handle('native:platformLogin', ([request]) => { runtime.platformLogin(parseDesktopPlatformLoginRequest(request)) })
   handle('native:setLocalePreference', ([preference]) => {
     runtime.setLocalePreference(preference)

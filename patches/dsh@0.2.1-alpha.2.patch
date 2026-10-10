@@ -1,0 +1,35 @@
+diff --git a/lib/bin.js b/lib/bin.js
+--- a/lib/bin.js
++++ b/lib/bin.js
+@@ -109,7 +109,7 @@ function parseDshArgs(argv, version, manageDesktopProfile = false) {
+ 		}
+ 		const profile = options.profile;
+ 		if (profile === "") program.error("error: --profile needs a name");
+-		rejectElectronProfile(program, profile);
++		if (!manageDesktopProfile) rejectElectronProfile(program, profile);
+ 		resolved = resolveBoot(program, profile, options, args);
+ 	});
+ 	if (first === "plugin") {
+diff --git a/lib/profile-boot-BZ2ZjNWi.js b/lib/profile-boot-BZ2ZjNWi.js
+--- a/lib/profile-boot-BZ2ZjNWi.js
++++ b/lib/profile-boot-BZ2ZjNWi.js
+@@ -259,6 +259,7 @@ async function runProfile(options) {
+ 		const profileContext = {
+ 			name: options.profile,
+ 			...options.packageManager === void 0 ? {} : { packageManager: options.packageManager },
++			...options.resolvedProfile?.readPatches === void 0 ? {} : { readPatches: options.resolvedProfile.readPatches },
+ 			dir: composed.profile.dir,
+ 			patchPath: composed.profile.patchPath,
+ 			installAnchor: options.resolvedProfile?.installAnchor ?? INSTALL_ANCHOR,
+diff --git a/lib/types/profile-boot.d.ts b/lib/types/profile-boot.d.ts
+--- a/lib/types/profile-boot.d.ts
++++ b/lib/types/profile-boot.d.ts
+@@ -58,6 +58,8 @@ export interface ResolvedProfileRuntime {
+     profile: Profile;
+     /** Absolute package.json path of the application's dsh installation. */
+     installAnchor: string;
++    /** Application-owned composition for subsequent configuration edits and HMR. */
++    readPatches?: ProfileContext['readPatches'];
+ }
+ /** Options for {@link runProfile}. */
+ export interface RunProfileOptions {

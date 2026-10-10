@@ -11,7 +11,7 @@ export function parsePreferences(value: unknown): DesktopPreferences {
   // Acrylic and Mica were removed like in the original Desktop. Old preference
   // files stay readable and fail closed to the ordinary opaque Windows window.
   if (source.windowsMaterial === 'acrylic' || source.windowsMaterial === 'mica') result.windowsMaterial = 'off'
-  for (const key of ['closeToTray', 'browserAccess', 'notifications', 'turnCompleted', 'turnFailed', 'jobCompleted', 'jobFailed', 'scheduleCompleted', 'scheduleFailed'] as const) {
+  for (const key of ['developerLogging', 'closeToTray', 'browserAccess', 'notifications', 'turnCompleted', 'turnFailed', 'jobCompleted', 'jobFailed', 'scheduleCompleted', 'scheduleFailed'] as const) {
     if (typeof result[key] !== 'boolean') throw new Error(`Invalid Desktop preference: ${key}`)
   }
   for (const [key, choices] of Object.entries({ macosMaterial: ['off', 'transparent'], windowsMaterial: ['off'],

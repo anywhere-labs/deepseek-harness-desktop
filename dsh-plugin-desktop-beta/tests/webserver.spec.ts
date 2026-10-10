@@ -7,6 +7,7 @@ import {
   type DesktopBrowserAccess,
 } from '../src/desktop-browser-access.ts'
 import { DESKTOP_WEB_PORT_RETRY_LIMIT } from '../src/desktop-port.ts'
+import { configureDeveloperLogging, initializeDeveloperLogging } from '../src/developer-logging.ts'
 import DesktopWebServer from '../src/webserver.ts'
 
 const occupied: Server[] = []
@@ -74,8 +75,10 @@ describe('Desktop WebServer port policy', () => {
     const context = new Context()
     contexts.push(context)
 
+    // dsh 0.2.1-alpha.2's webserver schema rejects wildcard binds before the
+    // Desktop policy runs; either refusal keeps the bind closed.
     await expect(context.plugin(DesktopWebServer, { host: '0.0.0.0', port: 0 }))
-      .rejects.toThrow('requires loopback until LAN HTTPS is available')
+      .rejects.toThrow(/requires loopback until LAN HTTPS is available|unspecified \(wildcard\) address, which is not supported/u)
   })
 
   it('increments only after the requested loopback bind reports EADDRINUSE', async () => {
@@ -173,4 +176,23 @@ describe('Desktop WebServer browser gate', () => {
       [access.rendererHeader.name]: access.rendererHeader.value,
     })).resolves.toContain('101 Switching Protocols')
   })
+})
+
+it('traces HTTP status and duration without query, headers or bodies', async () => {
+  const records: any[] = []
+  initializeDeveloperLogging((_level, line) => records.push(JSON.parse(line)), 'http-test')
+  configureDeveloperLogging({ developerLogging: true, logLevel: 'info' })
+  try {
+    const server = await startWebServer()
+    server.register({ kind: 'exact', path: '/fixture', handler: (_req, res) => { res.end('private response') } })
+    const response = await fetch(`http://127.0.0.1:${String(server.port)}/fixture?token=private-query`, {
+      method: 'POST', body: 'private body', headers: { authorization: 'Bearer private-header' },
+    })
+    expect(await response.text()).toBe('private response')
+    expect(records.at(-1)).toMatchObject({ event: 'request.complete', fields: { route: '/fixture', method: 'POST', status: 200, aborted: false, durationMs: expect.any(Number) } })
+    expect(JSON.stringify(records)).not.toContain('private')
+  } finally {
+    configureDeveloperLogging({ developerLogging: false, logLevel: 'info' })
+    initializeDeveloperLogging(() => {})
+  }
 })

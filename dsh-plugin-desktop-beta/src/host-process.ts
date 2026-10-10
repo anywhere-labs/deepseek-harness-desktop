@@ -1,4 +1,5 @@
 /** Electron owns the child lifetime; the child owns the unchanged DSH Web server. */
+import { createProcessOutputLogging } from './process-output-logging.ts'
 import { serializeHostEnvironment } from './host-launch-environment.ts'
 import { utilityProcess } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -49,11 +50,16 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
     serviceName: 'DSH Host', stdio: 'pipe', cwd: process.cwd(), env: { ...process.env },
   })
   // Keep normal Host logs in its own files; stderr includes bootstrap failures.
-  child.stdout?.on('data', (data: Buffer) => { process.stdout.write(data) })
+  const stdoutLog = createProcessOutputLogging('stdout', () => child.pid)
+  const stderrLog = createProcessOutputLogging('stderr', () => child.pid)
+  child.stdout?.on('data', (data: Buffer) => { process.stdout.write(data); stdoutLog.write(data) })
+  child.stdout?.once('end', () => stdoutLog.end())
+  child.stderr?.once('end', () => stderrLog.end())
   const stderrDecoder = new StringDecoder('utf8')
   let stderrTail = ''
   child.stderr?.on('data', (data: Buffer) => {
     process.stderr.write(data)
+    stderrLog.write(data)
     stderrTail = (stderrTail + stderrDecoder.write(data)).slice(-HOST_STDERR_TAIL_CHARS)
   })
   const rpc = new HostRpc({
@@ -69,6 +75,7 @@ export async function startIsolatedDesktopHost(options: IsolatedHostOptions): Pr
   let resolveExit!: () => void
   const exit = new Promise<void>(resolve => { resolveExit = resolve })
   child.once('exit', (code) => {
+    stdoutLog.end(); stderrLog.end()
     exited = true
     rpc.close(`DSH Host exited (${code})`)
     resolveExit()

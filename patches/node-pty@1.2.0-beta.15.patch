@@ -1,0 +1,43 @@
+diff --git a/lib/unixTerminal.js b/lib/unixTerminal.js
+--- a/lib/unixTerminal.js
++++ b/lib/unixTerminal.js
+@@ -28,10 +28,23 @@ var terminal_1 = require("./terminal");
+ var utils_1 = require("./utils");
+ var native = (0, utils_1.loadNativeModule)('pty');
+ var pty = native.module;
+-var helperPath = native.dir + '/spawn-helper';
+-helperPath = path.resolve(__dirname, helperPath);
+-helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
+-helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
++// A current external embedded-runtime consumer supplies a non-sibling helper.
++var helperPath = process.env.DSH_NODE_PTY_SPAWN_HELPER;
++if (helperPath) {
++    helperPath = path.resolve(helperPath);
++}
++else {
++    var executableSibling = process.execPath + '-spawn-helper';
++    if (fs.existsSync(executableSibling)) {
++        helperPath = executableSibling;
++    }
++    else {
++        helperPath = native.dir + '/spawn-helper';
++        helperPath = path.resolve(__dirname, helperPath);
++        helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');
++        helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');
++    }
++}
+ var DEFAULT_FILE = 'sh';
+ var DEFAULT_NAME = 'xterm';
+ var DESTROY_SOCKET_TIMEOUT_MS = 200;
+diff --git a/lib/windowsPtyAgent.js b/lib/windowsPtyAgent.js
+--- a/lib/windowsPtyAgent.js
++++ b/lib/windowsPtyAgent.js
+@@ -207,6 +207,8 @@ var WindowsPtyAgent = /** @class */ (function () {
+             // Close the input write handle to signal the end of session.
+             this._inSocket.destroy();
+             this._ptyNative.kill(this._pty, this._useConptyDll);
++            // Start draining even when the exited process has no more output.
++            this._conoutSocketWorker.dispose();
+             this._outSocket.on('data', function () {
+                 _this._conoutSocketWorker.dispose();
+             });

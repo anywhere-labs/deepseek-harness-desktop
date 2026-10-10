@@ -26,6 +26,7 @@ export interface DesktopShellSettings {
   readonly port: number
   readonly openBrowser: boolean
   readonly networkExposure: 'loopback' | 'lan'
+  readonly developerLogging?: boolean
   readonly logLevel: 'debug' | 'info' | 'warn' | 'error'
 }
 
@@ -60,6 +61,7 @@ export interface DesktopSettingsSectionInjected {
     readonly nativeLanConfirmation?: boolean
     readonly jobNotifications?: boolean
     readonly updates?: boolean
+    readonly logging?: boolean
   }
   readonly introNotice?: ReactNode
   readonly browserActions?: ReactNode
@@ -73,7 +75,7 @@ export type DesktopSettingsSectionProps =
   & InjectFace<DesktopSettingsSectionInjected>
 
 type Translate = DesktopSettingsSectionProps['t']
-type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification'
+type BusyOperation = 'load' | 'create-profile' | 'select-profile' | 'delete-profile' | 'select-aa' | 'select-market' | 'mode' | 'material' | 'web' | 'notification' | 'logging'
 type RestartState = 'none' | 'restarting' | 'required'
 type LanPollWait = (signal: AbortSignal) => Promise<void>
 
@@ -927,6 +929,20 @@ export function DesktopSettingsSection({
         </section>
       )}
 
+      {capabilities?.logging !== false && <section className="dshDesktopSettingsGroup" aria-labelledby="dsh-desktop-logging-title">
+        <h3 id="dsh-desktop-logging-title">{t('loggingTitle')}</h3>
+        <DesktopSettingsToggleRow label={t('developerLogging')} checked={desktop.value?.developerLogging === true}
+          disabled={!settingsWritable || busy !== undefined}
+          onChange={checked => { void run('logging', async () => { await desktopSettings.set('developerLogging', checked) }) }} />
+        <p className="dshDesktopSettingsGroupIntro">{t('developerLoggingBody')}</p>
+        <label className="dshDesktopSettingsToggleRow">
+          <span>{t('logLevel')}</span>
+          <select value={desktop.value?.logLevel ?? 'info'} disabled={!settingsWritable || busy !== undefined}
+            onChange={event => { const value = event.target.value as DesktopShellSettings['logLevel']; void run('logging', async () => { await desktopSettings.set('logLevel', value) }) }}>
+            <option value="debug">Debug</option><option value="info">Info</option><option value="warn">Warn</option><option value="error">Error</option>
+          </select>
+        </label>
+      </section>}
       {extraSections}
       {confirmLan && (
         <div className="dshDesktopSettingsDialogBackdrop" role="presentation">

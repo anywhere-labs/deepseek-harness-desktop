@@ -7,6 +7,7 @@ import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@dee
 import { DESKTOP_PACKAGE_NAME as BIN_NAME } from './product-identity.ts'
 import { observeDesktopPreferenceSettings } from './settings-bridge.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
+import { DesktopPluginPackages } from './plugin-packages.ts'
 import { createDesktopWebProfile, listDesktopProfiles, canDeleteDesktopProfile, deleteDesktopProfile, selectDesktopProfile } from './profile-manager.ts'
 import { DesktopProfileService } from './profile-service.ts'
 import { DesktopActionsService } from './desktop-actions.ts'
@@ -23,6 +24,8 @@ import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 import { FileExporter } from './file-exporter.ts'
+import { initializeDeveloperLogging, diagnosticRunId } from './developer-logging.ts'
+import { installHostDeveloperLogging } from './host-developer-logging.ts'
 import { installAgentErrorLogging } from './agent-error-logging.ts'
 import { LogFileSink } from './log-files.ts'
 
@@ -55,6 +58,7 @@ export interface DesktopHostOptions {
   desktopProxyOverlay: Readonly<Record<string, string>>
   desktopPnpmBootstrap: DesktopPnpmBootstrap
   logDirectory: string
+  diagnosticRunId?: string
 }
 
 export async function bootDesktopHost(options: DesktopHostOptions, runtime: DesktopRuntime,
@@ -72,6 +76,8 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
   const logSink = new LogFileSink(options.logDirectory, {
     maxFileBytes: 10 * 1024 * 1024, maxDirectoryBytes: 200 * 1024 * 1024,
   })
+  logSink.purgeOlderThan(7)
+  initializeDeveloperLogging((level, line) => logSink.writeRecord(level, JSON.parse(line)), options.diagnosticRunId ?? diagnosticRunId())
   let fileExporter: FileExporter | undefined
     let currentProfilePreferences: DesktopProfilePreferences = profilePreferences
     let profilePreferencesWriteTail: Promise<void> = Promise.resolve()
@@ -127,6 +133,8 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
           () => releasePackageResolver,
           'dsh-plugin-desktop: profile package resolution',
         )
+        // Official plugin metadata and package lookups read the packages this resolver loads.
+        await hostCtx.plugin(DesktopPluginPackages)
         hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, desktopLaunchEnvironment)
         hostCtx.provide('desktopBrowserAccess', browserAccess)
         hostCtx.provide('desktopLanHttps', lanHttps)
@@ -150,6 +158,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         }
         // Registered before the plugin tree mounts, so no agent can fail unrecorded.
         installAgentErrorLogging(hostCtx)
+        installHostDeveloperLogging(hostCtx)
         await hostCtx.plugin(DesktopProfileService, {
           current: {
             name: activeProfileName,
