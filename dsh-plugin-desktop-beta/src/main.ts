@@ -87,6 +87,7 @@ import { LogFileSink } from './log-files.ts'
 import { maskSecrets } from './mask-secrets.ts'
 import { resolveDesktopShellEnvironment } from './shell-environment.ts'
 import { installProfilePackageResolver } from './module-resolution.ts'
+import { DesktopPluginPackages } from './plugin-packages.ts'
 import { packagedDependencyPath } from './packaged-runtime-path.ts'
 import {
   beginDesktopProfileStartup,
@@ -1702,6 +1703,8 @@ async function start(): Promise<void> {
             () => releasePackageResolver,
             'dsh-plugin-desktop: profile package resolution',
           )
+          // Official plugin metadata and package lookups read the packages this resolver loads.
+          await hostCtx.plugin(DesktopPluginPackages)
           hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, desktopLaunchEnvironment)
           hostCtx.provide('desktopBrowserAccess', browserAccess)
           hostCtx.provide('desktopLanHttps', lanHttps)

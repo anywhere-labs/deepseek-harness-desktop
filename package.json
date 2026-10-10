@@ -1018,8 +1018,8 @@
     "@deepseek-ai/dsh-experimental-cot-translation-bundle@npm:^0.2.1-alpha.2": "file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-cot-translation-bundle-0.2.1-alpha.2.tgz",
     "@deepseek-ai/dsh-client-modules@npm:0.2.1-alpha.2": "patch:@deepseek-ai/dsh-client-modules@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-client-modules-0.2.1-alpha.2.tgz#./patches/dsh-client-modules@0.2.1-alpha.2.patch",
     "@deepseek-ai/dsh-client-modules@npm:^0.2.1-alpha.2": "patch:@deepseek-ai/dsh-client-modules@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-client-modules-0.2.1-alpha.2.tgz#./patches/dsh-client-modules@0.2.1-alpha.2.patch",
-    "@deepseek-ai/dsh-experimental-inspector@npm:0.2.1-alpha.2": "file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz",
-    "@deepseek-ai/dsh-experimental-inspector@npm:^0.2.1-alpha.2": "file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz",
+    "@deepseek-ai/dsh-experimental-inspector@npm:0.2.1-alpha.2": "patch:@deepseek-ai/dsh-experimental-inspector@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz#./patches/dsh-experimental-inspector@0.2.1-alpha.2.patch",
+    "@deepseek-ai/dsh-experimental-inspector@npm:^0.2.1-alpha.2": "patch:@deepseek-ai/dsh-experimental-inspector@file%3Avendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-0.2.1-alpha.2.tgz#./patches/dsh-experimental-inspector@0.2.1-alpha.2.patch",
     "@deepseek-ai/dsh-experimental-session-inspector@npm:0.2.1-alpha.2": "file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-session-inspector-0.2.1-alpha.2.tgz",
     "@deepseek-ai/dsh-experimental-session-inspector@npm:^0.2.1-alpha.2": "file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-session-inspector-0.2.1-alpha.2.tgz",
     "@deepseek-ai/dsh-experimental-inspector-profile@npm:0.2.1-alpha.2": "file:vendor/dsh-runtime/0.2.1-alpha.2/deepseek-ai-dsh-experimental-inspector-profile-0.2.1-alpha.2.tgz",
@@ -1369,7 +1369,7 @@
     "check:architecture": "yarn test:architecture-gates && node scripts/verify-market-dependency-direction.mjs",
     "check:vendored-runtime": "node scripts/sync-vendored-runtime.mjs --check --channel stable && node scripts/sync-vendored-runtime.mjs --check --channel beta",
     "check:desktop-variants": "node scripts/verify-desktop-variants.mjs",
-    "check:layout": "yarn test:market-release && yarn test:aa-release && yarn check:bilingual-docs && yarn check:architecture && yarn check:vendored-runtime && yarn check:desktop-variants && yarn icons:check && node scripts/verify-layout.mjs",
+    "check:layout": "yarn test:market-release && yarn test:aa-release && yarn check:bilingual-docs && yarn check:architecture && yarn check:vendored-runtime && yarn test:inspector-compat && yarn check:desktop-variants && yarn icons:check && node scripts/verify-layout.mjs",
     "check": "yarn check:layout && yarn test:aa-connector && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-plugin-desktop check && yarn workspace dsh-plugin-desktop-beta check && yarn workspace dsh-desktop-next check",
     "dev": "yarn market:prepare && yarn aa:prepare-release && yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dev",
     "start": "yarn market:prepare && yarn workspace dsh-plugin-desktop start",
@@ -1407,6 +1407,7 @@
     "dist:win:next": "yarn market:prepare && yarn aa:prepare-release && yarn aa:prepare-release --verify-release && yarn workspace dsh-community-market build && yarn workspace dsh-desktop-next dist:win",
     "market:prepare": "node scripts/prepare-dsh-market.mjs",
     "market:check": "node scripts/prepare-dsh-market.mjs --check",
-    "test:market-release": "node --test scripts/prepare-dsh-market.test.mjs"
+    "test:market-release": "node --test scripts/prepare-dsh-market.test.mjs",
+    "test:inspector-compat": "node --test scripts/inspector-compat.test.mjs"
   }
 }

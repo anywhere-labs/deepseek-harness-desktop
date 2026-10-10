@@ -128,6 +128,26 @@ export async function forwardWebRequest(request: Request, host: string, cookie: 
   if (source.protocol !== 'dsh-app:' || source.host !== 'app' || source.username || source.password
     || !nativeToken || request.headers.get(NATIVE_ACCESS_HEADER) !== nativeToken) return new Response(null, { status: 403 })
   if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
+  // The official connect.js accepts an explicit ws query. Its same-origin
+  // fallback would otherwise derive ws://app from this custom-protocol iframe.
+  // Keep the frontend local, and use the authenticated Host's public CDP proxy
+  // (not the Inspector Worker's private port). Its CSP already permits loopback.
+  if (source.pathname === '/inspector/devtools/devtools_app.html' && ['GET', 'HEAD'].includes(request.method)) {
+    const endpoint = new URL(host)
+    if (endpoint.protocol !== 'http:' || endpoint.hostname !== '127.0.0.1' || endpoint.username || endpoint.password) {
+      return new Response(null, { status: 503 })
+    }
+    endpoint.pathname = '/inspector/devtools/cdp'
+    endpoint.search = ''
+    endpoint.hash = ''
+    for (const id of source.searchParams.getAll('clientSourceId')) endpoint.searchParams.append('clientSourceId', id)
+    const connection = endpoint.host + endpoint.pathname + endpoint.search
+    if (source.searchParams.getAll('ws').length !== 1 || source.searchParams.get('ws') !== connection || source.searchParams.has('wss')) {
+      source.searchParams.delete('wss')
+      source.searchParams.set('ws', connection)
+      return new Response(null, { status: 302, headers: { location: source.href, 'cache-control': 'no-store' } })
+    }
+  }
   const target = new URL(host)
   target.pathname = source.pathname
   target.search = source.search

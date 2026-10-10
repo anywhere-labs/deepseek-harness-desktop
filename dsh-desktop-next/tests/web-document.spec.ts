@@ -3,6 +3,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { WebContents } from 'electron'
 import { APP_BOOT_SCRIPT, appRequestHeaders, authenticateWebHost, forwardWebRequest, serveWebDocument } from '../src/web-document.ts'
 import { NATIVE_ACCESS_HEADER } from '../src/desktop-contract.ts'
@@ -61,6 +63,55 @@ it('requires the Host authentication exchange and retains only its cookie value'
   expect(await authenticateWebHost('http://127.0.0.1:1234/?token=owned')).toBe('session=owned')
   await expect(authenticateWebHost('http://127.0.0.1:1234/')).rejects.toThrow('authentication failed')
 })
+
+it.each(['', '&ws=app%2Finspector%2Fdevtools%2Fcdp', '&wss=foreign.example%2Fcdp', '&ws=old&ws=duplicate'])(
+  'adapts the official Inspector entry to the current Host without changing CSP (%s)', async extra => {
+    const fetch = vi.fn().mockResolvedValue(new Response('official frontend'))
+    vi.stubGlobal('fetch', fetch)
+    const request = ownedRequest('dsh-app://app/inspector/devtools/devtools_app.html?disableLocaleInfoBar=true&clientSourceId=client%2Fone&clientSourceId=client-two&panel=network' + extra)
+    const host = 'http://127.0.0.1:1234/?token=secret'
+    const response = await forwardWebRequest(request, host, 'session=owned', NATIVE_TOKEN)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(fetch).not.toHaveBeenCalled()
+    const location = response.headers.get('location')!
+    expect(location).not.toContain('secret')
+    const entry = new URL(location)
+    expect(entry.protocol).toBe('dsh-app:')
+    expect(entry.host).toBe('app')
+    expect(entry.searchParams.has('wss')).toBe(false)
+    expect(entry.searchParams.get('panel')).toBe('network')
+    const socket = new URL('ws://' + entry.searchParams.get('ws'))
+    expect(socket.origin).toBe('ws://127.0.0.1:1234')
+    expect(socket.pathname).toBe('/inspector/devtools/cdp')
+    expect(socket.searchParams.getAll('clientSourceId')).toEqual(['client/one', 'client-two'])
+    // Execute the published connector to catch changes to its supported query contract.
+    const assets = new URL('./lib/devtools/', import.meta.resolve('@deepseek-ai/dsh-experimental-inspector/package.json'))
+    const replaceState = vi.fn()
+    runInNewContext(readFileSync(fileURLToPath(new URL('connect.js', assets)), 'utf8'), {
+      URL, window: { location: { href: location }, localStorage: { setItem() {} }, history: { state: null, replaceState } },
+    })
+    expect(new URL(replaceState.mock.calls[0]![2]).searchParams.get('ws')).toBe(entry.searchParams.get('ws'))
+    const html = readFileSync(fileURLToPath(new URL('devtools_app.html', assets)), 'utf8')
+    expect(html).toMatch(/connect-src[^;]*ws:\/\/127\.0\.0\.1:\*/u)
+    // Redirect settles after one hop; the official document is forwarded normally.
+    expect(await (await forwardWebRequest(ownedRequest(location), host, 'session=owned', NATIVE_TOKEN)).text()).toBe('official frontend')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  },
+)
+
+it('keeps Inspector adaptation behind native authorization', async () => {
+  const request = new Request('dsh-app://app/inspector/devtools/devtools_app.html')
+  expect((await forwardWebRequest(request, 'http://127.0.0.1:1234/', 'session=owned', NATIVE_TOKEN)).status).toBe(403)
+  const foreign = ownedRequest(request.url, { headers: { origin: 'https://foreign.example' } })
+  expect((await forwardWebRequest(foreign, 'http://127.0.0.1:1234/', 'session=owned', NATIVE_TOKEN)).status).toBe(403)
+})
+
+it.each(['http://foreign.example:1234/', 'https://127.0.0.1:1234/', 'http://user:pass@127.0.0.1:1234/'])(
+  'does not create an Inspector connection to an unexpected Host %s', async host => {
+    expect((await forwardWebRequest(ownedRequest('dsh-app://app/inspector/devtools/devtools_app.html'), host, 'c', NATIVE_TOKEN)).status).toBe(503)
+  },
+)
 
 it('forwards upload bytes and cancellation with Host credentials while keeping the response streaming', async () => {
   const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('stream')); controller.close() } })

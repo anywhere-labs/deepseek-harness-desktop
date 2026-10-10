@@ -1,0 +1,14 @@
+diff --git a/lib/devtools/chunks/legacy-BNB7PpN-.js b/lib/devtools/chunks/legacy-BNB7PpN-.js
+--- a/lib/devtools/chunks/legacy-BNB7PpN-.js
++++ b/lib/devtools/chunks/legacy-BNB7PpN-.js
+@@ -867,7 +867,9 @@
+ 	setWhitelistedShortcuts(e) {}
+ 	setEyeDropperActive(e) {}
+ 	showCertificateViewer(e) {}
+-	reattach(e) {}
++	// Standalone Inspector has no native DevTools embedder to reattach.
++	// Complete the public callback so Reload DevTools can reload its iframe.
++	reattach(e) { e(); }
+ 	readyForTest() {}
+ 	connectionReady() {}
+ 	setOpenNewWindowForPopups(e) {}
