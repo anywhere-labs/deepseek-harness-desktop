@@ -2,7 +2,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { SETUP_ONBOARDING_CHANNEL } from './setup-onboarding-bridge.ts'
-import { DESKTOP_FILE_PATH_BRIDGE } from './file-path-bridge-contract.ts'
+import { DESKTOP_FILE_PATH_BRIDGE, DESKTOP_HOST_PATH_BRIDGE } from './file-path-bridge-contract.ts'
 import { DESKTOP_NATIVE_DIRECTORY_PICKER_CHANNEL } from './directory-picker-contract.ts'
 import {
   DESKTOP_RENDERER_ACTION_CHANNEL,
@@ -11,12 +11,12 @@ import {
   type DesktopRendererActionsBridge,
 } from './renderer-actions-contract.ts'
 
-contextBridge.exposeInMainWorld(DESKTOP_FILE_PATH_BRIDGE, {
-  /** Resolve only genuine disk-backed Web File objects selected by the operator. */
-  getPathForFile(file: File): string {
-    return webUtils.getPathForFile(file)
-  },
-})
+/** Electron validates the File and returns an empty path for browser-created bytes. */
+const getPathForFile = (file: File): string => webUtils.getPathForFile(file)
+contextBridge.exposeInMainWorld(DESKTOP_FILE_PATH_BRIDGE, { getPathForFile })
+// The official client uploads image bytes, and uses native paths for ordinary
+// file/directory references. Keep both names for existing Desktop plugins.
+contextBridge.exposeInMainWorld(DESKTOP_HOST_PATH_BRIDGE, { pathFor: getPathForFile })
 
 const actions: DesktopRendererActionsBridge = {
   /** Reach the main process directly, independent of the Host generation. */
