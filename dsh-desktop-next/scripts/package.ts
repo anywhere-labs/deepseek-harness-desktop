@@ -14,8 +14,29 @@ import { runNextPackagingCommand } from './packaging-command.ts'
 const desktopRoot = fileURLToPath(new URL('..', import.meta.url))
 const workspaceRoot = resolve(desktopRoot, '..')
 const require = createRequire(import.meta.url)
+
+/**
+ * Optional test-only build version for update drills.
+ *
+ * electron-builder merges `extraMetadata` before signing, so one value reaches
+ * the packaged `package.json` (which the runtime and the updater's bundle check
+ * read), `Info.plist` `CFBundleShortVersionString`/`CFBundleVersion`, and the
+ * `${version}` artifact name. That produces an installable, correctly signed
+ * release whose version differs from the source tree, without editing any
+ * version declaration. Only the two shapes the Next channel accepts are allowed.
+ */
+const TEST_BUILD_VERSION = process.env.DSH_NEXT_BUILD_VERSION
+if (TEST_BUILD_VERSION !== undefined && !/^[0-9]+\.[0-9]+\.[0-9]+-next(?:\.[0-9]+)?$/u.test(TEST_BUILD_VERSION)) {
+  throw new Error(`DSH_NEXT_BUILD_VERSION must be x.y.z-next or x.y.z-next.N; received ${TEST_BUILD_VERSION}`)
+}
 const run = (command: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): void => {
-  runNextPackagingCommand(command, args, cwd, env, workspaceRoot)
+  // Windows resolves the CLI path with backslashes.
+  const isBuilder = args.includes('electron-builder') || args.some(arg => arg.replaceAll('\\', '/').endsWith('electron-builder/cli.js'))
+  const forwarded = TEST_BUILD_VERSION !== undefined && isBuilder
+    ? [...args, `--config.extraMetadata.version=${TEST_BUILD_VERSION}`, `--config.buildVersion=${TEST_BUILD_VERSION}`]
+    : args
+  if (forwarded !== args) console.log(`Packaging with test build version ${TEST_BUILD_VERSION}; source manifests are unchanged.`)
+  runNextPackagingCommand(command, forwarded, cwd, env, workspaceRoot)
 }
 const prepareRuntime = (): void => {
   prepareNextMacRuntime(desktopRoot)
