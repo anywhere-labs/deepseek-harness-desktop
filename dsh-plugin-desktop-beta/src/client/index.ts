@@ -15,6 +15,7 @@ import { registerDesktopOnboarding } from './onboarding.tsx'
 import { createElement } from 'react'
 import { SetupWizardApp, type EmbeddedSetupWizard } from '../native-ui/setup-wizard/App.tsx'
 import './onboarding.css'
+import { applySessionTrash } from './session-trash.tsx'
 import { applyAdvancedShell } from './advanced-shell.ts'
 import { startRendererBootReporter } from './boot-health.ts'
 import { applyDesktopSettings } from './desktop-settings.ts'
@@ -132,6 +133,7 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: native window geometry service',
   )
   const desktopSettings = applyDesktopSettings(ctx, environment)
+  ctx.inject(['uiWorkspace'], scope => { applySessionTrash(scope) })
   registerDesktopOnboarding(ctx, (snapshot, locale, finish, renderNavigation) => createElement<{ embedded?: EmbeddedSetupWizard }>(SetupWizardApp, {
     embedded: { input: snapshot.input, locale, renderNavigation, finish: selection => finish(snapshot.profile, selection) },
   }))

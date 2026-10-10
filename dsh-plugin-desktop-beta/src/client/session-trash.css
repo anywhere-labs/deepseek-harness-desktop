@@ -1,0 +1,15 @@
+.dshDesktopTrashDialog{max-width:520px;width:calc(100% - 48px);border:1px solid var(--dsw-alias-border-l2);border-radius:16px;background:var(--dsw-alias-bg-layer-2,#fff);color:var(--dsw-alias-label-primary,#222);padding:24px;box-shadow:0 12px 40px #0003}
+.dshDesktopTrashDialog::backdrop{background:#0006}
+.dshDesktopTrashDialog h2{font-size:18px;margin-top:0}
+.dshDesktopTrashSessionTitle{font-weight:600;overflow-wrap:anywhere}
+.dshDesktopTrashActions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}
+.dshDesktopDeletedSessions{padding:24px;max-width:800px}
+.dshDesktopTrashRow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l2,#ddd)}
+.dshDesktopTrashRow div{min-width:0;overflow-wrap:anywhere}
+.dshDesktopTrashRow small{display:block;opacity:.65;margin-top:4px}
+.dshDesktopTrashDialog button,.dshDesktopDeletedSessions button{padding:6px 14px;border-radius:8px;cursor:pointer;background:var(--dsw-alias-interactive-bg-hover,#eee);color:inherit;border:1px solid var(--dsw-alias-border-l2,#ddd)}
+.dshDesktopTrashDialog button:disabled,.dshDesktopDeletedSessions button:disabled{opacity:.5;cursor:wait}
+
+.dshDesktopDeleteMenuItem{display:block;width:100%;padding:8px 12px;text-align:left;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
+.dshDesktopDeleteMenuItem:hover,.dshDesktopDeleteMenuItem:focus-visible{background:var(--dsw-alias-interactive-bg-hover,#eee)}
+.dshDesktopDeleteMenuItem:disabled{opacity:.5;cursor:default}

@@ -1703,6 +1703,7 @@ async function start(): Promise<void> {
           hostCtx.provide('desktopBrowserAccess', browserAccess)
           hostCtx.provide('desktopLanHttps', lanHttps)
           hostCtx.provide('desktopRuntime', runtime)
+          hostCtx.provide('desktopSessionTrashRequired', true)
           hostCtx.provide('desktopPnpmBootstrap', desktopPnpmBootstrap)
           await hostCtx.plugin(DesktopActionsService, {
             openTerminal: () => { runtime.openTerminal() },

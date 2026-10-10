@@ -17,7 +17,7 @@ const MAX_SETTINGS_BODY_BYTES = 16 * 1024
 
 class BodyTooLargeError extends Error {}
 
-function finishJson(
+export function finishJson(
   res: ServerResponse,
   statusCode: number,
   value: object,
@@ -86,7 +86,7 @@ function referrerOrigin(value: string | undefined): string | undefined {
  * use the standard same-origin fetch metadata plus its same-origin referrer,
  * because browsers commonly omit Origin on same-origin GET requests.
  */
-function isSameOriginLoopbackRequest(
+export function isSameOriginLoopbackRequest(
   req: IncomingMessage,
   expectedOrigin: string,
   mutating: boolean,
@@ -102,11 +102,11 @@ function isSameOriginLoopbackRequest(
     && referrerOrigin(req.headers.referer) === expected.origin
 }
 
-function isJsonRequest(req: IncomingMessage): boolean {
+export function isJsonRequest(req: IncomingMessage): boolean {
   return req.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase() === 'application/json'
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+export async function readJson(req: IncomingMessage): Promise<unknown> {
   const declaredLength = req.headers['content-length']
   if (declaredLength !== undefined) {
     if (!/^\d+$/.test(declaredLength)) throw new SyntaxError('invalid content length')

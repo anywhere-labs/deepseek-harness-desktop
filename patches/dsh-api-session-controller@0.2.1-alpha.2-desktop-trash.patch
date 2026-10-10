@@ -1,0 +1,638 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -219,6 +219,7 @@
+ 		return this.resolve(observation.header.id, observation);
+ 	}
+ 	async resolve(sessionId, observation) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		const live = this.liveAgent(sessionId);
+ 		if (live !== void 0) return live;
+ 		const attached = this.ctx.sessions.get(sessionId);
+@@ -402,16 +403,25 @@
+ 		if (observation.header.id !== sessionId || observation.header.cwd === void 0) throw new ApiSessionNotFound(`session "${sessionId}" not found`);
+ 		if (hasApiSessionSubagentOwner(this.ctx, { header: observation.header }, void 0)) throw new ApiSessionSubagentOwnership(sessionId);
+ 		const composition = await this.composeAgent(this.presetForObservation(observation));
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		const published = this.ctx.sessions.get(sessionId);
+ 		const live = this.ctx.agents.get(sessionId);
+ 		if (published !== void 0 && hasApiSessionSubagentOwner(this.ctx, published, live)) throw new ApiSessionSubagentOwnership(sessionId);
+-		return (await this.ctx.agents.resume({
++		const ownedHandle = await this.ctx.agents.resume({
+ 			resumeSessionId: sessionId,
+ 			agentOptions: this.agentOptions(),
+ 			setup: composition.setup
+-		})).agent;
++		});
++        try {
++            if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return ownedHandle.agent;
++        } catch (error) {
++            try { await ownedHandle.dispose(); } catch (disposalError) { throw new AggregateError([error, disposalError], "Session admission and owned-handle cleanup failed"); }
++            throw error;
++        }
+ 	}
+ 	async createOrAdopt(sessionId, cwd, checkPersistedIdentity, presetId) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		const attached = this.ctx.sessions.get(sessionId);
+ 		const live = this.ctx.agents.get(sessionId);
+ 		if (attached !== void 0 && hasApiSessionSubagentOwner(this.ctx, attached, live)) throw new ApiSessionSubagentOwnership(sessionId);
+@@ -429,11 +439,19 @@
+ 				const storedPreset = this.presetForObservation(observation);
+ 				this.assertPresetUnchanged(sessionId, presetId, storedPreset);
+ 				const composition = await this.composeAgent(storedPreset);
+-				return (await this.ctx.agents.resume({
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++				const ownedHandle = await this.ctx.agents.resume({
+ 					resumeSessionId: sessionId,
+ 					agentOptions: this.agentOptions(),
+ 					setup: composition.setup
+-				})).agent;
++				});
++        try {
++            if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return ownedHandle.agent;
++        } catch (error) {
++            try { await ownedHandle.dispose(); } catch (disposalError) { throw new AggregateError([error, disposalError], "Session admission and owned-handle cleanup failed"); }
++            throw error;
++        }
+ 			} catch (e_3) {
+ 				env_3.error = e_3;
+ 				env_3.hasError = true;
+@@ -449,7 +467,8 @@
+ 			throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error });
+ 		}
+ 		const composition = await this.composeAgent(presetId);
+-		return (await this.ctx.agents.create({
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++		const ownedHandle = await this.ctx.agents.create({
+ 			sessionId,
+ 			agentOptions: this.agentOptions(),
+ 			meta: {
+@@ -457,7 +476,14 @@
+ 				...composition.agentPreset === void 0 ? {} : { agentPreset: composition.agentPreset }
+ 			},
+ 			setup: composition.setup
+-		})).agent;
++		});
++        try {
++            if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return ownedHandle.agent;
++        } catch (error) {
++            try { await ownedHandle.dispose(); } catch (disposalError) { throw new AggregateError([error, disposalError], "Session admission and owned-handle cleanup failed"); }
++            throw error;
++        }
+ 	}
+ 	agentOptions() {
+ 		const { provider, model } = this.ctx.agentDefaultModel.currentSelection();
+@@ -720,6 +746,7 @@
+ 	* @returns the normalized selection installed for the Session, without waiting for default persistence.
+ 	*/
+ 	async selectModel(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		const agent = await this.resolveAgent(request.sessionId);
+ 		return this.agents.serializeImageAdmission(agent, async () => {
+ 			try {
+@@ -754,6 +781,7 @@
+ 	* @returns the accepted title and durable event sequence.
+ 	*/
+ 	async rename(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		const agent = await this.resolveAgent(request.sessionId);
+ 		const titles = this.ctx.get("sessionTitle");
+ 		if (titles === void 0) throw new RemoteError("gateway/internal", "renaming is unavailable: this deployment mounts no session-title service", {});
+@@ -776,6 +804,7 @@
+ 	* @returns the new Session identity.
+ 	*/
+ 	async fork(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before forking", { reason: "session is deleted" });
+ 		const env_1 = {
+ 			stack: [],
+ 			error: void 0,
+@@ -850,6 +879,7 @@
+ 	* @returns acknowledgement that the Agent accepted the prompt.
+ 	*/
+ 	async prompt(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		if (!hasPromptContent(request.content)) throw new RemoteError("gateway/bad-request", "prompt content must include non-whitespace text or an attachment", {});
+ 		const clientTimeZone = request.clientTimeZone === void 0 ? void 0 : canonicalClientTimeZone(request.clientTimeZone);
+ 		if (request.clientTimeZone !== void 0 && clientTimeZone === void 0) throw new RemoteError("session/invalid-time-zone", "clientTimeZone must be UTC or a valid IANA Area/Location name", { value: request.clientTimeZone });
+@@ -911,6 +941,7 @@
+ 	* @returns the durable attachment reference and base64-encoded bytes.
+ 	*/
+ 	async attachment(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		let source;
+ 		try {
+ 			source = await this.readSessionState(request.sessionId);
+@@ -937,6 +968,7 @@
+ 	* @returns acknowledgement that the queue mutation was applied.
+ 	*/
+ 	async updateQueue(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 		if (request.action.kind === "edit") {
+ 			if (request.action.content.some((block) => block.type !== "text")) throw new RemoteError("session/attachment-invalid", "queue edits accept text content only", { reason: "QUEUE_EDIT_NON_TEXT" });
+ 			if (!hasPromptContent(request.action.content)) throw new RemoteError("gateway/bad-request", "queue edit content must include non-whitespace text", {});
+@@ -1410,6 +1442,7 @@
+ 	* @returns a contiguous event page.
+ 	*/
+ 	async page(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.address.kind === "session" ? request.address.sessionId : request.address.childSessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before opening it", { reason: "session is deleted" });
+ 		const env_1 = {
+ 			stack: [],
+ 			error: void 0,
+@@ -1445,6 +1478,7 @@
+ 	* @returns a complete opening snapshot followed by gap-free durable events and opted-in assistant frames.
+ 	*/
+ 	async *follow(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.address.kind === "session" ? request.address.sessionId : request.address.childSessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before opening it", { reason: "session is deleted" });
+ 		validateHistoryWindow(request);
+ 		const { address } = request;
+ 		const target = addressId(address);
+@@ -1901,7 +1935,8 @@
+ 		const cold = [];
+ 		let yieldDeadline = performance.now() + this.workSliceMs;
+ 		for (const record of records) {
+-			signal?.throwIfAborted();
++			if (desktopSessionTrashOf(this.ctx)?.has(record.header.id)) continue;
++signal?.throwIfAborted();
+ 			const live = this.ctx.sessions.get(record.header.id);
+ 			if (live !== void 0) items.push(this.summaryFor(live));
+ 			else if (record.header.cwd !== void 0) cold.push(record);
+@@ -1922,7 +1957,7 @@
+ 		}
+ 		signal?.throwIfAborted();
+ 		items.sort((left, right) => right.updatedAt - left.updatedAt);
+-		return items;
++		return items.filter(item => !desktopSessionTrashOf(this.ctx)?.has(item.sessionId));
+ 	}
+ 	summarizeCold({ header, formatStatus }) {
+ 		const projections = this.projectionsFor(header, void 0);
+@@ -1952,7 +1987,7 @@
+ 		try {
+ 			const visible = await provider.listSessions(signal);
+ 			signal.throwIfAborted();
+-			const visibleIds = new Set(visible.filter((record) => record.header.cwd !== void 0).map((record) => record.header.id));
++			const visibleIds = new Set(visible.filter((record) => record.header.cwd !== void 0 && !desktopSessionTrashOf(this.ctx)?.has(record.header.id)).map((record) => record.header.id));
+ 			if (visibleIds.size === 0) return {
+ 				items: [],
+ 				hasMore: false
+@@ -2017,8 +2052,8 @@
+ 				cursor = page.nextCursor;
+ 			}
+ 			return {
+-				items: authorized.slice(0, 20),
+-				hasMore: authorized.length > 20
++				items: authorized.filter(item => !desktopSessionTrashOf(this.ctx)?.has(item.sessionId)).slice(0, 20),
++				hasMore: authorized.filter(item => !desktopSessionTrashOf(this.ctx)?.has(item.sessionId)).length > 20
+ 			};
+ 		} catch (error) {
+ 			signal.throwIfAborted();
+@@ -2467,11 +2502,11 @@
+ 	let header = agent.session.header;
+ 	const visited = /* @__PURE__ */ new Set();
+ 	while (!visited.has(header.id)) {
+-		if (archived.includes(header.id)) return true;
++		if ((archived.includes(header.id) || desktopSessionTrashOf(ctx)?.blocks(header.id))) return true;
+ 		visited.add(header.id);
+ 		if (header.origin !== "subagent" || header.parentSession === void 0) return false;
+ 		const parent = ctx.sessions.get(header.parentSession);
+-		if (parent === void 0) return archived.includes(header.parentSession);
++		if (parent === void 0) return (archived.includes(header.parentSession) || desktopSessionTrashOf(ctx)?.blocks(header.parentSession));
+ 		header = parent.header;
+ 	}
+ 	return false;
+@@ -2898,13 +2933,13 @@
+ 			ctx.plugin(SessionSkillCatalog);
+ 			ctx.plugin(ArchivedSessionGate);
+ 			ctx.on("session/created", (session) => {
+-				ctx.emit("api-session/added", this.listState.summaryFor(session));
++				if (!desktopSessionTrashOf(ctx)?.has(session.id)) ctx.emit("api-session/added", this.listState.summaryFor(session));
+ 			});
+ 			ctx.on("session/disposed", (session) => {
+ 				ctx.emit("api-session/removed", session.id);
+ 			});
+ 			const publishAgentAvailability = ({ agent }) => {
+-				if (ctx.sessions.get(agent.id) === agent.session) ctx.emit("api-session/added", this.listState.summaryFor(agent.session));
++				if (ctx.sessions.get(agent.id) === agent.session) if (!desktopSessionTrashOf(ctx)?.has(agent.id)) ctx.emit("api-session/added", this.listState.summaryFor(agent.session));
+ 			};
+ 			ctx.on("agent/created", publishAgentAvailability);
+ 			ctx.on("agent/disposed", publishAgentAvailability);
+@@ -2954,6 +2989,7 @@
+ 		* @param sessionId - Session identity whose Agent owns the operation.
+ 		* @returns the live Agent or the stable Session-domain failure.
+ 		*/
++		get desktopSessionTrashSupported() { return true; }
+ 		resolveAgent(sessionId) {
+ 			return this.agents.resolveAgent(sessionId);
+ 		}
+@@ -3004,7 +3040,8 @@
+ 		* @returns the normalized selection installed for the Session, without waiting for default persistence.
+ 		*/
+ 		selectModel(request) {
+-			return this.commands.selectModel(request);
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++			return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.selectModel(request)) ?? this.commands.selectModel(request);
+ 		}
+ 		/**
+ 		* Select the first available account model after login when no provider API key is configured.
+@@ -3102,7 +3139,8 @@
+ 		* @returns the accepted title and durable event sequence.
+ 		*/
+ 		rename(request) {
+-			return this.commands.rename(request);
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++			return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.rename(request)) ?? this.commands.rename(request);
+ 		}
+ 		/**
+ 		* Fork one cold-readable exact event prefix into a new Session. An omitted
+@@ -3112,10 +3150,11 @@
+ 		* @returns the new Session identity.
+ 		*/
+ 		async fork(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before forking", { reason: "session is deleted" });
+ 			if (request.allowMigration === false && this.ctx.sessions.get(request.sessionId) === void 0) {
+ 				if ((await this.ctx.get("sessionPersistence")?.stat(request.sessionId))?.formatStatus === "migration-required" && this.ctx.sessions.get(request.sessionId) === void 0) throw new RemoteError("session/migration-required", "Open the source Session to complete migration before forking", { sessionId: request.sessionId });
+ 			}
+-			return this.commands.fork(request);
++			return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.fork(request)) ?? this.commands.fork(request);
+ 		}
+ 		/**
+ 		* Admit one prompt after explicitly resuming its Session.
+@@ -3124,8 +3163,9 @@
+ 		* @returns acknowledgement that the Agent accepted the prompt.
+ 		*/
+ 		prompt(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 			signal.throwIfAborted();
+-			return this.commands.prompt(request);
++			return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.prompt(request)) ?? this.commands.prompt(request);
+ 		}
+ 		/**
+ 		* Read one image proven reachable from the addressed Session log.
+@@ -3133,6 +3173,7 @@
+ 		* @returns the durable attachment reference and base64-encoded bytes.
+ 		*/
+ 		attachment(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 			return this.commands.attachment(request);
+ 		}
+ 		/**
+@@ -3141,7 +3182,8 @@
+ 		* @returns acknowledgement that the queue mutation was applied.
+ 		*/
+ 		updateQueue(request) {
+-			return this.commands.updateQueue(request);
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++			return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.updateQueue(request)) ?? this.commands.updateQueue(request);
+ 		}
+ 		/**
+ 		* Cancel one active Agent turn without dropping its pending inbox.
+@@ -3158,6 +3200,7 @@
+ 		* @returns one chronological page.
+ 		*/
+ 		page(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.address.kind === "session" ? request.address.sessionId : request.address.childSessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before opening it", { reason: "session is deleted" });
+ 			return this.history.page(request, signal);
+ 		}
+ 		/**
+@@ -3168,6 +3211,7 @@
+ 		*   frames and optional cursorless assistant-stream frames.
+ 		*/
+ 		follow(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.address.kind === "session" ? request.address.sessionId : request.address.childSessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before opening it", { reason: "session is deleted" });
+ 			return this.history.follow(request, signal);
+ 		}
+ 		/**
+@@ -3177,6 +3221,7 @@
+ 		* @returns a sequenced baseline, cached hints when migration is deferred, or null when absent.
+ 		*/
+ 		async projections(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+ 			const { sessionId } = request;
+ 			if (sessionId.length === 0) throw new RemoteError("gateway/bad-request", "sessionId must not be empty", {});
+ 			try {
+@@ -3240,3 +3285,9 @@
+ })();
+ //#endregion
+ export { ApiSessionNotFound, SessionController, SessionController as default, SessionFileReferences, SessionSkillCatalog, buildModelCatalog };
++
++function desktopSessionTrashOf(ctx) {
++    const service = ctx.get("desktopSessionTrash");
++    if (service === undefined && ctx.get("desktopSessionTrashRequired") === true) throw new Error("Desktop deleted-session protection is unavailable; restart in recovery mode");
++    return service;
++}
+diff --git a/lib/types/agent.js b/lib/types/agent.js
+--- a/lib/types/agent.js
++++ b/lib/types/agent.js
+@@ -206,6 +206,7 @@
+         return this.resolve(observation.header.id, observation);
+     }
+     async resolve(sessionId, observation) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+         const live = this.liveAgent(sessionId);
+         if (live !== undefined)
+             return live;
+@@ -440,18 +441,27 @@
+             throw new ApiSessionSubagentOwnership(sessionId);
+         }
+         const composition = await this.composeAgent(this.presetForObservation(observation));
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+         const published = this.ctx.sessions.get(sessionId);
+         const live = this.ctx.agents.get(sessionId);
+         if (published !== undefined && hasApiSessionSubagentOwner(this.ctx, published, live)) {
+             throw new ApiSessionSubagentOwnership(sessionId);
+         }
+-        return (await this.ctx.agents.resume({
++        const ownedHandle = await this.ctx.agents.resume({
+             resumeSessionId: sessionId,
+             agentOptions: this.agentOptions(),
+             setup: composition.setup,
+-        })).agent;
++        });
++        try {
++            if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return ownedHandle.agent;
++        } catch (error) {
++            try { await ownedHandle.dispose(); } catch (disposalError) { throw new AggregateError([error, disposalError], "Session admission and owned-handle cleanup failed"); }
++            throw error;
++        }
+     }
+     async createOrAdopt(sessionId, cwd, checkPersistedIdentity, presetId) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+         const attached = this.ctx.sessions.get(sessionId);
+         const live = this.ctx.agents.get(sessionId);
+         if (attached !== undefined && hasApiSessionSubagentOwner(this.ctx, attached, live)) {
+@@ -473,11 +483,19 @@
+                     const storedPreset = this.presetForObservation(observation);
+                     this.assertPresetUnchanged(sessionId, presetId, storedPreset);
+                     const composition = await this.composeAgent(storedPreset);
+-                    return (await this.ctx.agents.resume({
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++                    const ownedHandle = await this.ctx.agents.resume({
+                         resumeSessionId: sessionId,
+                         agentOptions: this.agentOptions(),
+                         setup: composition.setup,
+-                    })).agent;
++                    });
++        try {
++            if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return ownedHandle.agent;
++        } catch (error) {
++            try { await ownedHandle.dispose(); } catch (disposalError) { throw new AggregateError([error, disposalError], "Session admission and owned-handle cleanup failed"); }
++            throw error;
++        }
+                 }
+                 catch (e_3) {
+                     env_3.error = e_3;
+@@ -500,7 +518,8 @@
+             throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error });
+         }
+         const composition = await this.composeAgent(presetId);
+-        return (await this.ctx.agents.create({
++        if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++        const ownedHandle = await this.ctx.agents.create({
+             sessionId,
+             agentOptions: this.agentOptions(),
+             meta: {
+@@ -508,7 +527,14 @@
+                 ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }),
+             },
+             setup: composition.setup,
+-        })).agent;
++        });
++        try {
++            if (desktopSessionTrashOf(this.ctx)?.blocks(sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return ownedHandle.agent;
++        } catch (error) {
++            try { await ownedHandle.dispose(); } catch (disposalError) { throw new AggregateError([error, disposalError], "Session admission and owned-handle cleanup failed"); }
++            throw error;
++        }
+     }
+     agentOptions() {
+         const { provider, model } = this.ctx.agentDefaultModel.currentSelection();
+@@ -543,4 +569,9 @@
+             : { reasoningEffort: ReasoningEffortId(selection.reasoningEffort) }),
+     };
+ }
+-//# sourceMappingURL=agent.js.map
+\ No newline at end of file
++//# sourceMappingURL=agent.js.map
++function desktopSessionTrashOf(ctx) {
++    const service = ctx.get("desktopSessionTrash");
++    if (service === undefined && ctx.get("desktopSessionTrashRequired") === true) throw new Error("Desktop deleted-session protection is unavailable; restart in recovery mode");
++    return service;
++}
+diff --git a/lib/types/archived-session-gate.js b/lib/types/archived-session-gate.js
+--- a/lib/types/archived-session-gate.js
++++ b/lib/types/archived-session-gate.js
+@@ -37,16 +37,21 @@
+     let header = agent.session.header;
+     const visited = new Set();
+     while (!visited.has(header.id)) {
+-        if (archived.includes(header.id))
++        if ((archived.includes(header.id) || desktopSessionTrashOf(ctx)?.blocks(header.id)))
+             return true;
+         visited.add(header.id);
+         if (header.origin !== 'subagent' || header.parentSession === undefined)
+             return false;
+         const parent = ctx.sessions.get(header.parentSession);
+         if (parent === undefined)
+-            return archived.includes(header.parentSession);
++            return (archived.includes(header.parentSession) || desktopSessionTrashOf(ctx)?.blocks(header.parentSession));
+         header = parent.header;
+     }
+     return false;
+ }
+-//# sourceMappingURL=archived-session-gate.js.map
+\ No newline at end of file
++//# sourceMappingURL=archived-session-gate.js.map
++function desktopSessionTrashOf(ctx) {
++    const service = ctx.get("desktopSessionTrash");
++    if (service === undefined && ctx.get("desktopSessionTrashRequired") === true) throw new Error("Desktop deleted-session protection is unavailable; restart in recovery mode");
++    return service;
++}
+diff --git a/lib/types/index.js b/lib/types/index.js
+--- a/lib/types/index.js
++++ b/lib/types/index.js
+@@ -239,14 +239,14 @@
+             // answer the Workspace registry's archive-admission events.
+             ctx.plugin(ArchivedSessionGate);
+             ctx.on('session/created', (session) => {
+-                ctx.emit('api-session/added', this.listState.summaryFor(session));
++                if (!desktopSessionTrashOf(ctx)?.has(session.id)) ctx.emit('api-session/added', this.listState.summaryFor(session));
+             });
+             ctx.on('session/disposed', (session) => {
+                 ctx.emit('api-session/removed', session.id);
+             });
+             const publishAgentAvailability = ({ agent }) => {
+                 if (ctx.sessions.get(agent.id) === agent.session) {
+-                    ctx.emit('api-session/added', this.listState.summaryFor(agent.session));
++                    if (!desktopSessionTrashOf(ctx)?.has(agent.id)) ctx.emit('api-session/added', this.listState.summaryFor(agent.session));
+                 }
+             };
+             ctx.on('agent/created', publishAgentAvailability);
+@@ -296,6 +296,7 @@
+          * @param sessionId - Session identity whose Agent owns the operation.
+          * @returns the live Agent or the stable Session-domain failure.
+          */
++        get desktopSessionTrashSupported() { return true; }
+         resolveAgent(sessionId) {
+             return this.agents.resolveAgent(sessionId);
+         }
+@@ -349,7 +350,8 @@
+          * @returns the normalized selection installed for the Session, without waiting for default persistence.
+          */
+         selectModel(request) {
+-            return this.commands.selectModel(request);
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.selectModel(request)) ?? this.commands.selectModel(request);
+         }
+         /**
+          * Select the first available account model after login when no provider API key is configured.
+@@ -457,7 +459,8 @@
+          * @returns the accepted title and durable event sequence.
+          */
+         rename(request) {
+-            return this.commands.rename(request);
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.rename(request)) ?? this.commands.rename(request);
+         }
+         /**
+          * Fork one cold-readable exact event prefix into a new Session. An omitted
+@@ -467,6 +470,7 @@
+          * @returns the new Session identity.
+          */
+         async fork(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before forking", { reason: "session is deleted" });
+             if (request.allowMigration === false && this.ctx.sessions.get(request.sessionId) === undefined) {
+                 const stored = await this.ctx.get('sessionPersistence')?.stat(request.sessionId);
+                 if (stored?.formatStatus === 'migration-required' && this.ctx.sessions.get(request.sessionId) === undefined) {
+@@ -475,7 +479,7 @@
+                     });
+                 }
+             }
+-            return this.commands.fork(request);
++            return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.fork(request)) ?? this.commands.fork(request);
+         }
+         /**
+          * Admit one prompt after explicitly resuming its Session.
+@@ -484,8 +488,9 @@
+          * @returns acknowledgement that the Agent accepted the prompt.
+          */
+         prompt(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+             signal.throwIfAborted();
+-            return this.commands.prompt(request);
++            return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.prompt(request)) ?? this.commands.prompt(request);
+         }
+         /**
+          * Read one image proven reachable from the addressed Session log.
+@@ -493,6 +498,7 @@
+          * @returns the durable attachment reference and base64-encoded bytes.
+          */
+         attachment(request) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+             return this.commands.attachment(request);
+         }
+         /**
+@@ -501,7 +507,8 @@
+          * @returns acknowledgement that the queue mutation was applied.
+          */
+         updateQueue(request) {
+-            return this.commands.updateQueue(request);
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
++            return desktopSessionTrashOf(this.ctx)?.using(request.sessionId, () => this.commands.updateQueue(request)) ?? this.commands.updateQueue(request);
+         }
+         /**
+          * Cancel one active Agent turn without dropping its pending inbox.
+@@ -518,6 +525,7 @@
+          * @returns one chronological page.
+          */
+         page(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.address.kind === "session" ? request.address.sessionId : request.address.childSessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before opening it", { reason: "session is deleted" });
+             return this.history.page(request, signal);
+         }
+         /**
+@@ -528,6 +536,7 @@
+          *   frames and optional cursorless assistant-stream frames.
+          */
+         follow(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.address.kind === "session" ? request.address.sessionId : request.address.childSessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before opening it", { reason: "session is deleted" });
+             return this.history.follow(request, signal);
+         }
+         /**
+@@ -537,6 +546,7 @@
+          * @returns a sequenced baseline, cached hints when migration is deferred, or null when absent.
+          */
+         async projections(request, signal) {
++        if (desktopSessionTrashOf(this.ctx)?.blocks(request.sessionId)) throw new RemoteError("session/agent-busy", "Restore this session from Settings > Deleted sessions before continuing", { reason: "session is deleted" });
+             const { sessionId } = request;
+             if (sessionId.length === 0) {
+                 throw new RemoteError('gateway/bad-request', 'sessionId must not be empty', {});
+@@ -606,4 +616,9 @@
+ export { SessionController };
+ export { buildModelCatalog };
+ export default SessionController;
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
++function desktopSessionTrashOf(ctx) {
++    const service = ctx.get("desktopSessionTrash");
++    if (service === undefined && ctx.get("desktopSessionTrashRequired") === true) throw new Error("Desktop deleted-session protection is unavailable; restart in recovery mode");
++    return service;
++}
+diff --git a/lib/types/list.js b/lib/types/list.js
+--- a/lib/types/list.js
++++ b/lib/types/list.js
+@@ -117,7 +117,8 @@
+         const cold = [];
+         let yieldDeadline = performance.now() + this.workSliceMs;
+         for (const record of records) {
+-            signal?.throwIfAborted();
++            if (desktopSessionTrashOf(this.ctx)?.has(record.header.id)) continue;
++signal?.throwIfAborted();
+             const live = this.ctx.sessions.get(record.header.id);
+             if (live !== undefined) {
+                 items.push(this.summaryFor(live));
+@@ -142,7 +143,7 @@
+         }
+         signal?.throwIfAborted();
+         items.sort((left, right) => right.updatedAt - left.updatedAt);
+-        return items;
++        return items.filter(item => !desktopSessionTrashOf(this.ctx)?.has(item.sessionId));
+     }
+     summarizeCold({ header, formatStatus }) {
+         const projections = this.projectionsFor(header, undefined);
+@@ -176,7 +177,7 @@
+             const visible = await provider.listSessions(signal);
+             signal.throwIfAborted();
+             const visibleIds = new Set(visible
+-                .filter(record => record.header.cwd !== undefined)
++                .filter(record => record.header.cwd !== undefined && !desktopSessionTrashOf(this.ctx)?.has(record.header.id))
+                 .map(record => record.header.id));
+             if (visibleIds.size === 0)
+                 return { items: [], hasMore: false };
+@@ -256,8 +257,8 @@
+                 cursor = page.nextCursor;
+             }
+             return {
+-                items: authorized.slice(0, SESSION_SEARCH_RESULT_LIMIT),
+-                hasMore: authorized.length > SESSION_SEARCH_RESULT_LIMIT,
++                items: authorized.filter(item => !desktopSessionTrashOf(this.ctx)?.has(item.sessionId)).slice(0, SESSION_SEARCH_RESULT_LIMIT),
++                hasMore: authorized.filter(item => !desktopSessionTrashOf(this.ctx)?.has(item.sessionId)).length > SESSION_SEARCH_RESULT_LIMIT,
+             };
+         }
+         catch (error) {
+@@ -323,4 +324,9 @@
+         ...(header.cwd === undefined ? {} : { cwd: header.cwd }),
+     };
+ }
+-//# sourceMappingURL=list.js.map
+\ No newline at end of file
++//# sourceMappingURL=list.js.map
++function desktopSessionTrashOf(ctx) {
++    const service = ctx.get("desktopSessionTrash");
++    if (service === undefined && ctx.get("desktopSessionTrashRequired") === true) throw new Error("Desktop deleted-session protection is unavailable; restart in recovery mode");
++    return service;
++}
