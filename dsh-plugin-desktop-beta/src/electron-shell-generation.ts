@@ -1,3 +1,4 @@
+import { observeDesktopRenderer } from './renderer-logging.ts'
 import {
   app,
   BrowserWindow,
@@ -340,6 +341,9 @@ export class ElectronShellGeneration {
     }
     const renderer = this.compatibilityShell?.webContents ?? window.webContents
     const chrome = this.compatibilityShell?.chromeWebContents ?? window.webContents
+    observeDesktopRenderer(renderer, 'application')
+    if (chrome !== renderer) observeDesktopRenderer(chrome, 'chrome')
+    if (window.webContents !== renderer && window.webContents !== chrome) observeDesktopRenderer(window.webContents, 'shell')
     this.renderer = renderer
 
     // Desktop-owned actions stay on the Electron lifetime. The page reaches the

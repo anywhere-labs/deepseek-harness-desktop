@@ -8,6 +8,7 @@ import {
   Notification,
   shell,
 } from 'electron'
+import { configureDeveloperLogging, type DiagnosticPreferences } from './developer-logging.ts'
 import { spawn } from 'node:child_process'
 import { RemoteControlOffer, remoteControlOfferCopy } from './remote-control-offer.ts'
 import { readFileSync } from 'node:fs'
@@ -179,6 +180,8 @@ export function requestDesktopArtifact(url: string, init: RequestInit): Promise<
 
 /** Native adapter used by the DSH Desktop launcher and owned by its Cordis shell plugin. */
 export class ElectronDesktopRuntime implements DesktopRuntime {
+  configureDeveloperLogging(preferences: DiagnosticPreferences): void { configureDeveloperLogging(preferences) }
+
   setupOnboarding?: import('./setup-onboarding-bridge.ts').DesktopOnboardingBridge
   readonly platform: DesktopPlatform
   private readonly platformStrategy: ElectronPlatformStrategy

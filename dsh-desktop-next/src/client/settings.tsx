@@ -30,7 +30,7 @@ export function NextDesktopSettings({ adapter, language, onOpenPlugins }: { adap
     initialMode="compatibility"
     setMode={async () => { throw new Error('Window modes are not supported in Next') }}
     desktopSettings={adapter.desktopSettings} notificationSettings={adapter.notificationSettings}
-    capabilities={{ windowModes: false, pluginSelectors: false, updates: false, materialRequiresRestart: false, nativeLanConfirmation: true, jobNotifications: false }}
+    capabilities={{ logging: false, windowModes: false, pluginSelectors: false, updates: false, materialRequiresRestart: false, nativeLanConfirmation: true, jobNotifications: false }}
     introNotice={<div className="dshDesktopSettingsNotice dshNextPluginSettingsNotice" data-next-plugin-settings-notice>
       <span>{language.startsWith('zh') ? '插件市场和远程控制设置已移至插件页面。' : 'Plugin market and remote control settings have moved to the Plugins page.'}</span>
       <Button variant="outline" size="sm" onClick={onOpenPlugins}>{language.startsWith('zh') ? '前往插件页面' : 'Go to Plugins'}</Button>

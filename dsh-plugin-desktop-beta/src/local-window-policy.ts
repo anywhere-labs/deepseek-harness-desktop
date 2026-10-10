@@ -1,5 +1,6 @@
 /** Fixed Electron security policy for Desktop-owned local HTML windows. */
 
+import { observeDesktopRenderer } from './renderer-logging.ts'
 import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
 
 export interface DesktopLocalWindowOptions extends Omit<BrowserWindowConstructorOptions, 'webPreferences'> {
@@ -29,6 +30,7 @@ export function createDesktopLocalWindow(options: DesktopLocalWindowOptions): Br
       partition,
     },
   })
+  observeDesktopRenderer(window.webContents, partition)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-attach-webview', event => { event.preventDefault() })
   return window

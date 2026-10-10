@@ -1,3 +1,4 @@
+import { developerLoggingEnabled, diagnosticLog } from './developer-logging.ts'
 import { Logger, type Exporter, type Message } from '@deepseek-ai/cordis'
 import { shouldEmit, type LogLevel } from './log-level.ts'
 import { LogFileSink } from './log-files.ts'
@@ -28,7 +29,11 @@ export class FileExporter implements Exporter {
 
   export(message: Message): void {
     if (!shouldEmit(message.type, this.threshold)) return
-    this.sink.write(message.type, this.render(message))
+    const rendered = this.render(message)
+    this.sink.write(message.type, rendered)
+    if (developerLoggingEnabled()) diagnosticLog({ source: `host.kernel.${message.name}`, event: 'log', level: message.type,
+      message: rendered, developer: true, fields: {
+        hostTime: message.ts, hostSequence: message.sn, pluginId: message.fiber?.deref()?.entry?.id } })
   }
 
   /** Close the underlying sink (used by tests and shutdown). */

@@ -1,5 +1,6 @@
 /** Desktop-owned WebServer wrapper with bounded bind-conflict retry. */
 
+import { diagnosticOperation } from './developer-logging.ts'
 import type { ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { Service } from '@deepseek-ai/cordis'
@@ -66,21 +67,32 @@ export class DesktopWebServer extends WebServer {
     return access === undefined || decideDesktopBrowserAccess(access, request) !== 'denied'
   }
 
+  private traceHttp(route: string, handler: WebRoute['handler']): WebRoute['handler'] {
+    return async (req, res) => {
+      const end = diagnosticOperation('host.http', 'request', { route, method: req.method })
+      const finish = () => { cleanup(); end(undefined, { status: res.statusCode, aborted: !res.writableFinished }) }
+      const cleanup = () => { res.removeListener('finish', finish); res.removeListener('close', finish) }
+      res.once('finish', finish)
+      res.once('close', finish)
+      try { await handler(req, res) } catch (error) { cleanup(); end(error); throw error }
+    }
+  }
+
   override register(route: WebRoute): () => void {
     return super.register({
       ...route,
-      handler: async (req, res) => {
+      handler: this.traceHttp(String(route.path), async (req, res) => {
         if (!this.permits(req)) return rejectBrowserRequest(res)
         await route.handler(req, res)
-      },
+      }),
     })
   }
 
   override registerFallback(handler: WebRoute['handler']): () => void {
-    return super.registerFallback(async (req, res) => {
+    return super.registerFallback(this.traceHttp('fallback', async (req, res) => {
       if (!this.permits(req)) return rejectBrowserRequest(res)
       await handler(req, res)
-    })
+    }))
   }
 
   override registerUpgrade(route: WebUpgradeRoute): () => void {

@@ -466,6 +466,7 @@ const PENDING_DESKTOP_SHELL_FIELDS: ReadonlySet<string> = new Set([
   'openBrowser',
   'networkExposure',
   'logLevel',
+  'developerLogging',
 ])
 
 /**

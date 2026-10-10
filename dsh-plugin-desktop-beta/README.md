@@ -272,3 +272,9 @@ None. The same DSH Host and client feature plugins assemble model requests.
 - The shared carrier is HTTP and WebSocket, not Electron IPC. It defaults to loopback and supports an explicitly confirmed all-interface LAN bind. Replacing the carrier requires transport extension points in upstream DSH and is outside this standalone package.
 - Beta vendors the official DSH `0.1.6-alpha.2` runtime built from the pinned release source. Desktop builds consume these packaged interfaces without linking the source checkout. Upstream migrates historical sessions to V3, including legacy PTC events and `code` preset references, while preserving the original logs; Desktop no longer creates preset aliases. V3 sessions cannot be read by older runtimes. Extended and enhanced modes host the right Sidebar with document previews, split panes and fullscreen, and support global plugin panels through the keyed `main` slot independently of Session selection.
 - `package:dir` is an unpacked smoke artifact. `dist:win` adds an unsigned NSIS test installer but does not establish Authenticode identity or SmartScreen reputation. Installation and upgrade behavior, native notifications and terminals, the Windows ACL sandbox, and native-material appearance remain target-platform verification boundaries.
+
+### 开发者日志
+
+桌面设置 → 日志 → 开发者日志，默认关闭，修改立即生效；日志级别同时控制内核文件日志和开发者记录。开启后追加结构化元数据：Cordis 来源、序号与插件 ID，插件状态，Agent turn/step，模型流的耗时、结果与分块数，工具执行与错误码，重试决策，Host ↔ Electron IPC，HTTP 路由/状态/耗时，Host 标准输出/错误输出，以及桌面界面控制台。每次启动包含 runId，各进程包含 pid 和记录序号，各操作包含 operationId。
+
+追踪不主动采集提示词、模型输出、工具参数/结果、HTTP/IPC 正文或请求头；错误链、进程输出与控制台文本仍可能含插件自行输出的信息，沿用脱敏、长度上限与界面速率限制。关闭开关仍保留错误和原有生命周期日志。Electron 与独立 Host 的日志分别写入现有 logs、logs/host，继续按单文件 10 MiB、每目录 200 MiB 和 7 天轮转；“导出诊断信息”继续生成 ZIP，包含这些日志和原有崩溃证据。未新增操作系统内核或网络抓包。
