@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
 
 const { name } = JSON.parse(readFileSync('package.json', 'utf8'))
+// This pure grammar has no shared runtime identity; bundle it into this client rather than leaving an unseeded module-table require.
+const inlinedClientModules = new Set(['@deepseek-ai/dsh-file-reference/grammar'])
 
 // The official Loader owns styles created inside a client factory. Keep the
 // existing native components' CSS active only while their onboarding is shown.
@@ -36,7 +38,7 @@ export default defineConfig({
     outDir: 'lib', emptyOutDir: false, target: 'es2022', minify: false,
     lib: { entry: 'src/client/index.ts', formats: ['cjs'], fileName: () => 'client.js' },
     rollupOptions: {
-      external: id => /^(react(?:-dom)?(?:\/|$)|@deepseek-ai\/)/u.test(id),
+      external: id => !inlinedClientModules.has(id) && /^(react(?:-dom)?(?:\/|$)|@deepseek-ai\/)/u.test(id),
       output: {
         codeSplitting: false,
         banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(name)}, factory: (require) => {`,

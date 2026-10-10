@@ -2,6 +2,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only service and SlotMap convergence for the Desktop settings section.
@@ -23,6 +24,7 @@ import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { applyExtendedShell } from './extended-shell.ts'
 import { installDesktopLaunchWorkspaceBridge } from './launch-workspace.ts'
+import { applyDesktopFileContextMenu } from './desktop-file-context-menu.tsx'
 import { DESKTOP_SETTINGS_FORMS_SERVICE } from './settings-bridge.ts'
 import { installSidebarFooterStyles } from './sidebar-footer-styles.ts'
 import { desktopWindowService, provideDesktopWindow } from './window-service.ts'
@@ -118,6 +120,7 @@ export const inject = [
   'locale',
   'connection',
   'remote',
+  'remote.session',
   DESKTOP_SETTINGS_FORMS_SERVICE,
   'sessions',
   'theme',
@@ -133,6 +136,7 @@ export function apply(ctx: ClientContext): void {
     'dsh-plugin-desktop: native window geometry service',
   )
   const desktopSettings = applyDesktopSettings(ctx, environment)
+  applyDesktopFileContextMenu(ctx)
   registerDesktopOnboarding(ctx, (snapshot, locale, finish, renderNavigation) => createElement<{ embedded?: EmbeddedSetupWizard }>(SetupWizardApp, {
     embedded: { input: snapshot.input, locale, renderNavigation, finish: selection => finish(snapshot.profile, selection) },
   }))

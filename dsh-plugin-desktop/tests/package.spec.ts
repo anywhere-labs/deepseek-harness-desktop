@@ -176,6 +176,9 @@ describe('published package surface', () => {
       platform: 'web',
       inject: [
         '@deepseek-ai/dsh-api-remotes',
+        '@deepseek-ai/dsh-api-session-controller',
+        '@deepseek-ai/dsh-client-ui-conversation',
+        '@deepseek-ai/dsh-client-ui-session',
         '@deepseek-ai/dsh-client-connection',
         '@deepseek-ai/dsh-client-locale',
         '@deepseek-ai/dsh-client-ui-renderer',
@@ -436,11 +439,12 @@ describe('published package surface', () => {
     expect(config).toContain("updates: 'src/updates.ts'")
   })
 
-  it('builds the browser client without Node process globals', () => {
+  it('bundles the pure file-reference grammar into the browser client without Node process globals', () => {
     const config = readFileSync(new URL('vite.client.config.ts', packageRoot), 'utf8')
     const client = readFileSync(new URL('lib/client.js', packageRoot), 'utf8')
 
     expect(config).toContain("'process.env.NODE_ENV': JSON.stringify('production')")
+    expect(client).not.toMatch(/require\(["']@deepseek-ai\/dsh-file-reference\/grammar["']\)/u)
     expect(client).not.toMatch(/\bprocess(?:\.|\[)/u)
   })
 
