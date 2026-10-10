@@ -30,7 +30,8 @@ if (TEST_BUILD_VERSION !== undefined && !/^[0-9]+\.[0-9]+\.[0-9]+-next(?:\.[0-9]
   throw new Error(`DSH_NEXT_BUILD_VERSION must be x.y.z-next or x.y.z-next.N; received ${TEST_BUILD_VERSION}`)
 }
 const run = (command: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): void => {
-  const isBuilder = args.includes('electron-builder') || args.some(arg => arg.endsWith('electron-builder/cli.js'))
+  // Windows resolves the CLI path with backslashes.
+  const isBuilder = args.includes('electron-builder') || args.some(arg => arg.replaceAll('\\', '/').endsWith('electron-builder/cli.js'))
   const forwarded = TEST_BUILD_VERSION !== undefined && isBuilder
     ? [...args, `--config.extraMetadata.version=${TEST_BUILD_VERSION}`, `--config.buildVersion=${TEST_BUILD_VERSION}`]
     : args
