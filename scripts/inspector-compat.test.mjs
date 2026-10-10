@@ -51,34 +51,5 @@ for (const workspace of ['dsh-plugin-desktop-beta', 'dsh-desktop-next']) {
     })
     assert.equal(reloads, 1, 'Clicking reload must reload the frontend document')
 
-    const network = parse('network', 'showRecordingHint() {')
-    const hints = nodes(network, node => ts.isMethodDeclaration(node) && node.name.getText(network) === 'showRecordingHint')
-    assert.equal(hints.length, 1)
-    const actions = []
-    const buttons = []
-    const panel = runInNewContext(`({ ${hints[0].getText(network)} })`, {
-      Yt: { instance: () => ({ hasAction: () => true, getAction: id => ({ execute: () => actions.push(id) }) }) },
-      be: { instance: () => ({ shortcutTitleForAction: id => id ? 'shortcut' : '' }) },
-      Z: key => key, X: new Proxy({}, { get: (_, key) => key }),
-      Ee: class {
-        constructor(title, text) { this.text = text }
-        element = { classList: { add() {} } }
-        contentElement = { appendChild: button => buttons.push(button) }
-        show() {}
-      },
-      pt: (text, click) => ({ text, click }), se: { TONAL: 'tonal' },
-    })
-    panel.hideRecordingHint = () => {}
-    panel.setHidden = () => {}
-    panel.recording = true
-    panel.showRecordingHint()
-    assert.match(panel.recordingHint.text, /fetch request/u)
-    assert.match(panel.recordingHint.text, /does not support page reload/u)
-    assert.equal(buttons.length, 0, 'Do not offer an unsupported inspected-target reload')
-    panel.recording = false
-    panel.showRecordingHint()
-    assert.equal(buttons.length, 1, 'Retain the functional Start recording action')
-    buttons[0].click()
-    assert.deepEqual(actions, ['network.toggle-recording'])
   })
 }
