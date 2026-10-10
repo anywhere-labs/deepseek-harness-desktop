@@ -1,0 +1,90 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -14,6 +14,8 @@
+ 			description: "Set up the DeepSeek search provider.",
+ 			apiKey: "API key",
+ 			apiKeyHint: "Stored outside the settings file. Leave blank to keep the current key.",
++			apiKeyRef: "API key reference",
++			apiKeyRefHint: "Use DEEPSEEK_SEARCH_API_KEY for a separate search key. Leave blank to use the provider default.",
+ 			apiKeySet: "A key is configured.",
+ 			apiKeyUnset: "No key is configured; only conversations using a DeepSeek Account model can search, through the default endpoint.",
+ 			baseUrl: "Endpoint",
+@@ -35,6 +37,8 @@
+ 			description: "设置 DeepSeek 的搜索提供方。",
+ 			apiKey: "API Key",
+ 			apiKeyHint: "不写入设置文件。留空表示保持当前密钥。",
++			apiKeyRef: "API Key 凭据引用",
++			apiKeyRefHint: "填入 DEEPSEEK_SEARCH_API_KEY 可为搜索使用独立密钥。留空使用提供方默认凭据引用。",
+ 			apiKeySet: "已配置密钥。",
+ 			apiKeyUnset: "未配置密钥；仅使用 DeepSeek 账号模型的对话可以通过默认接口地址搜索。",
+ 			baseUrl: "接口地址",
+@@ -82,6 +86,17 @@
+ 				onSave: props.save,
+ 				onDiscard: props.discard,
+ 				children: [
++					(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.SettingsValueField, {
++						id: "plugin-config-web-search-reference",
++						label: t("apiKeyRef"),
++						hint: t("apiKeyRefHint"),
++						overriddenLabel: t("overridden"),
++						resetLabel: t("reset"),
++						disabled,
++						...state.apiKeyEnv,
++						onEdit: (text) => { props.edit("apiKeyEnv", text); },
++						onReset: () => { props.resetField("apiKeyEnv"); }
++					}),
+ 					(0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.SettingsSecretField, {
+ 						id: "plugin-config-web-search-key",
+ 						label: t("apiKey"),
+@@ -171,7 +186,7 @@
+ 			constructor(scope, ctx) {
+ 				this.scope = scope;
+ 				this.ctx = ctx;
+-				this.form = new _deepseek_ai_dsh_client_ui_primitives.SettingsFormModel(scope, [(0, _deepseek_ai_dsh_client_ui_primitives.settingsTextField)("baseURL"), (0, _deepseek_ai_dsh_client_ui_primitives.settingsNumberField)("maxUses")], [{
++				this.form = new _deepseek_ai_dsh_client_ui_primitives.SettingsFormModel(scope, [(0, _deepseek_ai_dsh_client_ui_primitives.settingsTextField)("apiKeyEnv"), (0, _deepseek_ai_dsh_client_ui_primitives.settingsTextField)("baseURL"), (0, _deepseek_ai_dsh_client_ui_primitives.settingsNumberField)("maxUses")], [{
+ 					field: API_KEY_FIELD,
+ 					write: (text) => this.writeKey(text)
+ 				}]);
+@@ -184,6 +199,7 @@
+ 			projection() {
+ 				return {
+ 					...this.form.shell(),
++					apiKeyEnv: this.form.field("apiKeyEnv"),
+ 					baseURL: this.form.field("baseURL"),
+ 					maxUses: this.form.field("maxUses"),
+ 					apiKey: this.form.field(API_KEY_FIELD),
+@@ -249,7 +265,8 @@
+ 			* @returns whether the Host reports a configured credential afterwards.
+ 			*/
+ 			async writeKey(value) {
+-				await this.ctx.remote.credentials.set(refOf(this.scope.getSnapshot()), value);
++				const response = await this.ctx.remote.credentials.set(refOf(this.scope.getSnapshot()), value);
++				if (!response.ok) return false;
+ 				await this.readCredential();
+ 				return this.credential.configured;
+ 			}
+diff --git a/lib/types/client/web-search-card-controller.d.ts b/lib/types/client/web-search-card-controller.d.ts
+--- a/lib/types/client/web-search-card-controller.d.ts
++++ b/lib/types/client/web-search-card-controller.d.ts
+@@ -27,6 +27,8 @@
+ }
+ /** What the web-search page renders. */
+ export interface WebSearchCardState extends SettingsFormShell {
++    /** Credential reference selected for search; never contains the secret. */
++    apiKeyEnv: SettingsFieldState;
+     /** Provider endpoint. */
+     baseURL: SettingsFieldState;
+     /** Searches allowed per request. */
+diff --git a/lib/types/client/locales.d.ts b/lib/types/client/locales.d.ts
+--- a/lib/types/client/locales.d.ts
++++ b/lib/types/client/locales.d.ts
+@@ -1,7 +1,7 @@
+ /** Locale bundles for the web-search provider's settings page. */
+ import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives';
+ /** Locale keys the page renders. */
+-export type WebSearchSettingsLocaleKey = 'title' | 'description' | 'apiKey' | 'apiKeyHint' | 'apiKeySet' | 'apiKeyUnset' | 'baseUrl' | 'baseUrlHint' | 'maxUses' | 'maxUsesHint' | 'overridden' | 'reset' | 'readOnly' | 'unavailable' | 'save' | 'saving' | 'saveFailed' | 'invalidNumber';
++export type WebSearchSettingsLocaleKey = 'title' | 'description' | 'apiKey' | 'apiKeyHint' | 'apiKeyRef' | 'apiKeyRefHint' | 'apiKeySet' | 'apiKeyUnset' | 'baseUrl' | 'baseUrlHint' | 'maxUses' | 'maxUsesHint' | 'overridden' | 'reset' | 'readOnly' | 'unavailable' | 'save' | 'saving' | 'saveFailed' | 'invalidNumber';
+ /** English copy. */
+ export declare const en: Record<WebSearchSettingsLocaleKey, string>;
+ /** Simplified Chinese copy. */
