@@ -4,6 +4,7 @@ import {
 import { join } from 'node:path'
 import type { LogType } from './log-level.ts'
 import { isErrorType } from './log-level.ts'
+import { sanitize } from './diagnostic-record.ts'
 import { maskSecrets } from './mask-secrets.ts'
 
 const OWNED_LOG_FILE = /^dsh-\d{4}-\d{2}-\d{2}(?:\.error)?(?:\.\d+)?\.log$/u
@@ -88,11 +89,19 @@ export class LogFileSink {
 
   /** Append one rendered line, routing by level and rotating on size/date. */
   write(type: LogType, line: string): void {
+    this.writeLine(type, maskSecrets(line))
+  }
+
+  /** Redact structured values before encoding, preserving JSON punctuation and escaping. */
+  writeRecord(type: LogType, record: unknown): void {
+    this.writeLine(type, JSON.stringify(sanitize(record)))
+  }
+
+  private writeLine(type: LogType, line: string): void {
     const suffix = localDateSuffix(new Date())
     if (suffix !== this.currentDate) this.rollDate(suffix)
-    const masked = maskSecrets(line)
-    this.append('all', masked)
-    if (isErrorType(type)) this.append('error', masked)
+    this.append('all', line)
+    if (isErrorType(type)) this.append('error', line)
     if (this.directoryBytes > this.maxDirectoryBytes) this.enforceDirectoryCap()
   }
 

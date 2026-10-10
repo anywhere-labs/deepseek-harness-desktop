@@ -23,6 +23,8 @@ import type { DesktopPnpmBootstrap } from './pnpm.ts'
 import type { DesktopRuntime } from './runtime.ts'
 import type { DesktopStartupGenerationHost } from './startup-generation.ts'
 import { FileExporter } from './file-exporter.ts'
+import { initializeDeveloperLogging, diagnosticRunId } from './developer-logging.ts'
+import { installHostDeveloperLogging } from './host-developer-logging.ts'
 import { installAgentErrorLogging } from './agent-error-logging.ts'
 import { LogFileSink } from './log-files.ts'
 
@@ -55,6 +57,7 @@ export interface DesktopHostOptions {
   desktopProxyOverlay: Readonly<Record<string, string>>
   desktopPnpmBootstrap: DesktopPnpmBootstrap
   logDirectory: string
+  diagnosticRunId?: string
 }
 
 export async function bootDesktopHost(options: DesktopHostOptions, runtime: DesktopRuntime,
@@ -72,6 +75,8 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
   const logSink = new LogFileSink(options.logDirectory, {
     maxFileBytes: 10 * 1024 * 1024, maxDirectoryBytes: 200 * 1024 * 1024,
   })
+  logSink.purgeOlderThan(7)
+  initializeDeveloperLogging((level, line) => logSink.writeRecord(level, JSON.parse(line)), options.diagnosticRunId ?? diagnosticRunId())
   let fileExporter: FileExporter | undefined
     let currentProfilePreferences: DesktopProfilePreferences = profilePreferences
     let profilePreferencesWriteTail: Promise<void> = Promise.resolve()
@@ -150,6 +155,7 @@ export async function bootDesktopHost(options: DesktopHostOptions, runtime: Desk
         }
         // Registered before the plugin tree mounts, so no agent can fail unrecorded.
         installAgentErrorLogging(hostCtx)
+        installHostDeveloperLogging(hostCtx)
         await hostCtx.plugin(DesktopProfileService, {
           current: {
             name: activeProfileName,

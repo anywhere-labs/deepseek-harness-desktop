@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { installAgentErrorLogging } from '../src/agent-error-logging.ts'
 import { ElectronStderrLogger } from '../src/desktop-logger.ts'
 import { FileExporter } from '../src/file-exporter.ts'
+import { configureDeveloperLogging, initializeDeveloperLogging } from '../src/developer-logging.ts'
 import { LogFileSink } from '../src/log-files.ts'
 
 const SESSION_ID = 'ws-1-session-9f2c1a7e-3b44-4c10-9e55-7a1d2f6b8c30'
@@ -157,4 +158,23 @@ describe('agent failure logging end-to-end', () => {
     expect(full).not.toContain('outer')
     expect(full).not.toContain('inner')
   })
+})
+
+it('persists structured Cordis metadata in the existing rotating files with redaction', () => {
+  const { dir, sink } = openLogDir()
+  initializeDeveloperLogging((level, line) => sink.writeRecord(level, JSON.parse(line)), 'kernel-test')
+  configureDeveloperLogging({ developerLogging: true, logLevel: 'debug' })
+  const ctx = new Context()
+  const dispose = ctx.logger.exporter(new FileExporter(sink, 'debug'))
+  try {
+    ctx.logger('fixture-plugin').warn('Authorization: Bearer private-value')
+    const full = readFileSync(join(dir, `dsh-${todaySuffix()}.log`), 'utf8')
+    const record = full.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line)).at(-1)
+    expect(record).toMatchObject({ source: 'host.kernel.fixture-plugin', event: 'log', level: 'warn', runId: 'kernel-test', fields: { hostSequence: expect.any(Number), hostTime: expect.any(Number) } })
+    expect(full).not.toContain('private-value')
+  } finally {
+    dispose(); sink.close()
+    configureDeveloperLogging({ developerLogging: false, logLevel: 'info' })
+    initializeDeveloperLogging(() => {})
+  }
 })

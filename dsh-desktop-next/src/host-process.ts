@@ -1,5 +1,6 @@
 /** Electron Node-mode child lifecycle for the shared Web application. */
 
+import type { LogInput } from './log-record.ts'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { desktopNodeEnvironment } from './node-environment.ts'
@@ -63,7 +64,7 @@ interface InjectionsEvent {
   readonly error?: string
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | PlatformLoginEvent | InjectionsEvent | { type: 'permission'; requestId: number; action: DesktopPermissionAction; permission: DesktopPermission } | { type: 'browser-access'; requestId: number; error?: string } | { type: 'notification'; notification: DesktopNotification } | { readonly type: 'shutdown-complete' } | { readonly type: 'desktop-action'; readonly action: 'restart' | 'terminal' } | {
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | PlatformLoginEvent | InjectionsEvent | { type: 'permission'; requestId: number; action: DesktopPermissionAction; permission: DesktopPermission } | { type: 'logging-config'; requestId: number; error?: string } | { type: 'browser-access'; requestId: number; error?: string } | { type: 'notification'; notification: DesktopNotification } | { readonly type: 'shutdown-complete' } | { readonly type: 'desktop-action'; readonly action: 'restart' | 'terminal' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -112,6 +113,7 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
     case 'update-tasks':
       return Number.isSafeInteger(candidate.requestId) && typeof candidate.active === 'boolean'
         && (candidate.error === undefined || typeof candidate.error === 'string')
+    case 'logging-config':
     case 'browser-access':
       return Number.isSafeInteger(candidate.requestId) && (candidate.error === undefined || typeof candidate.error === 'string')
     case 'injections':
@@ -183,6 +185,7 @@ export class DesktopHostProcess {
   private nextControlId = 1
   private readonly taskQueries = new Map<number, { resolve: (active: boolean) => void; reject: (error: Error) => void }>()
   private readonly accessRequests = new Map<number, { resolve: () => void; reject: (error: Error) => void }>()
+  private readonly loggingRequests = new Map<number, { resolve: () => void; reject: (error: Error) => void }>()
   private readonly injectionRequests = new Map<number, { resolve: (injections: readonly unknown[]) => void; reject: (error: Error) => void }>()
 
   /**
@@ -210,11 +213,12 @@ export class DesktopHostProcess {
     private readonly hostEntry?: string,
     private readonly onRestart?: () => void,
     private readonly onNotification?: (notification: DesktopNotification) => void,
-    private readonly onLog?: (chunk: string) => void,
+    private readonly onLog?: (chunk: string, stream?: string, pid?: number) => void,
     private readonly onTerminal?: () => void,
     private readonly onPermission?: (action: DesktopPermissionAction, permission: DesktopPermission) => Promise<DesktopPermissionSnapshot>,
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
     private readonly onPlatformLogin?: (request: DesktopPlatformLoginRequest) => void,
+    private readonly onDiagnostic?: (input: LogInput) => void,
   ) {}
 
   /**
@@ -238,10 +242,11 @@ export class DesktopHostProcess {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
     this.child = child
+    this.diagnostic({ source: 'host.process', event: 'spawn', pid: child.pid })
     child.stderr?.setEncoding('utf8')
-    child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS); this.onLog?.(chunk) })
+    child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS); this.onLog?.(chunk, 'stderr', child.pid) })
     child.stdout?.setEncoding('utf8')
-    child.stdout?.on('data', (chunk: string) => { this.onLog?.(chunk) })
+    child.stdout?.on('data', (chunk: string) => { this.onLog?.(chunk, 'stdout', child.pid) })
     child.stdout?.pipe(process.stdout)
     child.on('message', (message: unknown) => {
       if (!isDesktopHostEvent(message)) {
@@ -249,6 +254,7 @@ export class DesktopHostProcess {
         child.kill('SIGTERM')
         return
       }
+      this.diagnostic({ source: 'host.ipc', event: 'received', developer: true, pid: child.pid, fields: { type: message.type, ...('requestId' in message ? { requestId: message.requestId } : {}) } })
       if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
       else if (message.type === 'platform-login') {
@@ -279,6 +285,11 @@ export class DesktopHostProcess {
           else this.onTerminal?.()
         }
       }
+      else if (message.type === 'logging-config') {
+        const request = this.loggingRequests.get(message.requestId)
+        if (message.error === undefined) request?.resolve()
+        else request?.reject(new Error(message.error))
+      }
       else if (message.type === 'browser-access') {
         const request = this.accessRequests.get(message.requestId)
         if (message.error === undefined) request?.resolve()
@@ -297,7 +308,8 @@ export class DesktopHostProcess {
     })
     child.once('error', (error) => { this.fail(error) })
     this.exitPromise = new Promise<void>((resolve) => {
-      child.once('close', (code) => {
+      child.once('close', (code, signal) => {
+        this.diagnostic({ source: 'host.process', event: 'exit', pid: child.pid, level: this.stopping && code === 0 ? 'info' : 'error', fields: { exitCode: code, signal, expected: this.stopping, acknowledged: this.shutdownCompleted } })
         const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
         if (code !== 0 && code !== null) this.fail(new Error(`dsh desktop host exited with ${String(code)}${suffix}`))
         else this.fail(new Error(`dsh desktop host stopped${suffix}`))
@@ -307,19 +319,51 @@ export class DesktopHostProcess {
     return this.readyPromise
   }
 
+  private diagnostic(input: LogInput): void { try { this.onDiagnostic?.(input) } catch { /* Observational only. */ } }
+
+  private controlOperation(type: string, requestId: number): (error?: unknown) => void {
+    const started = Date.now()
+    const pid = this.child?.pid
+    const operationId = `host-${pid ?? 0}-control-${requestId}`
+    this.diagnostic({ source: 'host.ipc', event: 'control.start', operationId, pid, developer: true, fields: { type, requestId } })
+    let finished = false
+    return error => {
+      if (finished) return
+      finished = true
+      this.diagnostic({ source: 'host.ipc', event: error === undefined ? 'control.complete' : 'control.failed', operationId, pid,
+        developer: error === undefined, level: error === undefined ? 'info' : 'error', error, fields: { type, requestId, durationMs: Date.now() - started } })
+    }
+  }
+
+  async setLogging(value: { developerLogging: boolean; logLevel: string }): Promise<void> {
+    const child = this.child
+    if (!child?.connected || this.stopping || this.failureReported) throw new Error('Next Host is unavailable')
+    const requestId = this.nextControlId++
+    const end = this.controlOperation('logging-config', requestId)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.loggingRequests.set(requestId, { resolve, reject })
+        timer = setTimeout(() => reject(new Error('Host logging configuration timed out')), 10_000)
+        child.send({ type: 'logging-config', requestId, ...value }, error => { if (error) reject(error) })
+      }).catch(error => { end(error); throw error })
+    } finally { end(); clearTimeout(timer); this.loggingRequests.delete(requestId) }
+  }
+
   /** Acknowledge the live request gate before publishing browser access as enabled. */
   async setBrowserAccess(enabled: boolean): Promise<void> {
     const child = this.child
     if (!child?.connected || this.stopping || this.failureReported) throw new Error('Next Host is unavailable')
     const requestId = this.nextControlId++
+    const end = this.controlOperation('browser-access', requestId)
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       await new Promise<void>((resolve, reject) => {
         this.accessRequests.set(requestId, { resolve, reject })
         timer = setTimeout(() => reject(new Error('Browser access change timed out')), 5_000)
         child.send({ type: 'browser-access', requestId, enabled }, error => { if (error) reject(error) })
-      })
-    } finally { clearTimeout(timer); this.accessRequests.delete(requestId) }
+      }).catch(error => { end(error); throw error })
+    } finally { end(); clearTimeout(timer); this.accessRequests.delete(requestId) }
   }
 
   /**
@@ -332,14 +376,15 @@ export class DesktopHostProcess {
     const child = this.child
     if (!child?.connected || this.stopping || this.failureReported) throw new Error('Next Host is unavailable')
     const requestId = this.nextControlId++
+    const end = this.controlOperation('injections', requestId)
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       return await new Promise<readonly unknown[]>((resolve, reject) => {
         this.injectionRequests.set(requestId, { resolve, reject })
         timer = setTimeout(() => { reject(new Error('Web boot injection collection timed out')) }, 10_000)
         child.send({ type: 'injections', requestId }, error => { if (error !== null) reject(error) })
-      })
-    } finally { clearTimeout(timer); this.injectionRequests.delete(requestId) }
+      }).catch(error => { end(error); throw error })
+    } finally { end(); clearTimeout(timer); this.injectionRequests.delete(requestId) }
   }
 
   /**
@@ -354,14 +399,15 @@ export class DesktopHostProcess {
       throw new Error('desktop update: Host is unavailable')
     }
     const requestId = this.nextControlId++
+    const end = this.controlOperation('update-tasks', requestId)
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       return await new Promise<boolean>((resolve, reject) => {
         this.taskQueries.set(requestId, { resolve, reject })
         timer = setTimeout(() => { reject(new Error('desktop update: task inspection timed out')) }, 10_000)
         child.send({ type: 'update-tasks', requestId, action }, (error) => { if (error !== null) reject(error) })
-      })
-    } finally {
+      }).catch(error => { end(error); throw error })
+    } finally { end();
       clearTimeout(timer)
       this.taskQueries.delete(requestId)
     }
@@ -377,12 +423,14 @@ export class DesktopHostProcess {
     const child = this.child
     if (child === undefined) return
     this.stopping = true
+    this.diagnostic({ source: 'host.process', event: 'shutdown.request', pid: child.pid })
     this.onPlatformSession?.(null)
     if (child.connected) child.send({ type: 'shutdown' }, (error) => { if (error !== null) this.fail(error) })
     const exited = this.exitPromise ?? Promise.resolve()
     const graceful = await exitsWithin(exited, 10_000)
-    if (!graceful) child.kill('SIGTERM')
+    if (!graceful) { this.diagnostic({ source: 'host.process', event: 'shutdown.escalate', level: 'warn', pid: child.pid, fields: { signal: 'SIGTERM' } }); child.kill('SIGTERM') }
     if (!await exitsWithin(exited, 5_000)) {
+      this.diagnostic({ source: 'host.process', event: 'shutdown.escalate', level: 'warn', pid: child.pid, fields: { signal: 'SIGKILL' } })
       child.kill('SIGKILL')
       if (!await exitsWithin(exited, 5_000)) {
         throw new Error('dsh desktop host did not exit after SIGKILL')
@@ -402,6 +450,8 @@ export class DesktopHostProcess {
     this.taskQueries.clear()
     for (const request of this.accessRequests.values()) request.reject(error)
     this.accessRequests.clear()
+    for (const request of this.loggingRequests.values()) request.reject(error)
+    this.loggingRequests.clear()
     for (const request of this.injectionRequests.values()) request.reject(error)
     this.injectionRequests.clear()
     if (!this.failureReported && !this.stopping) {
